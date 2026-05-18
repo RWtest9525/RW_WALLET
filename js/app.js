@@ -18,7 +18,8 @@ import {
     currentUser,
     currentUserData,
     transactions,
-    pendingRequests
+    pendingRequests,
+    unifiedHistoryCache
 } from './core/state.js';
 import { handleAuth, toggleAuthMode, handleLogout, handleForgotPassword } from './features/auth.js';
 import { notificationSystem, showFullNotificationPage } from './features/notifications.js';
@@ -152,7 +153,7 @@ const renderDashboardHistory = () => {
     const list = document.getElementById('transactions-list');
     if (!list) return;
     
-    const displayList = window.unifiedHistoryCache || [];
+    const displayList = unifiedHistoryCache || [];
     if (displayList.length === 0) {
         list.innerHTML = '<p class="text-gray-500 dark:text-gray-400">No transactions yet.</p>';
     } else {
