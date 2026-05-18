@@ -796,87 +796,71 @@
                     <!-- Fixed Quick Actions Bar -->
                     <div class="bg-white dark:bg-gray-800 p-5 sm:p-6 rounded-2xl shadow-md mb-6 border border-gray-100 dark:border-gray-700">
                         <h3 class="text-lg font-semibold mb-4">Quick Actions</h3>
-                        <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
+                        <div class="grid grid-cols-3 lg:grid-cols-4 gap-3">
                             <button id="admin-withdrawals-btn"
-                                class="flex flex-col items-center justify-center p-4 min-h-28 bg-blue-50 dark:bg-blue-900/20 rounded-2xl hover:bg-blue-100 dark:hover:bg-blue-900/30 transition border border-blue-200 dark:border-blue-800 shadow-sm">
-                                <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-blue-600 mb-2" fill="none"
-                                    viewBox="0 0 24 24" stroke="currentColor">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                        d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                                </svg>
+                                class="flex flex-col items-center justify-center p-3 min-h-28 bg-blue-50 dark:bg-blue-900/20 rounded-2xl hover:bg-blue-100 dark:hover:bg-blue-900/30 transition border border-blue-200 dark:border-blue-800 shadow-sm">
+                                <span class="flex h-12 w-12 items-center justify-center rounded-2xl bg-white dark:bg-gray-800 shadow-sm mb-2">
+                                    <img src="https://cdn-icons-png.flaticon.com/512/7939/7939990.png" class="h-8 w-8 object-contain" alt="Withdrawals">
+                                </span>
                                 <span class="text-sm font-medium text-blue-700 dark:text-blue-300">Withdrawals</span>
                             </button>
                             <button id="admin-users-btn"
-                                class="flex flex-col items-center justify-center p-4 min-h-28 bg-green-50 dark:bg-green-900/20 rounded-2xl hover:bg-green-100 dark:hover:bg-green-900/30 transition border border-green-200 dark:border-green-800 shadow-sm">
-                                <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-green-600 mb-2" fill="none"
-                                    viewBox="0 0 24 24" stroke="currentColor">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                        d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197m13.5-9a2.5 2.5 0 11-5 0 2.5 2.5 0 015 0z" />
-                                </svg>
+                                class="flex flex-col items-center justify-center p-3 min-h-28 bg-green-50 dark:bg-green-900/20 rounded-2xl hover:bg-green-100 dark:hover:bg-green-900/30 transition border border-green-200 dark:border-green-800 shadow-sm">
+                                <span class="flex h-12 w-12 items-center justify-center rounded-2xl bg-white dark:bg-gray-800 shadow-sm mb-2">
+                                    <img src="https://cdn-icons-png.flaticon.com/512/681/681494.png" class="h-8 w-8 object-contain" alt="Users">
+                                </span>
                                 <span class="text-sm font-medium text-green-700 dark:text-green-300">Users</span>
                             </button>
                             <button id="admin-gift-codes-btn"
-                                class="flex flex-col items-center justify-center p-4 min-h-28 bg-purple-50 dark:bg-purple-900/20 rounded-2xl hover:bg-purple-100 dark:hover:bg-purple-900/30 transition border border-purple-200 dark:border-purple-800 shadow-sm">
-                                <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-purple-600 mb-2" fill="none"
-                                    viewBox="0 0 24 24" stroke="currentColor">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                        d="M12 8v13m0-13V6a2 2 0 112 2h-2zm0 0V5.5A2.5 2.5 0 109.5 8H12zm-7 4h14M5 12a2 2 0 110-4h14a2 2 0 110 4M5 12v7a2 2 0 002 2h10a2 2 0 002-2v-7" />
-                                </svg>
+                                class="flex flex-col items-center justify-center p-3 min-h-28 bg-purple-50 dark:bg-purple-900/20 rounded-2xl hover:bg-purple-100 dark:hover:bg-purple-900/30 transition border border-purple-200 dark:border-purple-800 shadow-sm">
+                                <span class="flex h-12 w-12 items-center justify-center rounded-2xl bg-white dark:bg-gray-800 shadow-sm mb-2">
+                                    <img src="https://cdn-icons-png.flaticon.com/512/2611/2611152.png" class="h-8 w-8 object-contain" alt="Gift Codes">
+                                </span>
                                 <span class="text-sm font-medium text-purple-700 dark:text-purple-300">Gift Codes</span>
                             </button>
                             <button id="admin-withdrawal-history-btn"
-                                class="flex flex-col items-center justify-center p-4 min-h-28 bg-yellow-50 dark:bg-yellow-900/20 rounded-2xl hover:bg-yellow-100 dark:hover:bg-yellow-900/30 transition border border-yellow-200 dark:border-yellow-800 shadow-sm">
-                                <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-yellow-600 mb-2" fill="none"
-                                    viewBox="0 0 24 24" stroke="currentColor">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                        d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
-                                </svg>
+                                class="flex flex-col items-center justify-center p-3 min-h-28 bg-yellow-50 dark:bg-yellow-900/20 rounded-2xl hover:bg-yellow-100 dark:hover:bg-yellow-900/30 transition border border-yellow-200 dark:border-yellow-800 shadow-sm">
+                                <span class="flex h-12 w-12 items-center justify-center rounded-2xl bg-white dark:bg-gray-800 shadow-sm mb-2">
+                                    <img src="https://cdn-icons-png.flaticon.com/512/3652/3652191.png" class="h-8 w-8 object-contain" alt="Withdrawal History">
+                                </span>
                                 <span class="text-sm font-medium text-yellow-700 dark:text-yellow-300">Withdrawal
                                     History</span>
                             </button>
                             <button id="admin-withdraw-settings-btn"
-                                class="flex flex-col items-center justify-center p-4 min-h-28 bg-purple-50 dark:bg-purple-900/20 rounded-2xl hover:bg-purple-100 dark:hover:bg-purple-900/30 transition border border-purple-200 dark:border-purple-800 shadow-sm">
-                                <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-purple-600 mb-2" fill="none"
-                                    viewBox="0 0 24 24" stroke="currentColor">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                        d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                        d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                                </svg>
+                                class="flex flex-col items-center justify-center p-3 min-h-28 bg-purple-50 dark:bg-purple-900/20 rounded-2xl hover:bg-purple-100 dark:hover:bg-purple-900/30 transition border border-purple-200 dark:border-purple-800 shadow-sm">
+                                <span class="flex h-12 w-12 items-center justify-center rounded-2xl bg-white dark:bg-gray-800 shadow-sm mb-2">
+                                    <img src="https://cdn-icons-png.flaticon.com/512/3524/3524659.png" class="h-8 w-8 object-contain" alt="Withdrawal Settings">
+                                </span>
                                 <span class="text-sm font-medium text-purple-700 dark:text-purple-300">Withdrawal
                                     Settings</span>
                             </button>
                             <button id="admin-pro-users-btn"
-                                class="flex flex-col items-center justify-center p-4 min-h-28 bg-blue-50 dark:bg-blue-900/20 rounded-2xl hover:bg-blue-100 dark:hover:bg-blue-900/30 transition border border-blue-200 dark:border-blue-800 shadow-sm">
-                                <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-blue-600 mb-2" fill="none"
-                                    viewBox="0 0 24 24" stroke="currentColor">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                        d="M9 12.75 11.25 15 15 9.75M12 3l7 3v5c0 4.5-3 8.5-7 10-4-1.5-7-5.5-7-10V6l7-3z" />
-                                </svg>
+                                class="flex flex-col items-center justify-center p-3 min-h-28 bg-blue-50 dark:bg-blue-900/20 rounded-2xl hover:bg-blue-100 dark:hover:bg-blue-900/30 transition border border-blue-200 dark:border-blue-800 shadow-sm">
+                                <span class="flex h-12 w-12 items-center justify-center rounded-2xl bg-white dark:bg-gray-800 shadow-sm mb-2">
+                                    <img src="https://cdn-icons-png.flaticon.com/512/942/942748.png" class="h-8 w-8 object-contain" alt="Pro Verification">
+                                </span>
                                 <span class="text-sm font-medium text-blue-700 dark:text-blue-300">Pro
                                     Verification</span>
                             </button>
                             <button id="admin-recharge-requests-btn"
-                                class="flex flex-col items-center justify-center p-4 min-h-28 bg-sky-50 dark:bg-sky-900/20 rounded-2xl hover:bg-sky-100 dark:hover:bg-sky-900/30 transition border border-sky-200 dark:border-sky-800 shadow-sm">
-                                <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-sky-600 mb-2" fill="none"
-                                    viewBox="0 0 24 24" stroke="currentColor">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                        d="M8 2h8a2 2 0 012 2v16a2 2 0 01-2 2H8a2 2 0 01-2-2V4a2 2 0 012-2zm4 17h.01" />
-                                </svg>
+                                class="flex flex-col items-center justify-center p-3 min-h-28 bg-sky-50 dark:bg-sky-900/20 rounded-2xl hover:bg-sky-100 dark:hover:bg-sky-900/30 transition border border-sky-200 dark:border-sky-800 shadow-sm">
+                                <span class="flex h-12 w-12 items-center justify-center rounded-2xl bg-white dark:bg-gray-800 shadow-sm mb-2">
+                                    <img src="https://cdn-icons-png.flaticon.com/512/4108/4108841.png" class="h-8 w-8 object-contain" alt="Recharge Requests">
+                                </span>
                                 <span class="text-sm font-medium text-sky-700 dark:text-sky-300">Recharge Requests</span>
                             </button>
                             <button id="admin-loans-btn"
-                                class="flex flex-col items-center justify-center p-4 min-h-28 bg-indigo-50 dark:bg-indigo-900/20 rounded-2xl hover:bg-indigo-100 dark:hover:bg-indigo-900/30 transition border border-indigo-200 dark:border-indigo-800 shadow-sm">
-                                <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-indigo-600 mb-2" fill="none"
-                                    viewBox="0 0 24 24" stroke="currentColor">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                        d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8V7m0 10v-1m9-4a9 9 0 11-18 0 9 9 0 0118 0z" />
-                                </svg>
+                                class="flex flex-col items-center justify-center p-3 min-h-28 bg-indigo-50 dark:bg-indigo-900/20 rounded-2xl hover:bg-indigo-100 dark:hover:bg-indigo-900/30 transition border border-indigo-200 dark:border-indigo-800 shadow-sm">
+                                <span class="flex h-12 w-12 items-center justify-center rounded-2xl bg-white dark:bg-gray-800 shadow-sm mb-2">
+                                    <img src="https://cdn-icons-png.flaticon.com/512/9197/9197103.png" class="h-8 w-8 object-contain" alt="Manage Loan">
+                                </span>
                                 <span class="text-sm font-medium text-indigo-700 dark:text-indigo-300">Manage Loan</span>
                             </button>
                             <button id="admin-investments-btn"
-                                class="flex flex-col items-center justify-center p-4 min-h-28 bg-emerald-50 dark:bg-emerald-900/20 rounded-2xl hover:bg-emerald-100 dark:hover:bg-emerald-900/30 transition border border-emerald-200 dark:border-emerald-800 shadow-sm">
-                                <img src="https://cdn-icons-png.flaticon.com/512/3135/3135706.png" class="h-7 w-7 mb-2 object-contain" alt="Partner">
+                                class="flex flex-col items-center justify-center p-3 min-h-28 bg-emerald-50 dark:bg-emerald-900/20 rounded-2xl hover:bg-emerald-100 dark:hover:bg-emerald-900/30 transition border border-emerald-200 dark:border-emerald-800 shadow-sm">
+                                <span class="flex h-12 w-12 items-center justify-center rounded-2xl bg-white dark:bg-gray-800 shadow-sm mb-2">
+                                    <img src="https://cdn-icons-png.flaticon.com/512/3135/3135706.png" class="h-8 w-8 object-contain" alt="Partner">
+                                </span>
                                 <span class="text-sm font-medium text-emerald-700 dark:text-emerald-300">Manage Partner</span>
                             </button>
                         </div>
