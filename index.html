@@ -673,7 +673,7 @@
                             </div>
                             <div class="bg-white dark:bg-gray-800 p-5 rounded-2xl shadow-md border border-gray-100 dark:border-gray-700">
                                 <h3 class="text-lg font-semibold mb-4">Actions</h3>
-                                <div class="grid grid-cols-1 sm:grid-cols-3 lg:grid-cols-1 gap-3">
+                                <div class="grid grid-cols-1 sm:grid-cols-4 lg:grid-cols-1 gap-3">
                                 <button id="withdraw-fund-btn"
                                     class="group w-full flex items-center gap-3 bg-yellow-50 dark:bg-yellow-900/20 text-yellow-700 dark:text-yellow-200 font-semibold p-4 rounded-xl hover:bg-yellow-100 dark:hover:bg-yellow-900/30 transition border border-yellow-200 dark:border-yellow-800 text-left">
                                     <span class="w-11 h-11 rounded-xl bg-yellow-500 text-white flex items-center justify-center shadow-sm group-hover:scale-105 transition">
@@ -700,6 +700,15 @@
                                         </svg>
                                     </span>
                                     <span>Pay to Wallet</span>
+                                </button>
+                                <button id="mobile-recharge-btn"
+                                    class="group w-full flex items-center gap-3 bg-sky-50 dark:bg-sky-900/20 text-sky-700 dark:text-sky-200 font-semibold p-4 rounded-xl hover:bg-sky-100 dark:hover:bg-sky-900/30 transition border border-sky-200 dark:border-sky-800 text-left">
+                                    <span class="w-11 h-11 rounded-xl bg-sky-500 text-white flex items-center justify-center shadow-sm group-hover:scale-105 transition">
+                                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 2h8a2 2 0 012 2v16a2 2 0 01-2 2H8a2 2 0 01-2-2V4a2 2 0 012-2zm4 17h.01"></path>
+                                        </svg>
+                                    </span>
+                                    <span>Mobile Recharge</span>
                                 </button>
                                 </div>
                             </div>
@@ -820,6 +829,15 @@
                                 <span class="text-sm font-medium text-blue-700 dark:text-blue-300">Pro
                                     Verification</span>
                             </button>
+                            <button id="admin-recharge-requests-btn"
+                                class="flex flex-col items-center justify-center p-4 min-h-28 bg-sky-50 dark:bg-sky-900/20 rounded-2xl hover:bg-sky-100 dark:hover:bg-sky-900/30 transition border border-sky-200 dark:border-sky-800 shadow-sm">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-sky-600 mb-2" fill="none"
+                                    viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                        d="M8 2h8a2 2 0 012 2v16a2 2 0 01-2 2H8a2 2 0 01-2-2V4a2 2 0 012-2zm4 17h.01" />
+                                </svg>
+                                <span class="text-sm font-medium text-sky-700 dark:text-sky-300">Recharge Requests</span>
+                            </button>
                         </div>
                     </div>
                 </div>
@@ -915,6 +933,14 @@
         };
         const appId = typeof __app_id !== 'undefined' ? __app_id : 'digital-wallet-prod';
         const ADMIN_UID = "mOs5Fmp4RoRzeBDH4pZLMOpQx7Q2";
+        const RECHARGE_DISCOUNT_RATE = 0.02;
+        const RECHARGE_OPERATORS = ['Jio', 'Airtel', 'Vi', 'BSNL', 'MTNL'];
+        const RECHARGE_STATES = [
+            'Andhra Pradesh', 'Assam', 'Bihar Jharkhand', 'Delhi NCR', 'Gujarat', 'Haryana',
+            'Himachal Pradesh', 'Jammu Kashmir', 'Karnataka', 'Kerala', 'Kolkata', 'Madhya Pradesh Chhattisgarh',
+            'Maharashtra Goa', 'Mumbai', 'North East', 'Odisha', 'Punjab', 'Rajasthan', 'Tamil Nadu',
+            'Uttar Pradesh East', 'Uttar Pradesh West', 'West Bengal'
+        ];
 
         const app = initializeApp(firebaseConfig);
         const auth = getAuth(app);
@@ -930,6 +956,7 @@
         let currentUserData = null;
         let allUsersCache = [];
         let allFundRequestsCache = [];
+        let allRechargeRequestsCache = [];
         let unifiedHistoryCache = [];
         let notificationTimeout;
 
@@ -1096,6 +1123,28 @@
         const renderTransactionItem = (item, isFullPage = false) => {
             const clickableClass = item.status !== 'pending' ? 'tx-item-clickable' : '';
             const dataKey = item.status !== 'pending' ? `data-key="${item.key}"` : '';
+
+            if (item.type === 'mobile_recharge') {
+                const isPending = item.status === 'pending';
+                const isRejected = item.status === 'rejected';
+                const statusText = isPending ? 'Pending' : isRejected ? 'Rejected' : 'Completed';
+                const statusColor = isPending ? 'text-yellow-600' : isRejected ? 'text-red-500' : 'text-green-500';
+                const bgColor = isPending ? 'bg-sky-50 dark:bg-sky-900/20' : isRejected ? 'bg-red-50 dark:bg-red-900/20' : 'bg-gray-50 dark:bg-gray-700/50';
+                const chargeAmount = item.chargeAmount || item.amount || 0;
+
+                return `
+                    <div class="flex justify-between items-center p-3 ${bgColor} rounded-lg text-sm ${clickableClass}" ${dataKey}>
+                        <div class="flex-1 min-w-0">
+                            <p class="font-semibold">Mobile Recharge</p>
+                            <p class="text-xs text-gray-500 dark:text-gray-400">${item.mobileNumber || ''} ${item.operator ? `| ${item.operator}` : ''}</p>
+                            <p class="text-xs text-gray-500 dark:text-gray-400">${formatDateDDMMYY(item.timestamp || item.requestedAt)}</p>
+                        </div>
+                        <div class="text-right">
+                            <p class="font-bold text-red-500">-${formatCurrency(chargeAmount)}</p>
+                            <p class="text-xs font-semibold ${statusColor}">${statusText}</p>
+                        </div>
+                    </div>`;
+            }
 
             if (item.status === 'pending') {
                 return `
@@ -1440,6 +1489,7 @@
             // Reset caches
             allUsersCache = [];
             allFundRequestsCache = [];
+            allRechargeRequestsCache = [];
             currentUserData = null;
             unifiedHistoryCache = [];
 
@@ -1521,7 +1571,17 @@
             const renderUnifiedHistory = (limit) => {
                 let combined = [
                     ...transactions.map(t => ({ ...t, key: `tx-${t.timestamp?.toMillis()}`, ...t })),
-                    ...pendingRequests.map(p => ({ ...p, key: `req-${p.requestedAt?.toMillis()}`, type: 'withdrawal', comment: 'Withdrawal Request', timestamp: p.requestedAt, status: 'pending', ...p }))
+                    ...pendingRequests.map(p => {
+                        const requestType = p.type || 'withdrawal';
+                        return {
+                            ...p,
+                            key: `req-${p.id || p.requestedAt?.toMillis()}`,
+                            type: requestType,
+                            comment: requestType === 'mobile_recharge' ? 'Mobile Recharge Request' : 'Withdrawal Request',
+                            timestamp: p.requestedAt,
+                            status: 'pending'
+                        };
+                    })
                 ];
                 combined.sort((a, b) => (b.timestamp?.toMillis() || 0) - (a.timestamp?.toMillis() || 0));
                 unifiedHistoryCache = combined;
@@ -1598,7 +1658,8 @@
             unsubscribers.push(onSnapshot(allFundRequestsQuery, (snap) => {
                 console.log(`Admin listener: ${snap.docs.length} fund requests fetched.`);
                 const allRequests = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-                allFundRequestsCache = allRequests.filter(req => req.status === 'pending');
+                allFundRequestsCache = allRequests.filter(req => req.status === 'pending' && (req.type || 'withdrawal') === 'withdrawal');
+                allRechargeRequestsCache = allRequests.filter(req => req.status === 'pending' && req.type === 'mobile_recharge');
 
                 // Calculate total pending amount
                 const totalPendingAmount = allFundRequestsCache.reduce((total, req) => total + (req.amount || 0), 0);
@@ -1610,6 +1671,9 @@
 
                 if (document.getElementById('admin-fund-requests-list-page')) {
                     renderAdminFundRequests(allFundRequestsCache);
+                }
+                if (document.getElementById('admin-recharge-requests-list-page')) {
+                    renderAdminRechargeRequests(allRechargeRequestsCache);
                 }
             }, (error) => console.error("Admin: Error listening to all fund requests:", error)));
         };
@@ -1768,6 +1832,7 @@
             } else if (filter === 'sent') {
                 filteredList = unifiedHistoryCache.filter(item =>
                     item.type === 'debit' ||
+                    item.type === 'mobile_recharge' ||
                     (item.type === 'wallet_transfer' && item.amount < 0)
                 );
             }
@@ -1837,8 +1902,9 @@
                 where("status", "==", "pending")
             );
             const snap = await getDocs(q);
-            if (snap.size >= maxPendingWithdrawalsPerUser) {
-                showNotification(`You already have ${snap.size} pending withdrawal request(s).`, true);
+            const pendingWithdrawalCount = snap.docs.filter(d => (d.data().type || 'withdrawal') === 'withdrawal').length;
+            if (pendingWithdrawalCount >= maxPendingWithdrawalsPerUser) {
+                showNotification(`You already have ${pendingWithdrawalCount} pending withdrawal request(s).`, true);
                 return;
             }
 
@@ -2083,6 +2149,134 @@
             document.getElementById('find-recipient-btn').onclick = handleFindRecipient;
         };
 
+        const getRechargeSummary = () => {
+            const amount = parseFloat(document.getElementById('recharge-amount-input')?.value || '0') || 0;
+            const discount = Number((amount * RECHARGE_DISCOUNT_RATE).toFixed(2));
+            const chargeAmount = Number((amount - discount).toFixed(2));
+            return { amount, discount, chargeAmount };
+        };
+
+        const updateRechargeSummary = () => {
+            const summaryEl = document.getElementById('recharge-summary');
+            if (!summaryEl) return;
+            const { amount, discount, chargeAmount } = getRechargeSummary();
+            summaryEl.innerHTML = `
+                <div class="flex justify-between text-sm">
+                    <span class="text-gray-500 dark:text-gray-400">Recharge Amount</span>
+                    <span class="font-semibold">${formatCurrency(amount)}</span>
+                </div>
+                <div class="flex justify-between text-sm text-green-600 dark:text-green-400">
+                    <span>2% Discount</span>
+                    <span>-${formatCurrency(discount)}</span>
+                </div>
+                <div class="flex justify-between pt-2 border-t border-gray-200 dark:border-gray-700">
+                    <span class="font-semibold">Wallet Deduction</span>
+                    <span class="font-bold text-sky-600 dark:text-sky-300">${formatCurrency(chargeAmount)}</span>
+                </div>`;
+        };
+
+        const showMobileRechargePage = () => {
+            if (!currentUserData) return showNotification('User data not loaded. Please wait.', true);
+            if (currentUserData.isFlagged) {
+                return showNotification('Your account is flagged. Please contact support.', true);
+            }
+
+            const operatorOptions = RECHARGE_OPERATORS.map(op => `<option value="${op}">${op}</option>`).join('');
+            const stateOptions = RECHARGE_STATES.map(state => `<option value="${state}">${state}</option>`).join('');
+            const content = `
+                ${getPageHeader('Mobile Recharge')}
+                <div class="max-w-md mx-auto bg-white dark:bg-gray-800 p-6 rounded-xl shadow-md space-y-5">
+                    <div class="text-center">
+                        <div class="mx-auto w-14 h-14 rounded-2xl bg-sky-100 dark:bg-sky-900/40 text-sky-600 dark:text-sky-300 flex items-center justify-center mb-3">
+                            <svg class="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 2h8a2 2 0 012 2v16a2 2 0 01-2 2H8a2 2 0 01-2-2V4a2 2 0 012-2zm4 17h.01"></path>
+                            </svg>
+                        </div>
+                        <h3 class="text-lg font-semibold">Place Recharge Request</h3>
+                        <p class="text-sm text-gray-500 dark:text-gray-400 mt-1">Fill the plan details. Admin will complete it manually.</p>
+                    </div>
+
+                    <div class="space-y-4">
+                        <div>
+                            <label class="text-sm font-medium text-gray-500 dark:text-gray-400">Mobile Number</label>
+                            <input type="tel" id="recharge-mobile-input" maxlength="10" placeholder="Enter 10 digit mobile number" value="${currentUserData.mobile || ''}" class="w-full mt-1 px-4 py-3 bg-gray-100 dark:bg-gray-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-sky-500">
+                        </div>
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                            <div>
+                                <label class="text-sm font-medium text-gray-500 dark:text-gray-400">Operator</label>
+                                <select id="recharge-operator-select" class="w-full mt-1 px-4 py-3 bg-gray-100 dark:bg-gray-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-sky-500">
+                                    <option value="">Select operator</option>
+                                    ${operatorOptions}
+                                </select>
+                            </div>
+                            <div>
+                                <label class="text-sm font-medium text-gray-500 dark:text-gray-400">State / Circle</label>
+                                <select id="recharge-state-select" class="w-full mt-1 px-4 py-3 bg-gray-100 dark:bg-gray-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-sky-500">
+                                    <option value="">Select state</option>
+                                    ${stateOptions}
+                                </select>
+                            </div>
+                        </div>
+                        <div>
+                            <label class="text-sm font-medium text-gray-500 dark:text-gray-400">Recharge Amount</label>
+                            <input type="number" id="recharge-amount-input" min="1" placeholder="Enter plan amount (₹)" class="w-full mt-1 px-4 py-3 bg-gray-100 dark:bg-gray-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-sky-500">
+                        </div>
+                        <div>
+                            <label class="text-sm font-medium text-gray-500 dark:text-gray-400">Validity / Plan Details</label>
+                            <textarea id="recharge-details-input" rows="3" placeholder="Example: 28 days, 1.5GB/day, unlimited calls" class="w-full mt-1 px-4 py-3 bg-gray-100 dark:bg-gray-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-sky-500"></textarea>
+                        </div>
+                    </div>
+
+                    <div id="recharge-summary" class="space-y-2 bg-sky-50 dark:bg-sky-900/20 border border-sky-100 dark:border-sky-800 rounded-xl p-4"></div>
+                    <button id="submit-recharge-btn" class="w-full bg-sky-600 text-white font-semibold py-3 rounded-lg hover:bg-sky-700 transition">Continue to Checkout</button>
+                </div>
+                ${getPageFooter()}`;
+
+            showPage(content);
+            updateRechargeSummary();
+            document.getElementById('recharge-amount-input').addEventListener('input', updateRechargeSummary);
+            document.getElementById('submit-recharge-btn').onclick = handleRechargeCheckout;
+        };
+
+        const handleRechargeCheckout = () => {
+            const mobileNumber = document.getElementById('recharge-mobile-input').value.trim();
+            const operator = document.getElementById('recharge-operator-select').value;
+            const state = document.getElementById('recharge-state-select').value;
+            const planDetails = document.getElementById('recharge-details-input').value.trim();
+            const { amount, discount, chargeAmount } = getRechargeSummary();
+
+            if (!/^\d{10}$/.test(mobileNumber)) return showNotification('Please enter a valid 10 digit mobile number.', true);
+            if (!operator) return showNotification('Please select operator.', true);
+            if (!state) return showNotification('Please select state.', true);
+            if (amount <= 0) return showNotification('Please enter a valid recharge amount.', true);
+            if (!planDetails) return showNotification('Please enter validity or plan details.', true);
+            if ((currentUserData.balance || 0) < chargeAmount) return showNotification('Insufficient wallet balance for this recharge.', true);
+
+            renderModal('Confirm Mobile Recharge',
+                `<div class="space-y-4">
+                    <div class="bg-gray-100 dark:bg-gray-700 p-4 rounded-lg space-y-2 text-sm">
+                        <div class="flex justify-between gap-3"><span class="text-gray-500 dark:text-gray-400">Mobile</span><span class="font-semibold">${mobileNumber}</span></div>
+                        <div class="flex justify-between gap-3"><span class="text-gray-500 dark:text-gray-400">Operator</span><span class="font-semibold">${operator}</span></div>
+                        <div class="flex justify-between gap-3"><span class="text-gray-500 dark:text-gray-400">State</span><span class="font-semibold text-right">${state}</span></div>
+                        <div class="flex justify-between gap-3"><span class="text-gray-500 dark:text-gray-400">Plan</span><span class="font-semibold text-right">${planDetails}</span></div>
+                        <div class="pt-2 mt-2 border-t border-gray-300 dark:border-gray-600 space-y-2">
+                            <div class="flex justify-between"><span>Recharge Amount</span><span>${formatCurrency(amount)}</span></div>
+                            <div class="flex justify-between text-green-600"><span>2% Discount</span><span>-${formatCurrency(discount)}</span></div>
+                            <div class="flex justify-between font-bold"><span>Wallet Deduction</span><span>${formatCurrency(chargeAmount)}</span></div>
+                        </div>
+                    </div>
+                    <p class="text-xs text-gray-500 dark:text-gray-400 text-center">Recharge will stay pending until admin completes it and enters transaction ID.</p>
+                </div>`,
+                `<button onclick="window.closeModal()" class="px-4 py-2 text-sm bg-gray-200 dark:bg-gray-600 rounded-lg">Cancel</button>
+                 <button id="confirm-recharge-btn" class="px-4 py-2 text-sm bg-sky-600 text-white rounded-lg">Place Request</button>`,
+                'max-w-md', true
+            );
+
+            document.getElementById('confirm-recharge-btn').onclick = () => {
+                handleSubmitRechargeRequest({ mobileNumber, operator, state, planDetails, amount, discount, chargeAmount });
+            };
+        };
+
         const showAdminWithdrawalsPage = () => {
             const content = `
                 ${getPageHeader('Pending Withdrawal Requests')}
@@ -2092,6 +2286,17 @@
                 ${getPageFooter()}`;
             showPage(content);
             renderAdminFundRequests(allFundRequestsCache);
+        };
+
+        const showAdminRechargeRequestsPage = () => {
+            const content = `
+                ${getPageHeader('Pending Recharge Requests')}
+                <div class="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-md space-y-4">
+                    <div id="admin-recharge-requests-list-page" class="max-h-[75vh] overflow-y-auto"></div>
+                </div>
+                ${getPageFooter()}`;
+            showPage(content);
+            renderAdminRechargeRequests(allRechargeRequestsCache);
         };
 
         const handleCleanupScamRequests = async () => {
@@ -2598,6 +2803,45 @@
                 </div>`).join('');
         };
 
+        const renderAdminRechargeRequests = (requests) => {
+            const listEl = document.getElementById('admin-recharge-requests-list-page');
+            if (!listEl) return;
+
+            const pendingRequests = [...requests];
+            pendingRequests.sort((a, b) => (a.requestedAt?.toMillis() || 0) - (b.requestedAt?.toMillis() || 0));
+
+            listEl.innerHTML = pendingRequests.length === 0 ? '<p class="text-gray-500 dark:text-gray-400 text-sm p-4 text-center">No pending recharge requests.</p>' : pendingRequests.map(r => `
+                <div class="p-4 mb-3 bg-sky-50 dark:bg-sky-900/20 rounded-xl border border-sky-100 dark:border-sky-800">
+                    <div class="flex flex-col sm:flex-row justify-between sm:items-start gap-3">
+                        <div class="text-sm flex-grow space-y-2">
+                            <div>
+                                <p class="font-semibold text-sky-700 dark:text-sky-300">Recharge ${formatCurrency(r.amount)}</p>
+                                <p class="font-semibold text-gray-700 dark:text-gray-200">${r.userName || 'No Name'}</p>
+                                <p class="text-xs text-gray-500 dark:text-gray-400">${r.userEmail || 'No Email'} | ${r.userMobile || 'No Mobile'}</p>
+                            </div>
+                            <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                <p class="text-xs bg-white dark:bg-gray-800 px-2 py-1 rounded">Recharge Mobile: <span class="font-mono font-semibold">${r.mobileNumber || 'N/A'}</span></p>
+                                <p class="text-xs bg-white dark:bg-gray-800 px-2 py-1 rounded">Operator: <span class="font-semibold">${r.operator || 'N/A'}</span></p>
+                                <p class="text-xs bg-white dark:bg-gray-800 px-2 py-1 rounded">State: <span class="font-semibold">${r.state || 'N/A'}</span></p>
+                                <p class="text-xs bg-white dark:bg-gray-800 px-2 py-1 rounded">Wallet Cut: <span class="font-semibold">${formatCurrency(r.chargeAmount || r.amount || 0)}</span></p>
+                            </div>
+                            <div class="text-xs bg-white dark:bg-gray-800 px-2 py-2 rounded">
+                                <p class="text-gray-500 dark:text-gray-400">Plan Details</p>
+                                <p class="font-semibold">${r.planDetails || 'N/A'}</p>
+                            </div>
+                            <div class="flex flex-wrap gap-2 text-xs">
+                                <span class="bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300 px-2 py-1 rounded">2% discount: ${formatCurrency(r.discount || 0)}</span>
+                                <button data-action="copy-text" data-text="${r.mobileNumber || ''}" class="bg-gray-200 dark:bg-gray-700 px-2 py-1 rounded hover:bg-gray-300 dark:hover:bg-gray-600">Copy Mobile</button>
+                            </div>
+                        </div>
+                        <div class="flex flex-row sm:flex-col gap-2 flex-shrink-0">
+                            <button data-action="complete-recharge" data-userid="${r.userId}" data-requestid="${r.id}" class="px-3 py-1 text-xs bg-sky-600 text-white rounded hover:bg-sky-700 font-semibold">Mark Done</button>
+                            <button data-action="reject-recharge" data-userid="${r.userId}" data-requestid="${r.id}" class="px-3 py-1 text-xs bg-red-500 text-white rounded hover:bg-red-600 font-semibold">Reject</button>
+                        </div>
+                    </div>
+                </div>`).join('');
+        };
+
         const renderAdminGiftCodesList = (docs) => {
             const listEl = document.getElementById('gift-codes-list-page');
             if (!listEl) return;
@@ -2617,6 +2861,67 @@
 
         // --- ACTIONS & EVENT HANDLERS ---
 
+        const handleSubmitRechargeRequest = async ({ mobileNumber, operator, state, planDetails, amount, discount, chargeAmount }) => {
+            if (!currentUser) return showNotification('Error: You are not logged in.', true);
+            if (!currentUserData) return showNotification('Your user data is still loading. Please try again.', true);
+
+            try {
+                const userRef = doc(db, `artifacts/${appId}/public/data/users`, currentUser.uid);
+
+                await runTransaction(db, async (tx) => {
+                    const userDoc = await tx.get(userRef);
+                    if (!userDoc.exists()) throw new Error("User account not found!");
+
+                    const currentBalance = userDoc.data().balance || 0;
+                    if (currentBalance < chargeAmount) throw new Error("Insufficient wallet balance for this recharge.");
+
+                    const reqRef = doc(collection(db, `artifacts/${appId}/public/data/fund_requests`));
+                    tx.update(userRef, { balance: currentBalance - chargeAmount });
+
+                    tx.set(reqRef, {
+                        userId: currentUser.uid,
+                        userName: currentUserData.name || 'N/A',
+                        userMobile: currentUserData.mobile || 'N/A',
+                        userEmail: currentUserData.email || 'N/A',
+                        type: 'mobile_recharge',
+                        mobileNumber,
+                        operator,
+                        state,
+                        planDetails,
+                        amount,
+                        discount,
+                        discountRate: RECHARGE_DISCOUNT_RATE,
+                        chargeAmount,
+                        status: 'pending',
+                        requestedAt: serverTimestamp()
+                    });
+
+                    tx.set(doc(collection(userRef, 'transactions')), {
+                        type: 'mobile_recharge',
+                        amount,
+                        discount,
+                        chargeAmount,
+                        mobileNumber,
+                        operator,
+                        state,
+                        planDetails,
+                        comment: `Mobile Recharge (${operator})`,
+                        timestamp: serverTimestamp(),
+                        status: 'pending',
+                        requestId: reqRef.id,
+                        transactionId: generateTransactionId()
+                    });
+                });
+
+                showNotification('Recharge request submitted and wallet amount deducted!', false, true);
+                window.closeModal();
+                hidePage();
+            } catch (e) {
+                console.error("Recharge request failed:", e);
+                showNotification('Could not submit recharge request. Error: ' + e.message, true);
+            }
+        };
+
         let handleWithdrawRequest = async (amount, method, methodName) => {
             if (!currentUser) return showNotification('Error: You are not logged in.', true);
             if (!currentUserData) {
@@ -2630,8 +2935,9 @@
                 where("status", "==", "pending")
             );
             const snap = await getDocs(q);
-            if (snap.size >= maxPendingWithdrawalsPerUser) {
-                return showNotification(`You already have ${snap.size} pending withdrawal request(s). Please wait for them to be processed.`, true);
+            const pendingWithdrawalCount = snap.docs.filter(d => (d.data().type || 'withdrawal') === 'withdrawal').length;
+            if (pendingWithdrawalCount >= maxPendingWithdrawalsPerUser) {
+                return showNotification(`You already have ${pendingWithdrawalCount} pending withdrawal request(s). Please wait for them to be processed.`, true);
             }
 
             let paymentDetails = '';
@@ -3083,6 +3389,126 @@
                     }
                     proceedWithRequestAction(userId, requestId, newStatus, null, null, rejectionReason);
                 };
+            }
+        };
+
+        const handleRechargeAction = (userId, requestId, newStatus) => {
+            const reqData = allRechargeRequestsCache.find(r => r.id === requestId);
+            if (!reqData) return showNotification('Error: Recharge request not found.', true);
+
+            if (newStatus === 'completed') {
+                renderModal('Complete Recharge',
+                    `<div class="space-y-4">
+                        <p class="mb-2">Enter the recharge transaction ID after completing ${formatCurrency(reqData.amount)} recharge for ${reqData.mobileNumber}.</p>
+                        <div class="bg-gray-100 dark:bg-gray-700 p-3 rounded-lg text-xs space-y-1">
+                            <p><strong>Operator:</strong> ${reqData.operator}</p>
+                            <p><strong>State:</strong> ${reqData.state}</p>
+                            <p><strong>Plan:</strong> ${reqData.planDetails}</p>
+                            <p><strong>Wallet Deducted:</strong> ${formatCurrency(reqData.chargeAmount || reqData.amount || 0)}</p>
+                        </div>
+                        <input type="text" id="admin-recharge-tx-id-input" placeholder="Enter Transaction ID" class="w-full px-4 py-3 bg-gray-100 dark:bg-gray-700 rounded-lg">
+                    </div>`,
+                    `<button onclick="window.closeModal()" class="px-4 py-2 text-sm bg-gray-200 dark:bg-gray-600 rounded-lg">Cancel</button>
+                     <button id="modal-recharge-confirm-btn" class="px-4 py-2 text-sm bg-sky-600 text-white rounded-lg">Mark Done</button>`,
+                    'max-w-md'
+                );
+                document.getElementById('modal-recharge-confirm-btn').onclick = () => {
+                    const txnId = document.getElementById('admin-recharge-tx-id-input').value.trim();
+                    if (!txnId) return showNotification('Transaction ID is required.', true);
+                    proceedWithRechargeAction(userId, requestId, newStatus, txnId, reqData);
+                };
+            } else {
+                renderModal('Reject Recharge Request',
+                    `<div class="space-y-4">
+                        <p class="font-semibold text-red-500">Reject this recharge request and refund wallet deduction?</p>
+                        <textarea id="recharge-rejection-reason-input" placeholder="Enter rejection reason" class="w-full px-4 py-3 bg-gray-100 dark:bg-gray-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500" rows="3"></textarea>
+                    </div>`,
+                    `<button onclick="window.closeModal()" class="px-4 py-2 text-sm bg-gray-200 dark:bg-gray-600 rounded-lg">Cancel</button>
+                     <button id="modal-recharge-reject-btn" class="px-4 py-2 text-sm bg-red-600 text-white rounded-lg">Reject & Refund</button>`,
+                    'max-w-md'
+                );
+                document.getElementById('modal-recharge-reject-btn').onclick = () => {
+                    const reason = document.getElementById('recharge-rejection-reason-input').value.trim();
+                    if (!reason) return showNotification('Please provide a rejection reason.', true);
+                    proceedWithRechargeAction(userId, requestId, newStatus, null, reqData, reason);
+                };
+            }
+        };
+
+        const proceedWithRechargeAction = async (userId, requestId, newStatus, txnId, reqData, rejectionReason = '') => {
+            try {
+                const reqRef = doc(db, `artifacts/${appId}/public/data/fund_requests`, requestId);
+                await runTransaction(db, async (tx) => {
+                    const reqDoc = await tx.get(reqRef);
+                    if (!reqDoc.exists() || reqDoc.data().status !== 'pending') throw new Error("Recharge request not found or already processed.");
+
+                    const data = reqDoc.data();
+                    const userRef = doc(db, `artifacts/${appId}/public/data/users`, userId);
+                    const userDoc = await tx.get(userRef);
+                    const chargeAmount = data.chargeAmount || data.amount || 0;
+
+                    if (newStatus === 'completed') {
+                        tx.update(reqRef, {
+                            status: 'completed',
+                            processedAt: serverTimestamp(),
+                            adminTransactionId: txnId
+                        });
+                    } else {
+                        tx.update(reqRef, {
+                            status: 'rejected',
+                            processedAt: serverTimestamp(),
+                            rejectionReason
+                        });
+                        if (userDoc.exists()) {
+                            tx.update(userRef, { balance: (userDoc.data().balance || 0) + chargeAmount });
+                        }
+                    }
+
+                    if (userDoc.exists()) {
+                        const txQuery = query(collection(userRef, 'transactions'), where("requestId", "==", requestId));
+                        const txSnap = await getDocs(txQuery);
+                        const txUpdate = newStatus === 'completed'
+                            ? {
+                                status: 'completed',
+                                adminTransactionId: txnId,
+                                transactionId: txnId,
+                                processedAt: serverTimestamp()
+                            }
+                            : {
+                                status: 'rejected',
+                                rejectionReason,
+                                processedAt: serverTimestamp(),
+                                comment: `Mobile Recharge Rejected: ${rejectionReason}`
+                            };
+
+                        if (!txSnap.empty) {
+                            tx.update(txSnap.docs[0].ref, txUpdate);
+                        } else {
+                            tx.set(doc(collection(userRef, 'transactions')), {
+                                type: 'mobile_recharge',
+                                amount: data.amount,
+                                chargeAmount,
+                                discount: data.discount || 0,
+                                mobileNumber: data.mobileNumber,
+                                operator: data.operator,
+                                state: data.state,
+                                planDetails: data.planDetails,
+                                comment: newStatus === 'completed' ? `Mobile Recharge (${data.operator})` : `Mobile Recharge Rejected: ${rejectionReason}`,
+                                timestamp: serverTimestamp(),
+                                requestId,
+                                transactionId: txnId || generateTransactionId(),
+                                status: newStatus,
+                                adminTransactionId: txnId || ''
+                            });
+                        }
+                    }
+                });
+                showNotification(`Recharge request has been ${newStatus === 'completed' ? 'completed' : 'rejected'}.`);
+                window.closeModal();
+            } catch (e) {
+                console.error("Recharge action failed:", e);
+                showNotification(`Error: ${e.message}`, true);
+                window.closeModal();
             }
         };
 
@@ -3702,12 +4128,14 @@
                 );
             };
 
-            const isCredit = item.type !== 'debit' && item.type !== 'withdrawal' && item.amount > 0;
+            const isRecharge = item.type === 'mobile_recharge';
+            const isCredit = item.type !== 'debit' && item.type !== 'withdrawal' && !isRecharge && item.amount > 0;
             const dateStr = formatDate(item.timestamp);
-            const amountStr = formatCurrency(Math.abs(item.amount));
+            const displayAmount = isRecharge ? (item.chargeAmount || item.amount || 0) : Math.abs(item.amount);
+            const amountStr = formatCurrency(displayAmount);
 
             // Format amount in words
-            const amountInWords = numberToWords(Math.abs(item.amount)) + " Only";
+            const amountInWords = numberToWords(displayAmount) + " Only";
 
             const senderName = item.senderName || (isCredit ? (item.isAdminTransaction ? 'Reviews World' : 'User') : currentUserData.name);
             const recipientName = item.recipientName || (isCredit ? currentUserData.name : 'User');
@@ -3785,7 +4213,34 @@
                         <p class="text-xs text-red-700 dark:text-red-300 mt-0.5">${item.rejectionReason}</p>
                     </div>` : '';
             }
-            const dateVerb = isWithdrawal ? (isRejected ? 'Failed' : isPending ? 'Requested' : 'Withdrawn') : (isCredit ? 'Received' : 'Paid');
+            if (isRecharge) {
+                statusTitle = isRejected ? 'Recharge Failed' : isPending ? 'Recharge Pending' : 'Mobile Recharge Done';
+                statusLabel = isRejected ? 'Failed' : isPending ? 'Pending' : 'Recharge Completed';
+                statusPillClass = isRejected
+                    ? 'bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-400 border-red-100 dark:border-red-900/30'
+                    : isPending
+                        ? 'bg-yellow-50 dark:bg-yellow-900/20 text-yellow-700 dark:text-yellow-400 border-yellow-100 dark:border-yellow-900/30'
+                        : 'bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-400 border-green-100 dark:border-green-900/30';
+                statusIconClass = isRejected ? 'text-red-500' : isPending ? 'text-yellow-500' : 'text-green-500';
+                fromParty = { label: 'From', name: 'Digital Wallet', detail: 'RW Wallet Balance', appLogo: true };
+                toParty = { label: 'Recharge For', name: item.mobileNumber || 'Mobile Number', detail: `${item.operator || ''} ${item.state ? `| ${item.state}` : ''}`.trim(), appLogo: false };
+                modeLabel = 'Mobile Recharge';
+                extraDetail = `
+                    <div class="bg-sky-50 dark:bg-sky-900/20 px-3 py-2">
+                        <p class="text-[10px] font-semibold uppercase text-sky-600 dark:text-sky-300">Plan Details</p>
+                        <p class="text-xs text-sky-800 dark:text-sky-200 mt-0.5">${item.planDetails || 'N/A'}</p>
+                    </div>
+                    <div class="bg-green-50 dark:bg-green-900/20 px-3 py-2">
+                        <p class="text-[10px] font-semibold uppercase text-green-600 dark:text-green-300">Discount</p>
+                        <p class="text-xs text-green-800 dark:text-green-200 mt-0.5">Recharge ${formatCurrency(item.amount || 0)} - 2% discount ${formatCurrency(item.discount || 0)} = wallet deduction ${formatCurrency(item.chargeAmount || item.amount || 0)}</p>
+                    </div>
+                    ${isRejected && item.rejectionReason ? `
+                        <div class="bg-red-50 dark:bg-red-900/20 px-3 py-2">
+                            <p class="text-[10px] font-semibold uppercase text-red-500 dark:text-red-400">Failed Reason</p>
+                            <p class="text-xs text-red-700 dark:text-red-300 mt-0.5">${item.rejectionReason}</p>
+                        </div>` : ''}`;
+            }
+            const dateVerb = isRecharge ? (isRejected ? 'Failed' : isPending ? 'Requested' : 'Recharged') : isWithdrawal ? (isRejected ? 'Failed' : isPending ? 'Requested' : 'Withdrawn') : (isCredit ? 'Received' : 'Paid');
 
             const content = `
                 <div class="bg-gray-50 dark:bg-gray-900 min-h-screen pb-6 overflow-x-hidden">
@@ -3964,6 +4419,14 @@
                     handleRequestAction(userid, requestid, 'rejected');
                     break;
 
+                case 'complete-recharge':
+                    handleRechargeAction(userid, requestid, 'completed');
+                    break;
+
+                case 'reject-recharge':
+                    handleRechargeAction(userid, requestid, 'rejected');
+                    break;
+
                 case 'copy-upi':
                     handleCopyUpi(upi, target);
                     break;
@@ -4016,6 +4479,7 @@
         document.getElementById('admin-withdrawal-history-btn').addEventListener('click', showWithdrawalHistoryPage);
         document.getElementById('admin-withdraw-settings-btn').addEventListener('click', showAdminWithdrawSettingsModal);
         document.getElementById('admin-pro-users-btn').addEventListener('click', showAdminUsersPage);
+        document.getElementById('admin-recharge-requests-btn').addEventListener('click', showAdminRechargeRequestsPage);
 
         // Withdraw Fund Button - Now opens full page
         document.getElementById('withdraw-fund-btn').addEventListener('click', showWithdrawPage);
@@ -4031,6 +4495,7 @@
 
         // Pay to Wallet Button - Now opens full page
         document.getElementById('pay-to-wallet-btn').addEventListener('click', showPayToWalletPage);
+        document.getElementById('mobile-recharge-btn').addEventListener('click', showMobileRechargePage);
 
         // Preload logo images to prevent loading flicker
         const preloadLogoImages = () => {
