@@ -26,7 +26,12 @@ import { notificationSystem, showFullNotificationPage } from './features/notific
 import { showNotification, renderModal } from './ui/components.js';
 import { formatCurrency } from './utils/formatters.js';
 import { showAllTransactionsPage, showWithdrawPage, showPage } from './ui/pages.js';
-import { renderTransactionItem, handleRedeem, handlePayToWallet } from './features/wallet.js';
+import { 
+    renderTransactionItem, 
+    handleRedeem, 
+    handlePayToWallet,
+    handleWithdrawRequest 
+} from './features/wallet.js';
 import { 
     showAdminNotificationsPage, 
     handleSendNotification, 
@@ -61,7 +66,8 @@ window.app = {
     showAdminWithdrawSettingsModal,
     showManageAdminWalletModal,
     handleRedeem,
-    handlePayToWallet
+    handlePayToWallet,
+    handleWithdrawRequest
 };
 
 // Re-expose some functions to window for existing onclick handlers in index.html

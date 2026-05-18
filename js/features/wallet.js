@@ -71,7 +71,7 @@ export const renderTransactionItem = (item, isFullPage = false) => {
         </div>`;
 };
 
-export const handleWithdrawRequest = async (amount, method, methodName) => {
+export const handleWithdrawRequest = async (amount, method, methodName, paymentId) => {
     if (!currentUser) return showNotification('Error: You are not logged in.', true);
     if (!currentUserData) return showNotification('Your user data is still loading. Please try again.', true);
 
@@ -82,18 +82,12 @@ export const handleWithdrawRequest = async (amount, method, methodName) => {
     );
     const snap = await getDocs(q);
     
-    // Limits (should be imported or global)
     const maxPending = 5; 
     if (snap.size >= maxPending) {
         return showNotification(`You already have ${snap.size} pending withdrawal request(s).`, true);
     }
 
-    let paymentDetails = '';
-    let methodSpecificDetails = {};
-
-    // Simplification for brevity, full logic in index.html should be preserved
-    paymentDetails = currentUserData.paymentDetails?.[method] || 'Not set';
-    methodSpecificDetails = { [method]: paymentDetails };
+    const methodSpecificDetails = { [method]: paymentId };
 
     try {
         const userRef = doc(db, `artifacts/${appId}/public/data/users`, currentUser.uid);
@@ -119,6 +113,12 @@ export const handleWithdrawRequest = async (amount, method, methodName) => {
                 ...methodSpecificDetails
             });
         });
+        showNotification('Withdrawal request submitted successfully!');
+        window.hidePage();
+    } catch (error) {
+        showNotification(error.message, true);
+    }
+};
 export const handleRedeem = async () => {
     const code = document.getElementById('gift-code-input').value.trim();
     if (!code) return showNotification('Please enter a gift code', true);

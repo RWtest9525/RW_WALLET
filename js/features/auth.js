@@ -121,15 +121,26 @@ export const handleLogout = async () => {
 export const handleForgotPassword = async () => {
     const email = document.getElementById('reset-email-input').value.trim();
     const errorElement = document.getElementById('reset-error');
+    const sendBtn = document.getElementById('send-reset-btn');
+
     if (!email) {
         errorElement.textContent = 'Please enter your email address';
         return;
     }
+
+    sendBtn.disabled = true;
+    sendBtn.textContent = 'Sending...';
+
     try {
         await sendPasswordResetEmail(auth, email);
-        showNotification('Password reset email sent! Check your inbox.');
+        showNotification('Success! Please check your Gmail inbox or Spam folder. A reset link has been sent.', false);
         if (window.closeForgotPasswordModal) window.closeForgotPasswordModal();
     } catch (error) {
-        errorElement.textContent = error.message;
+        let msg = error.message;
+        if (error.code === 'auth/user-not-found') msg = "No account found with this email.";
+        errorElement.textContent = msg;
+    } finally {
+        sendBtn.disabled = false;
+        sendBtn.textContent = 'Send Link';
     }
 };
