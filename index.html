@@ -965,6 +965,7 @@
         let allRechargeRequestsCache = [];
         let allLoanRequestsCache = [];
         let allLoansCache = [];
+        let allGiftCodesCache = [];
         let unifiedHistoryCache = [];
         let notificationTimeout;
 
@@ -1656,6 +1657,7 @@
             const codesQuery = query(collection(db, `artifacts/${appId}/public/data/gift_codes`));
             unsubscribers.push(onSnapshot(codesQuery, (snap) => {
                 console.log(`Admin listener: ${snap.docs.length} gift codes fetched.`);
+                allGiftCodesCache = snap.docs;
                 const totalRedeemed = snap.docs.reduce((acc, doc) => acc + (doc.data().timesUsed || 0), 0);
                 document.getElementById('analytics-gift-cards').textContent = totalRedeemed;
 
@@ -2563,15 +2565,28 @@
         const showAdminGiftCodesPage = () => {
             const content = `
                 ${getPageHeader('Gift Codes')}
-                <div class="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-md">
-                    <button id="create-gift-code-btn-page" class="px-4 py-2 text-sm bg-green-600 text-white font-semibold rounded-lg hover:bg-green-700 transition mb-4">Create New</button>
+                <div class="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-md space-y-4">
+                    <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                        <button id="create-gift-code-btn-page" class="px-4 py-2 text-sm bg-green-600 text-white font-semibold rounded-lg hover:bg-green-700 transition">Create New</button>
+                        <button id="copy-active-gift-codes-btn" class="px-4 py-2 text-sm bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700 transition">Copy Active Codes</button>
+                    </div>
+                    <div class="grid grid-cols-1 sm:grid-cols-[1fr_1fr_auto] gap-3 p-4 bg-gray-50 dark:bg-gray-700/50 rounded-xl border border-gray-100 dark:border-gray-700">
+                        <input type="number" id="bulk-gift-code-count" min="1" max="200" placeholder="How many codes?" class="w-full px-4 py-3 bg-white dark:bg-gray-800 rounded-lg">
+                        <input type="number" id="bulk-gift-code-amount" min="1" placeholder="Amount (₹)" class="w-full px-4 py-3 bg-white dark:bg-gray-800 rounded-lg">
+                        <button id="bulk-gift-code-generate-btn" class="px-4 py-3 text-sm bg-purple-600 text-white font-semibold rounded-lg hover:bg-purple-700 transition">Generate</button>
+                    </div>
                     <div id="gift-codes-list-page" class="space-y-2 max-h-[70vh] overflow-y-auto"></div>
                 </div>
                 ${getPageFooter()}`;
             showPage(content);
             getDocs(collection(db, `artifacts/${appId}/public/data/gift_codes`))
-                .then(snap => renderAdminGiftCodesList(snap.docs));
+                .then(snap => {
+                    allGiftCodesCache = snap.docs;
+                    renderAdminGiftCodesList(snap.docs);
+                });
             document.getElementById('create-gift-code-btn-page').onclick = showCreateGiftCodeModal;
+            document.getElementById('bulk-gift-code-generate-btn').onclick = handleGenerateGiftCodes;
+            document.getElementById('copy-active-gift-codes-btn').onclick = (e) => handleCopyActiveGiftCodes(e.currentTarget);
         };
         // Show Withdrawal History Page with filters
         const showWithdrawalHistoryPage = async () => {
@@ -3707,6 +3722,84 @@
             });
             showNotification(`Code ${code} created.`);
             window.closeModal();
+        };
+
+        const generateUniqueGiftCodeValue = (existingCodes) => {
+            const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+            let code = '';
+
+            do {
+                code = 'RW';
+                for (let i = 0; i < 8; i++) {
+                    code += chars[Math.floor(Math.random() * chars.length)];
+                }
+            } while (existingCodes.has(code));
+
+            existingCodes.add(code);
+            return code;
+        };
+
+        const handleGenerateGiftCodes = async () => {
+            const count = parseInt(document.getElementById('bulk-gift-code-count').value);
+            const amount = parseFloat(document.getElementById('bulk-gift-code-amount').value);
+
+            if (isNaN(count) || count <= 0 || count > 200 || isNaN(amount) || amount <= 0) {
+                return showNotification('Enter valid count (1-200) and amount.', true);
+            }
+
+            try {
+                const codesRef = collection(db, `artifacts/${appId}/public/data/gift_codes`);
+                const snap = await getDocs(codesRef);
+                const existingCodes = new Set(snap.docs.map(d => (d.data().code || '').toUpperCase()));
+                const batch = writeBatch(db);
+
+                for (let i = 0; i < count; i++) {
+                    const code = generateUniqueGiftCodeValue(existingCodes);
+                    batch.set(doc(codesRef), {
+                        code,
+                        amount,
+                        usageLimit: 1,
+                        timesUsed: 0,
+                        redeemedBy: [],
+                        createdAt: serverTimestamp()
+                    });
+                }
+
+                await batch.commit();
+                document.getElementById('bulk-gift-code-count').value = '';
+                document.getElementById('bulk-gift-code-amount').value = '';
+                const freshSnap = await getDocs(codesRef);
+                allGiftCodesCache = freshSnap.docs;
+                renderAdminGiftCodesList(freshSnap.docs);
+                showNotification(`${count} unique gift code(s) generated.`);
+            } catch (e) {
+                console.error('Bulk gift code generation failed:', e);
+                showNotification(`Error: ${e.message}`, true);
+            }
+        };
+
+        const handleCopyActiveGiftCodes = async (button) => {
+            try {
+                let docs = allGiftCodesCache;
+                if (!docs.length) {
+                    const snap = await getDocs(collection(db, `artifacts/${appId}/public/data/gift_codes`));
+                    docs = snap.docs;
+                    allGiftCodesCache = docs;
+                }
+
+                const activeCodes = docs
+                    .map(d => d.data())
+                    .filter(c => (c.timesUsed || 0) < (c.usageLimit || 1))
+                    .map(c => c.code)
+                    .filter(Boolean);
+
+                if (!activeCodes.length) return showNotification('No active gift codes to copy.', true);
+                await handleCopyText(activeCodes.join('\n'), button);
+                showNotification('Active gift codes copied line by line.');
+            } catch (e) {
+                console.error('Copy active gift codes failed:', e);
+                showNotification(`Error: ${e.message}`, true);
+            }
         };
 
         const handleDeleteGiftCode = (docId) => {
