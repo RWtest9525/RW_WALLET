@@ -209,6 +209,8 @@
         .tx-item-clickable {
             cursor: pointer;
             transition: background-color 0.1s ease-in-out;
+            content-visibility: auto;
+            contain-intrinsic-size: 72px;
         }
 
         .tx-item-clickable:hover {
@@ -231,6 +233,10 @@
 
         .chat-bubble-admin {
             border-radius: 18px 18px 18px 4px;
+        }
+
+        .app-footer-hidden {
+            display: none;
         }
 
         @keyframes borderAnimation {
@@ -666,14 +672,9 @@
             </header>
             <!-- Main Dashboard Area (Tabs) -->
             <div id="dashboard-content">
-                <!-- Tab Navigation -->
-                <div class="mb-6 border-b border-gray-200 dark:border-gray-700">
-                    <nav id="tabs-container" class="flex space-x-4" aria-label="Tabs">
-                        <button data-tab="user-panel" class="tab-button px-3 py-2 font-medium text-sm border-b-2">My
-                            Wallet</button>
-                        <button data-tab="admin-panel" id="admin-tab-button"
-                            class="hidden tab-button px-3 py-2 font-medium text-sm border-b-2">Admin Panel</button>
-                    </nav>
+                <div id="tabs-container" class="hidden" aria-hidden="true">
+                    <button data-tab="user-panel" class="tab-button" aria-selected="true">My Wallet</button>
+                    <button data-tab="admin-panel" id="admin-tab-button" class="hidden tab-button" aria-selected="false">Admin Panel</button>
                 </div>
 
                 <!-- User Panel -->
@@ -872,7 +873,7 @@
             </div>
 
             <nav id="bottom-nav" class="fixed left-1/2 bottom-3 z-50 w-[calc(100%-1.5rem)] max-w-xl -translate-x-1/2 rounded-2xl border border-gray-200 dark:border-gray-700 bg-white/95 dark:bg-gray-800/95 shadow-2xl backdrop-blur">
-                <div class="grid grid-cols-4 items-center px-2 py-2 text-xs font-semibold text-gray-500 dark:text-gray-400">
+                <div id="bottom-nav-grid" class="grid grid-cols-4 items-center px-2 py-2 text-xs font-semibold text-gray-500 dark:text-gray-400">
                     <button id="bottom-transactions-btn" class="bottom-nav-btn flex flex-col items-center gap-1 py-1">
                         <span class="bottom-nav-icon flex h-9 w-9 items-center justify-center rounded-xl bg-gray-100 dark:bg-gray-700 transition">
                             <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16"></path><path d="M4 12h16"></path><path d="M4 17h10"></path></svg>
@@ -880,10 +881,16 @@
                         <span>Transaction</span>
                     </button>
                     <button id="bottom-home-btn" class="bottom-nav-btn active flex flex-col items-center gap-1 py-1">
-                        <span class="bottom-nav-icon flex h-12 w-12 items-center justify-center rounded-2xl bg-blue-600 text-white shadow-lg transition -mt-5">
+                        <span class="bottom-nav-icon flex h-10 w-10 items-center justify-center rounded-xl bg-gray-100 dark:bg-gray-700 transition">
                             <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m3 10 9-7 9 7"></path><path d="M5 10v10h14V10"></path><path d="M9 20v-6h6v6"></path></svg>
                         </span>
                         <span>Home</span>
+                    </button>
+                    <button id="bottom-admin-btn" class="bottom-nav-btn hidden flex flex-col items-center gap-1 py-1">
+                        <span class="bottom-nav-icon flex h-9 w-9 items-center justify-center rounded-xl bg-gray-100 dark:bg-gray-700 transition">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2"></rect><path d="M8 12h8"></path><path d="M12 8v8"></path></svg>
+                        </span>
+                        <span>Admin</span>
                     </button>
                     <button id="bottom-help-btn" class="bottom-nav-btn flex flex-col items-center gap-1 py-1">
                         <span class="bottom-nav-icon flex h-9 w-9 items-center justify-center rounded-xl bg-gray-100 dark:bg-gray-700 transition">
@@ -909,7 +916,7 @@
     </div>
 
     <!-- Footer -->
-    <footer class="text-center p-4 text-sm text-gray-500 dark:text-gray-400">
+    <footer id="app-footer" class="text-center p-4 text-sm text-gray-500 dark:text-gray-400">
         © Reviews world 2022. All rights reserved.
         <br>
         <span id="app-version" class="text-xs">v2.0</span>
@@ -1419,11 +1426,17 @@
             });
         };
 
-        const showPage = (content) => {
+        const setMainChrome = (show) => {
+            document.getElementById('bottom-nav')?.classList.toggle('hidden', !show);
+        };
+
+        const showPage = (content, options = {}) => {
             document.getElementById('dashboard-content').classList.add('hidden');
             const pageContainer = document.getElementById('page-container');
             pageContainer.innerHTML = content;
             pageContainer.classList.remove('hidden');
+            setMainChrome(!!options.keepBottomNav);
+            document.getElementById('app-footer')?.classList.add('app-footer-hidden');
             const backButton = pageContainer.querySelector('.page-back-btn');
             if (backButton) {
                 backButton.onclick = hidePage;
@@ -1439,12 +1452,15 @@
             document.getElementById('page-container').classList.add('hidden');
             document.getElementById('page-container').innerHTML = '';
             updateDollarBalanceDisplay(currentUserData?.balance || 0);
-            setBottomNavActive('bottom-home-btn');
+            setMainChrome(true);
+            document.getElementById('app-footer')?.classList.remove('app-footer-hidden');
             const selectedTab = document.querySelector('.tab-button[aria-selected="true"]');
             if (selectedTab) {
                 switchTab(selectedTab.dataset.tab);
+                setBottomNavActive(selectedTab.dataset.tab === 'admin-panel' ? 'bottom-admin-btn' : 'bottom-home-btn');
             } else {
                 switchTab(currentUser.uid === ADMIN_UID ? 'admin-panel' : 'user-panel');
+                setBottomNavActive(currentUser.uid === ADMIN_UID ? 'bottom-admin-btn' : 'bottom-home-btn');
             }
         };
 
@@ -1698,6 +1714,8 @@
                 }, 100);
 
                 document.getElementById('admin-tab-button').classList.toggle('hidden', !isAdmin);
+                document.getElementById('bottom-admin-btn').classList.toggle('hidden', !isAdmin);
+                document.getElementById('bottom-nav-grid').className = `grid ${isAdmin ? 'grid-cols-5' : 'grid-cols-4'} items-center px-2 py-2 text-xs font-semibold text-gray-500 dark:text-gray-400`;
 
                 if (isAdmin) {
                     console.log("User is Admin, initializing admin listeners...");
@@ -1709,6 +1727,8 @@
                     }
                 }
                 switchTab(isAdmin ? 'admin-panel' : 'user-panel');
+                setMainChrome(true);
+                setBottomNavActive(isAdmin ? 'bottom-admin-btn' : 'bottom-home-btn');
 
                 // Save user to localStorage for auto-login
                 localStorage.setItem('lastLoggedInUser', user.uid);
@@ -1721,6 +1741,8 @@
                 // Show auth screen immediately
                 document.getElementById('auth-screen').classList.remove('hidden');
                 document.getElementById('main-content').classList.add('hidden');
+                setMainChrome(false);
+                document.getElementById('app-footer')?.classList.add('app-footer-hidden');
 
                 closeSlideMenu();
             }
@@ -2068,6 +2090,8 @@
                 <div class="max-w-lg mx-auto space-y-4">
                     <div class="bg-white dark:bg-gray-800 p-5 rounded-2xl shadow-md border border-gray-100 dark:border-gray-700 space-y-3">
                         ${renderSettingAction('settings-profile-btn', 'My Profile', 'https://cdn-icons-png.flaticon.com/512/3135/3135715.png', 'blue')}
+                        ${renderSettingAction('settings-track-income-btn', 'Track Income', 'https://cdn-icons-png.flaticon.com/512/3135/3135706.png', 'emerald')}
+                        ${renderSettingAction('settings-invoice-btn', 'Invoice', 'https://cdn-icons-png.flaticon.com/512/337/337946.png', 'yellow')}
                         <button id="settings-theme-btn" class="flex items-center justify-between w-full text-left p-4 bg-gray-100 dark:bg-gray-700 rounded-xl hover:bg-gray-200 dark:hover:bg-gray-600 transition font-medium">
                             <span>Toggle Light/Dark Mode</span>
                         <div class="relative w-5 h-5">
@@ -2088,9 +2112,11 @@
                     <button id="settings-logout-btn" class="flex items-center justify-center w-full p-4 rounded-2xl bg-red-50 dark:bg-red-900/20 border border-red-100 dark:border-red-800 text-red-600 dark:text-red-300 font-bold">Logout</button>
                 </div>
                 ${getPageFooter()}`;
-            showPage(content);
+            showPage(content, { keepBottomNav: true });
             setBottomNavActive('bottom-settings-btn');
             document.getElementById('settings-profile-btn').onclick = showProfilePage;
+            document.getElementById('settings-track-income-btn').onclick = showTrackIncomePage;
+            document.getElementById('settings-invoice-btn').onclick = showWithdrawalInvoicesPage;
             document.getElementById('settings-theme-btn').onclick = toggleTheme;
             document.getElementById('settings-logout-btn').onclick = () => signOut(auth);
             if (isAdmin) {
@@ -2102,7 +2128,216 @@
             }
         };
 
+        const showHomeMainPage = () => {
+            if (activeChatUnsubscribe) {
+                activeChatUnsubscribe();
+                activeChatUnsubscribe = null;
+            }
+            document.getElementById('dashboard-content').classList.remove('hidden');
+            document.getElementById('page-container').classList.add('hidden');
+            document.getElementById('page-container').innerHTML = '';
+            setMainChrome(true);
+            document.getElementById('app-footer')?.classList.remove('app-footer-hidden');
+            switchTab('user-panel');
+            setBottomNavActive('bottom-home-btn');
+        };
+
+        const showAdminMainPage = () => {
+            if (!currentUser || currentUser.uid !== ADMIN_UID) return showNotification('Admin access only.', true);
+            if (activeChatUnsubscribe) {
+                activeChatUnsubscribe();
+                activeChatUnsubscribe = null;
+            }
+            document.getElementById('dashboard-content').classList.remove('hidden');
+            document.getElementById('page-container').classList.add('hidden');
+            document.getElementById('page-container').innerHTML = '';
+            setMainChrome(true);
+            document.getElementById('app-footer')?.classList.remove('app-footer-hidden');
+            switchTab('admin-panel');
+            setBottomNavActive('bottom-admin-btn');
+        };
+
         const SUPPORT_PROFILE_DESCRIPTION = 'Hey, I am Yash Vishal founder Of Reviews World Pvt. Ltd. Working since 2021. I am currently Running more than 5-6 community of Reviews world. I have more than 1000+ active members in our community.Please let me know if you want to do any deal regarding App Reviews work, Map reviews work, and other type of reviews work, web Development, App Developement, etc.Working on making REVIEWS WORLD App since Jan. 2026. It will announced soon..🤗#stay_away_haters';
+
+        const getSafeDate = (value) => value?.toDate ? value.toDate() : value ? new Date(value) : null;
+        const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+        const shortMonthNames = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'];
+
+        const getUserCreatedYear = () => {
+            const created = getSafeDate(currentUserData?.createdAt);
+            return created ? created.getFullYear() : new Date().getFullYear();
+        };
+
+        const getIncomeTransactions = () => unifiedHistoryCache.filter(item => {
+            if (item.status && item.status !== 'completed') return false;
+            return item.type === 'credit' || item.type === 'gift_card' || (item.type === 'wallet_transfer' && item.amount > 0);
+        });
+
+        const getWithdrawalTransactions = () => unifiedHistoryCache.filter(item => {
+            if (item.status && item.status !== 'completed') return false;
+            return item.type === 'withdrawal';
+        });
+
+        const showTrackIncomePage = () => {
+            const createdYear = getUserCreatedYear();
+            const currentYear = new Date().getFullYear();
+            const years = [];
+            for (let year = createdYear; year <= currentYear; year++) years.push(year);
+            const content = `
+                ${getPageHeader('Track Income')}
+                <div class="max-w-lg mx-auto space-y-4">
+                    <div class="bg-white dark:bg-gray-800 p-5 rounded-2xl shadow-md border border-gray-100 dark:border-gray-700">
+                        <label class="text-sm font-semibold text-gray-500 dark:text-gray-400">Choose Year</label>
+                        <select id="income-year-select" class="mt-2 w-full px-4 py-3 rounded-xl bg-gray-100 dark:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-emerald-500">
+                            ${years.map(year => `<option value="${year}" ${year === currentYear ? 'selected' : ''}>${year}</option>`).join('')}
+                        </select>
+                    </div>
+                    <div id="income-month-list" class="space-y-3"></div>
+                </div>
+                ${getPageFooter()}`;
+            showPage(content);
+            const renderIncomeYear = (year) => {
+                const created = getSafeDate(currentUserData?.createdAt);
+                const current = new Date();
+                const totals = Array(12).fill(0);
+                getIncomeTransactions().forEach(item => {
+                    const date = getSafeDate(item.timestamp || item.createdAt);
+                    if (!date || date.getFullYear() !== Number(year)) return;
+                    totals[date.getMonth()] += Number(item.amount || 0);
+                });
+                const rows = totals.map((amount, monthIndex) => {
+                    if (created && Number(year) === created.getFullYear() && monthIndex < created.getMonth()) return '';
+                    if (Number(year) === current.getFullYear() && monthIndex > current.getMonth()) return '';
+                    return `
+                        <div class="flex items-center justify-between p-4 bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 shadow-sm">
+                            <span class="font-semibold text-gray-900 dark:text-white">${monthNames[monthIndex]}</span>
+                            <span class="font-bold text-emerald-600 dark:text-emerald-300">${formatCurrency(amount)}</span>
+                        </div>`;
+                }).join('');
+                document.getElementById('income-month-list').innerHTML = rows || '<p class="text-center text-gray-500 dark:text-gray-400 py-8">No income records for this year.</p>';
+            };
+            document.getElementById('income-year-select').onchange = (e) => renderIncomeYear(e.target.value);
+            renderIncomeYear(currentYear);
+        };
+
+        const getInvoiceGroups = () => {
+            const groups = {};
+            getWithdrawalTransactions().forEach(item => {
+                const date = getSafeDate(item.timestamp || item.requestedAt || item.processedAt);
+                if (!date) return;
+                const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+                if (!groups[key]) groups[key] = { year: date.getFullYear(), month: date.getMonth(), items: [], total: 0 };
+                groups[key].items.push(item);
+                groups[key].total += Number(item.amount || 0);
+            });
+            return Object.entries(groups).map(([key, value]) => ({ key, ...value })).sort((a, b) => b.key.localeCompare(a.key));
+        };
+
+        const showWithdrawalInvoicesPage = () => {
+            const groups = getInvoiceGroups();
+            const content = `
+                ${getPageHeader('Invoice')}
+                <div class="max-w-lg mx-auto space-y-3">
+                    ${groups.length === 0 ? '<p class="text-center text-gray-500 dark:text-gray-400 py-8">No withdrawal invoices available yet.</p>' : groups.map(group => `
+                        <button data-invoice-key="${group.key}" class="invoice-month-card w-full text-left p-5 bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 shadow-md hover:bg-gray-50 dark:hover:bg-gray-700/50 transition">
+                            <div class="flex items-center justify-between">
+                                <div>
+                                    <h3 class="text-lg font-bold">${shortMonthNames[group.month]} - ${group.year}</h3>
+                                    <p class="text-sm text-gray-500 dark:text-gray-400">${group.items.length} withdrawal${group.items.length === 1 ? '' : 's'}</p>
+                                </div>
+                                <p class="font-bold text-red-600 dark:text-red-300">${formatCurrency(group.total)}</p>
+                            </div>
+                        </button>`).join('')}
+                </div>
+                ${getPageFooter()}`;
+            showPage(content);
+            document.querySelectorAll('.invoice-month-card').forEach(card => {
+                card.onclick = () => showWithdrawalInvoiceDetails(card.dataset.invoiceKey);
+            });
+        };
+
+        const showWithdrawalInvoiceDetails = (invoiceKey) => {
+            const group = getInvoiceGroups().find(item => item.key === invoiceKey);
+            if (!group) return showNotification('Invoice not found.', true);
+            const first = group.items[0] || {};
+            const content = `
+                ${getPageHeader(`${shortMonthNames[group.month]} - ${group.year}`)}
+                <div class="max-w-2xl mx-auto space-y-4">
+                    <div class="bg-white dark:bg-gray-800 p-5 rounded-2xl shadow-md border border-gray-100 dark:border-gray-700">
+                        <div class="flex items-start justify-between gap-4">
+                            <div>
+                                <p class="text-xs font-bold uppercase text-gray-400">Withdrawal Invoice</p>
+                                <h3 class="text-xl font-bold mt-1">${shortMonthNames[group.month]} - ${group.year}</h3>
+                                <p class="text-sm text-gray-500 dark:text-gray-400 mt-1">${escapeHtml(currentUserData?.name || 'User')} · ${escapeHtml(currentUserData?.email || currentUser?.email || '')}</p>
+                            </div>
+                            <button id="download-withdrawal-invoice-btn" class="px-4 py-2 rounded-xl bg-blue-600 text-white text-sm font-semibold">Download PDF</button>
+                        </div>
+                        <div class="mt-4 grid grid-cols-2 gap-3">
+                            <div class="rounded-xl bg-red-50 dark:bg-red-900/20 p-3">
+                                <p class="text-xs text-red-500">Total Withdrawal</p>
+                                <p class="font-bold">${formatCurrency(group.total)}</p>
+                            </div>
+                            <div class="rounded-xl bg-blue-50 dark:bg-blue-900/20 p-3">
+                                <p class="text-xs text-blue-500">Mode</p>
+                                <p class="font-bold">${escapeHtml(first.method || first.paymentMethod || 'Multiple')}</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="space-y-3">
+                        ${group.items.map(item => `
+                            <div class="bg-white dark:bg-gray-800 p-4 rounded-2xl border border-gray-100 dark:border-gray-700 shadow-sm">
+                                <div class="flex items-start justify-between gap-3">
+                                    <div>
+                                        <p class="font-bold">${formatCurrency(item.amount || 0)}</p>
+                                        <p class="text-xs text-gray-500 dark:text-gray-400">Requested: ${formatDateDDMMYY(item.timestamp || item.requestedAt)}</p>
+                                        <p class="text-xs text-gray-500 dark:text-gray-400">Processed: ${formatDateDDMMYY(item.processedAt || item.timestamp)}</p>
+                                    </div>
+                                    <span class="rounded-full bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300 px-3 py-1 text-xs font-bold">Done</span>
+                                </div>
+                                <div class="mt-3 rounded-xl bg-gray-50 dark:bg-gray-700/60 p-3 text-sm">
+                                    <p><strong>Mode:</strong> ${escapeHtml(item.method || item.paymentMethod || 'N/A')}</p>
+                                    <p><strong>Details:</strong> ${escapeHtml(item.upiId || item.accountNumber || item.email || item.paymentDetails || item.comment || 'N/A')}</p>
+                                    <p><strong>Transaction ID:</strong> ${escapeHtml(item.adminTransactionId || item.transactionId || 'N/A')}</p>
+                                </div>
+                            </div>`).join('')}
+                    </div>
+                </div>
+                ${getPageFooter()}`;
+            showPage(content);
+            document.getElementById('download-withdrawal-invoice-btn').onclick = () => downloadWithdrawalInvoicePdf(group);
+        };
+
+        const downloadWithdrawalInvoicePdf = (group) => {
+            const body = [
+                `Generated On: ${new Date().toLocaleString('en-IN')}`,
+                `User Name: ${currentUserData?.name || 'User'}`,
+                `Email: ${currentUserData?.email || currentUser?.email || 'N/A'}`,
+                `Mobile: ${currentUserData?.mobile || 'N/A'}`,
+                '',
+                `Invoice Month: ${shortMonthNames[group.month]} - ${group.year}`,
+                `Total Withdrawal: ${formatPdfCurrency(group.total)}`,
+                `Total Transactions: ${group.items.length}`,
+                '',
+                'Withdrawal Details:',
+                ...group.items.flatMap((item, index) => [
+                    `${index + 1}. Amount: ${formatPdfCurrency(item.amount || 0)}`,
+                    `   Requested: ${formatDateDDMMYY(item.timestamp || item.requestedAt)}`,
+                    `   Processed: ${formatDateDDMMYY(item.processedAt || item.timestamp)}`,
+                    `   Mode: ${item.method || item.paymentMethod || 'N/A'}`,
+                    `   Details: ${item.upiId || item.accountNumber || item.email || item.comment || 'N/A'}`,
+                    `   Transaction ID: ${item.adminTransactionId || item.transactionId || 'N/A'}`,
+                    ''
+                ])
+            ];
+            const blob = createSimplePdf({ title: 'REVIEWS WORLD - WITHDRAWAL INVOICE', body });
+            const link = document.createElement('a');
+            link.href = URL.createObjectURL(blob);
+            link.download = `RW-WITHDRAWAL-${shortMonthNames[group.month]}-${group.year}.pdf`;
+            document.body.appendChild(link);
+            link.click();
+            link.remove();
+            setTimeout(() => URL.revokeObjectURL(link.href), 1000);
+        };
 
         const getSupportLogo = () => 'https://i.ibb.co/x8YBYwGG/6233389803554672153.jpg';
 
@@ -2110,13 +2345,16 @@
             renderModal('REVIEWS WORLD',
                 `<div class="space-y-4 text-center">
                     <img src="${getSupportLogo()}" alt="REVIEWS WORLD" class="h-20 w-20 rounded-full mx-auto object-cover shadow-md">
-                    <div>
-                        <h3 class="text-lg font-bold">REVIEWS WORLD</h3>
-                        <p class="text-sm text-gray-500 dark:text-gray-400">support@reviewsworld.in</p>
+                    <div class="rounded-2xl bg-blue-50 dark:bg-blue-900/20 border border-blue-100 dark:border-blue-800 p-4">
+                        <h3 class="text-lg font-bold text-blue-900 dark:text-blue-100">REVIEWS WORLD</h3>
+                        <p class="text-sm text-blue-600 dark:text-blue-300">${escapeHtml(currentUserData?.email || currentUser?.email || '')}</p>
                     </div>
-                    <p class="text-sm leading-6 text-left text-gray-600 dark:text-gray-300">${escapeHtml(SUPPORT_PROFILE_DESCRIPTION)}</p>
+                    <div class="rounded-2xl bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-100 dark:border-emerald-800 p-4 text-left">
+                        <p class="text-xs font-bold uppercase text-emerald-600 dark:text-emerald-300 mb-2">Description</p>
+                        <p class="text-sm leading-6 text-gray-700 dark:text-gray-200">${escapeHtml(SUPPORT_PROFILE_DESCRIPTION)}</p>
+                    </div>
                 </div>`,
-                `<button onclick="window.closeModal()" class="px-4 py-2 text-sm bg-blue-600 text-white rounded-lg">Close</button>`,
+                ``,
                 'max-w-md');
         };
 
@@ -2180,16 +2418,18 @@
             const displayEmail = isAdminView ? (chatMeta.userEmail || '') : 'support@reviewsworld.in';
             const logo = isAdminView ? 'https://cdn-icons-png.flaticon.com/512/3135/3135715.png' : getSupportLogo();
             const content = `
-                ${getPageHeader(escapeHtml(displayName))}
-                <div class="max-w-2xl mx-auto bg-gray-100 dark:bg-gray-900 min-h-[calc(100vh-8rem)] flex flex-col">
+                <div class="max-w-2xl mx-auto bg-gray-100 dark:bg-gray-900 min-h-[calc(100vh-4rem)] flex flex-col">
                     <div class="bg-white dark:bg-gray-800 border border-gray-100 dark:border-gray-700 rounded-2xl shadow-md overflow-hidden flex flex-col min-h-[calc(100vh-10rem)]">
-                        <button id="support-profile-btn" class="flex items-center gap-3 p-4 text-left border-b border-gray-100 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition">
+                        <div class="flex items-center gap-3 p-4 border-b border-gray-100 dark:border-gray-700">
+                            <button class="page-back-btn h-10 w-10 shrink-0 rounded-full bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 flex items-center justify-center">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5"></path><path d="M12 19l-7-7 7-7"></path></svg>
+                            </button>
                             <img src="${logo}" alt="${escapeHtml(displayName)}" class="h-12 w-12 rounded-full object-cover">
-                            <div class="min-w-0">
+                            <button id="support-profile-btn" class="min-w-0 flex-1 text-left">
                                 <h3 class="font-bold truncate">${escapeHtml(displayName)}</h3>
                                 <p class="text-xs text-gray-500 dark:text-gray-400 truncate">${escapeHtml(displayEmail)}</p>
-                            </div>
-                        </button>
+                            </button>
+                        </div>
                         <div id="support-chat-messages" class="flex-1 space-y-3 overflow-y-auto p-4 bg-gray-50 dark:bg-gray-900"></div>
                         <div id="emoji-panel" class="hidden flex flex-wrap gap-2 p-3 border-t border-gray-100 dark:border-gray-700 bg-white dark:bg-gray-800">
                             ${['😀','😁','🙏','👍','❤️','🔥','🎉','😊','🤗','✅','💰','📞'].map(emoji => `<button class="emoji-choice text-xl">${emoji}</button>`).join('')}
@@ -2206,6 +2446,20 @@
                 ${getPageFooter()}`;
             showPage(content);
             setBottomNavActive(isAdminView ? 'bottom-settings-btn' : 'bottom-help-btn');
+            const chatBackBtn = document.querySelector('#page-container .page-back-btn');
+            if (chatBackBtn) {
+                chatBackBtn.onclick = () => {
+                    if (activeChatUnsubscribe) {
+                        activeChatUnsubscribe();
+                        activeChatUnsubscribe = null;
+                    }
+                    if (isAdminView) {
+                        showAdminChatsPage();
+                    } else {
+                        showHelpSupportPage();
+                    }
+                };
+            }
 
             document.getElementById('support-profile-btn').onclick = () => {
                 if (isAdminView) {
@@ -2285,7 +2539,7 @@
                     </button>
                 </div>
                 ${getPageFooter()}`;
-            showPage(content);
+            showPage(content, { keepBottomNav: true });
             setBottomNavActive('bottom-help-btn');
             document.getElementById('reviews-world-chat-card').onclick = () => openSupportChatPage(currentUser.uid, 'user');
         };
@@ -2367,11 +2621,11 @@
                         <button data-filter="sent" class="filter-btn">Sent</button>
                     </div>
                     
-                    <div id="all-transactions-list" class="space-y-3 max-h-[70vh] overflow-y-auto pr-2">
+                    <div id="all-transactions-list" class="space-y-3 pr-1">
                         </div>
                 </div>
                 ${getPageFooter()}`;
-            showPage(content);
+            showPage(content, { keepBottomNav: true });
             setBottomNavActive('bottom-transactions-btn');
 
             // Initial render of all transactions
@@ -6038,10 +6292,9 @@
             if (e.target.matches('.tab-button')) switchTab(e.target.dataset.tab);
         });
         document.getElementById('bottom-home-btn').addEventListener('click', () => {
-            hidePage();
-            switchTab(currentUser?.uid === ADMIN_UID ? 'admin-panel' : 'user-panel');
-            setBottomNavActive('bottom-home-btn');
+            showHomeMainPage();
         });
+        document.getElementById('bottom-admin-btn').addEventListener('click', showAdminMainPage);
         document.getElementById('bottom-transactions-btn').addEventListener('click', () => {
             showAllTransactionsPage();
             setBottomNavActive('bottom-transactions-btn');
