@@ -1689,7 +1689,11 @@
 
             const loanRequestsQuery = query(collection(db, `artifacts/${appId}/public/data/loan_requests`), orderBy("requestedAt", "desc"));
             unsubscribers.push(onSnapshot(loanRequestsQuery, (snap) => {
-                allLoanRequestsCache = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                const rejectedLoanRequestDocs = snap.docs.filter(doc => doc.data().status === 'rejected');
+                deleteRejectedLoanRequests(rejectedLoanRequestDocs);
+                allLoanRequestsCache = snap.docs
+                    .filter(doc => doc.data().status !== 'rejected')
+                    .map(doc => ({ id: doc.id, ...doc.data() }));
                 if (document.getElementById('admin-loan-page')) {
                     renderAdminLoanPage();
                 }
@@ -3068,6 +3072,17 @@
                     </div>
                 </div>`).join('') : '<p class="text-center text-gray-500 py-6">No loan requests found.</p>';
         };
+
+        async function deleteRejectedLoanRequests(rejectedDocs) {
+            if (!rejectedDocs.length) return;
+
+            try {
+                await Promise.all(rejectedDocs.map(requestDoc => deleteDoc(requestDoc.ref)));
+                console.log(`Deleted ${rejectedDocs.length} rejected loan request(s).`);
+            } catch (e) {
+                console.error('Rejected loan cleanup failed:', e);
+            }
+        }
 
         const renderAdminGiftCodesList = (docs) => {
             const listEl = document.getElementById('gift-codes-list-page');
