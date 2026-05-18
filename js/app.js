@@ -70,6 +70,9 @@ window.app = {
     handleWithdrawRequest
 };
 
+// Immediately hide loading screen once script starts
+document.getElementById('js-fail-msg')?.classList.add('hidden');
+
 // Re-expose some functions to window for existing onclick handlers in index.html
 window.showPage = showPage;
 window.showAllTransactionsPage = showAllTransactionsPage;
@@ -169,9 +172,6 @@ const renderDashboardHistory = () => {
 
 onAuthStateChanged(auth, (user) => {
     console.log("Auth state changed:", user ? "User logged in" : "No user");
-    
-    // Hide initialization fallback
-    document.getElementById('js-fail-msg')?.classList.add('hidden');
     
     setCurrentUser(user);
     const authScreen = document.getElementById('auth-screen');

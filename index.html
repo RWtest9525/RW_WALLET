@@ -200,6 +200,21 @@
 
     <!-- App Entry -->
     <script type="module" src="js/app.js"></script>
+    <script>
+        // Safety timeout to hide loading screen even if JS fails
+        setTimeout(() => {
+            const failMsg = document.getElementById('js-fail-msg');
+            if (failMsg && !failMsg.classList.contains('hidden')) {
+                console.warn("Safety timeout triggered: Hiding loading screen manually.");
+                failMsg.classList.add('hidden');
+                
+                // Show a small warning if it really failed
+                if (typeof window.app === 'undefined') {
+                    console.error("App failed to initialize. Please check console for errors.");
+                }
+            }
+        }, 5000);
+    </script>
 </body>
 
 </html>
