@@ -1071,6 +1071,8 @@
         };
         const appId = typeof __app_id !== 'undefined' ? __app_id : 'digital-wallet-prod';
         const ADMIN_UID = "mOs5Fmp4RoRzeBDH4pZLMOpQx7Q2";
+        const ONE_SIGNAL_APP_ID = "4affd7dd-a2c1-4b94-8253-dde142f4c847";
+        const ONE_SIGNAL_REST_API_KEY = "os_v2_app_jl75pxncyffzjast3xquf5gii54sqa6fycmuglew4vp64rdufzqradkcxzgkeff5rti2ejsth3oiqiqnoclktgkj2onvl5kqoxlyvbi";
 
         const app = initializeApp(firebaseConfig);
         const auth = getAuth(app);
@@ -5091,10 +5093,7 @@
                 await addDoc(collection(db, `artifacts/${appId}/public/data/notifications`), notificationData);
 
                 // Send OneSignal Push as well
-                const ONE_SIGNAL_APP_ID = "4affd7dd-a2c1-4b94-8253-dde142f4c847";
-                const REST_API_KEY = "os_v2_app_jl75pxncyffzjast3xquf5gii54sqa6fycmuglew4vp64rdufzqradkcxzgkeff5rti2ejsth3oiqiqnoclktgkj2onvl5kqoxlyvbi";
-                
-                if (REST_API_KEY) {
+                if (ONE_SIGNAL_REST_API_KEY) {
                     const payload = {
                         app_id: ONE_SIGNAL_APP_ID,
                         headings: { "en": title },
@@ -5113,7 +5112,7 @@
                             method: 'POST',
                             headers: {
                                 'Content-Type': 'application/json',
-                                'Authorization': `Basic ${REST_API_KEY}`
+                                'Authorization': `Basic ${ONE_SIGNAL_REST_API_KEY}`
                             },
                             body: JSON.stringify(payload)
                         });
