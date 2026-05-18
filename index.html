@@ -1006,6 +1006,7 @@
         let allInvestmentsCache = [];
         let unifiedHistoryCache = [];
         let lastAutoProcessCheckAt = 0;
+        let activeWithdrawalHistoryFilter = { filter: 'today', fromDate: null, toDate: null };
         let notificationTimeout;
 
         const unsubscribers = [];
@@ -1835,6 +1836,10 @@
                 }
                 if (document.getElementById('admin-recharge-requests-list-page')) {
                     renderAdminRechargeRequests(allRechargeRequestsCache);
+                }
+                if (document.getElementById('withdrawal-history-list')) {
+                    const { filter, fromDate, toDate } = activeWithdrawalHistoryFilter;
+                    loadWithdrawalHistory(filter, fromDate, toDate).catch(e => console.error("Admin: Error refreshing withdrawal history:", e));
                 }
             }, (error) => console.error("Admin: Error listening to all fund requests:", error)));
 
@@ -3021,6 +3026,7 @@
 
         // Load Withdrawal History function
         const loadWithdrawalHistory = async (filter = 'today', fromDate = null, toDate = null) => {
+            activeWithdrawalHistoryFilter = { filter, fromDate, toDate };
             try {
                 // First, get all fund requests
                 const withdrawalQuery = query(
