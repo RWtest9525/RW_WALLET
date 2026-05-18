@@ -1800,6 +1800,21 @@
             </header>
             <div class="p-4 pt-0">`;
 
+        const getPartnerInvestmentHeader = () => `
+            <header class="flex items-center justify-between gap-3 mb-6 p-4 bg-white dark:bg-gray-800 shadow-md page-header-fixed">
+                <div class="flex items-center min-w-0">
+                    <button class="page-back-btn p-2 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700 mr-2 shrink-0">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5"></path><path d="M12 19l-7-7 7-7"></path></svg>
+                    </button>
+                    <h2 class="text-xl font-bold truncate">Partner Investment</h2>
+                </div>
+                <div class="shrink-0 rounded-xl bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-100 dark:border-emerald-800 px-3 py-2 text-right">
+                    <p class="text-[10px] font-semibold uppercase text-emerald-600 dark:text-emerald-300">Wallet Balance</p>
+                    <p class="text-sm font-bold text-gray-900 dark:text-white">${formatCurrency(currentUserData?.balance || 0)}</p>
+                </div>
+            </header>
+            <div class="p-4 pt-0">`;
+
         const getPageFooter = () => `</div>`;
 
         const showProfilePage = () => {
@@ -2685,14 +2700,8 @@
 
         const showCreatePartnerInvestmentPage = () => {
             showPage(`
-                ${getPageHeader('Partner Investment')}
+                ${getPartnerInvestmentHeader()}
                 <div class="max-w-md mx-auto bg-white dark:bg-gray-800 p-6 rounded-2xl shadow-md space-y-5">
-                    <div class="flex justify-end">
-                        <div class="rounded-xl bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-100 dark:border-emerald-800 px-3 py-2 text-right">
-                            <p class="text-[10px] font-semibold uppercase text-emerald-600 dark:text-emerald-300">Wallet Balance</p>
-                            <p class="text-sm font-bold text-gray-900 dark:text-white">${formatCurrency(currentUserData.balance)}</p>
-                        </div>
-                    </div>
                     <div class="text-center">
                         <div class="mx-auto w-16 h-16 rounded-2xl bg-emerald-100 dark:bg-emerald-900/30 p-3">
                             <img src="${PARTNER_ICON_URL}" alt="Partner" class="w-full h-full object-contain">
