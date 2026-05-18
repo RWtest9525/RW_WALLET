@@ -673,42 +673,42 @@
                             </div>
                             <div class="bg-white dark:bg-gray-800 p-5 rounded-2xl shadow-md border border-gray-100 dark:border-gray-700">
                                 <h3 class="text-lg font-semibold mb-4">Actions</h3>
-                                <div class="grid grid-cols-1 sm:grid-cols-4 lg:grid-cols-1 gap-3">
+                                <div class="grid grid-cols-4 gap-2 sm:gap-3">
                                 <button id="withdraw-fund-btn"
-                                    class="group w-full flex items-center gap-3 bg-yellow-50 dark:bg-yellow-900/20 text-yellow-700 dark:text-yellow-200 font-semibold p-4 rounded-xl hover:bg-yellow-100 dark:hover:bg-yellow-900/30 transition border border-yellow-200 dark:border-yellow-800 text-left">
+                                    class="group w-full min-h-28 flex flex-col items-center justify-between gap-2 bg-yellow-50 dark:bg-yellow-900/20 text-yellow-700 dark:text-yellow-200 font-semibold p-3 rounded-xl hover:bg-yellow-100 dark:hover:bg-yellow-900/30 transition border border-yellow-200 dark:border-yellow-800 text-center">
                                     <span class="w-11 h-11 rounded-xl bg-yellow-500 text-white flex items-center justify-center shadow-sm group-hover:scale-105 transition">
                                         <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v12m0 0l-4-4m4 4l4-4M5 19h14"></path>
                                         </svg>
                                     </span>
-                                    <span>Withdraw Fund</span>
+                                    <span class="text-xs sm:text-sm leading-tight">Withdraw Fund</span>
                                 </button>
                                 <button id="redeem-gift-card-btn"
-                                    class="group w-full flex items-center gap-3 bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-200 font-semibold p-4 rounded-xl hover:bg-green-100 dark:hover:bg-green-900/30 transition border border-green-200 dark:border-green-800 text-left">
+                                    class="group w-full min-h-28 flex flex-col items-center justify-between gap-2 bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-200 font-semibold p-3 rounded-xl hover:bg-green-100 dark:hover:bg-green-900/30 transition border border-green-200 dark:border-green-800 text-center">
                                     <span class="w-11 h-11 rounded-xl bg-green-500 text-white flex items-center justify-center shadow-sm group-hover:scale-105 transition">
                                         <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 12v8H4v-8m16 0H4m16 0V8H4v4m8-4v12m0-12h3a2 2 0 100-4c-2 0-3 4-3 4zm0 0H9a2 2 0 110-4c2 0 3 4 3 4z"></path>
                                         </svg>
                                     </span>
-                                    <span>Redeem Gift Card</span>
+                                    <span class="text-xs sm:text-sm leading-tight">Redeem Gift Card</span>
                                 </button>
                                 <button id="pay-to-wallet-btn"
-                                    class="group w-full flex items-center gap-3 bg-purple-50 dark:bg-purple-900/20 text-purple-700 dark:text-purple-200 font-semibold p-4 rounded-xl hover:bg-purple-100 dark:hover:bg-purple-900/30 transition border border-purple-200 dark:border-purple-800 text-left">
+                                    class="group w-full min-h-28 flex flex-col items-center justify-between gap-2 bg-purple-50 dark:bg-purple-900/20 text-purple-700 dark:text-purple-200 font-semibold p-3 rounded-xl hover:bg-purple-100 dark:hover:bg-purple-900/30 transition border border-purple-200 dark:border-purple-800 text-center">
                                     <span class="w-11 h-11 rounded-xl bg-purple-500 text-white flex items-center justify-center shadow-sm group-hover:scale-105 transition">
                                         <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 8l4 4m0 0l-4 4m4-4H3"></path>
                                         </svg>
                                     </span>
-                                    <span>Pay to Wallet</span>
+                                    <span class="text-xs sm:text-sm leading-tight">Pay to Wallet</span>
                                 </button>
                                 <button id="mobile-recharge-btn"
-                                    class="group w-full flex items-center gap-3 bg-sky-50 dark:bg-sky-900/20 text-sky-700 dark:text-sky-200 font-semibold p-4 rounded-xl hover:bg-sky-100 dark:hover:bg-sky-900/30 transition border border-sky-200 dark:border-sky-800 text-left">
+                                    class="group w-full min-h-28 flex flex-col items-center justify-between gap-2 bg-sky-50 dark:bg-sky-900/20 text-sky-700 dark:text-sky-200 font-semibold p-3 rounded-xl hover:bg-sky-100 dark:hover:bg-sky-900/30 transition border border-sky-200 dark:border-sky-800 text-center">
                                     <span class="w-11 h-11 rounded-xl bg-sky-500 text-white flex items-center justify-center shadow-sm group-hover:scale-105 transition">
                                         <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 2h8a2 2 0 012 2v16a2 2 0 01-2 2H8a2 2 0 01-2-2V4a2 2 0 012-2zm4 17h.01"></path>
                                         </svg>
                                     </span>
-                                    <span>Mobile Recharge</span>
+                                    <span class="text-xs sm:text-sm leading-tight">Mobile Recharge</span>
                                 </button>
                                 </div>
                             </div>
@@ -933,7 +933,7 @@
         };
         const appId = typeof __app_id !== 'undefined' ? __app_id : 'digital-wallet-prod';
         const ADMIN_UID = "mOs5Fmp4RoRzeBDH4pZLMOpQx7Q2";
-        const RECHARGE_DISCOUNT_RATE = 0.02;
+        const RECHARGE_DISCOUNT_RATE = 0.01;
         const RECHARGE_OPERATORS = ['Jio', 'Airtel', 'Vi', 'BSNL', 'MTNL'];
         const RECHARGE_STATES = [
             'Andhra Pradesh', 'Assam', 'Bihar Jharkhand', 'Delhi NCR', 'Gujarat', 'Haryana',
@@ -2166,7 +2166,7 @@
                     <span class="font-semibold">${formatCurrency(amount)}</span>
                 </div>
                 <div class="flex justify-between text-sm text-green-600 dark:text-green-400">
-                    <span>2% Discount</span>
+                    <span>1% Discount</span>
                     <span>-${formatCurrency(discount)}</span>
                 </div>
                 <div class="flex justify-between pt-2 border-t border-gray-200 dark:border-gray-700">
@@ -2261,7 +2261,7 @@
                         <div class="flex justify-between gap-3"><span class="text-gray-500 dark:text-gray-400">Plan</span><span class="font-semibold text-right">${planDetails}</span></div>
                         <div class="pt-2 mt-2 border-t border-gray-300 dark:border-gray-600 space-y-2">
                             <div class="flex justify-between"><span>Recharge Amount</span><span>${formatCurrency(amount)}</span></div>
-                            <div class="flex justify-between text-green-600"><span>2% Discount</span><span>-${formatCurrency(discount)}</span></div>
+                            <div class="flex justify-between text-green-600"><span>1% Discount</span><span>-${formatCurrency(discount)}</span></div>
                             <div class="flex justify-between font-bold"><span>Wallet Deduction</span><span>${formatCurrency(chargeAmount)}</span></div>
                         </div>
                     </div>
@@ -2830,7 +2830,7 @@
                                 <p class="font-semibold">${r.planDetails || 'N/A'}</p>
                             </div>
                             <div class="flex flex-wrap gap-2 text-xs">
-                                <span class="bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300 px-2 py-1 rounded">2% discount: ${formatCurrency(r.discount || 0)}</span>
+                                <span class="bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300 px-2 py-1 rounded">1% discount: ${formatCurrency(r.discount || 0)}</span>
                                 <button data-action="copy-text" data-text="${r.mobileNumber || ''}" class="bg-gray-200 dark:bg-gray-700 px-2 py-1 rounded hover:bg-gray-300 dark:hover:bg-gray-600">Copy Mobile</button>
                             </div>
                         </div>
@@ -4232,7 +4232,7 @@
                     </div>
                     <div class="bg-green-50 dark:bg-green-900/20 px-3 py-2">
                         <p class="text-[10px] font-semibold uppercase text-green-600 dark:text-green-300">Discount</p>
-                        <p class="text-xs text-green-800 dark:text-green-200 mt-0.5">Recharge ${formatCurrency(item.amount || 0)} - 2% discount ${formatCurrency(item.discount || 0)} = wallet deduction ${formatCurrency(item.chargeAmount || item.amount || 0)}</p>
+                        <p class="text-xs text-green-800 dark:text-green-200 mt-0.5">Recharge ${formatCurrency(item.amount || 0)} - 1% discount ${formatCurrency(item.discount || 0)} = wallet deduction ${formatCurrency(item.chargeAmount || item.amount || 0)}</p>
                     </div>
                     ${isRejected && item.rejectionReason ? `
                         <div class="bg-red-50 dark:bg-red-900/20 px-3 py-2">
