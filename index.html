@@ -662,10 +662,8 @@
                                 <div class="relative">
                                     <div class="flex items-center justify-between">
                                         <h3 class="text-sm font-medium text-white/75">Your Balance</h3>
-                                        <div class="w-10 h-10 rounded-xl bg-white/15 flex items-center justify-center">
-                                            <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 9V7a5 5 0 00-10 0v2M5 9h14l-1 11H6L5 9z"></path>
-                                            </svg>
+                                        <div class="w-12 h-12 rounded-full bg-white/90 flex items-center justify-center p-2 shadow-sm">
+                                            <img src="https://cdn-icons-png.flaticon.com/512/12449/12449036.png" alt="Top up" class="w-full h-full object-contain">
                                         </div>
                                     </div>
                                     <p id="user-balance" class="text-4xl font-bold mt-4 tracking-tight">₹0.00</p>
@@ -676,46 +674,36 @@
                                 <div class="grid grid-cols-3 gap-2 sm:gap-3">
                                 <button id="withdraw-fund-btn"
                                     class="group w-full min-h-28 flex flex-col items-center justify-between gap-2 bg-yellow-50 dark:bg-yellow-900/20 text-yellow-700 dark:text-yellow-200 font-semibold p-3 rounded-xl hover:bg-yellow-100 dark:hover:bg-yellow-900/30 transition border border-yellow-200 dark:border-yellow-800 text-center">
-                                    <span class="w-11 h-11 rounded-xl bg-yellow-500 text-white flex items-center justify-center shadow-sm group-hover:scale-105 transition">
-                                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v12m0 0l-4-4m4 4l4-4M5 19h14"></path>
-                                        </svg>
+                                    <span class="w-12 h-12 rounded-xl bg-yellow-500 flex items-center justify-center shadow-sm p-2">
+                                        <img src="https://cdn-icons-png.flaticon.com/512/7939/7939990.png" alt="Withdraw" class="w-full h-full object-contain">
                                     </span>
                                     <span class="text-xs sm:text-sm leading-tight">Withdraw Fund</span>
                                 </button>
                                 <button id="redeem-gift-card-btn"
                                     class="group w-full min-h-28 flex flex-col items-center justify-between gap-2 bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-200 font-semibold p-3 rounded-xl hover:bg-green-100 dark:hover:bg-green-900/30 transition border border-green-200 dark:border-green-800 text-center">
-                                    <span class="w-11 h-11 rounded-xl bg-green-500 text-white flex items-center justify-center shadow-sm group-hover:scale-105 transition">
-                                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 12v8H4v-8m16 0H4m16 0V8H4v4m8-4v12m0-12h3a2 2 0 100-4c-2 0-3 4-3 4zm0 0H9a2 2 0 110-4c2 0 3 4 3 4z"></path>
-                                        </svg>
+                                    <span class="w-12 h-12 rounded-xl bg-green-500 flex items-center justify-center shadow-sm p-2">
+                                        <img src="https://cdn-icons-png.flaticon.com/512/2611/2611152.png" alt="Gift card" class="w-full h-full object-contain">
                                     </span>
                                     <span class="text-xs sm:text-sm leading-tight">Gift Card</span>
                                 </button>
                                 <button id="pay-to-wallet-btn"
                                     class="group w-full min-h-28 flex flex-col items-center justify-between gap-2 bg-purple-50 dark:bg-purple-900/20 text-purple-700 dark:text-purple-200 font-semibold p-3 rounded-xl hover:bg-purple-100 dark:hover:bg-purple-900/30 transition border border-purple-200 dark:border-purple-800 text-center">
-                                    <span class="w-11 h-11 rounded-xl bg-purple-500 text-white flex items-center justify-center shadow-sm group-hover:scale-105 transition">
-                                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 8l4 4m0 0l-4 4m4-4H3"></path>
-                                        </svg>
+                                    <span class="w-12 h-12 rounded-xl bg-purple-500 flex items-center justify-center shadow-sm p-2">
+                                        <img src="https://cdn-icons-png.flaticon.com/512/734/734922.png" alt="Pay to wallet" class="w-full h-full object-contain">
                                     </span>
                                     <span class="text-xs sm:text-sm leading-tight">Pay to Wallet</span>
                                 </button>
                                 <button id="mobile-recharge-btn"
                                     class="group w-full min-h-28 flex flex-col items-center justify-between gap-2 bg-sky-50 dark:bg-sky-900/20 text-sky-700 dark:text-sky-200 font-semibold p-3 rounded-xl hover:bg-sky-100 dark:hover:bg-sky-900/30 transition border border-sky-200 dark:border-sky-800 text-center">
-                                    <span class="w-11 h-11 rounded-xl bg-sky-500 text-white flex items-center justify-center shadow-sm group-hover:scale-105 transition">
-                                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 2h8a2 2 0 012 2v16a2 2 0 01-2 2H8a2 2 0 01-2-2V4a2 2 0 012-2zm4 17h.01"></path>
-                                        </svg>
+                                    <span class="w-12 h-12 rounded-xl bg-sky-500 flex items-center justify-center shadow-sm p-2">
+                                        <img src="https://cdn-icons-png.flaticon.com/512/7325/7325287.png" alt="Mobile recharge" class="w-full h-full object-contain">
                                     </span>
                                     <span class="text-xs sm:text-sm leading-tight">Mobile Recharge</span>
                                 </button>
                                 <button id="loan-btn"
                                     class="group w-full min-h-28 flex flex-col items-center justify-between gap-2 bg-indigo-50 dark:bg-indigo-900/20 text-indigo-700 dark:text-indigo-200 font-semibold p-3 rounded-xl hover:bg-indigo-100 dark:hover:bg-indigo-900/30 transition border border-indigo-200 dark:border-indigo-800 text-center">
-                                    <span class="w-11 h-11 rounded-xl bg-indigo-500 text-white flex items-center justify-center shadow-sm group-hover:scale-105 transition">
-                                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8V7m0 10v-1m9-4a9 9 0 11-18 0 9 9 0 0118 0z"></path>
-                                        </svg>
+                                    <span class="w-12 h-12 rounded-xl bg-indigo-500 flex items-center justify-center shadow-sm p-2">
+                                        <img src="https://cdn-icons-png.flaticon.com/512/9197/9197103.png" alt="Loan" class="w-full h-full object-contain">
                                     </span>
                                     <span class="text-xs sm:text-sm leading-tight">Loan</span>
                                 </button>
@@ -2399,6 +2387,7 @@
                         <input id="loan-father-input" placeholder="Father's name" class="w-full px-4 py-3 bg-gray-100 dark:bg-gray-700 rounded-lg">
                         <input id="loan-mobile-input" value="${currentUserData.mobile || ''}" maxlength="10" placeholder="Mobile no." class="w-full px-4 py-3 bg-gray-100 dark:bg-gray-700 rounded-lg">
                         <input id="loan-alt-mobile-input" maxlength="10" placeholder="Alternate no." class="w-full px-4 py-3 bg-gray-100 dark:bg-gray-700 rounded-lg">
+                        <input id="loan-dob-input" maxlength="10" placeholder="Date of birth (DD_MM_YYYY)" class="w-full px-4 py-3 bg-gray-100 dark:bg-gray-700 rounded-lg">
                         <input id="loan-aadhaar-input" maxlength="12" placeholder="Aadhaar number" class="w-full px-4 py-3 bg-gray-100 dark:bg-gray-700 rounded-lg">
                     </div>
                     <button id="submit-loan-request-btn" class="w-full bg-indigo-600 text-white font-semibold py-3 rounded-lg hover:bg-indigo-700 transition">Submit Request</button>
@@ -3059,7 +3048,7 @@
             }
 
             let requests = [...allLoanRequestsCache].filter(r => r.status === filter);
-            requests = requests.filter(r => !search || [r.name, r.fatherName, r.mobile, r.alternateMobile, r.aadhaar].some(v => (v || '').toString().toLowerCase().includes(search)));
+            requests = requests.filter(r => !search || [r.name, r.fatherName, r.mobile, r.alternateMobile, r.dob, r.aadhaar].some(v => (v || '').toString().toLowerCase().includes(search)));
             listEl.innerHTML = requests.length ? requests.map(r => `
                 <div class="p-4 mb-3 bg-gray-50 dark:bg-gray-700/50 rounded-xl text-sm">
                     <div class="flex flex-col sm:flex-row justify-between gap-3">
@@ -3067,6 +3056,7 @@
                             <p class="font-semibold">${r.name || 'No Name'}</p>
                             <p class="text-xs text-gray-500">Father: ${r.fatherName || 'N/A'}</p>
                             <p class="text-xs text-gray-500">Mobile: ${r.mobile || 'N/A'} | Alt: ${r.alternateMobile || 'N/A'}</p>
+                            <p class="text-xs text-gray-500">DOB: ${r.dob || 'N/A'}</p>
                             <p class="text-xs text-gray-500">Aadhaar: ${r.aadhaar || 'N/A'}</p>
                             <p class="text-xs text-gray-500">User: ${r.userEmail || 'N/A'}</p>
                         </div>
@@ -3159,14 +3149,27 @@
             }
         };
 
+        const isValidLoanDob = (dob) => {
+            const match = /^(\d{2})_(\d{2})_(\d{4})$/.exec(dob);
+            if (!match) return false;
+
+            const day = Number(match[1]);
+            const month = Number(match[2]);
+            const year = Number(match[3]);
+            const date = new Date(year, month - 1, day);
+
+            return date.getFullYear() === year && date.getMonth() === month - 1 && date.getDate() === day;
+        };
+
         const handleSubmitLoanRequest = async () => {
             const name = document.getElementById('loan-name-input').value.trim();
             const fatherName = document.getElementById('loan-father-input').value.trim();
             const mobile = document.getElementById('loan-mobile-input').value.trim();
             const alternateMobile = document.getElementById('loan-alt-mobile-input').value.trim();
+            const dob = document.getElementById('loan-dob-input').value.trim();
             const aadhaar = document.getElementById('loan-aadhaar-input').value.trim();
 
-            if (!name || !fatherName || !/^\d{10}$/.test(mobile) || !/^\d{10}$/.test(alternateMobile) || !/^\d{12}$/.test(aadhaar)) {
+            if (!name || !fatherName || !/^\d{10}$/.test(mobile) || !/^\d{10}$/.test(alternateMobile) || !isValidLoanDob(dob) || !/^\d{12}$/.test(aadhaar)) {
                 return showNotification('Please fill all loan details correctly.', true);
             }
 
@@ -3178,6 +3181,7 @@
                     fatherName,
                     mobile,
                     alternateMobile,
+                    dob,
                     aadhaar,
                     status: 'pending',
                     requestedAt: serverTimestamp()
