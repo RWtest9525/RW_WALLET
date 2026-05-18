@@ -46,6 +46,7 @@
             -webkit-font-smoothing: antialiased;
             -moz-osx-font-smoothing: grayscale;
             overflow-x: hidden;
+            padding-bottom: 5.5rem;
         }
 
         #app {
@@ -94,6 +95,7 @@
             z-index: 30;
             overflow-y: auto;
             background-color: rgb(243 244 246);
+            padding-bottom: 5.5rem;
         }
 
         .dark #page-container {
@@ -211,6 +213,24 @@
 
         .tx-item-clickable:hover {
             background-color: rgba(128, 128, 128, 0.1);
+        }
+
+        .bottom-nav-btn.active {
+            color: #2563eb;
+        }
+
+        .bottom-nav-btn.active .bottom-nav-icon {
+            background: #2563eb;
+            color: white;
+            box-shadow: 0 10px 22px rgba(37, 99, 235, 0.28);
+        }
+
+        .chat-bubble-user {
+            border-radius: 18px 18px 4px 18px;
+        }
+
+        .chat-bubble-admin {
+            border-radius: 18px 18px 18px 4px;
         }
 
         @keyframes borderAnimation {
@@ -643,18 +663,6 @@
                         <p class="text-xs text-gray-500 dark:text-gray-400 mt-0.5">REVIEWS WORLD</p>
                     </div>
                 </div>
-                <!-- Menu Button -->
-                <div class="flex items-center gap-3">
-                    <button id="main-menu-btn"
-                        class="p-2 bg-gray-100 dark:bg-gray-700 rounded-full hover:bg-gray-200 dark:hover:bg-gray-600 transition">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none"
-                            stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                            <line x1="3" y1="12" x2="21" y2="12"></line>
-                            <line x1="3" y1="6" x2="21" y2="6"></line>
-                            <line x1="3" y1="18" x2="21" y2="18"></line>
-                        </svg>
-                    </button>
-                </div>
             </header>
             <!-- Main Dashboard Area (Tabs) -->
             <div id="dashboard-content">
@@ -670,8 +678,8 @@
 
                 <!-- User Panel -->
                 <div id="user-panel" class="tab-content">
-                    <div class="grid grid-cols-1 lg:grid-cols-5 gap-5">
-                        <div class="lg:col-span-2 space-y-5">
+                    <div class="grid grid-cols-1 gap-5">
+                        <div class="space-y-5">
                             <div class="relative overflow-hidden bg-gradient-to-br from-slate-900 via-blue-900 to-emerald-700 dark:from-gray-800 dark:via-blue-950 dark:to-emerald-900 p-6 rounded-2xl shadow-xl text-white">
                                 <div class="absolute -right-10 -top-10 h-36 w-36 rounded-full border border-white/15"></div>
                                 <div class="absolute right-5 bottom-5 min-w-20 h-14 rounded-2xl bg-white/10 border border-white/15 flex flex-col items-center justify-center px-3 text-right">
@@ -737,18 +745,6 @@
                                     </span>
                                     <span class="text-xs sm:text-sm leading-tight">Become Partner</span>
                                 </button>
-                                </div>
-                            </div>
-                        </div>
-                        <div class="lg:col-span-3 space-y-5">
-                            <div class="bg-white dark:bg-gray-800 p-5 sm:p-6 rounded-2xl shadow-md border border-gray-100 dark:border-gray-700 min-h-full">
-                                <div class="flex justify-between items-center mb-4">
-                                    <h3 class="text-lg font-semibold">Transaction History</h3>
-                                    <button id="view-all-tx-btn"
-                                        class="text-sm font-medium text-blue-500 hover:underline">View All</button>
-                                </div>
-                                <div id="transactions-list" class="space-y-3 max-h-[30rem] overflow-y-auto pr-2">
-                                    <p class="text-gray-500 dark:text-gray-400 text-center py-14 bg-gray-50 dark:bg-gray-700/40 rounded-xl border border-dashed border-gray-200 dark:border-gray-700">No transactions yet.</p>
                                 </div>
                             </div>
                         </div>
@@ -863,10 +859,46 @@
                                 </span>
                                 <span class="text-sm font-medium text-emerald-700 dark:text-emerald-300">Manage Partner</span>
                             </button>
+                            <button id="admin-chats-btn"
+                                class="flex flex-col items-center justify-center p-3 min-h-28 bg-rose-50 dark:bg-rose-900/20 rounded-2xl hover:bg-rose-100 dark:hover:bg-rose-900/30 transition border border-rose-200 dark:border-rose-800 shadow-sm">
+                                <span class="flex h-12 w-12 items-center justify-center rounded-2xl bg-white dark:bg-gray-800 shadow-sm mb-2">
+                                    <img src="https://cdn-icons-png.flaticon.com/512/5962/5962463.png" class="h-8 w-8 object-contain" alt="Manage Chat">
+                                </span>
+                                <span class="text-sm font-medium text-rose-700 dark:text-rose-300">Manage Chat</span>
+                            </button>
                         </div>
                     </div>
                 </div>
             </div>
+
+            <nav id="bottom-nav" class="fixed left-1/2 bottom-3 z-50 w-[calc(100%-1.5rem)] max-w-xl -translate-x-1/2 rounded-2xl border border-gray-200 dark:border-gray-700 bg-white/95 dark:bg-gray-800/95 shadow-2xl backdrop-blur">
+                <div class="grid grid-cols-4 items-center px-2 py-2 text-xs font-semibold text-gray-500 dark:text-gray-400">
+                    <button id="bottom-transactions-btn" class="bottom-nav-btn flex flex-col items-center gap-1 py-1">
+                        <span class="bottom-nav-icon flex h-9 w-9 items-center justify-center rounded-xl bg-gray-100 dark:bg-gray-700 transition">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16"></path><path d="M4 12h16"></path><path d="M4 17h10"></path></svg>
+                        </span>
+                        <span>Transaction</span>
+                    </button>
+                    <button id="bottom-home-btn" class="bottom-nav-btn active flex flex-col items-center gap-1 py-1">
+                        <span class="bottom-nav-icon flex h-12 w-12 items-center justify-center rounded-2xl bg-blue-600 text-white shadow-lg transition -mt-5">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m3 10 9-7 9 7"></path><path d="M5 10v10h14V10"></path><path d="M9 20v-6h6v6"></path></svg>
+                        </span>
+                        <span>Home</span>
+                    </button>
+                    <button id="bottom-help-btn" class="bottom-nav-btn flex flex-col items-center gap-1 py-1">
+                        <span class="bottom-nav-icon flex h-9 w-9 items-center justify-center rounded-xl bg-gray-100 dark:bg-gray-700 transition">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a4 4 0 0 1-4 4H8l-5 3V7a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4z"></path></svg>
+                        </span>
+                        <span>Help</span>
+                    </button>
+                    <button id="bottom-settings-btn" class="bottom-nav-btn flex flex-col items-center gap-1 py-1">
+                        <span class="bottom-nav-icon flex h-9 w-9 items-center justify-center rounded-xl bg-gray-100 dark:bg-gray-700 transition">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06A1.65 1.65 0 0 0 15 19.4a1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.6 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06A2 2 0 0 1 7.1 4.29l.06.06A1.65 1.65 0 0 0 9 4.6a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
+                        </span>
+                        <span>Setting</span>
+                    </button>
+                </div>
+            </nav>
 
             <!-- Full Page Panel Container -->
             <div id="page-container" class="hidden bg-gray-100 dark:bg-gray-900">
@@ -988,9 +1020,11 @@
         let allLoansCache = [];
         let allGiftCodesCache = [];
         let allInvestmentsCache = [];
+        let allSupportChatsCache = [];
         let unifiedHistoryCache = [];
         let lastAutoProcessCheckAt = 0;
         let activeWithdrawalHistoryFilter = { filter: 'today', fromDate: null, toDate: null };
+        let activeChatUnsubscribe = null;
         let notificationTimeout;
 
         const unsubscribers = [];
@@ -1006,6 +1040,12 @@
         // --- UI UTILS ---
         const formatCurrency = (amount) => new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR' }).format(amount || 0);
         const formatUsd = (amount) => `$${Number(amount || 0).toFixed(2)}`;
+        const escapeHtml = (value = '') => String(value)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#039;');
         const getUserCacheKey = (userId) => `rw_wallet_user_cache_${userId}`;
         const getHistoryCacheKey = (userId) => `rw_wallet_history_cache_${userId}`;
 
@@ -1373,6 +1413,12 @@
 
 
         // --- PAGE NAVIGATION ---
+        const setBottomNavActive = (activeId) => {
+            document.querySelectorAll('.bottom-nav-btn').forEach(btn => {
+                btn.classList.toggle('active', btn.id === activeId);
+            });
+        };
+
         const showPage = (content) => {
             document.getElementById('dashboard-content').classList.add('hidden');
             const pageContainer = document.getElementById('page-container');
@@ -1385,10 +1431,15 @@
         };
 
         const hidePage = () => {
+            if (activeChatUnsubscribe) {
+                activeChatUnsubscribe();
+                activeChatUnsubscribe = null;
+            }
             document.getElementById('dashboard-content').classList.remove('hidden');
             document.getElementById('page-container').classList.add('hidden');
             document.getElementById('page-container').innerHTML = '';
             updateDollarBalanceDisplay(currentUserData?.balance || 0);
+            setBottomNavActive('bottom-home-btn');
             const selectedTab = document.querySelector('.tab-button[aria-selected="true"]');
             if (selectedTab) {
                 switchTab(selectedTab.dataset.tab);
@@ -1615,8 +1666,13 @@
             allLoanRequestsCache = [];
             allLoansCache = [];
             allInvestmentsCache = [];
+            allSupportChatsCache = [];
             currentUserData = null;
             unifiedHistoryCache = [];
+            if (activeChatUnsubscribe) {
+                activeChatUnsubscribe();
+                activeChatUnsubscribe = null;
+            }
 
             if (user) {
                 currentUser = user;
@@ -1642,7 +1698,6 @@
                 }, 100);
 
                 document.getElementById('admin-tab-button').classList.toggle('hidden', !isAdmin);
-                document.getElementById('main-menu-btn').classList.remove('hidden');
 
                 if (isAdmin) {
                     console.log("User is Admin, initializing admin listeners...");
@@ -1666,7 +1721,6 @@
                 // Show auth screen immediately
                 document.getElementById('auth-screen').classList.remove('hidden');
                 document.getElementById('main-content').classList.add('hidden');
-                document.getElementById('main-menu-btn').classList.add('hidden');
 
                 closeSlideMenu();
             }
@@ -1726,6 +1780,7 @@
 
                 const listElement = document.getElementById('transactions-list');
                 const limitedList = limit ? combined.slice(0, limit) : combined;
+                if (!listElement) return;
 
                 listElement.innerHTML = limitedList.length === 0
                     ? `<p class="text-gray-500 dark:text-gray-400">No transactions yet.</p>`
@@ -1855,6 +1910,14 @@
                     renderAdminInvestmentsPage();
                 }
             }, (error) => console.error("Admin: Error listening to partner investments:", error)));
+
+            const supportChatsQuery = query(collection(db, `artifacts/${appId}/public/data/support_chats`), orderBy("updatedAt", "desc"));
+            unsubscribers.push(onSnapshot(supportChatsQuery, (snap) => {
+                allSupportChatsCache = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                if (document.getElementById('admin-chats-list')) {
+                    renderAdminChatsList();
+                }
+            }, (error) => console.error("Admin: Error listening to support chats:", error)));
         };
 
         // --- FULL PAGE RENDERERS ---
@@ -1989,23 +2052,276 @@
             }
         };
 
+        const renderSettingAction = (id, label, iconUrl, tone = 'gray') => `
+            <button id="${id}" class="flex items-center w-full gap-3 p-4 bg-${tone}-50 dark:bg-${tone}-900/20 hover:bg-${tone}-100 dark:hover:bg-${tone}-900/30 border border-${tone}-100 dark:border-${tone}-800 rounded-xl transition text-left">
+                <span class="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-white dark:bg-gray-800 shadow-sm">
+                    <img src="${iconUrl}" alt="${label}" class="h-7 w-7 object-contain">
+                </span>
+                <span class="font-semibold text-gray-900 dark:text-white">${label}</span>
+            </button>`;
+
         const showSettingsPage = () => {
             const currentTheme = localStorage.getItem('theme') || 'light';
+            const isAdmin = currentUser && currentUser.uid === ADMIN_UID;
             const content = `
-                ${getPageHeader('Settings')}
-                <div class="max-w-lg mx-auto bg-white dark:bg-gray-800 p-6 rounded-xl shadow-md space-y-4">
-                    <h3 class="text-lg font-semibold">Theme</h3>
-                    <button id="settings-theme-btn" class="flex items-center justify-between w-full text-left p-4 bg-gray-100 dark:bg-gray-700 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition font-medium">
-                        <span>Toggle Light/Dark Mode</span>
+                ${getPageHeader('Setting')}
+                <div class="max-w-lg mx-auto space-y-4">
+                    <div class="bg-white dark:bg-gray-800 p-5 rounded-2xl shadow-md border border-gray-100 dark:border-gray-700 space-y-3">
+                        ${renderSettingAction('settings-profile-btn', 'My Profile', 'https://cdn-icons-png.flaticon.com/512/3135/3135715.png', 'blue')}
+                        <button id="settings-theme-btn" class="flex items-center justify-between w-full text-left p-4 bg-gray-100 dark:bg-gray-700 rounded-xl hover:bg-gray-200 dark:hover:bg-gray-600 transition font-medium">
+                            <span>Toggle Light/Dark Mode</span>
                         <div class="relative w-5 h-5">
                             <svg id="settings-theme-icon-light" class="w-5 h-5 ${currentTheme === 'dark' ? 'hidden' : ''}" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"></circle><path d="M12 2v2"></path><path d="M12 20v2"></path><path d="m4.93 4.93 1.41 1.41"></path><path d="m18.66 18.66 1.41 1.41"></path><path d="M2 12h2"></path><path d="M20 12h2"></path><path d="m6.34 17.66-1.41 1.41"></path><path d="m19.07 4.93-1.41 1.41"></path></svg>
                             <svg id="settings-theme-icon-dark" class="w-5 h-5 ${currentTheme === 'light' ? 'hidden' : ''}" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"></path></svg>
                         </div>
+                        </button>
+                    </div>
+                    ${isAdmin ? `
+                    <div class="bg-white dark:bg-gray-800 p-5 rounded-2xl shadow-md border border-gray-100 dark:border-gray-700 space-y-3">
+                        <p class="text-xs font-bold uppercase text-gray-400 px-1">Admin</p>
+                        ${renderSettingAction('settings-admin-withdrawals', 'Pending Requests', 'https://cdn-icons-png.flaticon.com/512/7939/7939990.png', 'blue')}
+                        ${renderSettingAction('settings-admin-users', 'User Management', 'https://cdn-icons-png.flaticon.com/512/681/681494.png', 'green')}
+                        ${renderSettingAction('settings-admin-gift-codes', 'Gift Codes', 'https://cdn-icons-png.flaticon.com/512/2611/2611152.png', 'purple')}
+                        ${renderSettingAction('settings-admin-history', 'Withdrawal History', 'https://cdn-icons-png.flaticon.com/512/3652/3652191.png', 'yellow')}
+                        ${renderSettingAction('settings-admin-chat', 'Manage Chat', 'https://cdn-icons-png.flaticon.com/512/5962/5962463.png', 'rose')}
+                    </div>` : ''}
+                    <button id="settings-logout-btn" class="flex items-center justify-center w-full p-4 rounded-2xl bg-red-50 dark:bg-red-900/20 border border-red-100 dark:border-red-800 text-red-600 dark:text-red-300 font-bold">Logout</button>
+                </div>
+                ${getPageFooter()}`;
+            showPage(content);
+            setBottomNavActive('bottom-settings-btn');
+            document.getElementById('settings-profile-btn').onclick = showProfilePage;
+            document.getElementById('settings-theme-btn').onclick = toggleTheme;
+            document.getElementById('settings-logout-btn').onclick = () => signOut(auth);
+            if (isAdmin) {
+                document.getElementById('settings-admin-withdrawals').onclick = showAdminWithdrawalsPage;
+                document.getElementById('settings-admin-users').onclick = showAdminUsersPage;
+                document.getElementById('settings-admin-gift-codes').onclick = showAdminGiftCodesPage;
+                document.getElementById('settings-admin-history').onclick = showWithdrawalHistoryPage;
+                document.getElementById('settings-admin-chat').onclick = showAdminChatsPage;
+            }
+        };
+
+        const SUPPORT_PROFILE_DESCRIPTION = 'Hey, I am Yash Vishal founder Of Reviews World Pvt. Ltd. Working since 2021. I am currently Running more than 5-6 community of Reviews world. I have more than 1000+ active members in our community.Please let me know if you want to do any deal regarding App Reviews work, Map reviews work, and other type of reviews work, web Development, App Developement, etc.Working on making REVIEWS WORLD App since Jan. 2026. It will announced soon..🤗#stay_away_haters';
+
+        const getSupportLogo = () => 'https://i.ibb.co/x8YBYwGG/6233389803554672153.jpg';
+
+        const showSupportProfileModal = () => {
+            renderModal('REVIEWS WORLD',
+                `<div class="space-y-4 text-center">
+                    <img src="${getSupportLogo()}" alt="REVIEWS WORLD" class="h-20 w-20 rounded-full mx-auto object-cover shadow-md">
+                    <div>
+                        <h3 class="text-lg font-bold">REVIEWS WORLD</h3>
+                        <p class="text-sm text-gray-500 dark:text-gray-400">support@reviewsworld.in</p>
+                    </div>
+                    <p class="text-sm leading-6 text-left text-gray-600 dark:text-gray-300">${escapeHtml(SUPPORT_PROFILE_DESCRIPTION)}</p>
+                </div>`,
+                `<button onclick="window.closeModal()" class="px-4 py-2 text-sm bg-blue-600 text-white rounded-lg">Close</button>`,
+                'max-w-md');
+        };
+
+        const formatChatTime = (timestamp) => {
+            if (!timestamp) return '';
+            const date = timestamp.toDate ? timestamp.toDate() : new Date(timestamp);
+            return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        };
+
+        const renderMessageTicks = (message, isMine) => {
+            if (!isMine) return '';
+            const tickClass = message.readAt ? 'text-blue-500' : 'text-gray-400';
+            return `<span class="${tickClass} font-bold tracking-[-3px] ml-1">✓✓</span>`;
+        };
+
+        const markChatMessagesRead = async (chatUserId, readerRole) => {
+            const messagesRef = collection(db, `artifacts/${appId}/public/data/support_chats`, chatUserId, 'messages');
+            const snap = await getDocs(messagesRef);
+            const batch = writeBatch(db);
+            let hasUpdates = false;
+            snap.docs.forEach(messageDoc => {
+                const data = messageDoc.data();
+                if (data.senderRole !== readerRole && !data.readAt) {
+                    batch.update(messageDoc.ref, { readAt: serverTimestamp() });
+                    hasUpdates = true;
+                }
+            });
+            if (hasUpdates) {
+                await batch.commit();
+            }
+        };
+
+        const renderSupportMessages = (messages, viewerRole) => {
+            const list = document.getElementById('support-chat-messages');
+            if (!list) return;
+            list.innerHTML = messages.length === 0
+                ? '<p class="text-center text-sm text-gray-500 dark:text-gray-400 py-8">Start a chat with Reviews World support.</p>'
+                : messages.map(message => {
+                    const isMine = message.senderRole === viewerRole;
+                    return `
+                        <div class="flex ${isMine ? 'justify-end' : 'justify-start'}">
+                            <div class="max-w-[78%] px-4 py-2 shadow-sm ${isMine ? 'chat-bubble-user bg-emerald-50 dark:bg-emerald-900/40 text-gray-900 dark:text-white border border-emerald-100 dark:border-emerald-800' : 'chat-bubble-admin bg-white dark:bg-gray-800 text-gray-900 dark:text-white border border-gray-100 dark:border-gray-700'}">
+                                <p class="text-sm leading-5 break-words">${escapeHtml(message.text || '')}</p>
+                                <div class="flex justify-end items-center text-[10px] mt-1 text-gray-400">
+                                    <span>${formatChatTime(message.createdAt)}</span>
+                                    ${renderMessageTicks(message, isMine)}
+                                </div>
+                            </div>
+                        </div>`;
+                }).join('');
+            list.scrollTop = list.scrollHeight;
+        };
+
+        const openSupportChatPage = async (chatUserId, viewerRole = 'user', chatMeta = {}) => {
+            if (activeChatUnsubscribe) {
+                activeChatUnsubscribe();
+                activeChatUnsubscribe = null;
+            }
+            const isAdminView = viewerRole === 'admin';
+            const displayName = isAdminView ? (chatMeta.userName || 'User') : 'REVIEWS WORLD';
+            const displayEmail = isAdminView ? (chatMeta.userEmail || '') : 'support@reviewsworld.in';
+            const logo = isAdminView ? 'https://cdn-icons-png.flaticon.com/512/3135/3135715.png' : getSupportLogo();
+            const content = `
+                ${getPageHeader(escapeHtml(displayName))}
+                <div class="max-w-2xl mx-auto bg-gray-100 dark:bg-gray-900 min-h-[calc(100vh-8rem)] flex flex-col">
+                    <div class="bg-white dark:bg-gray-800 border border-gray-100 dark:border-gray-700 rounded-2xl shadow-md overflow-hidden flex flex-col min-h-[calc(100vh-10rem)]">
+                        <button id="support-profile-btn" class="flex items-center gap-3 p-4 text-left border-b border-gray-100 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition">
+                            <img src="${logo}" alt="${escapeHtml(displayName)}" class="h-12 w-12 rounded-full object-cover">
+                            <div class="min-w-0">
+                                <h3 class="font-bold truncate">${escapeHtml(displayName)}</h3>
+                                <p class="text-xs text-gray-500 dark:text-gray-400 truncate">${escapeHtml(displayEmail)}</p>
+                            </div>
+                        </button>
+                        <div id="support-chat-messages" class="flex-1 space-y-3 overflow-y-auto p-4 bg-gray-50 dark:bg-gray-900"></div>
+                        <div id="emoji-panel" class="hidden flex flex-wrap gap-2 p-3 border-t border-gray-100 dark:border-gray-700 bg-white dark:bg-gray-800">
+                            ${['😀','😁','🙏','👍','❤️','🔥','🎉','😊','🤗','✅','💰','📞'].map(emoji => `<button class="emoji-choice text-xl">${emoji}</button>`).join('')}
+                        </div>
+                        <div class="flex items-center gap-2 p-3 border-t border-gray-100 dark:border-gray-700 bg-white dark:bg-gray-800">
+                            <button id="emoji-toggle-btn" class="h-10 w-10 rounded-full bg-gray-100 dark:bg-gray-700 text-xl">☺</button>
+                            <input id="support-message-input" type="text" placeholder="Type a message" class="flex-1 px-4 py-3 bg-gray-100 dark:bg-gray-700 rounded-full focus:outline-none focus:ring-2 focus:ring-blue-500">
+                            <button id="support-send-btn" class="h-10 w-10 rounded-full bg-blue-600 text-white flex items-center justify-center">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M2 21l21-9L2 3v7l15 2-15 2v7z"></path></svg>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+                ${getPageFooter()}`;
+            showPage(content);
+            setBottomNavActive(isAdminView ? 'bottom-settings-btn' : 'bottom-help-btn');
+
+            document.getElementById('support-profile-btn').onclick = () => {
+                if (isAdminView) {
+                    renderModal('User Details',
+                        `<div class="space-y-3">
+                            <p><strong>Name:</strong> ${escapeHtml(chatMeta.userName || 'User')}</p>
+                            <p><strong>Email:</strong> ${escapeHtml(chatMeta.userEmail || '')}</p>
+                            <p><strong>Mobile:</strong> ${escapeHtml(chatMeta.userMobile || '')}</p>
+                        </div>`,
+                        `<button onclick="window.closeModal()" class="px-4 py-2 text-sm bg-blue-600 text-white rounded-lg">Close</button>`);
+                } else {
+                    showSupportProfileModal();
+                }
+            };
+
+            const messagesRef = collection(db, `artifacts/${appId}/public/data/support_chats`, chatUserId, 'messages');
+            const messagesQuery = query(messagesRef, orderBy('createdAt', 'asc'));
+            activeChatUnsubscribe = onSnapshot(messagesQuery, (snap) => {
+                const messages = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                renderSupportMessages(messages, viewerRole);
+                markChatMessagesRead(chatUserId, viewerRole).catch(e => console.error('Mark chat read failed:', e));
+            }, (error) => console.error('Support chat listener failed:', error));
+
+            const sendMessage = async () => {
+                const input = document.getElementById('support-message-input');
+                const text = input.value.trim();
+                if (!text) return;
+                input.value = '';
+                const chatRef = doc(db, `artifacts/${appId}/public/data/support_chats`, chatUserId);
+                const senderName = isAdminView ? 'REVIEWS WORLD' : (currentUserData?.name || currentUser?.email || 'User');
+                const chatPayload = {
+                    userId: chatUserId,
+                    userName: chatMeta.userName || currentUserData?.name || currentUser?.email || 'User',
+                    userEmail: chatMeta.userEmail || currentUserData?.email || currentUser?.email || '',
+                    userMobile: chatMeta.userMobile || currentUserData?.mobile || '',
+                    lastMessage: text,
+                    lastSenderRole: viewerRole,
+                    updatedAt: serverTimestamp()
+                };
+                await setDoc(chatRef, chatPayload, { merge: true });
+                await addDoc(messagesRef, {
+                    text,
+                    senderRole: viewerRole,
+                    senderId: currentUser.uid,
+                    senderName,
+                    createdAt: serverTimestamp(),
+                    deliveredAt: serverTimestamp(),
+                    readAt: null
+                });
+            };
+
+            document.getElementById('support-send-btn').onclick = sendMessage;
+            document.getElementById('support-message-input').addEventListener('keydown', (e) => {
+                if (e.key === 'Enter') sendMessage();
+            });
+            document.getElementById('emoji-toggle-btn').onclick = () => document.getElementById('emoji-panel').classList.toggle('hidden');
+            document.querySelectorAll('.emoji-choice').forEach(btn => {
+                btn.onclick = () => {
+                    const input = document.getElementById('support-message-input');
+                    input.value += btn.textContent;
+                    input.focus();
+                };
+            });
+        };
+
+        const showHelpSupportPage = () => {
+            const content = `
+                ${getPageHeader('Help')}
+                <div class="max-w-lg mx-auto space-y-4">
+                    <button id="reviews-world-chat-card" class="w-full flex items-center gap-4 p-4 bg-white dark:bg-gray-800 border border-gray-100 dark:border-gray-700 rounded-2xl shadow-md text-left hover:bg-gray-50 dark:hover:bg-gray-700/50 transition">
+                        <img src="${getSupportLogo()}" alt="REVIEWS WORLD" class="h-14 w-14 rounded-full object-cover shadow-sm">
+                        <div class="flex-1 min-w-0">
+                            <h3 class="font-bold text-gray-900 dark:text-white">REVIEWS WORLD</h3>
+                            <p class="text-sm text-gray-500 dark:text-gray-400 truncate">Chat with admin support</p>
+                        </div>
+                        <span class="text-blue-600 dark:text-blue-300 font-bold">Chat</span>
                     </button>
                 </div>
                 ${getPageFooter()}`;
             showPage(content);
-            document.getElementById('settings-theme-btn').onclick = toggleTheme;
+            setBottomNavActive('bottom-help-btn');
+            document.getElementById('reviews-world-chat-card').onclick = () => openSupportChatPage(currentUser.uid, 'user');
+        };
+
+        const renderAdminChatsList = () => {
+            const list = document.getElementById('admin-chats-list');
+            if (!list) return;
+            list.innerHTML = allSupportChatsCache.length === 0
+                ? '<p class="text-center text-gray-500 dark:text-gray-400 py-8">No chats received yet.</p>'
+                : allSupportChatsCache.map(chat => `
+                    <button data-chat-userid="${chat.userId || chat.id}" class="admin-chat-row w-full flex items-center gap-3 p-4 bg-white dark:bg-gray-800 border border-gray-100 dark:border-gray-700 rounded-2xl shadow-sm text-left hover:bg-gray-50 dark:hover:bg-gray-700/50 transition">
+                        <img src="https://cdn-icons-png.flaticon.com/512/3135/3135715.png" alt="${escapeHtml(chat.userName || 'User')}" class="h-12 w-12 rounded-full object-contain bg-blue-50 p-2">
+                        <div class="flex-1 min-w-0">
+                            <div class="flex items-center justify-between gap-2">
+                                <h3 class="font-bold truncate">${escapeHtml(chat.userName || 'User')}</h3>
+                                <span class="text-[10px] text-gray-400">${formatChatTime(chat.updatedAt)}</span>
+                            </div>
+                            <p class="text-sm text-gray-500 dark:text-gray-400 truncate">${escapeHtml(chat.lastMessage || 'No message')}</p>
+                        </div>
+                    </button>`).join('');
+            document.querySelectorAll('.admin-chat-row').forEach(row => {
+                row.onclick = () => {
+                    const chat = allSupportChatsCache.find(item => (item.userId || item.id) === row.dataset.chatUserid);
+                    openSupportChatPage(row.dataset.chatUserid, 'admin', chat || {});
+                };
+            });
+        };
+
+        const showAdminChatsPage = () => {
+            const content = `
+                ${getPageHeader('Manage Chat')}
+                <div id="admin-chats-list" class="max-w-2xl mx-auto space-y-3"></div>
+                ${getPageFooter()}`;
+            showPage(content);
+            setBottomNavActive('bottom-settings-btn');
+            renderAdminChatsList();
         };
 
         const renderFilteredTransactions = (filter) => {
@@ -2056,6 +2372,7 @@
                 </div>
                 ${getPageFooter()}`;
             showPage(content);
+            setBottomNavActive('bottom-transactions-btn');
 
             // Initial render of all transactions
             renderFilteredTransactions('all');
@@ -5720,15 +6037,17 @@
         document.getElementById('tabs-container').addEventListener('click', (e) => {
             if (e.target.matches('.tab-button')) switchTab(e.target.dataset.tab);
         });
-        document.getElementById('main-menu-btn').addEventListener('click', openSlideMenu);
-        document.getElementById('view-all-tx-btn').addEventListener('click', showAllTransactionsPage);
-
-        document.getElementById('transactions-list').addEventListener('click', (e) => {
-            const itemEl = e.target.closest('.tx-item-clickable');
-            if (itemEl) {
-                showTransactionDetails(itemEl.dataset.key);
-            }
+        document.getElementById('bottom-home-btn').addEventListener('click', () => {
+            hidePage();
+            switchTab(currentUser?.uid === ADMIN_UID ? 'admin-panel' : 'user-panel');
+            setBottomNavActive('bottom-home-btn');
         });
+        document.getElementById('bottom-transactions-btn').addEventListener('click', () => {
+            showAllTransactionsPage();
+            setBottomNavActive('bottom-transactions-btn');
+        });
+        document.getElementById('bottom-help-btn').addEventListener('click', showHelpSupportPage);
+        document.getElementById('bottom-settings-btn').addEventListener('click', showSettingsPage);
 
         document.getElementById('manage-admin-wallet-btn').addEventListener('click', showManageAdminWalletModal);
 
@@ -5742,6 +6061,7 @@
         document.getElementById('admin-recharge-requests-btn').addEventListener('click', showAdminRechargeRequestsPage);
         document.getElementById('admin-loans-btn').addEventListener('click', showAdminLoanPage);
         document.getElementById('admin-investments-btn').addEventListener('click', showAdminInvestmentsPage);
+        document.getElementById('admin-chats-btn').addEventListener('click', showAdminChatsPage);
 
         // Withdraw Fund Button - Now opens full page
         document.getElementById('withdraw-fund-btn').addEventListener('click', showWithdrawPage);
