@@ -2687,6 +2687,12 @@
             showPage(`
                 ${getPageHeader('Partner Investment')}
                 <div class="max-w-md mx-auto bg-white dark:bg-gray-800 p-6 rounded-2xl shadow-md space-y-5">
+                    <div class="flex justify-end">
+                        <div class="rounded-xl bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-100 dark:border-emerald-800 px-3 py-2 text-right">
+                            <p class="text-[10px] font-semibold uppercase text-emerald-600 dark:text-emerald-300">Wallet Balance</p>
+                            <p class="text-sm font-bold text-gray-900 dark:text-white">${formatCurrency(currentUserData.balance)}</p>
+                        </div>
+                    </div>
                     <div class="text-center">
                         <div class="mx-auto w-16 h-16 rounded-2xl bg-emerald-100 dark:bg-emerald-900/30 p-3">
                             <img src="${PARTNER_ICON_URL}" alt="Partner" class="w-full h-full object-contain">
