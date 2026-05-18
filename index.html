@@ -1096,6 +1096,40 @@
             });
         };
 
+        const promptOneSignalPermission = (force = false) => {
+            if (!window.OneSignalDeferred) return;
+            window.OneSignalDeferred.push(async function (OneSignal) {
+                try {
+                    const supported = await OneSignal.Notifications.isPushSupported();
+                    if (!supported || OneSignal.Notifications.permission) return;
+
+                    if (OneSignal.Slidedown?.promptPush) {
+                        await OneSignal.Slidedown.promptPush({ force });
+                        return;
+                    }
+
+                    await OneSignal.Notifications.requestPermission();
+                } catch (error) {
+                    console.warn("OneSignal permission prompt failed:", error.message);
+                }
+            });
+        };
+
+        const bindOneSignalPromptToNextUserAction = () => {
+            if (window.__rwOneSignalPromptBound) return;
+            window.__rwOneSignalPromptBound = true;
+
+            const promptHandler = () => {
+                promptOneSignalPermission(true);
+                document.removeEventListener('click', promptHandler);
+                document.removeEventListener('touchend', promptHandler);
+                window.__rwOneSignalPromptBound = false;
+            };
+
+            document.addEventListener('click', promptHandler, { once: true });
+            document.addEventListener('touchend', promptHandler, { once: true });
+        };
+
         try {
             setLogLevel('Debug');
         } catch (e) {
@@ -1628,6 +1662,7 @@
             if (user) {
                 currentUser = user;
                 syncOneSignalUser(user);
+                bindOneSignalPromptToNextUserAction();
 
                 // Hide loading overlay if shown
                 hideLoading();
