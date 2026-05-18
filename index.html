@@ -19,7 +19,6 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-    <script src="https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.page.js" defer></script>
     <script>
         tailwind.config = {
             darkMode: 'class',
@@ -32,21 +31,6 @@
             },
         }
 
-        window.OneSignalDeferred = window.OneSignalDeferred || [];
-        window.oneSignalReady = false;
-        OneSignalDeferred.push(async function (OneSignal) {
-            try {
-                await OneSignal.init({
-                    appId: "4affd7dd-a2c1-4b94-8253-dde142f4c847",
-                    safari_web_id: "web.onesignal.auto.1969a531-155e-4c74-883a-18e03006540c",
-                    notifyButton: { enable: true },
-                    allowLocalhostAsSecureOrigin: true,
-                });
-                window.oneSignalReady = true;
-            } catch (e) {
-                console.warn("OneSignal initialization failed:", e.message);
-            }
-        });
     </script>
     <style>
         html,
@@ -346,67 +330,6 @@
             min-height: 40px;
         }
 
-        /* ========== NEW NOTIFICATION STYLES (ADD THIS ONLY) ========== */
-        .push-notification {
-            position: fixed;
-            bottom: 20px;
-            right: 20px;
-            background: white;
-            border-radius: 12px;
-            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
-            width: 320px;
-            z-index: 10000;
-            overflow: hidden;
-            animation: slideIn 0.3s ease-out;
-            border-left: 5px solid #3b82f6;
-        }
-
-        @keyframes slideIn {
-            from {
-                transform: translateX(400px);
-                opacity: 0;
-            }
-
-            to {
-                transform: translateX(0);
-                opacity: 1;
-            }
-        }
-
-        .push-notification.hidden {
-            animation: slideOut 0.3s ease-in;
-            transform: translateX(400px);
-            opacity: 0;
-        }
-
-        @keyframes slideOut {
-            from {
-                transform: translateX(0);
-                opacity: 1;
-            }
-
-            to {
-                transform: translateX(400px);
-                opacity: 0;
-            }
-        }
-
-        .notification-badge {
-            position: absolute;
-            top: -5px;
-            right: -5px;
-            background: #ef4444;
-            color: white;
-            border-radius: 50%;
-            width: 20px;
-            height: 20px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 12px;
-            font-weight: bold;
-        }
-
         .request-id-badge {
             background: linear-gradient(135deg, #8b5cf6 0%, #6366f1 100%);
             color: white;
@@ -416,41 +339,6 @@
             font-family: monospace;
             margin-left: 8px;
         }
-
-        @keyframes bellRing {
-            0% {
-                transform: rotate(0);
-            }
-
-            10% {
-                transform: rotate(-10deg);
-            }
-
-            20% {
-                transform: rotate(10deg);
-            }
-
-            30% {
-                transform: rotate(-10deg);
-            }
-
-            40% {
-                transform: rotate(10deg);
-            }
-
-            50% {
-                transform: rotate(0);
-            }
-
-            100% {
-                transform: rotate(0);
-            }
-        }
-
-        .notification-bell {
-            animation: bellRing 2s ease infinite;
-        }
-
 
         @keyframes pulse {
             0% {
@@ -625,9 +513,6 @@
         });
     </script>
 
-    <!-- Push Notification Container (ADD THIS LINE ONLY) -->
-    <div id="push-notification-container"></div>
-
     <!-- Main App Container -->
     <div id="app" class="container mx-auto p-4 max-w-7xl relative">
         <!-- Auth Screen -->
@@ -742,23 +627,8 @@
                         <p class="text-xs text-gray-500 dark:text-gray-400 mt-0.5">REVIEWS WORLD</p>
                     </div>
                 </div>
-                <!-- Notification & Menu Buttons -->
+                <!-- Menu Button -->
                 <div class="flex items-center gap-3">
-                    <!-- Notification Bell -->
-                    <div class="relative">
-                        <button id="notification-bell"
-                            class="p-2 bg-gray-100 dark:bg-gray-700 rounded-full hover:bg-gray-200 dark:hover:bg-gray-600 transition relative">
-                            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24"
-                                fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
-                                stroke-linejoin="round">
-                                <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path>
-                                <path d="M13.73 21a2 2 0 0 1-3.46 0"></path>
-                            </svg>
-                            <span id="notification-count" class="notification-badge hidden">0</span>
-                        </button>
-                    </div>
-
-                    <!-- Menu Button -->
                     <button id="main-menu-btn"
                         class="p-2 bg-gray-100 dark:bg-gray-700 rounded-full hover:bg-gray-200 dark:hover:bg-gray-600 transition">
                         <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none"
@@ -770,19 +640,6 @@
                     </button>
                 </div>
             </header>
-            <!-- Notification Center (ADD THIS SECTION ONLY) -->
-            <div id="notification-center" class="hidden mb-4">
-                <div class="bg-white dark:bg-gray-800 p-4 rounded-xl shadow-md">
-                    <div class="flex justify-between items-center mb-3">
-                        <h3 class="text-lg font-semibold">Notifications</h3>
-                        <button id="mark-all-read" class="text-sm text-blue-500 hover:underline">Mark all as
-                            read</button>
-                    </div>
-                    <div id="notifications-list" class="max-h-64 overflow-y-auto space-y-2">
-                        <!-- Notifications will be loaded here -->
-                    </div>
-                </div>
-            </div>
             <!-- Main Dashboard Area (Tabs) -->
             <div id="dashboard-content">
                 <!-- Tab Navigation -->
@@ -963,15 +820,6 @@
                                 <span class="text-sm font-medium text-blue-700 dark:text-blue-300">Pro
                                     Verification</span>
                             </button>
-                            <button id="admin-notifications-btn"
-                                class="flex flex-col items-center justify-center p-4 min-h-28 bg-indigo-50 dark:bg-indigo-900/20 rounded-2xl hover:bg-indigo-100 dark:hover:bg-indigo-900/30 transition border border-indigo-200 dark:border-indigo-800 shadow-sm">
-                                <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-indigo-600 mb-2" fill="none"
-                                    viewBox="0 0 24 24" stroke="currentColor">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                        d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6 6 0 10-12 0v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0a3 3 0 11-6 0" />
-                                </svg>
-                                <span class="text-sm font-medium text-indigo-700 dark:text-indigo-300">Notifications</span>
-                            </button>
                         </div>
                     </div>
                 </div>
@@ -995,7 +843,7 @@
     <!-- Modal Container -->
     <div id="modal-container"></div>
 
-    <!-- Notification Toast Container -->
+    <!-- Toast Container -->
     <div id="notification-toast">
         <!-- Toast content will be injected here -->
     </div>
@@ -1021,7 +869,7 @@
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
         import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, onAuthStateChanged, sendPasswordResetEmail } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { getFirestore, doc, setDoc, getDoc, collection, addDoc, onSnapshot, query, orderBy, Timestamp, writeBatch, runTransaction, deleteDoc, getDocs, serverTimestamp, where, arrayUnion, updateDoc, deleteField, setLogLevel, limit } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        import { getFirestore, doc, setDoc, getDoc, collection, addDoc, onSnapshot, query, orderBy, Timestamp, writeBatch, runTransaction, deleteDoc, getDocs, serverTimestamp, where, arrayUnion, updateDoc, deleteField, setLogLevel } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
         // --- THEME LOGIC ---
         const applyTheme = (theme) => {
@@ -1071,85 +919,6 @@
         const app = initializeApp(firebaseConfig);
         const auth = getAuth(app);
         const db = getFirestore(app);
-
-        const syncOneSignalUser = (user) => {
-            if (!user || !window.OneSignalDeferred) return;
-            window.OneSignalDeferred.push(async function (OneSignal) {
-                try {
-                    await OneSignal.login(user.uid);
-                    OneSignal.User.addAlias("firebase_uid", user.uid);
-                    if (user.email) OneSignal.User.addAlias("email", user.email);
-                } catch (error) {
-                    console.warn("OneSignal user sync failed:", error.message);
-                }
-            });
-        };
-
-        const logoutOneSignalUser = () => {
-            if (!window.OneSignalDeferred) return;
-            window.OneSignalDeferred.push(async function (OneSignal) {
-                try {
-                    await OneSignal.logout();
-                } catch (error) {
-                    console.warn("OneSignal logout failed:", error.message);
-                }
-            });
-        };
-
-        const promptOneSignalPermission = (force = false) => {
-            if (!window.OneSignalDeferred) return Promise.resolve(false);
-            return new Promise((resolve) => {
-                let settled = false;
-                const finish = (value) => {
-                    if (settled) return;
-                    settled = true;
-                    resolve(value);
-                };
-                setTimeout(() => finish(false), 4000);
-
-                window.OneSignalDeferred.push(async function (OneSignal) {
-                try {
-                    const supported = await OneSignal.Notifications.isPushSupported();
-                    if (!supported) {
-                        showNotification('Push notifications are not supported on this device/browser.', true, false);
-                        finish(false);
-                        return;
-                    }
-
-                    if (OneSignal.Notifications.permission) {
-                        finish(true);
-                        return;
-                    }
-
-                    if (OneSignal.Slidedown?.promptPush) {
-                        await OneSignal.Slidedown.promptPush({ force });
-                    } else {
-                        await OneSignal.Notifications.requestPermission();
-                    }
-
-                    finish(!!OneSignal.Notifications.permission);
-                } catch (error) {
-                    console.warn("OneSignal permission prompt failed:", error.message);
-                    finish(false);
-                }
-                });
-            });
-        };
-
-        const bindOneSignalPromptToNextUserAction = () => {
-            if (window.__rwOneSignalPromptBound) return;
-            window.__rwOneSignalPromptBound = true;
-
-            const promptHandler = async () => {
-                await promptOneSignalPermission(true);
-                document.removeEventListener('click', promptHandler);
-                document.removeEventListener('touchend', promptHandler);
-                window.__rwOneSignalPromptBound = false;
-            };
-
-            document.addEventListener('click', promptHandler, { once: true });
-            document.addEventListener('touchend', promptHandler, { once: true });
-        };
 
         try {
             setLogLevel('Debug');
@@ -1229,31 +998,6 @@
             return upiId.substring(0, 2) + '****' + upiId.substring(atIndex);
         };
 
-        const sendOneSignalPush = async ({ title, message, userId = 'all', data = {} }) => {
-            try {
-                const response = await fetch('/api/send-notification', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        title,
-                        message,
-                        userId,
-                        data,
-                        url: location.origin,
-                    }),
-                });
-
-                const result = await response.json().catch(() => ({}));
-                if (!response.ok) {
-                    throw new Error(result.error || 'OneSignal push failed');
-                }
-                return result;
-            } catch (error) {
-                console.error('OneSignal push failed:', error);
-                throw error;
-            }
-        };
-
         // Generate transaction ID
         const generateTransactionId = () => {
             const timestamp = Date.now().toString(36);
@@ -1284,7 +1028,7 @@
         };
         window.closeNotification = closeNotification;
 
-        // Updated Notification Function with sound
+        // Toast helper with sound
         const showNotification = (message, isError = false, playSound = true) => {
             const toast = document.getElementById('notification-toast');
             if (notificationTimeout) clearTimeout(notificationTimeout);
@@ -1508,10 +1252,7 @@
                         <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="mr-3"><path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" /></svg>
                         Withdrawal History
                     </button>
-                    <button id="slide-menu-admin-notifications" class="flex items-center w-full text-left p-4 hover:bg-gray-100 dark:hover:bg-gray-700 transition font-medium">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="mr-3"><path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9"></path><path d="M13.73 21a2 2 0 01-3.46 0"></path></svg>
-                        Notifications
-                    </button>`;
+                    `;
             }
 
             menu.innerHTML = `
@@ -1554,7 +1295,6 @@
                 document.getElementById('slide-menu-admin-users').onclick = () => { showAdminUsersPage(); closeSlideMenu(); };
                 document.getElementById('slide-menu-admin-gift-codes').onclick = () => { showAdminGiftCodesPage(); closeSlideMenu(); };
                 document.getElementById('slide-menu-admin-withdrawal-history').onclick = () => { showWithdrawalHistoryPage(); closeSlideMenu(); };
-                document.getElementById('slide-menu-admin-notifications').onclick = () => { showAdminNotificationsPage(); closeSlideMenu(); };
             }
             document.getElementById('slide-menu-logout-btn').onclick = () => {
                 signOut(auth);
@@ -1702,13 +1442,9 @@
             allFundRequestsCache = [];
             currentUserData = null;
             unifiedHistoryCache = [];
-            seenTransactionPushIds = new Set();
-            transactionPushListenerReady = false;
 
             if (user) {
                 currentUser = user;
-                syncOneSignalUser(user);
-                bindOneSignalPromptToNextUserAction();
 
                 // Hide loading overlay if shown
                 hideLoading();
@@ -1747,7 +1483,6 @@
                 localStorage.setItem('lastLoggedInUser', user.uid);
             } else {
                 currentUser = null;
-                logoutOneSignalUser();
                 hideLoading();
                 // Remove saved user
                 localStorage.removeItem('lastLoggedInUser');
@@ -1801,26 +1536,6 @@
 
             const transactionsQuery = query(collection(db, `artifacts/${appId}/public/data/users`, userId, 'transactions'), orderBy('timestamp', 'desc'));
             unsubscribers.push(onSnapshot(transactionsQuery, (snap) => {
-                snap.docChanges().forEach((change) => {
-                    if (change.type !== 'added') return;
-                    const item = { key: change.doc.id, ...change.doc.data() };
-                    const eventKey = item.transactionId || item.requestId || change.doc.id;
-                    if (seenTransactionPushIds.has(eventKey)) return;
-                    seenTransactionPushIds.add(eventKey);
-
-                    if (!transactionPushListenerReady) return;
-                    if (item.status === 'pending') return;
-
-                    if (['wallet_transfer', 'credit'].includes(item.type) && item.amount > 0) {
-                        notificationSystem.sendBrowserOnlyNotification(
-                            'Received Fund',
-                            `${formatCurrency(item.amount)} received from ${item.senderName || (item.isAdminTransaction ? 'Reviews World' : 'User')}.`,
-                            { type: 'received_fund', transactionId: item.transactionId }
-                        );
-                    }
-                });
-                transactionPushListenerReady = true;
-
                 transactions = snap.docs.map(d => d.data());
                 renderUnifiedHistory(5);
             }, (error) => console.error("Error listening to transactions:", error)));
@@ -3001,17 +2716,6 @@
                 });
 
                 showNotification('Withdrawal Request Submitted and balance deducted!', false, true);
-                notificationSystem.sendBrowserOnlyNotification(
-                    'Withdrawal Pending',
-                    `${formatCurrency(amount)} withdrawal request is pending.`,
-                    { type: 'withdrawal_pending' }
-                );
-                sendOneSignalPush({
-                    title: 'Withdrawal Pending',
-                    message: `${formatCurrency(amount)} withdrawal request is pending.`,
-                    userId: currentUser.uid,
-                    data: { type: 'withdrawal_pending' }
-                }).catch(() => showNotification('Push send failed. Check OneSignal server key.', true, false));
                 window.closeModal();
                 hidePage();
             } catch (e) {
@@ -3194,23 +2898,6 @@
                 });
 
                 showNotification(`Success! Sent ${formatCurrency(amount)} to ${recipientData.name || recipientData.mobile}`, false, true);
-                notificationSystem.sendBrowserOnlyNotification(
-                    'Transfer Fund',
-                    `${formatCurrency(amount)} sent to ${recipientData.name || recipientData.mobile}.`,
-                    { type: 'transfer_fund' }
-                );
-                sendOneSignalPush({
-                    title: 'Transfer Fund',
-                    message: `${formatCurrency(amount)} sent to ${recipientData.name || recipientData.mobile}.`,
-                    userId: currentUser.uid,
-                    data: { type: 'transfer_fund' }
-                }).catch(() => showNotification('Sender push failed. Check OneSignal server key.', true, false));
-                sendOneSignalPush({
-                    title: 'Received Fund',
-                    message: `${formatCurrency(amount)} received from ${currentUserData.name || 'User'}.`,
-                    userId: recipientData.uid,
-                    data: { type: 'received_fund' }
-                }).catch(() => showNotification('Recipient push failed. Check OneSignal server key.', true, false));
                 window.closeModal();
                 hidePage();
             } catch (e) {
@@ -3265,17 +2952,6 @@
                     });
                 });
                 showNotification(`Success! Added ${formatCurrency(redeemedAmount)} to your wallet.`, false, true);
-                notificationSystem.sendBrowserOnlyNotification(
-                    'Claimed Gift Card',
-                    `${formatCurrency(redeemedAmount)} added to your wallet.`,
-                    { type: 'claimed_gift_card' }
-                );
-                sendOneSignalPush({
-                    title: 'Claimed Gift Card',
-                    message: `${formatCurrency(redeemedAmount)} added to your wallet.`,
-                    userId: currentUser.uid,
-                    data: { type: 'claimed_gift_card' }
-                }).catch(() => showNotification('Push send failed. Check OneSignal server key.', true, false));
                 window.closeModal();
             } catch (e) {
                 console.error("Redeem failed:", e);
@@ -3501,14 +3177,6 @@
                     }
                 });
                 showNotification(`Success! Request has been ${newStatus}.`);
-                sendOneSignalPush({
-                    title: newStatus === 'completed' ? 'Withdrawal Approved' : 'Withdrawal Rejected',
-                    message: newStatus === 'completed'
-                        ? `Your ${formatCurrency(processedAmount)} withdrawal has been approved.`
-                        : `Your withdrawal was rejected${rejectionReason ? `: ${rejectionReason}` : '.'}`,
-                    userId,
-                    data: { type: newStatus === 'completed' ? 'withdrawal_approved' : 'withdrawal_rejected' }
-                }).catch(() => showNotification('Push send failed. Check OneSignal server key.', true, false));
                 window.closeModal();
             } catch (e) {
                 console.error("Request action failed:", e);
@@ -3680,12 +3348,6 @@
                     });
                 });
                 showNotification('Funds added successfully!');
-                sendOneSignalPush({
-                    title: 'Received Fund',
-                    message: `${formatCurrency(amount)} added to your wallet.`,
-                    userId,
-                    data: { type: 'received_fund' }
-                }).catch(() => showNotification('Push send failed. Check OneSignal server key.', true, false));
                 window.closeModal();
             } catch (e) {
                 console.error("Admin add funds failed:", e);
@@ -4354,7 +4016,6 @@
         document.getElementById('admin-withdrawal-history-btn').addEventListener('click', showWithdrawalHistoryPage);
         document.getElementById('admin-withdraw-settings-btn').addEventListener('click', showAdminWithdrawSettingsModal);
         document.getElementById('admin-pro-users-btn').addEventListener('click', showAdminUsersPage);
-        document.getElementById('admin-notifications-btn').addEventListener('click', () => showAdminNotificationsPage());
 
         // Withdraw Fund Button - Now opens full page
         document.getElementById('withdraw-fund-btn').addEventListener('click', showWithdrawPage);
@@ -4437,11 +4098,7 @@
         const APP_VERSION = "2.0";
 
         // --- GLOBAL VARIABLES ---
-        let unreadNotificationsCount = 0;
         let pendingRequests = new Set();
-        let realtimeListeners = [];
-        let seenTransactionPushIds = new Set();
-        let transactionPushListenerReady = false;
         let minWithdrawalAmount = 50;
         let minWithdrawalUpi = 50;
         let minWithdrawalBank = 1000;
@@ -4474,351 +4131,6 @@
         // Add min withdrawal info to user panel HTML (if not already there)
         // In your user-panel section, add this line:
         // <p class="text-xs text-gray-500 dark:text-gray-400 mt-1" id="min-withdrawal-info">Min. withdrawal: ₹50</p>
-
-        // --- PUSH NOTIFICATIONS SYSTEM ---
-        class PushNotificationSystem {
-            constructor() {
-                this.notifications = [];
-                this.permission = 'Notification' in window ? Notification.permission : 'unsupported';
-                this.initialize();
-            }
-
-            async initialize() {
-                // Display app version
-                if (document.getElementById('app-version')) {
-                    document.getElementById('app-version').textContent = `v${APP_VERSION}`;
-                }
-
-                // Check for existing permission
-                if (this.permission === 'default') {
-                    this.requestPermission();
-                }
-
-                // Load saved notifications
-                this.loadNotifications();
-            }
-
-            async requestPermission() {
-                if (!('Notification' in window)) {
-                    console.warn('Browser notifications are not supported in this environment.');
-                    return;
-                }
-
-                try {
-                    this.permission = await Notification.requestPermission();
-                    if (this.permission === 'granted') {
-                        showNotification('Notifications enabled!', false);
-                    }
-                } catch (error) {
-                    console.error('Error requesting notification permission:', error);
-                }
-            }
-
-            async sendNotification(title, body, data = {}) {
-                // Show in-app notification
-                this.showInAppNotification(title, body, data);
-
-                // Show browser notification if permission granted
-                if ('Notification' in window && this.permission === 'granted') {
-                    const notification = new Notification(title, {
-                        body: body,
-                        icon: 'https://i.ibb.co/x8YBYwGG/6233389803554672153.jpg',
-                        badge: 'https://i.ibb.co/x8YBYwGG/6233389803554672153.jpg',
-                        data: data,
-                        tag: data.type || 'general'
-                    });
-
-                    notification.onclick = () => {
-                        window.focus();
-                        notification.close();
-                        this.handleNotificationClick(data);
-                    };
-                }
-            }
-
-            async sendBrowserOnlyNotification(title, body, data = {}) {
-                if (!('Notification' in window)) {
-                    console.warn('Browser notifications are not supported in this environment.');
-                    return;
-                }
-
-                if (this.permission === 'default') {
-                    await this.requestPermission();
-                }
-
-                if (this.permission !== 'granted') {
-                    console.warn('Browser notification permission is not granted.');
-                    return;
-                }
-
-                const notification = new Notification(title, {
-                    body,
-                    icon: 'https://i.ibb.co/x8YBYwGG/6233389803554672153.jpg',
-                    badge: 'https://i.ibb.co/x8YBYwGG/6233389803554672153.jpg',
-                    data,
-                    tag: data.type || `wallet-event-${Date.now()}`,
-                    renotify: true
-                });
-
-                notification.onclick = () => {
-                    window.focus();
-                    notification.close();
-                    this.handleNotificationClick(data);
-                };
-            }
-
-            showInAppNotification(title, body, data = {}) {
-                const notificationId = `notif-${Date.now()}`;
-                const container = document.getElementById('push-notification-container');
-                if (!container) return;
-
-                const notificationEl = document.createElement('div');
-                notificationEl.className = 'push-notification';
-                notificationEl.id = notificationId;
-
-                // Play notification sound
-                const audio = document.getElementById('notification-sound') || document.getElementById('success-sound');
-                if (audio) {
-                    audio.currentTime = 0;
-                    audio.play().catch(e => console.log("Notification sound play failed:", e));
-                }
-
-                // Update notification count
-                this.updateNotificationCount(1);
-
-                notificationEl.innerHTML = `
-            <div class="p-4">
-                <div class="flex justify-between items-start mb-2">
-                    <div class="flex items-center">
-                        <div class="w-10 h-10 bg-blue-100 dark:bg-blue-900 rounded-full flex items-center justify-center mr-3">
-                            <svg class="w-5 h-5 text-blue-600 dark:text-blue-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"></path>
-                            </svg>
-                        </div>
-                        <div>
-                            <h4 class="font-semibold text-gray-800 dark:text-gray-200">${title}</h4>
-                            <p class="text-sm text-gray-600 dark:text-gray-400 mt-1">${body}</p>
-                        </div>
-                    </div>
-                    <button onclick="window.closeNotificationById('${notificationId}')" class="text-gray-400 hover:text-gray-600">
-                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
-                        </svg>
-                    </button>
-                </div>
-                <div class="text-right">
-                    <small class="text-xs text-gray-500">${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</small>
-                </div>
-            </div>
-        `;
-
-                container.appendChild(notificationEl);
-
-                // Auto remove after 5 seconds
-                setTimeout(() => {
-                    this.removeNotification(notificationId);
-                }, 5000);
-
-                // Store notification
-                this.notifications.push({
-                    id: notificationId,
-                    title,
-                    body,
-                    data,
-                    timestamp: new Date(),
-                    read: false
-                });
-
-                this.saveNotifications();
-
-                // Also add to notification center
-                this.addToNotificationsList({
-                    title,
-                    message: body,
-                    ...data,
-                    createdAt: { toDate: () => new Date() }
-                });
-            }
-
-            removeNotification(id) {
-                const notification = document.getElementById(id);
-                if (notification) {
-                    notification.classList.add('hidden');
-                    setTimeout(() => notification.remove(), 300);
-                }
-
-                // Update notification count
-                const notificationObj = this.notifications.find(n => n.id === id);
-                if (notificationObj && !notificationObj.read) {
-                    this.updateNotificationCount(-1);
-                }
-            }
-
-            updateNotificationCount(change) {
-                unreadNotificationsCount = Math.max(0, unreadNotificationsCount + change);
-                const badge = document.getElementById('notification-count');
-                const bell = document.getElementById('notification-bell');
-
-                if (badge) {
-                    if (unreadNotificationsCount > 0) {
-                        badge.textContent = unreadNotificationsCount > 99 ? '99+' : unreadNotificationsCount;
-                        badge.classList.remove('hidden');
-                        if (bell) bell.classList.add('notification-bell');
-                    } else {
-                        badge.classList.add('hidden');
-                        if (bell) bell.classList.remove('notification-bell');
-                    }
-                }
-            }
-
-            handleNotificationClick(data) {
-                if (data.type === 'withdrawal_approved') {
-                    if (typeof showAllTransactionsPage === 'function') {
-                        showAllTransactionsPage();
-                    }
-                } else if (data.type === 'admin_message') {
-                    showNotificationsInboxPage();
-                } else {
-                    showNotificationsInboxPage();
-                }
-            }
-
-            addToNotificationsList(data) {
-                const list = document.getElementById('notifications-list');
-                if (!list) return;
-
-                const timeAgo = this.formatTimeAgo(data.createdAt);
-
-                const notificationItem = document.createElement('div');
-                notificationItem.className = 'p-3 bg-gray-50 dark:bg-gray-700/50 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition';
-
-                notificationItem.innerHTML = `
-            <div class="flex items-start">
-                <div class="flex-shrink-0 mr-3">
-                    <div class="w-8 h-8 rounded-full ${data.type === 'admin' ? 'bg-purple-100 dark:bg-purple-900' : 'bg-blue-100 dark:bg-blue-900'} flex items-center justify-center">
-                        ${data.type === 'admin' ?
-                        '<svg class="w-4 h-4 text-purple-600 dark:text-purple-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path></svg>' :
-                        '<svg class="w-4 h-4 text-blue-600 dark:text-blue-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>'
-                    }
-                    </div>
-                </div>
-                <div class="flex-1">
-                    <h4 class="font-semibold text-sm text-gray-800 dark:text-gray-200">${data.title || 'Notification'}</h4>
-                    <p class="text-xs text-gray-600 dark:text-gray-400 mt-1">${data.message || data.body}</p>
-                    <p class="text-xs text-gray-500 dark:text-gray-500 mt-2">${timeAgo}</p>
-                </div>
-            </div>
-        `;
-
-                // Add to beginning of list
-                if (list.firstChild) {
-                    list.insertBefore(notificationItem, list.firstChild);
-                } else {
-                    list.appendChild(notificationItem);
-                }
-
-                // Limit to 50 notifications
-                if (list.children.length > 50) {
-                    list.removeChild(list.lastChild);
-                }
-            }
-
-            formatTimeAgo(timestamp) {
-                if (!timestamp) return 'Just now';
-                const date = timestamp.toDate ? timestamp.toDate() : new Date(timestamp);
-                const now = new Date();
-                const diffMs = now - date;
-                const diffMins = Math.floor(diffMs / 60000);
-                const diffHours = Math.floor(diffMs / 3600000);
-                const diffDays = Math.floor(diffMs / 86400000);
-
-                if (diffMins < 1) return 'Just now';
-                if (diffMins < 60) return `${diffMins}m ago`;
-                if (diffHours < 24) return `${diffHours}h ago`;
-                if (diffDays < 7) return `${diffDays}d ago`;
-                return date.toLocaleDateString();
-            }
-
-            saveNotifications() {
-                localStorage.setItem('wallet_notifications', JSON.stringify(this.notifications));
-            }
-
-            loadNotifications() {
-                const saved = localStorage.getItem('wallet_notifications');
-                if (saved) {
-                    try {
-                        this.notifications = JSON.parse(saved);
-                        unreadNotificationsCount = this.notifications.filter(n => !n.read).length;
-                        this.updateNotificationCount(0);
-
-                        // Load into notification center
-                        this.notifications.slice(0, 20).forEach(notif => {
-                            this.addToNotificationsList({
-                                title: notif.title,
-                                message: notif.body,
-                                createdAt: { toDate: () => new Date(notif.timestamp) }
-                            });
-                        });
-                    } catch (e) {
-                        console.error('Error loading notifications:', e);
-                    }
-                }
-            }
-
-            startNotificationListener() {
-                if (!currentUser) return;
-                if (this.notificationUnsubscribe) {
-                    this.notificationUnsubscribe();
-                }
-
-                const targets = currentUser.uid === ADMIN_UID ? ['admin', ADMIN_UID, 'all'] : [currentUser.uid, 'all'];
-                const notificationsQuery = query(
-                    collection(db, `artifacts/${appId}/notifications`),
-                    where("userId", "in", targets),
-                    orderBy("createdAt", "desc"),
-                    limit(25)
-                );
-
-                let isInitialSnapshot = true;
-                this.notificationUnsubscribe = onSnapshot(notificationsQuery, (snapshot) => {
-                    snapshot.docChanges().forEach((change) => {
-                        if (change.type !== 'added') return;
-
-                        const notificationId = change.doc.id;
-                        if (this.notifications.some(n => n.data?.notificationId === notificationId)) return;
-
-                        const data = change.doc.data();
-                        const notificationPayload = {
-                            type: 'admin_message',
-                            notificationId,
-                            important: !!data.important,
-                            createdAt: data.createdAt,
-                        };
-
-                        if (isInitialSnapshot) {
-                            this.addToNotificationsList({
-                                title: data.title,
-                                message: data.message,
-                                type: data.type || 'admin',
-                                createdAt: data.createdAt,
-                            });
-                            return;
-                        }
-
-                        this.sendNotification(data.title || 'Notification', data.message || '', notificationPayload);
-                    });
-
-                    isInitialSnapshot = false;
-                }, (error) => {
-                    console.error('Notification listener error:', error);
-                });
-
-                unsubscribers.push(this.notificationUnsubscribe);
-            }
-        }
-
-        // Initialize push notification system
-        const notificationSystem = new PushNotificationSystem();
 
         // --- FORGOT PASSWORD FUNCTIONALITY ---
         const showForgotPasswordModal = () => {
@@ -4856,85 +4168,8 @@
             }
         };
 
-        const showNotificationsInboxPage = () => {
-            unreadNotificationsCount = 0;
-            notificationSystem.updateNotificationCount(0);
-            notificationSystem.notifications = notificationSystem.notifications.map(n => ({ ...n, read: true }));
-            notificationSystem.saveNotifications();
-
-            const notifications = [...notificationSystem.notifications].sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
-            const listHtml = notifications.length ? notifications.map(notif => `
-                <div class="p-4 bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700">
-                    <div class="flex items-start gap-3">
-                        <div class="w-10 h-10 rounded-full bg-blue-100 dark:bg-blue-900 flex items-center justify-center flex-shrink-0">
-                            <svg class="w-5 h-5 text-blue-600 dark:text-blue-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6 6 0 10-12 0v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0a3 3 0 11-6 0"></path>
-                            </svg>
-                        </div>
-                        <div class="min-w-0 flex-1">
-                            <h4 class="font-semibold text-gray-900 dark:text-gray-100">${notif.title || 'Notification'}</h4>
-                            <p class="text-sm text-gray-600 dark:text-gray-400 mt-1">${notif.body || notif.message || ''}</p>
-                            <p class="text-xs text-gray-500 mt-2">${notificationSystem.formatTimeAgo(notif.timestamp)}</p>
-                        </div>
-                    </div>
-                </div>
-            `).join('') : '<div class="text-center py-12 text-gray-500 dark:text-gray-400">No notifications yet.</div>';
-
-            showPage(`
-                ${getPageHeader('Notifications')}
-                <div class="max-w-3xl mx-auto space-y-3">
-                    ${listHtml}
-                </div>
-                ${getPageFooter()}
-            `);
-        };
-
-        const getPushSupportStatus = () => {
-            const rows = [
-                { label: 'OneSignal SDK', ok: !!window.OneSignalDeferred, detail: window.oneSignalReady ? 'Initialized' : 'Loading' },
-                { label: 'Service Worker', ok: 'serviceWorker' in navigator, detail: 'OneSignalSDKWorker.js is present at site root' },
-                { label: 'Browser Push API', ok: 'PushManager' in window, detail: 'Required for Chrome/web push' },
-                { label: 'Notifications API', ok: 'Notification' in window, detail: 'Required for browser permission prompts' },
-                { label: 'Secure Context', ok: window.isSecureContext || location.hostname === 'localhost', detail: 'HTTPS is required after deployment' },
-            ];
-
-            return rows.map(row => `
-                <div class="flex items-center justify-between gap-3 p-3 bg-gray-50 dark:bg-gray-700/50 rounded-lg">
-                    <div>
-                        <p class="text-sm font-semibold">${row.label}</p>
-                        <p class="text-xs text-gray-500 dark:text-gray-400">${row.detail}</p>
-                    </div>
-                    <span class="text-xs font-bold px-2 py-1 rounded-full ${row.ok ? 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300' : 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300'}">${row.ok ? 'OK' : 'No'}</span>
-                </div>
-            `).join('');
-        };
-
-        const openNotificationsPage = () => {
-            if (currentUser?.uid === ADMIN_UID) {
-                showAdminNotificationsPage();
-            } else {
-                showNotificationsInboxPage();
-            }
-
-            promptOneSignalPermission(true).then((permissionGranted) => {
-                if (!permissionGranted) {
-                    showNotification('Please allow notifications for outside-app alerts.', true, false);
-                }
-            });
-        };
-
-        // --- NOTIFICATION PAGE ACTIONS ---
+        // --- PASSWORD RESET PAGE ACTIONS ---
         document.addEventListener('click', (e) => {
-            if (e.target.closest('#notification-bell')) {
-                e.preventDefault();
-                openNotificationsPage();
-            }
-
-            if (e.target.closest('#mark-all-read')) {
-                unreadNotificationsCount = 0;
-                notificationSystem.updateNotificationCount(0);
-            }
-
             if (e.target.closest('#forgot-password-link')) {
                 e.preventDefault();
                 showForgotPasswordModal();
@@ -4945,230 +4180,6 @@
                 handleForgotPassword();
             }
         });
-
-        // Close notification by ID
-        window.closeNotificationById = (id) => {
-            notificationSystem.removeNotification(id);
-        };
-
-        // --- ADMIN NOTIFICATION PAGE ---
-        const showAdminNotificationsPage = () => {
-            const content = `
-        ${getPageHeader('Send Notifications')}
-        <div class="max-w-2xl mx-auto bg-white dark:bg-gray-800 p-6 rounded-xl shadow-md space-y-6">
-            <div class="space-y-2">
-                <h4 class="font-semibold">Push Support</h4>
-                <div class="grid grid-cols-1 gap-2">
-                    ${getPushSupportStatus()}
-                </div>
-            </div>
-
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div class="p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
-                    <h4 class="font-semibold text-blue-700 dark:text-blue-300">Send to All Users</h4>
-                    <p class="text-sm text-gray-600 dark:text-gray-400 mt-2">Send notification to all registered users</p>
-                    <button id="send-all-notification-btn" class="mt-3 w-full px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">Send to All</button>
-                </div>
-                
-                <div class="p-4 bg-green-50 dark:bg-green-900/20 rounded-lg">
-                    <h4 class="font-semibold text-green-700 dark:text-green-300">Send to Specific User</h4>
-                    <p class="text-sm text-gray-600 dark:text-gray-400 mt-2">Send notification to a specific user</p>
-                    <button id="send-user-notification-btn" class="mt-3 w-full px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700">Send to User</button>
-                </div>
-            </div>
-            
-            <div class="bg-gray-50 dark:bg-gray-700/50 p-4 rounded-lg">
-                <h4 class="font-semibold mb-3">Notification History</h4>
-                <div id="notification-history" class="max-h-64 overflow-y-auto space-y-2">
-                    <!-- Notification history will be loaded here -->
-                </div>
-            </div>
-        </div>
-        ${getPageFooter()}`;
-
-            showPage(content);
-            loadNotificationHistory();
-
-            document.getElementById('send-all-notification-btn').onclick = () => showSendNotificationModal('all');
-            document.getElementById('send-user-notification-btn').onclick = () => showSendNotificationModal('user');
-        };
-
-        const showSendNotificationModal = (type) => {
-            let userSelect = '';
-
-            if (type === 'user') {
-                const users = allUsersCache.filter(u => u.id !== ADMIN_UID);
-                userSelect = `
-            <div class="mb-4">
-                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Select User</label>
-                <select id="notification-user-select" class="w-full px-4 py-2 bg-gray-100 dark:bg-gray-700 rounded-lg">
-                    <option value="">Select a user</option>
-                    ${users.map(u => `<option value="${u.id}">${u.name || u.email} (${u.mobile || 'No mobile'})</option>`).join('')}
-                </select>
-            </div>
-        `;
-            }
-
-            const content = `
-        <div class="space-y-4">
-            <div>
-                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Notification Title</label>
-                <input type="text" id="notification-title" placeholder="Enter title" class="w-full px-4 py-2 bg-gray-100 dark:bg-gray-700 rounded-lg">
-            </div>
-            <div>
-                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Message</label>
-                <textarea id="notification-message" placeholder="Enter message" rows="3" class="w-full px-4 py-2 bg-gray-100 dark:bg-gray-700 rounded-lg"></textarea>
-            </div>
-            ${userSelect}
-            <div>
-                <label class="flex items-center">
-                    <input type="checkbox" id="notification-important" class="mr-2">
-                    <span class="text-sm">Mark as important</span>
-                </label>
-            </div>
-        </div>`;
-
-            const actions = `
-        <button onclick="window.closeModal()" class="px-4 py-2 bg-gray-200 dark:bg-gray-600 rounded-lg">Cancel</button>
-        <button id="send-notification-btn" class="px-4 py-2 bg-blue-600 text-white rounded-lg">Send Notification</button>`;
-
-            renderModal(`Send Notification to ${type === 'all' ? 'All Users' : 'Specific User'}`, content, actions);
-
-            document.getElementById('send-notification-btn').onclick = () => {
-                handleSendNotification(type);
-            };
-        };
-
-        const handleSendNotification = async (type) => {
-            const title = document.getElementById('notification-title').value.trim();
-            const message = document.getElementById('notification-message').value.trim();
-            const important = document.getElementById('notification-important')?.checked || false;
-
-            if (!title || !message) {
-                showNotification('Please fill all fields', true);
-                return;
-            }
-
-            let userId = 'all';
-            if (type === 'user') {
-                userId = document.getElementById('notification-user-select').value;
-                if (!userId) {
-                    showNotification('Please select a user', true);
-                    return;
-                }
-            }
-
-            try {
-                const notificationData = {
-                    title,
-                    message,
-                    type: 'admin',
-                    important,
-                    userId: type === 'all' ? 'all' : userId,
-                    adminId: currentUser.uid,
-                    adminName: currentUserData?.name || 'Admin',
-                    createdAt: serverTimestamp(),
-                    readBy: []
-                };
-
-                await addDoc(collection(db, `artifacts/${appId}/notifications`), notificationData);
-                await sendOneSignalPush({
-                    title,
-                    message,
-                    userId: type === 'all' ? 'all' : userId,
-                    data: { type: 'admin_message', important }
-                });
-
-                showNotification(`Notification sent to ${type === 'all' ? 'all users' : 'selected user'}!`);
-                window.closeModal();
-
-                // Reload notification history
-                loadNotificationHistory();
-
-            } catch (error) {
-                console.error('Error sending notification:', error);
-                showNotification('Failed to send notification', true);
-            }
-        };
-
-        const loadNotificationHistory = async () => {
-            try {
-                const historyQuery = query(
-                    collection(db, `artifacts/${appId}/notifications`),
-                    where("adminId", "==", currentUser.uid),
-                    orderBy("createdAt", "desc")
-                );
-
-                const snapshot = await getDocs(historyQuery);
-                const historyList = document.getElementById('notification-history');
-
-                if (!historyList) return;
-
-                if (snapshot.empty) {
-                    historyList.innerHTML = '<p class="text-gray-500 dark:text-gray-400 text-center py-4">No notifications sent yet</p>';
-                    return;
-                }
-
-                historyList.innerHTML = snapshot.docs.map(doc => {
-                    const data = doc.data();
-                    const timeAgo = notificationSystem.formatTimeAgo(data.createdAt);
-                    const target = data.userId === 'all' ? 'All Users' : 'Specific User';
-
-                    return `
-                <div class="p-3 bg-white dark:bg-gray-800 rounded border border-gray-200 dark:border-gray-700">
-                    <div class="flex justify-between items-start">
-                        <div>
-                            <h5 class="font-semibold text-sm">${data.title}</h5>
-                            <p class="text-xs text-gray-600 dark:text-gray-400 mt-1">${data.message}</p>
-                        </div>
-                        ${data.important ?
-                            '<span class="px-2 py-1 text-xs bg-red-100 dark:bg-red-900 text-red-600 dark:text-red-400 rounded-full">Important</span>' :
-                            ''
-                        }
-                    </div>
-                    <div class="flex justify-between items-center mt-2 text-xs text-gray-500 dark:text-gray-500">
-                        <span>Sent to: ${target}</span>
-                        <span>${timeAgo}</span>
-                    </div>
-                </div>
-            `;
-                }).join('');
-
-            } catch (error) {
-                console.error('Error loading notification history:', error);
-            }
-        };
-
-        // --- ADD NOTIFICATION MENU ITEM TO SLIDE MENU ---
-        const addNotificationMenuItems = () => {
-            if (currentUser?.uid === ADMIN_UID) {
-                // This will be called after user logs in
-                setTimeout(() => {
-                    const slideMenu = document.getElementById('slide-menu');
-                    if (slideMenu && !slideMenu.querySelector('#slide-menu-notifications, #slide-menu-admin-notifications')) {
-                        const adminItems = slideMenu.querySelector('hr');
-                        if (adminItems) {
-                            const notificationItem = document.createElement('button');
-                            notificationItem.id = 'slide-menu-notifications';
-                            notificationItem.className = 'flex items-center w-full text-left p-4 hover:bg-gray-100 dark:hover:bg-gray-700 transition font-medium';
-                            notificationItem.innerHTML = `
-                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="mr-3">
-                            <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path>
-                            <path d="M13.73 21a2 2 0 0 1-3.46 0"></path>
-                        </svg>
-                        Send Notifications
-                    `;
-                            notificationItem.onclick = () => {
-                                showAdminNotificationsPage();
-                                closeSlideMenu();
-                            };
-
-                            adminItems.parentNode.insertBefore(notificationItem, adminItems);
-                        }
-                    }
-                }, 1000);
-            }
-        };
 
         // --- UPDATE EXISTING FUNCTIONS ---
 
@@ -5194,68 +4205,6 @@
             }
         };
 
-        // 2. Update initializeAdminListeners to include notifications
-        const originalInitializeAdminListeners = initializeAdminListeners;
-        initializeAdminListeners = function () {
-            originalInitializeAdminListeners.call(this);
-
-            // Add notification menu item
-            addNotificationMenuItems();
-
-            // Listen for notifications
-            if (currentUser?.uid === ADMIN_UID) {
-                const notificationsQuery = query(
-                    collection(db, `artifacts/${appId}/notifications`),
-                    where("adminId", "==", currentUser.uid),
-                    orderBy("createdAt", "desc"),
-                    limit(10)
-                );
-
-                realtimeListeners.push(
-                    onSnapshot(notificationsQuery, (snapshot) => {
-                        // Update notification history if page is open
-                        if (document.getElementById('notification-history')) {
-                            loadNotificationHistory();
-                        }
-                    })
-                );
-            }
-        };
-
-        // 3. Update onAuthStateChanged to include notification system
-        // Find your existing onAuthStateChanged and add this inside the user block:
-        // if (user) {
-        //     // ... existing code ...
-        //     
-        //     // Initialize notification system
-        //     setTimeout(() => {
-        //         notificationSystem.startNotificationListener();
-        //     }, 1500);
-        // }
-
-        // 4. Add notification sound audio element
-        const notificationSound = document.createElement('audio');
-        notificationSound.id = 'notification-sound';
-        notificationSound.preload = 'auto';
-        notificationSound.innerHTML = '<source src="https://assets.mixkit.co/sfx/preview/mixkit-message-pop-alert-2354.mp3" type="audio/mpeg">';
-        document.body.appendChild(notificationSound);
-
-        // --- START NOTIFICATION LISTENER WHEN USER LOGS IN ---
-        // Add this to your auth state change handler after user logs in
-        const originalAuthStateHandler = onAuthStateChanged;
-        onAuthStateChanged(auth, (user) => {
-            // Your existing auth state handler code here...
-
-            if (user) {
-                // Your existing code when user logs in...
-
-                // Start notification listener after a delay
-                setTimeout(() => {
-                    notificationSystem.startNotificationListener();
-                }, 2000);
-            }
-        });
-
         // --- CHECK APP VERSION (OPTIONAL) ---
         const checkAppVersion = async () => {
             try {
@@ -5277,7 +4226,6 @@
                     // Check for updates (optional)
                     if (config.latest_version && config.latest_version !== APP_VERSION) {
                         console.log(`Update available: ${config.latest_version}`);
-                        // You can show update notification here
                     }
                 }
             } catch (error) {
