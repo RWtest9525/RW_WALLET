@@ -506,6 +506,22 @@
             if (lastUser) {
                 document.getElementById('main-content').classList.remove('hidden');
                 document.getElementById('auth-screen').classList.add('hidden');
+                try {
+                    const cachedUser = JSON.parse(localStorage.getItem(`rw_wallet_user_cache_${lastUser}`) || 'null');
+                    if (cachedUser) {
+                        const formatInr = (amount) => new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR' }).format(amount || 0);
+                        const balanceEl = document.getElementById('user-balance');
+                        const adminBalanceEl = document.getElementById('admin-wallet-balance');
+                        if (balanceEl) balanceEl.textContent = formatInr(cachedUser.balance || 0);
+                        if (adminBalanceEl) adminBalanceEl.textContent = formatInr(cachedUser.balance || 0);
+                    }
+                    const cachedHistory = localStorage.getItem(`rw_wallet_history_cache_${lastUser}`);
+                    if (cachedHistory && document.getElementById('transactions-list')) {
+                        document.getElementById('transactions-list').innerHTML = cachedHistory;
+                    }
+                } catch (e) {
+                    console.warn('Instant cache hydrate failed:', e);
+                }
             } else {
                 document.getElementById('auth-screen').classList.remove('hidden');
                 document.getElementById('main-content').classList.add('hidden');
@@ -989,6 +1005,7 @@
         let allGiftCodesCache = [];
         let allInvestmentsCache = [];
         let unifiedHistoryCache = [];
+        let lastAutoProcessCheckAt = 0;
         let notificationTimeout;
 
         const unsubscribers = [];
@@ -1004,6 +1021,51 @@
         // --- UI UTILS ---
         const formatCurrency = (amount) => new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR' }).format(amount || 0);
         const formatUsd = (amount) => `$${Number(amount || 0).toFixed(2)}`;
+        const getUserCacheKey = (userId) => `rw_wallet_user_cache_${userId}`;
+        const getHistoryCacheKey = (userId) => `rw_wallet_history_cache_${userId}`;
+
+        const readJsonCache = (key) => {
+            try {
+                return JSON.parse(localStorage.getItem(key) || 'null');
+            } catch (e) {
+                console.warn('Cache read failed:', e);
+                return null;
+            }
+        };
+
+        const writeJsonCache = (key, value) => {
+            try {
+                localStorage.setItem(key, JSON.stringify(value));
+            } catch (e) {
+                console.warn('Cache write failed:', e);
+            }
+        };
+
+        const sanitizeUserForCache = (data = {}, uid = '') => ({
+            uid,
+            email: data.email || '',
+            name: data.name || '',
+            mobile: data.mobile || '',
+            balance: data.balance || 0,
+            paymentMethod: data.paymentMethod || '',
+            paymentDetails: data.paymentDetails || {},
+            isProProfile: !!data.isProProfile,
+            isFlagged: !!data.isFlagged,
+            loanEligible: !!data.loanEligible
+        });
+
+        const hydrateUserFromCache = (userId) => {
+            const cached = readJsonCache(getUserCacheKey(userId));
+            if (!cached) return false;
+
+            currentUserData = cached;
+            document.getElementById('user-balance').textContent = formatCurrency(cached.balance || 0);
+            updateDollarBalanceDisplay(cached.balance || 0);
+            if (userId === ADMIN_UID) {
+                document.getElementById('admin-wallet-balance').textContent = formatCurrency(cached.balance || 0);
+            }
+            return true;
+        };
 
         let usdInrRateCache = null;
         let usdInrRateDate = '';
@@ -1583,6 +1645,7 @@
                 hidePage();
 
                 const isAdmin = user.uid === ADMIN_UID;
+                hydrateUserFromCache(user.uid);
 
                 // Initialize user listeners (non-blocking)
                 setTimeout(() => {
@@ -1636,8 +1699,13 @@
                     document.getElementById('user-balance').textContent = formatCurrency(data.balance);
                     updateDollarBalanceDisplay(data.balance);
                     currentUserData = data;
-                    processDuePartnerInvestmentsForUser(userId).catch(e => console.error('Auto partner interest check failed:', e));
-                    processDueLoansForUser(userId).catch(e => console.error('Auto loan debit check failed:', e));
+                    writeJsonCache(getUserCacheKey(userId), sanitizeUserForCache(data, userId));
+                    const now = Date.now();
+                    if (now - lastAutoProcessCheckAt > 60000) {
+                        lastAutoProcessCheckAt = now;
+                        processDuePartnerInvestmentsForUser(userId).catch(e => console.error('Auto partner interest check failed:', e));
+                        processDueLoansForUser(userId).catch(e => console.error('Auto loan debit check failed:', e));
+                    }
                     if (userId === ADMIN_UID) {
                         document.getElementById('admin-wallet-balance').textContent = formatCurrency(data.balance);
                     }
@@ -1648,6 +1716,10 @@
 
             let transactions = [];
             let pendingRequests = [];
+            const cachedHistoryHtml = localStorage.getItem(getHistoryCacheKey(userId));
+            if (cachedHistoryHtml && document.getElementById('transactions-list')) {
+                document.getElementById('transactions-list').innerHTML = cachedHistoryHtml;
+            }
 
             const renderUnifiedHistory = (limit) => {
                 let combined = [
@@ -1673,6 +1745,13 @@
                 listElement.innerHTML = limitedList.length === 0
                     ? `<p class="text-gray-500 dark:text-gray-400">No transactions yet.</p>`
                     : limitedList.map(item => renderTransactionItem(item)).join('');
+                if (limit) {
+                    try {
+                        localStorage.setItem(getHistoryCacheKey(userId), listElement.innerHTML);
+                    } catch (e) {
+                        console.warn('History cache write failed:', e);
+                    }
+                }
             };
 
             const transactionsQuery = query(collection(db, `artifacts/${appId}/public/data/users`, userId, 'transactions'), orderBy('timestamp', 'desc'));
