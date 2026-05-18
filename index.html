@@ -694,18 +694,28 @@
                                     <span class="text-xs sm:text-sm leading-tight">Pay to Wallet</span>
                                 </button>
                                 <button id="mobile-recharge-btn"
-                                    class="group w-full min-h-28 flex flex-col items-center justify-between gap-2 bg-sky-50 dark:bg-sky-900/20 text-sky-700 dark:text-sky-200 font-semibold p-3 rounded-xl hover:bg-sky-100 dark:hover:bg-sky-900/30 transition border border-sky-200 dark:border-sky-800 text-center">
+                                    class="relative group w-full min-h-28 flex flex-col items-center justify-between gap-2 bg-sky-50 dark:bg-sky-900/20 text-sky-700 dark:text-sky-200 font-semibold p-3 rounded-xl hover:bg-sky-100 dark:hover:bg-sky-900/30 transition border border-sky-200 dark:border-sky-800 text-center">
+                                    <span class="absolute right-1.5 top-1.5 rounded-full bg-green-600 px-1.5 py-0.5 text-[9px] font-bold text-white shadow-sm">1% off</span>
                                     <span class="w-12 h-12 rounded-xl bg-sky-500 flex items-center justify-center shadow-sm p-2">
                                         <img src="https://cdn-icons-png.flaticon.com/512/4108/4108841.png" alt="Mobile recharge" class="w-full h-full object-contain">
                                     </span>
                                     <span class="text-xs sm:text-sm leading-tight">Mobile Recharge</span>
                                 </button>
                                 <button id="loan-btn"
-                                    class="group w-full min-h-28 flex flex-col items-center justify-between gap-2 bg-indigo-50 dark:bg-indigo-900/20 text-indigo-700 dark:text-indigo-200 font-semibold p-3 rounded-xl hover:bg-indigo-100 dark:hover:bg-indigo-900/30 transition border border-indigo-200 dark:border-indigo-800 text-center">
+                                    class="relative group w-full min-h-28 flex flex-col items-center justify-between gap-2 bg-indigo-50 dark:bg-indigo-900/20 text-indigo-700 dark:text-indigo-200 font-semibold p-3 rounded-xl hover:bg-indigo-100 dark:hover:bg-indigo-900/30 transition border border-indigo-200 dark:border-indigo-800 text-center">
+                                    <span class="absolute right-1.5 top-1.5 rounded-full bg-indigo-600 px-1.5 py-0.5 text-[9px] font-bold text-white shadow-sm">1.5% intrest</span>
                                     <span class="w-12 h-12 rounded-xl bg-indigo-500 flex items-center justify-center shadow-sm p-2">
                                         <img src="https://cdn-icons-png.flaticon.com/512/9197/9197103.png" alt="Loan" class="w-full h-full object-contain">
                                     </span>
                                     <span class="text-xs sm:text-sm leading-tight">Loan</span>
+                                </button>
+                                <button id="partner-btn"
+                                    class="relative group w-full min-h-28 flex flex-col items-center justify-between gap-2 bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-200 font-semibold p-3 rounded-xl hover:bg-emerald-100 dark:hover:bg-emerald-900/30 transition border border-emerald-200 dark:border-emerald-800 text-center">
+                                    <span class="absolute right-1.5 top-1.5 rounded-full bg-emerald-600 px-1.5 py-0.5 text-[9px] font-bold text-white shadow-sm">1.5% intrest</span>
+                                    <span class="w-12 h-12 rounded-xl bg-emerald-500 flex items-center justify-center shadow-sm p-2">
+                                        <img src="https://cdn-icons-png.flaticon.com/512/3135/3135706.png" alt="Become Partner" class="w-full h-full object-contain">
+                                    </span>
+                                    <span class="text-xs sm:text-sm leading-tight">Become Partner</span>
                                 </button>
                                 </div>
                             </div>
@@ -844,6 +854,11 @@
                                 </svg>
                                 <span class="text-sm font-medium text-indigo-700 dark:text-indigo-300">Manage Loan</span>
                             </button>
+                            <button id="admin-investments-btn"
+                                class="flex flex-col items-center justify-center p-4 min-h-28 bg-emerald-50 dark:bg-emerald-900/20 rounded-2xl hover:bg-emerald-100 dark:hover:bg-emerald-900/30 transition border border-emerald-200 dark:border-emerald-800 shadow-sm">
+                                <img src="https://cdn-icons-png.flaticon.com/512/3135/3135706.png" class="h-7 w-7 mb-2 object-contain" alt="Partner">
+                                <span class="text-sm font-medium text-emerald-700 dark:text-emerald-300">Manage Partner</span>
+                            </button>
                         </div>
                     </div>
                 </div>
@@ -940,6 +955,8 @@
         const appId = typeof __app_id !== 'undefined' ? __app_id : 'digital-wallet-prod';
         const ADMIN_UID = "mOs5Fmp4RoRzeBDH4pZLMOpQx7Q2";
         const RECHARGE_DISCOUNT_RATE = 0.01;
+        const PARTNER_INTEREST_RATE = 0.015;
+        const PARTNER_ICON_URL = 'https://cdn-icons-png.flaticon.com/512/3135/3135706.png';
         const RECHARGE_OPERATORS = ['Jio', 'Airtel', 'Vi', 'BSNL', 'MTNL'];
         const RECHARGE_STATES = [
             'Andhra Pradesh', 'Assam', 'Bihar Jharkhand', 'Delhi NCR', 'Gujarat', 'Haryana',
@@ -966,6 +983,7 @@
         let allLoanRequestsCache = [];
         let allLoansCache = [];
         let allGiftCodesCache = [];
+        let allInvestmentsCache = [];
         let unifiedHistoryCache = [];
         let notificationTimeout;
 
@@ -1501,6 +1519,7 @@
             allRechargeRequestsCache = [];
             allLoanRequestsCache = [];
             allLoansCache = [];
+            allInvestmentsCache = [];
             currentUserData = null;
             unifiedHistoryCache = [];
 
@@ -1568,6 +1587,8 @@
                     const data = doc.data();
                     document.getElementById('user-balance').textContent = formatCurrency(data.balance);
                     currentUserData = data;
+                    processDuePartnerInvestmentsForUser(userId).catch(e => console.error('Auto partner interest check failed:', e));
+                    processDueLoansForUser(userId).catch(e => console.error('Auto loan debit check failed:', e));
                     if (userId === ADMIN_UID) {
                         document.getElementById('admin-wallet-balance').textContent = formatCurrency(data.balance);
                     }
@@ -1708,6 +1729,15 @@
                     renderAdminLoanPage();
                 }
             }, (error) => console.error("Admin: Error listening to loans:", error)));
+
+            const investmentsQuery = query(collection(db, `artifacts/${appId}/public/data/partner_investments`), orderBy("createdAt", "desc"));
+            unsubscribers.push(onSnapshot(investmentsQuery, (snap) => {
+                allInvestmentsCache = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                processDuePartnerInvestmentsForAdmin();
+                if (document.getElementById('admin-investments-page')) {
+                    renderAdminInvestmentsPage();
+                }
+            }, (error) => console.error("Admin: Error listening to partner investments:", error)));
         };
 
         // --- FULL PAGE RENDERERS ---
@@ -2358,6 +2388,60 @@
             return new Date(year, month + 1, Math.min(day, daysInNextMonth), 23, 59, 59);
         };
 
+        const addMonthsClamped = (date, months) => {
+            const start = new Date(date);
+            const day = start.getDate();
+            const target = new Date(start.getFullYear(), start.getMonth() + months + 1, 0);
+            return new Date(start.getFullYear(), start.getMonth() + months, Math.min(day, target.getDate()), 23, 59, 59);
+        };
+
+        const addDays = (date, days) => {
+            const next = new Date(date);
+            next.setDate(next.getDate() + days);
+            return next;
+        };
+
+        const toDate = (value) => value?.toDate ? value.toDate() : value ? new Date(value) : null;
+
+        const getPartnerInvestmentSummary = () => {
+            const amount = parseFloat(document.getElementById('partner-amount-input')?.value || '0') || 0;
+            const months = parseInt(document.getElementById('partner-months-input')?.value || '0') || 0;
+            const startDate = new Date();
+            const endDate = months > 0 ? addMonthsClamped(startDate, months) : null;
+            const monthlyInterest = Number((amount * PARTNER_INTEREST_RATE).toFixed(2));
+            const totalInterest = Number((monthlyInterest * months).toFixed(2));
+            return { amount, months, startDate, endDate, monthlyInterest, totalInterest };
+        };
+
+        const updatePartnerInvestmentSummary = () => {
+            const summaryEl = document.getElementById('partner-investment-summary');
+            if (!summaryEl) return;
+            const { amount, months, startDate, endDate, monthlyInterest, totalInterest } = getPartnerInvestmentSummary();
+            summaryEl.innerHTML = `
+                <div class="grid grid-cols-2 gap-3 text-sm">
+                    <div class="rounded-xl bg-white/80 dark:bg-gray-800 p-3 border border-emerald-100 dark:border-emerald-800">
+                        <p class="text-xs text-gray-500">Start Month</p>
+                        <p class="font-bold">${startDate.toLocaleDateString('en-IN', { month: 'short', year: 'numeric' })}</p>
+                    </div>
+                    <div class="rounded-xl bg-white/80 dark:bg-gray-800 p-3 border border-emerald-100 dark:border-emerald-800">
+                        <p class="text-xs text-gray-500">Ending Month</p>
+                        <p class="font-bold">${endDate ? endDate.toLocaleDateString('en-IN', { month: 'short', year: 'numeric' }) : 'Select months'}</p>
+                    </div>
+                    <div class="rounded-xl bg-white/80 dark:bg-gray-800 p-3 border border-emerald-100 dark:border-emerald-800">
+                        <p class="text-xs text-gray-500">Monthly Interest</p>
+                        <p class="font-bold">${formatCurrency(monthlyInterest)}</p>
+                    </div>
+                    <div class="rounded-xl bg-white/80 dark:bg-gray-800 p-3 border border-emerald-100 dark:border-emerald-800">
+                        <p class="text-xs text-gray-500">Total Interest</p>
+                        <p class="font-bold text-emerald-600">${formatCurrency(totalInterest)}</p>
+                    </div>
+                </div>
+                <div class="mt-3 flex justify-between rounded-xl bg-emerald-600 text-white p-3">
+                    <span>Total Maturity Value</span>
+                    <span class="font-bold">${formatCurrency(amount + totalInterest)}</span>
+                </div>`;
+        };
+
         const showLoanPage = async () => {
             if (!currentUser || !currentUserData) return showNotification('User data not loaded. Please wait.', true);
 
@@ -2469,6 +2553,134 @@
                 </div>
                 ${getPageFooter()}`);
             document.getElementById('repay-loan-btn').onclick = () => handleRepayLoan(loan);
+        };
+
+        const showPartnerPage = async () => {
+            if (!currentUser || !currentUserData) return showNotification('User data not loaded. Please wait.', true);
+            await processDuePartnerInvestmentsForUser(currentUser.uid);
+
+            const snap = await getDocs(query(
+                collection(db, `artifacts/${appId}/public/data/partner_investments`),
+                where("userId", "==", currentUser.uid)
+            ));
+            const investments = snap.docs.map(d => ({ id: d.id, ...d.data() }))
+                .sort((a, b) => (toDate(b.createdAt)?.getTime() || 0) - (toDate(a.createdAt)?.getTime() || 0));
+
+            const activeCards = investments.length ? investments.map(inv => renderUserInvestmentCard(inv)).join('') : `
+                <div class="rounded-2xl border border-dashed border-emerald-200 dark:border-emerald-800 p-5 text-center bg-emerald-50/60 dark:bg-emerald-900/10">
+                    <p class="font-semibold">No investment yet</p>
+                    <p class="text-sm text-gray-500 dark:text-gray-400 mt-1">Start with wallet funds and track monthly returns here.</p>
+                </div>`;
+
+            showPage(`
+                ${getPageHeader('Become Partner')}
+                <div class="max-w-md mx-auto space-y-5">
+                    <div class="relative overflow-hidden rounded-3xl bg-gradient-to-br from-emerald-700 via-teal-700 to-slate-900 text-white p-6 shadow-xl">
+                        <div class="absolute -right-10 -top-10 h-32 w-32 rounded-full border border-white/20"></div>
+                        <div class="relative flex items-center gap-4">
+                            <div class="w-16 h-16 rounded-2xl bg-white/90 p-3 shadow-lg">
+                                <img src="${PARTNER_ICON_URL}" alt="Become Partner" class="w-full h-full object-contain">
+                            </div>
+                            <div>
+                                <p class="text-xs uppercase tracking-wide text-white/70">RW Partner Plan</p>
+                                <h3 class="text-2xl font-bold">Invest wallet funds</h3>
+                                <p class="text-sm text-white/75 mt-1">Earn 1.5% monthly interest after every 30 days.</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="grid grid-cols-2 gap-3">
+                        <button id="new-investment-btn" class="rounded-2xl bg-emerald-600 text-white py-3 font-semibold shadow-sm">Create Investment</button>
+                        <button id="track-investment-btn" class="rounded-2xl bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 py-3 font-semibold">Track Investment</button>
+                    </div>
+                    <div id="partner-track-list" class="space-y-3">${activeCards}</div>
+                </div>
+                ${getPageFooter()}`);
+
+            document.getElementById('new-investment-btn').onclick = showCreatePartnerInvestmentPage;
+            document.getElementById('track-investment-btn').onclick = () => document.getElementById('partner-track-list')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            document.querySelectorAll('[data-action="download-investment-invoice"]').forEach(btn => {
+                btn.onclick = () => {
+                    const inv = investments.find(i => i.id === btn.dataset.investmentid);
+                    if (inv) downloadInvestmentInvoice(inv);
+                };
+            });
+        };
+
+        const renderUserInvestmentCard = (inv) => {
+            const start = toDate(inv.startDate) || toDate(inv.createdAt) || new Date();
+            const end = toDate(inv.endDate);
+            const next = toDate(inv.nextPayoutAt);
+            const paidInterest = inv.paidInterest || 0;
+            const totalInterest = inv.totalInterest || 0;
+            const progress = totalInterest > 0 ? Math.min(100, Math.round((paidInterest / totalInterest) * 100)) : 0;
+            return `
+                <div class="rounded-2xl bg-white dark:bg-gray-800 border border-gray-100 dark:border-gray-700 p-4 shadow-sm">
+                    <div class="flex justify-between gap-3">
+                        <div>
+                            <p class="text-xs uppercase text-gray-500">Investment</p>
+                            <p class="text-xl font-bold">${formatCurrency(inv.amount || 0)}</p>
+                            <p class="text-xs text-gray-500 mt-1">${start.toLocaleDateString('en-IN')} - ${end ? end.toLocaleDateString('en-IN') : 'N/A'}</p>
+                        </div>
+                        <span class="h-fit rounded-full px-3 py-1 text-xs font-bold ${inv.status === 'completed' ? 'bg-green-100 text-green-700' : 'bg-emerald-100 text-emerald-700'}">${inv.status || 'active'}</span>
+                    </div>
+                    <div class="mt-3 h-2 rounded-full bg-gray-100 dark:bg-gray-700 overflow-hidden">
+                        <div class="h-full bg-emerald-500" style="width:${progress}%"></div>
+                    </div>
+                    <div class="mt-3 grid grid-cols-2 gap-2 text-xs">
+                        <div class="rounded-xl bg-gray-50 dark:bg-gray-700 p-2"><span class="text-gray-500">Interest got</span><p class="font-bold">${formatCurrency(paidInterest)}</p></div>
+                        <div class="rounded-xl bg-gray-50 dark:bg-gray-700 p-2"><span class="text-gray-500">Next interest</span><p class="font-bold">${next && inv.status === 'active' ? next.toLocaleDateString('en-IN') : 'Done'}</p></div>
+                    </div>
+                    <button data-action="download-investment-invoice" data-investmentid="${inv.id}" class="mt-3 w-full rounded-xl bg-slate-900 dark:bg-slate-100 text-white dark:text-slate-900 py-2 text-sm font-semibold">Download PDF Invoice</button>
+                </div>`;
+        };
+
+        const showCreatePartnerInvestmentPage = () => {
+            showPage(`
+                ${getPageHeader('Partner Investment')}
+                <div class="max-w-md mx-auto bg-white dark:bg-gray-800 p-6 rounded-2xl shadow-md space-y-5">
+                    <div class="text-center">
+                        <div class="mx-auto w-16 h-16 rounded-2xl bg-emerald-100 dark:bg-emerald-900/30 p-3">
+                            <img src="${PARTNER_ICON_URL}" alt="Partner" class="w-full h-full object-contain">
+                        </div>
+                        <h3 class="text-xl font-bold mt-3">Create Investment</h3>
+                        <p class="text-sm text-gray-500 dark:text-gray-400">1.5% monthly interest, processed every 30 days.</p>
+                    </div>
+                    <div class="space-y-3">
+                        <input type="number" id="partner-amount-input" min="1" placeholder="Enter wallet amount (₹)" class="w-full px-4 py-3 bg-gray-100 dark:bg-gray-700 rounded-lg">
+                        <input type="number" id="partner-months-input" min="1" max="60" placeholder="Type no. of months e.g. 1, 2, 3" class="w-full px-4 py-3 bg-gray-100 dark:bg-gray-700 rounded-lg">
+                    </div>
+                    <div id="partner-investment-summary" class="rounded-2xl bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-100 dark:border-emerald-800 p-3"></div>
+                    <label class="flex gap-3 rounded-xl border border-gray-200 dark:border-gray-700 p-3 text-sm">
+                        <input type="checkbox" id="partner-terms-checkbox" class="mt-1">
+                        <span>I am confirming that I do this after reading all documents and accept the <button id="partner-terms-link" type="button" class="text-emerald-600 font-semibold underline">terms and conditions</button>.</span>
+                    </label>
+                    <button id="confirm-partner-investment-btn" class="w-full bg-emerald-600 text-white font-semibold py-3 rounded-xl hover:bg-emerald-700 transition">Invest Now</button>
+                </div>
+                ${getPageFooter()}`);
+
+            updatePartnerInvestmentSummary();
+            document.getElementById('partner-amount-input').addEventListener('input', updatePartnerInvestmentSummary);
+            document.getElementById('partner-months-input').addEventListener('input', updatePartnerInvestmentSummary);
+            document.getElementById('partner-terms-link').onclick = showPartnerTermsModal;
+            document.getElementById('confirm-partner-investment-btn').onclick = handleCreatePartnerInvestment;
+        };
+
+        const showPartnerTermsModal = () => {
+            renderModal('Partner Terms & Conditions',
+                `<div class="space-y-3 text-sm">
+                    <p class="font-semibold">Please read before investing wallet funds.</p>
+                    <ul class="list-disc pl-5 space-y-2 text-gray-600 dark:text-gray-300">
+                        <li>Interest rate is 1.5% per month on invested wallet amount.</li>
+                        <li>Interest is processed after each completed 30 day cycle.</li>
+                        <li>If you withdraw before the selected end date, no pending interest is paid.</li>
+                        <li>Early withdrawal has a 2% charge deducted from principal.</li>
+                        <li>Principal remains locked until maturity unless admin closes early under these conditions.</li>
+                        <li>You confirm that you invested after reading all documents and conditions.</li>
+                    </ul>
+                </div>`,
+                `<button onclick="window.closeModal()" class="px-4 py-2 text-sm bg-emerald-600 text-white rounded-lg">I Understand</button>`,
+                'max-w-md'
+            );
         };
 
         const handleCleanupScamRequests = async () => {
@@ -3066,7 +3278,9 @@
             if (filter === 'loans') {
                 let loans = [...allLoansCache].filter(l => !search || [l.userName, l.userMobile, l.status].some(v => (v || '').toString().toLowerCase().includes(search)));
                 listEl.innerHTML = loans.length ? loans.map(l => {
-                    const dueDate = l.dueDate?.toDate ? l.dueDate.toDate().toLocaleDateString('en-IN') : 'N/A';
+                    const rawDueDate = toDate(l.dueDate);
+                    const dueDate = rawDueDate ? rawDueDate.toLocaleDateString('en-IN') : 'N/A';
+                    const canAutoDebit = l.status === 'active' && rawDueDate && rawDueDate <= new Date();
                     return `
                         <div class="p-4 mb-3 bg-gray-50 dark:bg-gray-700/50 rounded-xl text-sm">
                             <div class="flex justify-between gap-3">
@@ -3080,6 +3294,11 @@
                                     <p class="text-xs text-gray-500">Principal ${formatCurrency(l.amount || 0)}</p>
                                 </div>
                             </div>
+                            ${l.status === 'active' ? `
+                                <div class="mt-3 flex flex-wrap gap-2">
+                                    <button data-action="admin-loan-auto-debit" data-loanid="${l.id}" ${canAutoDebit ? '' : 'disabled'} class="px-3 py-1 text-xs rounded font-semibold ${canAutoDebit ? 'bg-indigo-600 text-white' : 'bg-gray-200 dark:bg-gray-600 text-gray-500 cursor-not-allowed'}">Auto Debit Loan</button>
+                                    <span class="px-3 py-1 text-xs rounded ${canAutoDebit ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'}">${canAutoDebit ? 'Due date complete' : 'Due date not complete'}</span>
+                                </div>` : ''}
                         </div>`;
                 }).join('') : '<p class="text-center text-gray-500 py-6">No loans found.</p>';
                 return;
@@ -3105,6 +3324,70 @@
                             </div>` : ''}
                     </div>
                 </div>`).join('') : '<p class="text-center text-gray-500 py-6">No loan requests found.</p>';
+        };
+
+        const showAdminInvestmentsPage = () => {
+            const content = `
+                ${getPageHeader('Manage Partner')}
+                <div id="admin-investments-page" class="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-md space-y-4">
+                    <div class="flex flex-col sm:flex-row gap-3 sm:items-center sm:justify-between">
+                        <input id="investment-admin-search" placeholder="Search user, mobile, invoice..." class="w-full px-4 py-3 bg-gray-100 dark:bg-gray-700 rounded-lg">
+                        <span class="text-xs text-gray-500 dark:text-gray-400">Interest button unlocks only after 30 days.</span>
+                    </div>
+                    <div id="admin-investments-list" class="max-h-[72vh] overflow-y-auto"></div>
+                </div>
+                ${getPageFooter()}`;
+            showPage(content);
+            document.getElementById('investment-admin-search').addEventListener('input', renderAdminInvestmentsPage);
+            renderAdminInvestmentsPage();
+        };
+
+        const renderAdminInvestmentsPage = () => {
+            const listEl = document.getElementById('admin-investments-list');
+            if (!listEl) return;
+            const search = (document.getElementById('investment-admin-search')?.value || '').toLowerCase();
+            let investments = [...allInvestmentsCache].filter(i => !search || [i.userName, i.userMobile, i.userEmail, i.invoiceId, i.status].some(v => (v || '').toString().toLowerCase().includes(search)));
+
+            listEl.innerHTML = investments.length ? investments.map(inv => {
+                const next = toDate(inv.nextPayoutAt);
+                const end = toDate(inv.endDate);
+                const due = inv.status === 'active' && next && next <= new Date();
+                const matured = inv.status === 'active' && end && end <= new Date();
+                return `
+                    <div class="p-4 mb-3 bg-gray-50 dark:bg-gray-700/50 rounded-xl text-sm border border-gray-100 dark:border-gray-700">
+                        <div class="flex flex-col sm:flex-row sm:justify-between gap-3">
+                            <div class="space-y-1">
+                                <p class="font-bold">${inv.userName || 'User'} <span class="text-xs uppercase text-gray-500">${inv.status || 'active'}</span></p>
+                                <p class="text-xs text-gray-500">${inv.userMobile || ''} ${inv.userEmail ? `| ${inv.userEmail}` : ''}</p>
+                                <p class="text-xs text-gray-500">Invoice: ${inv.invoiceId || inv.id}</p>
+                                <p class="text-xs text-gray-500">Next interest: ${next && inv.status === 'active' ? next.toLocaleDateString('en-IN') : 'Done'} | End: ${end ? end.toLocaleDateString('en-IN') : 'N/A'}</p>
+                            </div>
+                            <div class="sm:text-right">
+                                <p class="font-bold">${formatCurrency(inv.amount || 0)}</p>
+                                <p class="text-xs text-gray-500">Got ${formatCurrency(inv.paidInterest || 0)} / ${formatCurrency(inv.totalInterest || 0)}</p>
+                            </div>
+                        </div>
+                        <div class="mt-3 flex flex-wrap gap-2">
+                            <button data-action="process-investment-interest" data-investmentid="${inv.id}" ${due ? '' : 'disabled'} class="px-3 py-1 text-xs rounded font-semibold ${due ? 'bg-emerald-600 text-white' : 'bg-gray-200 dark:bg-gray-600 text-gray-500 cursor-not-allowed'}">Give Interest</button>
+                            <button data-action="download-admin-investment-invoice" data-investmentid="${inv.id}" class="px-3 py-1 text-xs rounded font-semibold bg-slate-800 text-white">Invoice</button>
+                            <span class="px-3 py-1 text-xs rounded ${matured ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'}">${due ? '30 days complete' : 'Not due yet'}</span>
+                        </div>
+                    </div>`;
+            }).join('') : '<p class="text-center text-gray-500 py-6">No partner investments found.</p>';
+        };
+
+        const processDuePartnerInvestmentsForAdmin = async (showToast = false) => {
+            const dueInvestments = allInvestmentsCache.filter(inv => inv.status === 'active' && toDate(inv.nextPayoutAt) && toDate(inv.nextPayoutAt) <= new Date());
+            let processed = 0;
+            for (const inv of dueInvestments) {
+                try {
+                    await processPartnerInterest(inv.id);
+                    processed++;
+                } catch (e) {
+                    console.error('Due partner interest failed:', e);
+                }
+            }
+            if (showToast) showNotification(processed ? `Processed ${processed} due investment(s).` : 'No investment has completed 30 days yet.', !processed);
         };
 
         async function deleteRejectedLoanRequests(rejectedDocs) {
@@ -3343,6 +3626,294 @@
                 console.error('Repay loan failed:', e);
                 showNotification(`Error: ${e.message}`, true);
             }
+        };
+
+        const handleCreatePartnerInvestment = async () => {
+            const { amount, months, startDate, endDate, monthlyInterest, totalInterest } = getPartnerInvestmentSummary();
+            if (amount <= 0 || months <= 0 || months > 60 || !endDate) {
+                return showNotification('Enter valid amount and months.', true);
+            }
+            if (!document.getElementById('partner-terms-checkbox').checked) {
+                return showNotification('Please accept partner terms and conditions.', true);
+            }
+            if ((currentUserData.balance || 0) < amount) {
+                return showNotification('Insufficient wallet balance for this investment.', true);
+            }
+
+            try {
+                const userRef = doc(db, `artifacts/${appId}/public/data/users`, currentUser.uid);
+                const investmentRef = doc(collection(db, `artifacts/${appId}/public/data/partner_investments`));
+                const invoiceId = `INV-${investmentRef.id.slice(0, 8).toUpperCase()}`;
+
+                await runTransaction(db, async (tx) => {
+                    const userDoc = await tx.get(userRef);
+                    if (!userDoc.exists()) throw new Error('User account not found.');
+                    const balance = userDoc.data().balance || 0;
+                    if (balance < amount) throw new Error('Insufficient wallet balance for this investment.');
+
+                    tx.update(userRef, { balance: balance - amount });
+                    tx.set(investmentRef, {
+                        userId: currentUser.uid,
+                        userName: currentUserData.name || 'User',
+                        userEmail: currentUserData.email || currentUser.email || '',
+                        userMobile: currentUserData.mobile || '',
+                        amount,
+                        months,
+                        interestRate: PARTNER_INTEREST_RATE,
+                        monthlyInterest,
+                        totalInterest,
+                        paidInterest: 0,
+                        monthsPaid: 0,
+                        startDate: Timestamp.fromDate(startDate),
+                        endDate: Timestamp.fromDate(endDate),
+                        nextPayoutAt: Timestamp.fromDate(addDays(startDate, 30)),
+                        status: 'active',
+                        invoiceId,
+                        createdAt: serverTimestamp()
+                    });
+                    tx.set(doc(collection(userRef, 'transactions')), {
+                        type: 'debit',
+                        amount,
+                        comment: 'Partner Investment Started',
+                        timestamp: serverTimestamp(),
+                        transactionId: investmentRef.id,
+                        status: 'completed',
+                        recipientName: 'Reviews World Partner Plan',
+                        recipientMobile: ''
+                    });
+                });
+
+                const invoiceData = {
+                    id: investmentRef.id,
+                    invoiceId,
+                    userName: currentUserData.name || 'User',
+                    userEmail: currentUserData.email || currentUser.email || '',
+                    userMobile: currentUserData.mobile || '',
+                    amount,
+                    months,
+                    interestRate: PARTNER_INTEREST_RATE,
+                    monthlyInterest,
+                    totalInterest,
+                    paidInterest: 0,
+                    startDate,
+                    endDate,
+                    status: 'active',
+                    createdAt: new Date()
+                };
+                renderModal('Investment Created',
+                    `<div class="text-center space-y-3">
+                        <div class="w-16 h-16 rounded-full bg-emerald-100 mx-auto p-3"><img src="${PARTNER_ICON_URL}" class="w-full h-full object-contain" alt="Partner"></div>
+                        <h3 class="font-bold text-lg">Investment successful</h3>
+                        <p class="text-sm text-gray-500">Your invoice is ready. Interest starts after 30 days.</p>
+                    </div>`,
+                    `<button onclick="window.closeModal(); showPartnerPage();" class="px-4 py-2 text-sm bg-gray-200 dark:bg-gray-600 rounded-lg">Close</button>
+                     <button id="download-new-investment-invoice-btn" class="px-4 py-2 text-sm bg-emerald-600 text-white rounded-lg">Download PDF Invoice</button>`,
+                    'max-w-sm'
+                );
+                document.getElementById('download-new-investment-invoice-btn').onclick = () => downloadInvestmentInvoice(invoiceData);
+            } catch (e) {
+                console.error('Partner investment failed:', e);
+                showNotification(`Error: ${e.message}`, true);
+            }
+        };
+
+        const processDuePartnerInvestmentsForUser = async (userId) => {
+            const snap = await getDocs(query(
+                collection(db, `artifacts/${appId}/public/data/partner_investments`),
+                where("userId", "==", userId),
+                where("status", "==", "active")
+            ));
+            for (const d of snap.docs) {
+                const inv = { id: d.id, ...d.data() };
+                if (toDate(inv.nextPayoutAt) && toDate(inv.nextPayoutAt) <= new Date()) {
+                    await processPartnerInterest(inv.id);
+                }
+            }
+        };
+
+        const processDueLoansForUser = async (userId) => {
+            const snap = await getDocs(query(
+                collection(db, `artifacts/${appId}/public/data/loans`),
+                where("userId", "==", userId),
+                where("status", "==", "active")
+            ));
+            for (const d of snap.docs) {
+                const loan = { id: d.id, ...d.data() };
+                if (toDate(loan.dueDate) && toDate(loan.dueDate) <= new Date()) {
+                    try {
+                        await processDueLoanRepayment(loan.id);
+                    } catch (e) {
+                        console.error('Due loan auto debit skipped:', e);
+                    }
+                }
+            }
+        };
+
+        const processPartnerInterest = async (investmentId) => {
+            const investmentRef = doc(db, `artifacts/${appId}/public/data/partner_investments`, investmentId);
+            await runTransaction(db, async (tx) => {
+                const invDoc = await tx.get(investmentRef);
+                if (!invDoc.exists()) throw new Error('Investment not found.');
+                const inv = invDoc.data();
+                if (inv.status !== 'active') throw new Error('Investment is not active.');
+                const nextPayout = toDate(inv.nextPayoutAt);
+                if (!nextPayout || nextPayout > new Date()) throw new Error('30 days are not completed yet.');
+
+                const userRef = doc(db, `artifacts/${appId}/public/data/users`, inv.userId);
+                const userDoc = await tx.get(userRef);
+                if (!userDoc.exists()) throw new Error('User not found.');
+
+                const monthsPaid = inv.monthsPaid || 0;
+                const nextMonthsPaid = monthsPaid + 1;
+                const monthlyInterest = inv.monthlyInterest || Number(((inv.amount || 0) * (inv.interestRate || PARTNER_INTEREST_RATE)).toFixed(2));
+                const isFinal = nextMonthsPaid >= (inv.months || 1);
+                const creditAmount = isFinal ? Number((monthlyInterest + (inv.amount || 0)).toFixed(2)) : monthlyInterest;
+
+                tx.update(userRef, { balance: (userDoc.data().balance || 0) + creditAmount });
+                tx.update(investmentRef, {
+                    paidInterest: Number(((inv.paidInterest || 0) + monthlyInterest).toFixed(2)),
+                    monthsPaid: nextMonthsPaid,
+                    nextPayoutAt: isFinal ? deleteField() : Timestamp.fromDate(addDays(nextPayout, 30)),
+                    status: isFinal ? 'completed' : 'active',
+                    completedAt: isFinal ? serverTimestamp() : (inv.completedAt || null)
+                });
+                tx.set(doc(collection(userRef, 'transactions')), {
+                    type: 'credit',
+                    amount: creditAmount,
+                    comment: isFinal ? 'Partner Investment Maturity' : 'Partner Investment Interest',
+                    timestamp: serverTimestamp(),
+                    transactionId: `PARTNER-${investmentId}-${nextMonthsPaid}`,
+                    status: 'completed',
+                    isAdminTransaction: true,
+                    senderName: 'Reviews World',
+                    recipientName: inv.userName || 'User',
+                    recipientMobile: inv.userMobile || ''
+                });
+            });
+        };
+
+        const processDueLoanRepayment = async (loanId) => {
+            const loanRef = doc(db, `artifacts/${appId}/public/data/loans`, loanId);
+            await runTransaction(db, async (tx) => {
+                const loanDoc = await tx.get(loanRef);
+                if (!loanDoc.exists()) throw new Error('Loan not found.');
+                const loan = loanDoc.data();
+                if (loan.status !== 'active') throw new Error('Loan is already closed.');
+                const dueDate = toDate(loan.dueDate);
+                if (!dueDate || dueDate > new Date()) throw new Error('Loan due date is not completed yet.');
+
+                const userRef = doc(db, `artifacts/${appId}/public/data/users`, loan.userId);
+                const userDoc = await tx.get(userRef);
+                if (!userDoc.exists()) throw new Error('User not found.');
+                const balance = userDoc.data().balance || 0;
+                if (balance < (loan.totalRepayable || 0)) throw new Error('User has insufficient balance for automatic loan debit.');
+
+                tx.update(userRef, {
+                    balance: balance - (loan.totalRepayable || 0),
+                    activeLoanId: deleteField()
+                });
+                tx.update(loanRef, {
+                    status: 'paid',
+                    paidAt: serverTimestamp(),
+                    autoDebited: true
+                });
+                tx.set(doc(collection(userRef, 'transactions')), {
+                    type: 'debit',
+                    amount: loan.totalRepayable || 0,
+                    comment: 'Loan Auto Debit',
+                    timestamp: serverTimestamp(),
+                    transactionId: `AUTO-REPAY-${loanId}`,
+                    status: 'completed',
+                    recipientName: 'Reviews World',
+                    recipientMobile: ''
+                });
+            });
+        };
+
+        const escapePdfText = (text = '') => String(text).replace(/\\/g, '\\\\').replace(/\(/g, '\\(').replace(/\)/g, '\\)');
+        const formatPdfCurrency = (amount = 0) => `Rs. ${Number(amount || 0).toFixed(2)}`;
+
+        const createSimplePdf = (lines) => {
+            const objects = [];
+            const addObject = (body) => {
+                objects.push(body);
+                return objects.length;
+            };
+            addObject('<< /Type /Catalog /Pages 2 0 R >>');
+            addObject('<< /Type /Pages /Kids [3 0 R] /Count 1 >>');
+            addObject('<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 4 0 R /F2 5 0 R >> >> /Contents 6 0 R >>');
+            addObject('<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>');
+            addObject('<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >>');
+
+            const content = [
+                'BT',
+                '/F2 20 Tf',
+                '50 790 Td',
+                `(${escapePdfText(lines.title)}) Tj`,
+                '/F1 10 Tf',
+                '0 -24 Td',
+                ...lines.body.map(line => `(${escapePdfText(line)}) Tj 0 -18 Td`),
+                'ET'
+            ].join('\n');
+            addObject(`<< /Length ${content.length} >>\nstream\n${content}\nendstream`);
+
+            let pdf = '%PDF-1.4\n';
+            const offsets = [0];
+            objects.forEach((obj, index) => {
+                offsets.push(pdf.length);
+                pdf += `${index + 1} 0 obj\n${obj}\nendobj\n`;
+            });
+            const xref = pdf.length;
+            pdf += `xref\n0 ${objects.length + 1}\n0000000000 65535 f \n`;
+            offsets.slice(1).forEach(offset => {
+                pdf += `${String(offset).padStart(10, '0')} 00000 n \n`;
+            });
+            pdf += `trailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF`;
+            return new Blob([pdf], { type: 'application/pdf' });
+        };
+
+        const downloadInvestmentInvoice = (investment) => {
+            const start = toDate(investment.startDate) || toDate(investment.createdAt) || new Date();
+            const end = toDate(investment.endDate) || addMonthsClamped(start, investment.months || 1);
+            const invoiceId = investment.invoiceId || `INV-${(investment.id || generateTransactionId()).slice(0, 8).toUpperCase()}`;
+            const lines = {
+                title: 'REVIEWS WORLD - PARTNER INVESTMENT INVOICE',
+                body: [
+                    `Invoice ID: ${invoiceId}`,
+                    `Generated On: ${new Date().toLocaleString('en-IN')}`,
+                    '',
+                    'Company: Reviews World / RW Wallet',
+                    'Document Type: Partner Investment Invoice',
+                    '',
+                    `User Name: ${investment.userName || currentUserData?.name || 'User'}`,
+                    `Mobile: ${investment.userMobile || currentUserData?.mobile || 'N/A'}`,
+                    `Email: ${investment.userEmail || currentUserData?.email || currentUser?.email || 'N/A'}`,
+                    '',
+                    `Investment Amount: ${formatPdfCurrency(investment.amount || 0)}`,
+                    `Duration: ${investment.months || 0} month(s)`,
+                    `Interest Rate: ${((investment.interestRate || PARTNER_INTEREST_RATE) * 100).toFixed(1)}% per month`,
+                    `Monthly Interest: ${formatPdfCurrency(investment.monthlyInterest || 0)}`,
+                    `Total Expected Interest: ${formatPdfCurrency(investment.totalInterest || 0)}`,
+                    `Interest Got: ${formatPdfCurrency(investment.paidInterest || 0)}`,
+                    `Maturity Value: ${formatPdfCurrency((investment.amount || 0) + (investment.totalInterest || 0))}`,
+                    '',
+                    `Starting Date: ${start.toLocaleDateString('en-IN')}`,
+                    `Ending Date: ${end.toLocaleDateString('en-IN')}`,
+                    `Status: ${(investment.status || 'active').toUpperCase()}`,
+                    '',
+                    'Terms: Interest is processed after every completed 30 days.',
+                    'Early withdrawal before end date gives no pending interest and 2% charge is deducted.',
+                    'User confirmed investment after reading all documents and terms.'
+                ]
+            };
+            const blob = createSimplePdf(lines);
+            const link = document.createElement('a');
+            link.href = URL.createObjectURL(blob);
+            link.download = `${invoiceId}.pdf`;
+            document.body.appendChild(link);
+            link.click();
+            link.remove();
+            setTimeout(() => URL.revokeObjectURL(link.href), 1000);
         };
 
         let handleWithdrawRequest = async (amount, method, methodName) => {
@@ -4938,6 +5509,26 @@
                     handleDeleteGiftCode(id);
                     break;
 
+                case 'process-investment-interest':
+                    processPartnerInterest(target.dataset.investmentid)
+                        .then(() => showNotification('Partner interest processed.'))
+                        .then(renderAdminInvestmentsPage)
+                        .catch(e => showNotification(`Error: ${e.message}`, true));
+                    break;
+
+                case 'download-admin-investment-invoice': {
+                    const inv = allInvestmentsCache.find(i => i.id === target.dataset.investmentid);
+                    if (inv) downloadInvestmentInvoice(inv);
+                    break;
+                }
+
+                case 'admin-loan-auto-debit':
+                    processDueLoanRepayment(target.dataset.loanid)
+                        .then(() => showNotification('Loan amount auto debited.'))
+                        .then(renderAdminLoanPage)
+                        .catch(e => showNotification(`Error: ${e.message}`, true));
+                    break;
+
                 case 'mark-as-paid':
                     handleRequestAction(userid, requestid, 'completed');
                     break;
@@ -5016,6 +5607,7 @@
         document.getElementById('admin-pro-users-btn').addEventListener('click', showAdminUsersPage);
         document.getElementById('admin-recharge-requests-btn').addEventListener('click', showAdminRechargeRequestsPage);
         document.getElementById('admin-loans-btn').addEventListener('click', showAdminLoanPage);
+        document.getElementById('admin-investments-btn').addEventListener('click', showAdminInvestmentsPage);
 
         // Withdraw Fund Button - Now opens full page
         document.getElementById('withdraw-fund-btn').addEventListener('click', showWithdrawPage);
@@ -5033,6 +5625,7 @@
         document.getElementById('pay-to-wallet-btn').addEventListener('click', showPayToWalletPage);
         document.getElementById('mobile-recharge-btn').addEventListener('click', showMobileRechargePage);
         document.getElementById('loan-btn').addEventListener('click', showLoanPage);
+        document.getElementById('partner-btn').addEventListener('click', showPartnerPage);
 
         // Preload logo images to prevent loading flicker
         const preloadLogoImages = () => {
