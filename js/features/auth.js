@@ -18,7 +18,8 @@ import {
     where,
     getDocs
 } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
-import { hideLoading, showNotification } from '../ui/components.js';
+import { showNotification } from '../ui/components.js';
+import { hideLoading } from '../utils/formatters.js';
 import { 
     setCurrentUser, 
     setCurrentUserData, 
