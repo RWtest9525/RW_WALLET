@@ -1,3 +1,4 @@
+// Wallet Features - Updated 2026-05-18
 import { db, appId } from '../core/firebase.js';
 import { 
     doc, 

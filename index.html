@@ -11,7 +11,7 @@
     <link rel="stylesheet" href="css/styles.css">
     
     <!-- Circular Favicon -->
-    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3CclipPath id='circle'%3E%3Ccircle cx='50' cy='50' r='50'/%3E%3C/clipPath%3E%3Cimage href='https://i.ibb.co/x8YBYwGG/6233389803554672153.jpg' width='100' height='100' clip-path='url(%23circle)'/%3E%3C/svg%3E">
+    <link rel="icon" type="image/png" href="https://i.ibb.co/x8YBYwGG/6233389803554672153.jpg">
     <link rel="apple-touch-icon" href="https://i.ibb.co/x8YBYwGG/6233389803554672153.jpg">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -33,11 +33,15 @@
     <script>
         window.OneSignalDeferred = window.OneSignalDeferred || [];
         OneSignalDeferred.push(async function(OneSignal) {
-            await OneSignal.init({
-                appId: "4affd7dd-a2c1-4b94-8253-dde142f4c847",
-                safari_web_id: "web.onesignal.auto.1969a531-155e-4c74-883a-18e03006540c",
-                notifyButton: { enable: true },
-            });
+            try {
+                await OneSignal.init({
+                    appId: "4affd7dd-a2c1-4b94-8253-dde142f4c847",
+                    safari_web_id: "web.onesignal.auto.1969a531-155e-4c74-883a-18e03006540c",
+                    notifyButton: { enable: true },
+                });
+            } catch (e) {
+                console.warn("OneSignal initialization failed:", e.message);
+            }
         });
     </script>
 </head>
