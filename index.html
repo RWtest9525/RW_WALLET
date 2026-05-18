@@ -1208,6 +1208,31 @@
             return upiId.substring(0, 2) + '****' + upiId.substring(atIndex);
         };
 
+        const sendOneSignalPush = async ({ title, message, userId = 'all', data = {} }) => {
+            try {
+                const response = await fetch('/api/send-notification', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        title,
+                        message,
+                        userId,
+                        data,
+                        url: location.origin,
+                    }),
+                });
+
+                const result = await response.json().catch(() => ({}));
+                if (!response.ok) {
+                    throw new Error(result.error || 'OneSignal push failed');
+                }
+                return result;
+            } catch (error) {
+                console.error('OneSignal push failed:', error);
+                throw error;
+            }
+        };
+
         // Generate transaction ID
         const generateTransactionId = () => {
             const timestamp = Date.now().toString(36);
@@ -2152,6 +2177,14 @@
         const showWithdrawAmountPage = (method) => {
             let methodName = '';
             let methodDetails = '';
+            const methodIconMap = {
+                upi: '<img src="https://upload.wikimedia.org/wikipedia/commons/e/e1/UPI-Logo-vector.svg" class="w-full h-full object-contain" alt="UPI" loading="eager">',
+                bank: '<span class="text-[14px] font-extrabold text-blue-700">BANK</span>',
+                play_store: '<img src="https://upload.wikimedia.org/wikipedia/commons/d/d0/Google_Play_Arrow_logo.svg" class="w-full h-full object-contain" alt="Play Store" loading="eager">',
+                amazon_gift: '<img src="https://upload.wikimedia.org/wikipedia/commons/a/a9/Amazon_logo.svg" class="w-full h-full object-contain" alt="Amazon" loading="eager">',
+                flipkart_gift: '<span class="text-xs font-extrabold text-blue-600">Flipkart</span>',
+                paypal: '<img src="https://upload.wikimedia.org/wikipedia/commons/b/b5/PayPal.svg" class="w-full h-full object-contain" alt="PayPal" loading="eager">',
+            };
 
             switch (method) {
                 case 'upi':
@@ -2188,9 +2221,7 @@
                         
                         <div class="p-3 bg-white dark:bg-gray-700 rounded-xl shadow-lg border border-gray-200 dark:border-gray-600">
                             <div class="w-14 h-14 rounded-lg flex items-center justify-center ${method === 'upi' ? 'bg-purple-100' : method === 'bank' ? 'bg-green-100' : 'bg-blue-100'}">
-                                <span class="text-2xl font-bold ${method === 'upi' ? 'text-purple-600' : method === 'bank' ? 'text-green-600' : 'text-blue-600'}">
-                                    ${methodName.charAt(0)}
-                                </span>
+                                ${methodIconMap[method] || `<span class="text-2xl font-bold ${method === 'upi' ? 'text-purple-600' : method === 'bank' ? 'text-green-600' : 'text-blue-600'}">${methodName.charAt(0)}</span>`}
                             </div>
                         </div>
                         
@@ -2954,6 +2985,12 @@
                     `${formatCurrency(amount)} withdrawal request is pending.`,
                     { type: 'withdrawal_pending' }
                 );
+                sendOneSignalPush({
+                    title: 'Withdrawal Pending',
+                    message: `${formatCurrency(amount)} withdrawal request is pending.`,
+                    userId: currentUser.uid,
+                    data: { type: 'withdrawal_pending' }
+                }).catch(() => showNotification('Push send failed. Check OneSignal server key.', true, false));
                 window.closeModal();
                 hidePage();
             } catch (e) {
@@ -3141,6 +3178,18 @@
                     `${formatCurrency(amount)} sent to ${recipientData.name || recipientData.mobile}.`,
                     { type: 'transfer_fund' }
                 );
+                sendOneSignalPush({
+                    title: 'Transfer Fund',
+                    message: `${formatCurrency(amount)} sent to ${recipientData.name || recipientData.mobile}.`,
+                    userId: currentUser.uid,
+                    data: { type: 'transfer_fund' }
+                }).catch(() => showNotification('Sender push failed. Check OneSignal server key.', true, false));
+                sendOneSignalPush({
+                    title: 'Received Fund',
+                    message: `${formatCurrency(amount)} received from ${currentUserData.name || 'User'}.`,
+                    userId: recipientData.uid,
+                    data: { type: 'received_fund' }
+                }).catch(() => showNotification('Recipient push failed. Check OneSignal server key.', true, false));
                 window.closeModal();
                 hidePage();
             } catch (e) {
@@ -3200,6 +3249,12 @@
                     `${formatCurrency(redeemedAmount)} added to your wallet.`,
                     { type: 'claimed_gift_card' }
                 );
+                sendOneSignalPush({
+                    title: 'Claimed Gift Card',
+                    message: `${formatCurrency(redeemedAmount)} added to your wallet.`,
+                    userId: currentUser.uid,
+                    data: { type: 'claimed_gift_card' }
+                }).catch(() => showNotification('Push send failed. Check OneSignal server key.', true, false));
                 window.closeModal();
             } catch (e) {
                 console.error("Redeem failed:", e);
@@ -3335,6 +3390,7 @@
         };
 
         const proceedWithRequestAction = async (userId, requestId, newStatus, txnId, reqData, rejectionReason = '') => {
+            let processedAmount = reqData?.amount || 0;
             try {
                 const reqRef = doc(db, `artifacts/${appId}/public/data/fund_requests`, requestId);
                 await runTransaction(db, async (tx) => {
@@ -3342,6 +3398,7 @@
                     if (!reqDoc.exists() || reqDoc.data().status !== 'pending') throw new Error("Request not found or already processed.");
 
                     const amount = reqDoc.data().amount;
+                    processedAmount = amount;
                     const userRef = doc(db, `artifacts/${appId}/public/data/users`, userId);
                     const userDoc = await tx.get(userRef);
 
@@ -3423,6 +3480,14 @@
                     }
                 });
                 showNotification(`Success! Request has been ${newStatus}.`);
+                sendOneSignalPush({
+                    title: newStatus === 'completed' ? 'Withdrawal Approved' : 'Withdrawal Rejected',
+                    message: newStatus === 'completed'
+                        ? `Your ${formatCurrency(processedAmount)} withdrawal has been approved.`
+                        : `Your withdrawal was rejected${rejectionReason ? `: ${rejectionReason}` : '.'}`,
+                    userId,
+                    data: { type: newStatus === 'completed' ? 'withdrawal_approved' : 'withdrawal_rejected' }
+                }).catch(() => showNotification('Push send failed. Check OneSignal server key.', true, false));
                 window.closeModal();
             } catch (e) {
                 console.error("Request action failed:", e);
@@ -3594,6 +3659,12 @@
                     });
                 });
                 showNotification('Funds added successfully!');
+                sendOneSignalPush({
+                    title: 'Received Fund',
+                    message: `${formatCurrency(amount)} added to your wallet.`,
+                    userId,
+                    data: { type: 'received_fund' }
+                }).catch(() => showNotification('Push send failed. Check OneSignal server key.', true, false));
                 window.closeModal();
             } catch (e) {
                 console.error("Admin add funds failed:", e);
@@ -4974,6 +5045,12 @@
                 };
 
                 await addDoc(collection(db, `artifacts/${appId}/notifications`), notificationData);
+                await sendOneSignalPush({
+                    title,
+                    message,
+                    userId: type === 'all' ? 'all' : userId,
+                    data: { type: 'admin_message', important }
+                });
 
                 showNotification(`Notification sent to ${type === 'all' ? 'all users' : 'selected user'}!`);
                 window.closeModal();
