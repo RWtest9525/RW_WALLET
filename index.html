@@ -1918,6 +1918,22 @@
             });
         };
 
+        const WITHDRAW_METHOD_LOGOS = {
+            upi: 'https://upload.wikimedia.org/wikipedia/commons/e/e1/UPI-Logo-vector.svg',
+            bank: 'https://cdn-icons-png.flaticon.com/512/3635/3635987.png',
+            play_store: 'https://upload.wikimedia.org/wikipedia/commons/d/d0/Google_Play_Arrow_logo.svg',
+            amazon_gift: 'https://upload.wikimedia.org/wikipedia/commons/a/a9/Amazon_logo.svg',
+            flipkart_gift: 'https://cdn.iconscout.com/icon/free/png-256/free-flipkart-logo-icon-download-in-svg-png-gif-file-formats--online-shopping-brand-logos-pack-icons-226594.png',
+            paypal: 'https://upload.wikimedia.org/wikipedia/commons/b/b5/PayPal.svg',
+            crypto: 'https://cdn-icons-png.flaticon.com/512/2091/2091665.png'
+        };
+
+        const getWithdrawMethodLogo = (methodId) => WITHDRAW_METHOD_LOGOS[methodId] || '';
+        const renderWithdrawMethodLogo = (methodId, altText, extraClass = '') => {
+            const logo = getWithdrawMethodLogo(methodId);
+            return logo ? `<img src="${logo}" class="w-full h-full object-contain ${extraClass}" alt="${altText}" loading="eager">` : '';
+        };
+
         // Show Withdraw Page with Professional Logos
         const showWithdrawPage = async () => {
             if (!currentUserData) return showNotification('User data not loaded. Please wait.', true);
@@ -1955,40 +1971,44 @@
                     <div class="grid grid-cols-3 sm:grid-cols-4 gap-3">
                         <div class="payment-option border border-gray-300 dark:border-gray-600 rounded-xl p-3 bg-gray-50 dark:bg-gray-700 flex items-center justify-center cursor-pointer hover:shadow-md hover:border-blue-400 transition-all duration-200" data-method="upi">
                             <div class="w-12 h-12 flex items-center justify-center">
-                                <img src="https://upload.wikimedia.org/wikipedia/commons/e/e1/UPI-Logo-vector.svg" class="w-full h-full object-contain" alt="UPI" loading="eager" fetchpriority="high">
+                                ${renderWithdrawMethodLogo('upi', 'UPI')}
                             </div>
                         </div>
 
                         <div class="payment-option border border-gray-300 dark:border-gray-600 rounded-xl p-3 bg-gray-50 dark:bg-gray-700 flex items-center justify-center cursor-pointer hover:shadow-md hover:border-green-400 transition-all duration-200" data-method="bank">
                             <div class="w-12 h-12 flex items-center justify-center">
-    <span class="text-[14px] font-extrabold text-blue-700">BANK</span>
-</div>
+                                ${renderWithdrawMethodLogo('bank', 'Bank')}
+                            </div>
                         </div>
 
                         <div class="payment-option border border-gray-300 dark:border-gray-600 rounded-xl p-3 bg-gray-50 dark:bg-gray-700 flex items-center justify-center cursor-pointer hover:shadow-md hover:border-purple-400 transition-all duration-200" data-method="play_store">
                             <div class="w-12 h-12 flex items-center justify-center">
-                                <img src="https://upload.wikimedia.org/wikipedia/commons/d/d0/Google_Play_Arrow_logo.svg" class="w-full h-full object-contain" alt="Play Store" loading="eager">
+                                ${renderWithdrawMethodLogo('play_store', 'Play Store')}
                             </div>
                         </div>
 
                         <div class="payment-option border border-gray-300 dark:border-gray-600 rounded-xl p-3 bg-gray-50 dark:bg-gray-700 flex items-center justify-center cursor-pointer hover:shadow-md hover:border-orange-400 transition-all duration-200" data-method="amazon_gift">
                             <div class="w-12 h-12 flex items-center justify-center">
-                                <img src="https://upload.wikimedia.org/wikipedia/commons/a/a9/Amazon_logo.svg" class="w-full h-full object-contain" alt="Amazon" loading="eager">
+                                ${renderWithdrawMethodLogo('amazon_gift', 'Amazon')}
                             </div>
                         </div>
 
                         <div class="payment-option border border-gray-300 dark:border-gray-600 rounded-xl p-3 bg-gray-50 dark:bg-gray-700 flex items-center justify-center cursor-pointer hover:shadow-md hover:border-blue-400 transition-all duration-200" data-method="flipkart_gift">
-                            <div class="w-12 h-12 flex items-center justify-center font-bold text-blue-600">Flipkart</div>
+                            <div class="w-12 h-12 flex items-center justify-center">
+                                ${renderWithdrawMethodLogo('flipkart_gift', 'Flipkart')}
+                            </div>
                         </div>
 
                         <div class="payment-option border border-gray-300 dark:border-gray-600 rounded-xl p-3 bg-gray-50 dark:bg-gray-700 flex items-center justify-center cursor-pointer hover:shadow-md hover:border-blue-500 transition-all duration-200" data-method="paypal">
                             <div class="w-12 h-12 flex items-center justify-center">
-                                <img src="https://upload.wikimedia.org/wikipedia/commons/b/b5/PayPal.svg" class="w-full h-full object-contain" alt="PayPal" loading="eager">
+                                ${renderWithdrawMethodLogo('paypal', 'PayPal')}
                             </div>
                         </div>
 
                         <div class="payment-option coming-soon border border-gray-300 dark:border-gray-600 rounded-xl p-3 bg-gray-50 dark:bg-gray-700 flex items-center justify-center cursor-not-allowed opacity-70" data-method="crypto">
-                            <div class="w-12 h-12 bg-gray-200 rounded-lg flex items-center justify-center">C</div>
+                            <div class="w-12 h-12 flex items-center justify-center">
+                                ${renderWithdrawMethodLogo('crypto', 'Crypto')}
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -2010,12 +2030,13 @@
             let methodName = '';
             let methodDetails = '';
             const methodIconMap = {
-                upi: '<img src="https://upload.wikimedia.org/wikipedia/commons/e/e1/UPI-Logo-vector.svg" class="w-full h-full object-contain" alt="UPI" loading="eager">',
-                bank: '<span class="text-[14px] font-extrabold text-blue-700">BANK</span>',
-                play_store: '<img src="https://upload.wikimedia.org/wikipedia/commons/d/d0/Google_Play_Arrow_logo.svg" class="w-full h-full object-contain" alt="Play Store" loading="eager">',
-                amazon_gift: '<img src="https://upload.wikimedia.org/wikipedia/commons/a/a9/Amazon_logo.svg" class="w-full h-full object-contain" alt="Amazon" loading="eager">',
-                flipkart_gift: '<span class="text-xs font-extrabold text-blue-600">Flipkart</span>',
-                paypal: '<img src="https://upload.wikimedia.org/wikipedia/commons/b/b5/PayPal.svg" class="w-full h-full object-contain" alt="PayPal" loading="eager">',
+                upi: renderWithdrawMethodLogo('upi', 'UPI'),
+                bank: renderWithdrawMethodLogo('bank', 'Bank'),
+                play_store: renderWithdrawMethodLogo('play_store', 'Play Store'),
+                amazon_gift: renderWithdrawMethodLogo('amazon_gift', 'Amazon'),
+                flipkart_gift: renderWithdrawMethodLogo('flipkart_gift', 'Flipkart'),
+                paypal: renderWithdrawMethodLogo('paypal', 'PayPal'),
+                crypto: renderWithdrawMethodLogo('crypto', 'Crypto'),
             };
 
             switch (method) {
@@ -4519,7 +4540,10 @@
                         <path fill-rule="evenodd" d="M16.704 5.29a1 1 0 0 1 .006 1.414l-8 8.08a1 1 0 0 1-1.419.001l-4-4.04a1 1 0 1 1 1.418-1.41l3.29 3.322 7.29-7.36a1 1 0 0 1 1.415-.006Z" clip-rule="evenodd"/>
                     </svg>
                 </span>`;
-            const renderTransactionAvatar = (name, forceAppLogo = false) => (forceAppLogo || isReviewsWorldName(name)) ? `
+            const renderTransactionAvatar = (name, forceAppLogo = false, logoUrl = '') => logoUrl ? `
+                <div class="w-10 h-10 bg-white dark:bg-gray-700 rounded-full flex items-center justify-center shadow-inner shrink-0 border border-gray-100 dark:border-gray-600 p-1.5">
+                    <img src="${logoUrl}" class="w-full h-full object-contain rounded-full" alt="${name}" loading="eager">
+                </div>` : (forceAppLogo || isReviewsWorldName(name)) ? `
                 <div class="shrink-0">
                     <img src="${rwLogoUrl}" class="w-10 h-10 rounded-full border-2 border-gray-100 dark:border-gray-700 shadow-sm object-cover" alt="Reviews World Logo" loading="eager" fetchpriority="high" decoding="sync">
                 </div>` : `
@@ -4615,7 +4639,7 @@
                         : 'bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-400 border-green-100 dark:border-green-900/30';
                 statusIconClass = isRejected ? 'text-red-500' : isPending ? 'text-yellow-500' : 'text-green-500';
                 fromParty = { label: 'From', name: 'Digital Wallet', detail: 'RW Wallet Balance', appLogo: true };
-                toParty = { label: 'To', name: methodName, detail: methodDetail, appLogo: false };
+                toParty = { label: 'To', name: methodName, detail: methodDetail, appLogo: false, logoUrl: getWithdrawMethodLogo(methodId) };
                 modeLabel = methodName;
                 extraDetail = isRejected && item.rejectionReason ? `
                     <div class="bg-red-50 dark:bg-red-900/20 px-3 py-2">
@@ -4704,7 +4728,7 @@
                                         </div>
                                         ${fromParty.detail ? `<p class="text-xs text-gray-400 font-mono truncate">${fromParty.detail}</p>` : ''}
                                     </div>
-                                    ${renderTransactionAvatar(fromParty.name, fromParty.appLogo)}
+                                    ${renderTransactionAvatar(fromParty.name, fromParty.appLogo, fromParty.logoUrl)}
                                 </div>
 
                                 <!-- My Account -->
@@ -4717,7 +4741,7 @@
                                         </div>
                                         ${toParty.detail ? `<p class="text-xs text-gray-400 font-mono truncate">${toParty.detail}</p>` : ''}
                                     </div>
-                                    ${renderTransactionAvatar(toParty.name, toParty.appLogo)}
+                                    ${renderTransactionAvatar(toParty.name, toParty.appLogo, toParty.logoUrl)}
                                 </div>
                             </div>
 
