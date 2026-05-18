@@ -673,7 +673,7 @@
                             </div>
                             <div class="bg-white dark:bg-gray-800 p-5 rounded-2xl shadow-md border border-gray-100 dark:border-gray-700">
                                 <h3 class="text-lg font-semibold mb-4">Actions</h3>
-                                <div class="grid grid-cols-4 gap-2 sm:gap-3">
+                                <div class="grid grid-cols-3 gap-2 sm:gap-3">
                                 <button id="withdraw-fund-btn"
                                     class="group w-full min-h-28 flex flex-col items-center justify-between gap-2 bg-yellow-50 dark:bg-yellow-900/20 text-yellow-700 dark:text-yellow-200 font-semibold p-3 rounded-xl hover:bg-yellow-100 dark:hover:bg-yellow-900/30 transition border border-yellow-200 dark:border-yellow-800 text-center">
                                     <span class="w-11 h-11 rounded-xl bg-yellow-500 text-white flex items-center justify-center shadow-sm group-hover:scale-105 transition">
@@ -690,7 +690,7 @@
                                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 12v8H4v-8m16 0H4m16 0V8H4v4m8-4v12m0-12h3a2 2 0 100-4c-2 0-3 4-3 4zm0 0H9a2 2 0 110-4c2 0 3 4 3 4z"></path>
                                         </svg>
                                     </span>
-                                    <span class="text-xs sm:text-sm leading-tight">Redeem Gift Card</span>
+                                    <span class="text-xs sm:text-sm leading-tight">Gift Card</span>
                                 </button>
                                 <button id="pay-to-wallet-btn"
                                     class="group w-full min-h-28 flex flex-col items-center justify-between gap-2 bg-purple-50 dark:bg-purple-900/20 text-purple-700 dark:text-purple-200 font-semibold p-3 rounded-xl hover:bg-purple-100 dark:hover:bg-purple-900/30 transition border border-purple-200 dark:border-purple-800 text-center">
@@ -709,6 +709,15 @@
                                         </svg>
                                     </span>
                                     <span class="text-xs sm:text-sm leading-tight">Mobile Recharge</span>
+                                </button>
+                                <button id="loan-btn"
+                                    class="group w-full min-h-28 flex flex-col items-center justify-between gap-2 bg-indigo-50 dark:bg-indigo-900/20 text-indigo-700 dark:text-indigo-200 font-semibold p-3 rounded-xl hover:bg-indigo-100 dark:hover:bg-indigo-900/30 transition border border-indigo-200 dark:border-indigo-800 text-center">
+                                    <span class="w-11 h-11 rounded-xl bg-indigo-500 text-white flex items-center justify-center shadow-sm group-hover:scale-105 transition">
+                                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8V7m0 10v-1m9-4a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                                        </svg>
+                                    </span>
+                                    <span class="text-xs sm:text-sm leading-tight">Loan</span>
                                 </button>
                                 </div>
                             </div>
@@ -838,6 +847,15 @@
                                 </svg>
                                 <span class="text-sm font-medium text-sky-700 dark:text-sky-300">Recharge Requests</span>
                             </button>
+                            <button id="admin-loans-btn"
+                                class="flex flex-col items-center justify-center p-4 min-h-28 bg-indigo-50 dark:bg-indigo-900/20 rounded-2xl hover:bg-indigo-100 dark:hover:bg-indigo-900/30 transition border border-indigo-200 dark:border-indigo-800 shadow-sm">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-indigo-600 mb-2" fill="none"
+                                    viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                        d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8V7m0 10v-1m9-4a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                </svg>
+                                <span class="text-sm font-medium text-indigo-700 dark:text-indigo-300">Manage Loan</span>
+                            </button>
                         </div>
                     </div>
                 </div>
@@ -957,6 +975,8 @@
         let allUsersCache = [];
         let allFundRequestsCache = [];
         let allRechargeRequestsCache = [];
+        let allLoanRequestsCache = [];
+        let allLoansCache = [];
         let unifiedHistoryCache = [];
         let notificationTimeout;
 
@@ -1490,6 +1510,8 @@
             allUsersCache = [];
             allFundRequestsCache = [];
             allRechargeRequestsCache = [];
+            allLoanRequestsCache = [];
+            allLoansCache = [];
             currentUserData = null;
             unifiedHistoryCache = [];
 
@@ -1676,6 +1698,22 @@
                     renderAdminRechargeRequests(allRechargeRequestsCache);
                 }
             }, (error) => console.error("Admin: Error listening to all fund requests:", error)));
+
+            const loanRequestsQuery = query(collection(db, `artifacts/${appId}/public/data/loan_requests`), orderBy("requestedAt", "desc"));
+            unsubscribers.push(onSnapshot(loanRequestsQuery, (snap) => {
+                allLoanRequestsCache = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                if (document.getElementById('admin-loan-page')) {
+                    renderAdminLoanPage();
+                }
+            }, (error) => console.error("Admin: Error listening to loan requests:", error)));
+
+            const loansQuery = query(collection(db, `artifacts/${appId}/public/data/loans`), orderBy("createdAt", "desc"));
+            unsubscribers.push(onSnapshot(loansQuery, (snap) => {
+                allLoansCache = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                if (document.getElementById('admin-loan-page')) {
+                    renderAdminLoanPage();
+                }
+            }, (error) => console.error("Admin: Error listening to loans:", error)));
         };
 
         // --- FULL PAGE RENDERERS ---
@@ -2299,6 +2337,126 @@
             renderAdminRechargeRequests(allRechargeRequestsCache);
         };
 
+        const getNextMonthRepaymentDate = (fromDate = new Date()) => {
+            const year = fromDate.getFullYear();
+            const month = fromDate.getMonth();
+            const day = fromDate.getDate();
+            const daysInNextMonth = new Date(year, month + 2, 0).getDate();
+            return new Date(year, month + 1, Math.min(day, daysInNextMonth), 23, 59, 59);
+        };
+
+        const showLoanPage = async () => {
+            if (!currentUser || !currentUserData) return showNotification('User data not loaded. Please wait.', true);
+
+            const activeLoanSnap = await getDocs(query(
+                collection(db, `artifacts/${appId}/public/data/loans`),
+                where("userId", "==", currentUser.uid),
+                where("status", "==", "active")
+            ));
+            if (!activeLoanSnap.empty) {
+                const loan = { id: activeLoanSnap.docs[0].id, ...activeLoanSnap.docs[0].data() };
+                showActiveLoanPage(loan);
+                return;
+            }
+
+            const pendingReqSnap = await getDocs(query(
+                collection(db, `artifacts/${appId}/public/data/loan_requests`),
+                where("userId", "==", currentUser.uid),
+                where("status", "==", "pending")
+            ));
+            if (!pendingReqSnap.empty) {
+                showPage(`
+                    ${getPageHeader('Loan')}
+                    <div class="max-w-md mx-auto bg-white dark:bg-gray-800 p-6 rounded-xl shadow-md text-center space-y-3">
+                        <div class="w-14 h-14 rounded-2xl bg-yellow-100 dark:bg-yellow-900/30 text-yellow-600 mx-auto flex items-center justify-center">
+                            <svg class="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M12 2a10 10 0 100 20 10 10 0 000-20z"></path></svg>
+                        </div>
+                        <h3 class="text-lg font-semibold">Loan Request Pending</h3>
+                        <p class="text-sm text-gray-500 dark:text-gray-400">Your eligibility request is under review. We will notify soon.</p>
+                    </div>
+                    ${getPageFooter()}`);
+                return;
+            }
+
+            if (currentUserData.loanEligible) {
+                showTakeLoanPage();
+                return;
+            }
+
+            showLoanApplicationPage();
+        };
+
+        const showLoanApplicationPage = () => {
+            const content = `
+                ${getPageHeader('Loan')}
+                <div class="max-w-md mx-auto bg-white dark:bg-gray-800 p-6 rounded-xl shadow-md space-y-5">
+                    <div class="text-center">
+                        <h3 class="text-lg font-semibold">Loan Eligibility Request</h3>
+                        <p class="text-sm text-gray-500 dark:text-gray-400 mt-1">Submit details for admin review.</p>
+                    </div>
+                    <div class="space-y-3">
+                        <input id="loan-name-input" value="${currentUserData.name || ''}" placeholder="Your name" class="w-full px-4 py-3 bg-gray-100 dark:bg-gray-700 rounded-lg">
+                        <input id="loan-father-input" placeholder="Father's name" class="w-full px-4 py-3 bg-gray-100 dark:bg-gray-700 rounded-lg">
+                        <input id="loan-mobile-input" value="${currentUserData.mobile || ''}" maxlength="10" placeholder="Mobile no." class="w-full px-4 py-3 bg-gray-100 dark:bg-gray-700 rounded-lg">
+                        <input id="loan-alt-mobile-input" maxlength="10" placeholder="Alternate no." class="w-full px-4 py-3 bg-gray-100 dark:bg-gray-700 rounded-lg">
+                        <input id="loan-aadhaar-input" maxlength="12" placeholder="Aadhaar number" class="w-full px-4 py-3 bg-gray-100 dark:bg-gray-700 rounded-lg">
+                    </div>
+                    <button id="submit-loan-request-btn" class="w-full bg-indigo-600 text-white font-semibold py-3 rounded-lg hover:bg-indigo-700 transition">Submit Request</button>
+                </div>
+                ${getPageFooter()}`;
+            showPage(content);
+            document.getElementById('submit-loan-request-btn').onclick = handleSubmitLoanRequest;
+        };
+
+        const showTakeLoanPage = () => {
+            const dueDate = getNextMonthRepaymentDate();
+            const content = `
+                ${getPageHeader('Take Loan')}
+                <div class="max-w-md mx-auto bg-white dark:bg-gray-800 p-6 rounded-xl shadow-md space-y-5">
+                    <div class="text-center">
+                        <h3 class="text-lg font-semibold">Choose Loan Amount</h3>
+                        <p class="text-sm text-gray-500 dark:text-gray-400 mt-1">Amount between ₹1 and ₹500. Interest is 1% for 1 month.</p>
+                    </div>
+                    <input type="number" id="loan-amount-input" min="1" max="500" placeholder="Enter amount (₹1 - ₹500)" class="w-full px-4 py-3 bg-gray-100 dark:bg-gray-700 rounded-lg">
+                    <div id="loan-summary" class="bg-indigo-50 dark:bg-indigo-900/20 border border-indigo-100 dark:border-indigo-800 rounded-xl p-4 space-y-2 text-sm"></div>
+                    <p class="text-xs text-gray-500 dark:text-gray-400">Repayment: you have to pay full amount on the same date next month. If that date does not exist, nearest last date of next month will be used.</p>
+                    <button id="confirm-take-loan-btn" class="w-full bg-indigo-600 text-white font-semibold py-3 rounded-lg hover:bg-indigo-700 transition">Take Loan</button>
+                </div>
+                ${getPageFooter()}`;
+            showPage(content);
+            const updateSummary = () => {
+                const amount = parseFloat(document.getElementById('loan-amount-input').value) || 0;
+                const interest = Number((amount * 0.01).toFixed(2));
+                document.getElementById('loan-summary').innerHTML = `
+                    <div class="flex justify-between"><span>Loan Amount</span><span>${formatCurrency(amount)}</span></div>
+                    <div class="flex justify-between"><span>1% Interest</span><span>${formatCurrency(interest)}</span></div>
+                    <div class="flex justify-between font-bold pt-2 border-t border-indigo-200 dark:border-indigo-800"><span>Total Repay</span><span>${formatCurrency(amount + interest)}</span></div>
+                    <div class="flex justify-between"><span>Due Date</span><span>${dueDate.toLocaleDateString('en-IN')}</span></div>`;
+            };
+            updateSummary();
+            document.getElementById('loan-amount-input').addEventListener('input', updateSummary);
+            document.getElementById('confirm-take-loan-btn').onclick = handleTakeLoan;
+        };
+
+        const showActiveLoanPage = (loan) => {
+            const dueDate = loan.dueDate?.toDate ? loan.dueDate.toDate() : new Date(loan.dueDate);
+            showPage(`
+                ${getPageHeader('Loan Repayment')}
+                <div class="max-w-md mx-auto bg-white dark:bg-gray-800 p-6 rounded-xl shadow-md space-y-4">
+                    <h3 class="text-lg font-semibold">Active Loan</h3>
+                    <div class="bg-gray-100 dark:bg-gray-700 rounded-xl p-4 space-y-2 text-sm">
+                        <div class="flex justify-between"><span>Loan Amount</span><span>${formatCurrency(loan.amount)}</span></div>
+                        <div class="flex justify-between"><span>Interest</span><span>${formatCurrency(loan.interest)}</span></div>
+                        <div class="flex justify-between font-bold"><span>Total Payable</span><span>${formatCurrency(loan.totalRepayable)}</span></div>
+                        <div class="flex justify-between"><span>Due Date</span><span>${dueDate.toLocaleDateString('en-IN')}</span></div>
+                    </div>
+                    <p class="text-xs text-gray-500 dark:text-gray-400">Repayment option: pay all amount on the same date in next month.</p>
+                    <button id="repay-loan-btn" class="w-full bg-green-600 text-white font-semibold py-3 rounded-lg hover:bg-green-700 transition">Repay Full Loan</button>
+                </div>
+                ${getPageFooter()}`);
+            document.getElementById('repay-loan-btn').onclick = () => handleRepayLoan(loan);
+        };
+
         const handleCleanupScamRequests = async () => {
             const scamUsers = [
                 { name: 'Aryan', amount: 88 },
@@ -2842,6 +3000,85 @@
                 </div>`).join('');
         };
 
+        const showAdminLoanPage = () => {
+            const content = `
+                ${getPageHeader('Manage Loan')}
+                <div id="admin-loan-page" class="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-md space-y-4">
+                    <div class="flex flex-wrap gap-2">
+                        <button data-loan-filter="pending" class="loan-filter-btn px-3 py-2 rounded-lg bg-indigo-600 text-white text-sm font-semibold">Pending</button>
+                        <button data-loan-filter="approved" class="loan-filter-btn px-3 py-2 rounded-lg bg-gray-100 dark:bg-gray-700 text-sm font-semibold">Approved</button>
+                        <button data-loan-filter="rejected" class="loan-filter-btn px-3 py-2 rounded-lg bg-gray-100 dark:bg-gray-700 text-sm font-semibold">Rejected</button>
+                        <button data-loan-filter="loans" class="loan-filter-btn px-3 py-2 rounded-lg bg-gray-100 dark:bg-gray-700 text-sm font-semibold">Active/Paid Loans</button>
+                    </div>
+                    <input id="loan-admin-search" placeholder="Search name, mobile, Aadhaar..." class="w-full px-4 py-3 bg-gray-100 dark:bg-gray-700 rounded-lg">
+                    <div id="admin-loan-list" class="max-h-[70vh] overflow-y-auto"></div>
+                </div>
+                ${getPageFooter()}`;
+            showPage(content);
+            window.currentLoanFilter = window.currentLoanFilter || 'pending';
+            document.getElementById('admin-loan-page').addEventListener('click', (e) => {
+                const btn = e.target.closest('.loan-filter-btn');
+                if (!btn) return;
+                window.currentLoanFilter = btn.dataset.loanFilter;
+                renderAdminLoanPage();
+            });
+            document.getElementById('loan-admin-search').addEventListener('input', renderAdminLoanPage);
+            renderAdminLoanPage();
+        };
+
+        const renderAdminLoanPage = () => {
+            const listEl = document.getElementById('admin-loan-list');
+            if (!listEl) return;
+            const filter = window.currentLoanFilter || 'pending';
+            document.querySelectorAll('.loan-filter-btn').forEach(btn => {
+                const active = btn.dataset.loanFilter === filter;
+                btn.className = `loan-filter-btn px-3 py-2 rounded-lg text-sm font-semibold ${active ? 'bg-indigo-600 text-white' : 'bg-gray-100 dark:bg-gray-700'}`;
+            });
+            const search = (document.getElementById('loan-admin-search')?.value || '').toLowerCase();
+
+            if (filter === 'loans') {
+                let loans = [...allLoansCache].filter(l => !search || [l.userName, l.userMobile, l.status].some(v => (v || '').toString().toLowerCase().includes(search)));
+                listEl.innerHTML = loans.length ? loans.map(l => {
+                    const dueDate = l.dueDate?.toDate ? l.dueDate.toDate().toLocaleDateString('en-IN') : 'N/A';
+                    return `
+                        <div class="p-4 mb-3 bg-gray-50 dark:bg-gray-700/50 rounded-xl text-sm">
+                            <div class="flex justify-between gap-3">
+                                <div>
+                                    <p class="font-semibold">${l.userName || 'User'} <span class="text-xs uppercase text-gray-500">${l.status}</span></p>
+                                    <p class="text-xs text-gray-500">${l.userMobile || ''}</p>
+                                    <p class="text-xs text-gray-500">Due: ${dueDate}</p>
+                                </div>
+                                <div class="text-right">
+                                    <p class="font-bold">${formatCurrency(l.totalRepayable || 0)}</p>
+                                    <p class="text-xs text-gray-500">Principal ${formatCurrency(l.amount || 0)}</p>
+                                </div>
+                            </div>
+                        </div>`;
+                }).join('') : '<p class="text-center text-gray-500 py-6">No loans found.</p>';
+                return;
+            }
+
+            let requests = [...allLoanRequestsCache].filter(r => r.status === filter);
+            requests = requests.filter(r => !search || [r.name, r.fatherName, r.mobile, r.alternateMobile, r.aadhaar].some(v => (v || '').toString().toLowerCase().includes(search)));
+            listEl.innerHTML = requests.length ? requests.map(r => `
+                <div class="p-4 mb-3 bg-gray-50 dark:bg-gray-700/50 rounded-xl text-sm">
+                    <div class="flex flex-col sm:flex-row justify-between gap-3">
+                        <div class="space-y-1">
+                            <p class="font-semibold">${r.name || 'No Name'}</p>
+                            <p class="text-xs text-gray-500">Father: ${r.fatherName || 'N/A'}</p>
+                            <p class="text-xs text-gray-500">Mobile: ${r.mobile || 'N/A'} | Alt: ${r.alternateMobile || 'N/A'}</p>
+                            <p class="text-xs text-gray-500">Aadhaar: ${r.aadhaar || 'N/A'}</p>
+                            <p class="text-xs text-gray-500">User: ${r.userEmail || 'N/A'}</p>
+                        </div>
+                        ${r.status === 'pending' ? `
+                            <div class="flex sm:flex-col gap-2">
+                                <button data-action="approve-loan-request" data-requestid="${r.id}" data-userid="${r.userId}" class="px-3 py-1 text-xs bg-green-600 text-white rounded font-semibold">Approve</button>
+                                <button data-action="reject-loan-request" data-requestid="${r.id}" data-userid="${r.userId}" class="px-3 py-1 text-xs bg-red-600 text-white rounded font-semibold">Reject</button>
+                            </div>` : ''}
+                    </div>
+                </div>`).join('') : '<p class="text-center text-gray-500 py-6">No loan requests found.</p>';
+        };
+
         const renderAdminGiftCodesList = (docs) => {
             const listEl = document.getElementById('gift-codes-list-page');
             if (!listEl) return;
@@ -2919,6 +3156,139 @@
             } catch (e) {
                 console.error("Recharge request failed:", e);
                 showNotification('Could not submit recharge request. Error: ' + e.message, true);
+            }
+        };
+
+        const handleSubmitLoanRequest = async () => {
+            const name = document.getElementById('loan-name-input').value.trim();
+            const fatherName = document.getElementById('loan-father-input').value.trim();
+            const mobile = document.getElementById('loan-mobile-input').value.trim();
+            const alternateMobile = document.getElementById('loan-alt-mobile-input').value.trim();
+            const aadhaar = document.getElementById('loan-aadhaar-input').value.trim();
+
+            if (!name || !fatherName || !/^\d{10}$/.test(mobile) || !/^\d{10}$/.test(alternateMobile) || !/^\d{12}$/.test(aadhaar)) {
+                return showNotification('Please fill all loan details correctly.', true);
+            }
+
+            try {
+                await addDoc(collection(db, `artifacts/${appId}/public/data/loan_requests`), {
+                    userId: currentUser.uid,
+                    userEmail: currentUserData.email || currentUser.email || '',
+                    name,
+                    fatherName,
+                    mobile,
+                    alternateMobile,
+                    aadhaar,
+                    status: 'pending',
+                    requestedAt: serverTimestamp()
+                });
+
+                renderModal('Loan Request Submitted',
+                    `<div class="text-center space-y-3">
+                        <div class="w-14 h-14 rounded-full bg-yellow-100 dark:bg-yellow-900/30 text-yellow-600 mx-auto flex items-center justify-center">
+                            <svg class="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M12 2a10 10 0 100 20 10 10 0 000-20z"></path></svg>
+                        </div>
+                        <h3 class="font-semibold">You are currently not eligible.</h3>
+                        <p class="text-sm text-gray-500 dark:text-gray-400">We will notify soon.</p>
+                    </div>`,
+                    `<button onclick="window.closeModal(); hidePage();" class="px-4 py-2 text-sm bg-indigo-600 text-white rounded-lg">OK</button>`,
+                    'max-w-sm', true
+                );
+            } catch (e) {
+                console.error('Loan request failed:', e);
+                showNotification(`Error: ${e.message}`, true);
+            }
+        };
+
+        const handleTakeLoan = async () => {
+            const amount = parseFloat(document.getElementById('loan-amount-input').value);
+            if (isNaN(amount) || amount < 1 || amount > 500) {
+                return showNotification('Loan amount must be between ₹1 and ₹500.', true);
+            }
+            const interest = Number((amount * 0.01).toFixed(2));
+            const totalRepayable = Number((amount + interest).toFixed(2));
+            const dueDate = getNextMonthRepaymentDate();
+
+            try {
+                const userRef = doc(db, `artifacts/${appId}/public/data/users`, currentUser.uid);
+                await runTransaction(db, async (tx) => {
+                    const userDoc = await tx.get(userRef);
+                    if (!userDoc.exists()) throw new Error('User not found.');
+                    if (!userDoc.data().loanEligible) throw new Error('Loan is not approved for your account.');
+
+                    const loanRef = doc(collection(db, `artifacts/${appId}/public/data/loans`));
+                    tx.update(userRef, {
+                        balance: (userDoc.data().balance || 0) + amount,
+                        loanEligible: false,
+                        activeLoanId: loanRef.id
+                    });
+                    tx.set(loanRef, {
+                        userId: currentUser.uid,
+                        userName: currentUserData.name || 'User',
+                        userMobile: currentUserData.mobile || '',
+                        amount,
+                        interest,
+                        totalRepayable,
+                        dueDate: Timestamp.fromDate(dueDate),
+                        status: 'active',
+                        createdAt: serverTimestamp()
+                    });
+                    tx.set(doc(collection(userRef, 'transactions')), {
+                        type: 'credit',
+                        amount,
+                        comment: 'Loan Amount Credited',
+                        timestamp: serverTimestamp(),
+                        transactionId: loanRef.id,
+                        status: 'completed',
+                        isAdminTransaction: true,
+                        senderName: 'Reviews World',
+                        recipientName: currentUserData.name || 'User',
+                        recipientMobile: currentUserData.mobile || ''
+                    });
+                });
+                showNotification('Loan amount added to wallet.');
+                hidePage();
+            } catch (e) {
+                console.error('Take loan failed:', e);
+                showNotification(`Error: ${e.message}`, true);
+            }
+        };
+
+        const handleRepayLoan = async (loan) => {
+            if ((currentUserData.balance || 0) < (loan.totalRepayable || 0)) {
+                return showNotification('Insufficient balance to repay full loan.', true);
+            }
+            try {
+                const userRef = doc(db, `artifacts/${appId}/public/data/users`, currentUser.uid);
+                const loanRef = doc(db, `artifacts/${appId}/public/data/loans`, loan.id);
+                await runTransaction(db, async (tx) => {
+                    const userDoc = await tx.get(userRef);
+                    const loanDoc = await tx.get(loanRef);
+                    if (!loanDoc.exists() || loanDoc.data().status !== 'active') throw new Error('Loan is already closed.');
+                    tx.update(userRef, {
+                        balance: (userDoc.data().balance || 0) - loan.totalRepayable,
+                        activeLoanId: deleteField()
+                    });
+                    tx.update(loanRef, {
+                        status: 'paid',
+                        paidAt: serverTimestamp()
+                    });
+                    tx.set(doc(collection(userRef, 'transactions')), {
+                        type: 'debit',
+                        amount: loan.totalRepayable,
+                        comment: 'Loan Repayment',
+                        timestamp: serverTimestamp(),
+                        transactionId: `REPAY-${loan.id}`,
+                        status: 'completed',
+                        recipientName: 'Reviews World',
+                        recipientMobile: ''
+                    });
+                });
+                showNotification('Loan repaid successfully.');
+                hidePage();
+            } catch (e) {
+                console.error('Repay loan failed:', e);
+                showNotification(`Error: ${e.message}`, true);
             }
         };
 
@@ -3432,6 +3802,29 @@
                     if (!reason) return showNotification('Please provide a rejection reason.', true);
                     proceedWithRechargeAction(userId, requestId, newStatus, null, reqData, reason);
                 };
+            }
+        };
+
+        const handleLoanRequestAction = async (userId, requestId, newStatus) => {
+            try {
+                const requestRef = doc(db, `artifacts/${appId}/public/data/loan_requests`, requestId);
+                const userRef = doc(db, `artifacts/${appId}/public/data/users`, userId);
+                await runTransaction(db, async (tx) => {
+                    const requestDoc = await tx.get(requestRef);
+                    if (!requestDoc.exists() || requestDoc.data().status !== 'pending') throw new Error('Loan request not found or already processed.');
+                    tx.update(requestRef, {
+                        status: newStatus,
+                        processedAt: serverTimestamp(),
+                        processedBy: currentUser.uid
+                    });
+                    if (newStatus === 'approved') {
+                        tx.update(userRef, { loanEligible: true });
+                    }
+                });
+                showNotification(`Loan request ${newStatus}.`);
+            } catch (e) {
+                console.error('Loan action failed:', e);
+                showNotification(`Error: ${e.message}`, true);
             }
         };
 
@@ -4427,6 +4820,14 @@
                     handleRechargeAction(userid, requestid, 'rejected');
                     break;
 
+                case 'approve-loan-request':
+                    handleLoanRequestAction(userid, requestid, 'approved');
+                    break;
+
+                case 'reject-loan-request':
+                    handleLoanRequestAction(userid, requestid, 'rejected');
+                    break;
+
                 case 'copy-upi':
                     handleCopyUpi(upi, target);
                     break;
@@ -4480,13 +4881,14 @@
         document.getElementById('admin-withdraw-settings-btn').addEventListener('click', showAdminWithdrawSettingsModal);
         document.getElementById('admin-pro-users-btn').addEventListener('click', showAdminUsersPage);
         document.getElementById('admin-recharge-requests-btn').addEventListener('click', showAdminRechargeRequestsPage);
+        document.getElementById('admin-loans-btn').addEventListener('click', showAdminLoanPage);
 
         // Withdraw Fund Button - Now opens full page
         document.getElementById('withdraw-fund-btn').addEventListener('click', showWithdrawPage);
 
-        // Redeem Gift Card Button
+        // Gift Card Button
         document.getElementById('redeem-gift-card-btn').addEventListener('click', () => {
-            renderModal('Redeem Gift Card',
+            renderModal('Gift Card',
                 `<input type="text" id="gift-code-input" placeholder="Enter your code" class="w-full px-4 py-3 bg-gray-100 dark:bg-gray-700 rounded-lg">`,
                 `<button onclick="window.closeModal()" class="px-4 py-2 text-sm bg-gray-200 dark:bg-gray-600 rounded-lg">Cancel</button>
                  <button id="modal-submit-btn" class="px-4 py-2 text-sm bg-green-500 text-white rounded-lg">Redeem</button>`);
@@ -4496,6 +4898,7 @@
         // Pay to Wallet Button - Now opens full page
         document.getElementById('pay-to-wallet-btn').addEventListener('click', showPayToWalletPage);
         document.getElementById('mobile-recharge-btn').addEventListener('click', showMobileRechargePage);
+        document.getElementById('loan-btn').addEventListener('click', showLoanPage);
 
         // Preload logo images to prevent loading flicker
         const preloadLogoImages = () => {
