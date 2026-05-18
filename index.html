@@ -1038,6 +1038,7 @@
         let lastAutoProcessCheckAt = 0;
         let activeWithdrawalHistoryFilter = { filter: 'today', fromDate: null, toDate: null };
         let activeChatUnsubscribe = null;
+        let currentMainSection = 'home';
         let notificationTimeout;
 
         const unsubscribers = [];
@@ -1445,7 +1446,17 @@
             document.getElementById('app-footer')?.classList.add('app-footer-hidden');
             const backButton = pageContainer.querySelector('.page-back-btn');
             if (backButton) {
-                backButton.onclick = hidePage;
+                backButton.onclick = options.onBack || (() => {
+                    if (currentMainSection === 'settings' && !options.keepBottomNav) {
+                        showSettingsPage();
+                    } else if (currentMainSection === 'transactions' && !options.keepBottomNav) {
+                        showAllTransactionsPage();
+                    } else if (currentMainSection === 'help' && !options.keepBottomNav) {
+                        showHelpSupportPage();
+                    } else {
+                        hidePage();
+                    }
+                });
             }
         };
 
@@ -2119,6 +2130,7 @@
                 </div>
                 ${getPageFooter()}`;
             showPage(content, { keepBottomNav: true });
+            currentMainSection = 'settings';
             setBottomNavActive('bottom-settings-btn');
             document.getElementById('settings-profile-btn').onclick = showProfilePage;
             document.getElementById('settings-track-income-btn').onclick = showTrackIncomePage;
@@ -2144,6 +2156,7 @@
             document.getElementById('page-container').innerHTML = '';
             setMainChrome(true);
             document.getElementById('app-footer')?.classList.remove('app-footer-hidden');
+            currentMainSection = 'home';
             switchTab('user-panel');
             setBottomNavActive('bottom-home-btn');
         };
@@ -2159,6 +2172,7 @@
             document.getElementById('page-container').innerHTML = '';
             setMainChrome(true);
             document.getElementById('app-footer')?.classList.remove('app-footer-hidden');
+            currentMainSection = 'admin';
             switchTab('admin-panel');
             setBottomNavActive('bottom-admin-btn');
         };
@@ -2201,7 +2215,7 @@
                     <div id="income-month-list" class="space-y-3"></div>
                 </div>
                 ${getPageFooter()}`;
-            showPage(content);
+            showPage(content, { onBack: showSettingsPage });
             const renderIncomeYear = (year) => {
                 const created = getSafeDate(currentUserData?.createdAt);
                 const current = new Date();
@@ -2256,7 +2270,7 @@
                         </button>`).join('')}
                 </div>
                 ${getPageFooter()}`;
-            showPage(content);
+            showPage(content, { onBack: showSettingsPage });
             document.querySelectorAll('.invoice-month-card').forEach(card => {
                 card.onclick = () => showWithdrawalInvoiceDetails(card.dataset.invoiceKey);
             });
@@ -2309,7 +2323,7 @@
                     </div>
                 </div>
                 ${getPageFooter()}`;
-            showPage(content);
+            showPage(content, { onBack: showWithdrawalInvoicesPage });
             document.getElementById('download-withdrawal-invoice-btn').onclick = () => downloadWithdrawalInvoicePdf(group);
         };
 
@@ -2548,6 +2562,7 @@
                 </div>
                 ${getPageFooter()}`;
             showPage(content, { keepBottomNav: true });
+            currentMainSection = 'help';
             setBottomNavActive('bottom-help-btn');
             document.getElementById('reviews-world-chat-card').onclick = () => openSupportChatPage(currentUser.uid, 'user');
         };
@@ -2634,6 +2649,7 @@
                 </div>
                 ${getPageFooter()}`;
             showPage(content, { keepBottomNav: true });
+            currentMainSection = 'transactions';
             setBottomNavActive('bottom-transactions-btn');
 
             // Initial render of all transactions
