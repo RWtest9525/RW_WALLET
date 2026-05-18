@@ -703,7 +703,7 @@
                                 </button>
                                 <button id="loan-btn"
                                     class="relative group w-full min-h-28 flex flex-col items-center justify-between gap-2 bg-indigo-50 dark:bg-indigo-900/20 text-indigo-700 dark:text-indigo-200 font-semibold p-3 rounded-xl hover:bg-indigo-100 dark:hover:bg-indigo-900/30 transition border border-indigo-200 dark:border-indigo-800 text-center">
-                                    <span class="absolute right-1.5 top-1.5 rounded-full bg-indigo-600 px-1.5 py-0.5 text-[9px] font-bold text-white shadow-sm">1.5% intrest</span>
+                                    <span class="absolute right-1.5 top-1.5 rounded-full bg-red-600 px-1.5 py-0.5 text-[9px] font-bold text-white shadow-sm">2% intrest</span>
                                     <span class="w-12 h-12 rounded-xl bg-indigo-500 flex items-center justify-center shadow-sm p-2">
                                         <img src="https://cdn-icons-png.flaticon.com/512/9197/9197103.png" alt="Loan" class="w-full h-full object-contain">
                                     </span>
@@ -711,7 +711,7 @@
                                 </button>
                                 <button id="partner-btn"
                                     class="relative group w-full min-h-28 flex flex-col items-center justify-between gap-2 bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-200 font-semibold p-3 rounded-xl hover:bg-emerald-100 dark:hover:bg-emerald-900/30 transition border border-emerald-200 dark:border-emerald-800 text-center">
-                                    <span class="absolute right-1.5 top-1.5 rounded-full bg-emerald-600 px-1.5 py-0.5 text-[9px] font-bold text-white shadow-sm">1.5% intrest</span>
+                                    <span class="absolute right-1.5 top-1.5 rounded-full bg-emerald-600 px-1.5 py-0.5 text-[9px] font-bold text-white shadow-sm">1% earn</span>
                                     <span class="w-12 h-12 rounded-xl bg-emerald-500 flex items-center justify-center shadow-sm p-2">
                                         <img src="https://cdn-icons-png.flaticon.com/512/3135/3135706.png" alt="Become Partner" class="w-full h-full object-contain">
                                     </span>
@@ -955,7 +955,7 @@
         const appId = typeof __app_id !== 'undefined' ? __app_id : 'digital-wallet-prod';
         const ADMIN_UID = "mOs5Fmp4RoRzeBDH4pZLMOpQx7Q2";
         const RECHARGE_DISCOUNT_RATE = 0.01;
-        const PARTNER_INTEREST_RATE = 0.015;
+        const PARTNER_INTEREST_RATE = 0.01;
         const PARTNER_ICON_URL = 'https://cdn-icons-png.flaticon.com/512/3135/3135706.png';
         const RECHARGE_OPERATORS = ['Jio', 'Airtel', 'Vi', 'BSNL', 'MTNL'];
         const RECHARGE_STATES = [
@@ -2513,7 +2513,7 @@
                 <div class="max-w-md mx-auto bg-white dark:bg-gray-800 p-6 rounded-xl shadow-md space-y-5">
                     <div class="text-center">
                         <h3 class="text-lg font-semibold">Choose Loan Amount</h3>
-                        <p class="text-sm text-gray-500 dark:text-gray-400 mt-1">Amount between ₹1 and ₹500. Interest is 1% for 1 month.</p>
+                        <p class="text-sm text-gray-500 dark:text-gray-400 mt-1">Amount between ₹1 and ₹500. Interest is 2% for 1 month.</p>
                     </div>
                     <input type="number" id="loan-amount-input" min="1" max="500" placeholder="Enter amount (₹1 - ₹500)" class="w-full px-4 py-3 bg-gray-100 dark:bg-gray-700 rounded-lg">
                     <div id="loan-summary" class="bg-indigo-50 dark:bg-indigo-900/20 border border-indigo-100 dark:border-indigo-800 rounded-xl p-4 space-y-2 text-sm"></div>
@@ -2524,10 +2524,10 @@
             showPage(content);
             const updateSummary = () => {
                 const amount = parseFloat(document.getElementById('loan-amount-input').value) || 0;
-                const interest = Number((amount * 0.01).toFixed(2));
+                const interest = Number((amount * 0.02).toFixed(2));
                 document.getElementById('loan-summary').innerHTML = `
                     <div class="flex justify-between"><span>Loan Amount</span><span>${formatCurrency(amount)}</span></div>
-                    <div class="flex justify-between"><span>1% Interest</span><span>${formatCurrency(interest)}</span></div>
+                    <div class="flex justify-between"><span>2% Interest</span><span>${formatCurrency(interest)}</span></div>
                     <div class="flex justify-between font-bold pt-2 border-t border-indigo-200 dark:border-indigo-800"><span>Total Repay</span><span>${formatCurrency(amount + interest)}</span></div>
                     <div class="flex justify-between"><span>Due Date</span><span>${dueDate.toLocaleDateString('en-IN')}</span></div>`;
             };
@@ -2584,7 +2584,7 @@
                             <div>
                                 <p class="text-xs uppercase tracking-wide text-white/70">RW Partner Plan</p>
                                 <h3 class="text-2xl font-bold">Invest wallet funds</h3>
-                                <p class="text-sm text-white/75 mt-1">Earn 1.5% monthly interest after every 30 days.</p>
+                                <p class="text-sm text-white/75 mt-1">Earn 1% monthly interest after every 30 days.</p>
                             </div>
                         </div>
                     </div>
@@ -2643,7 +2643,7 @@
                             <img src="${PARTNER_ICON_URL}" alt="Partner" class="w-full h-full object-contain">
                         </div>
                         <h3 class="text-xl font-bold mt-3">Create Investment</h3>
-                        <p class="text-sm text-gray-500 dark:text-gray-400">1.5% monthly interest, processed every 30 days.</p>
+                        <p class="text-sm text-gray-500 dark:text-gray-400">1% monthly interest, processed every 30 days.</p>
                     </div>
                     <div class="space-y-3">
                         <input type="number" id="partner-amount-input" min="1" placeholder="Enter wallet amount (₹)" class="w-full px-4 py-3 bg-gray-100 dark:bg-gray-700 rounded-lg">
@@ -2670,7 +2670,7 @@
                 `<div class="space-y-3 text-sm">
                     <p class="font-semibold">Please read before investing wallet funds.</p>
                     <ul class="list-disc pl-5 space-y-2 text-gray-600 dark:text-gray-300">
-                        <li>Interest rate is 1.5% per month on invested wallet amount.</li>
+                        <li>Interest rate is 1% per month on invested wallet amount.</li>
                         <li>Interest is processed after each completed 30 day cycle.</li>
                         <li>If you withdraw before the selected end date, no pending interest is paid.</li>
                         <li>Early withdrawal has a 2% charge deducted from principal.</li>
@@ -3541,7 +3541,7 @@
             if (isNaN(amount) || amount < 1 || amount > 500) {
                 return showNotification('Loan amount must be between ₹1 and ₹500.', true);
             }
-            const interest = Number((amount * 0.01).toFixed(2));
+            const interest = Number((amount * 0.02).toFixed(2));
             const totalRepayable = Number((amount + interest).toFixed(2));
             const dueDate = getNextMonthRepaymentDate();
 
