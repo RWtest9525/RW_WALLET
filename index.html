@@ -35,7 +35,7 @@
     <style>
         html,
         body {
-            height: 100%;
+            min-height: 100%;
             -webkit-text-size-adjust: 100%;
             touch-action: manipulation;
         }
@@ -51,6 +51,12 @@
 
         #app {
             flex-grow: 1;
+            min-height: 100%;
+        }
+
+        #main-content,
+        #dashboard-content {
+            padding-bottom: 7rem;
         }
 
         .modal-backdrop {
@@ -95,7 +101,7 @@
             z-index: 30;
             overflow-y: auto;
             background-color: rgb(243 244 246);
-            padding-bottom: 5.5rem;
+            padding-bottom: 7rem;
         }
 
         .dark #page-container {
@@ -2415,7 +2421,9 @@
             }
             const isAdminView = viewerRole === 'admin';
             const displayName = isAdminView ? (chatMeta.userName || 'User') : 'REVIEWS WORLD';
-            const displayEmail = isAdminView ? (chatMeta.userEmail || '') : 'support@reviewsworld.in';
+            const displayEmail = isAdminView
+                ? (chatMeta.userEmail || '')
+                : (currentUserData?.email || currentUser?.email || '');
             const logo = isAdminView ? 'https://cdn-icons-png.flaticon.com/512/3135/3135715.png' : getSupportLogo();
             const content = `
                 <div class="max-w-2xl mx-auto bg-gray-100 dark:bg-gray-900 min-h-[calc(100vh-4rem)] flex flex-col">
