@@ -1097,21 +1097,34 @@
         };
 
         const promptOneSignalPermission = (force = false) => {
-            if (!window.OneSignalDeferred) return;
-            window.OneSignalDeferred.push(async function (OneSignal) {
+            if (!window.OneSignalDeferred) return Promise.resolve(false);
+            return new Promise((resolve) => {
+                window.OneSignalDeferred.push(async function (OneSignal) {
                 try {
                     const supported = await OneSignal.Notifications.isPushSupported();
-                    if (!supported || OneSignal.Notifications.permission) return;
-
-                    if (OneSignal.Slidedown?.promptPush) {
-                        await OneSignal.Slidedown.promptPush({ force });
+                    if (!supported) {
+                        showNotification('Push notifications are not supported on this device/browser.', true, false);
+                        resolve(false);
                         return;
                     }
 
-                    await OneSignal.Notifications.requestPermission();
+                    if (OneSignal.Notifications.permission) {
+                        resolve(true);
+                        return;
+                    }
+
+                    if (OneSignal.Slidedown?.promptPush) {
+                        await OneSignal.Slidedown.promptPush({ force });
+                    } else {
+                        await OneSignal.Notifications.requestPermission();
+                    }
+
+                    resolve(!!OneSignal.Notifications.permission);
                 } catch (error) {
                     console.warn("OneSignal permission prompt failed:", error.message);
+                    resolve(false);
                 }
+                });
             });
         };
 
@@ -1119,8 +1132,8 @@
             if (window.__rwOneSignalPromptBound) return;
             window.__rwOneSignalPromptBound = true;
 
-            const promptHandler = () => {
-                promptOneSignalPermission(true);
+            const promptHandler = async () => {
+                await promptOneSignalPermission(true);
                 document.removeEventListener('click', promptHandler);
                 document.removeEventListener('touchend', promptHandler);
                 window.__rwOneSignalPromptBound = false;
@@ -4888,7 +4901,13 @@
             `).join('');
         };
 
-        const openNotificationsPage = () => {
+        const openNotificationsPage = async () => {
+            const permissionGranted = await promptOneSignalPermission(true);
+            if (!permissionGranted) {
+                showNotification('Please allow notifications to continue.', true, false);
+                return;
+            }
+
             if (currentUser?.uid === ADMIN_UID) {
                 showAdminNotificationsPage();
                 return;
