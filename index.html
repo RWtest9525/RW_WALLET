@@ -864,46 +864,48 @@
 
                 <!-- Admin Panel Dashboard -->
                 <div id="admin-panel" class="tab-content hidden">
-                    <div class="mb-6 bg-white dark:bg-gray-800 p-6 rounded-xl shadow-md">
-                        <h3 class="text-lg font-semibold mb-2">My Admin Wallet</h3>
-                        <p id="admin-wallet-balance" class="text-4xl font-bold text-green-500">₹0.00</p>
+                    <div class="relative overflow-hidden mb-6 bg-gradient-to-br from-gray-950 via-indigo-900 to-blue-700 dark:from-gray-800 dark:via-indigo-950 dark:to-blue-950 p-6 rounded-2xl shadow-xl text-white">
+                        <div class="absolute -right-12 -top-12 h-40 w-40 rounded-full border border-white/15"></div>
+                        <div class="absolute right-7 bottom-6 h-16 w-16 rounded-2xl bg-white/10 border border-white/15"></div>
+                        <h3 class="relative text-lg font-semibold mb-2 text-white/85">My Admin Wallet</h3>
+                        <p id="admin-wallet-balance" class="relative text-4xl font-bold text-white">₹0.00</p>
                         <button id="manage-admin-wallet-btn"
-                            class="mt-4 w-full sm:w-auto px-6 py-2 bg-gray-700 text-white font-semibold rounded-lg hover:bg-gray-800 transition">Add/Remove
+                            class="relative mt-4 w-full sm:w-auto px-6 py-3 bg-white/15 text-white font-semibold rounded-xl hover:bg-white/25 transition border border-white/20">Add/Remove
                             My Funds</button>
                     </div>
-                    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-6">
-                        <div class="bg-white dark:bg-gray-800 p-5 rounded-xl shadow-md">
+                    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-4">
+                        <div class="bg-white dark:bg-gray-800 p-5 rounded-2xl shadow-md border border-gray-100 dark:border-gray-700">
                             <h4 class="text-sm text-gray-500 dark:text-gray-400 font-medium">Total Users</h4>
                             <p id="analytics-total-users" class="text-3xl font-bold mt-2">0</p>
                         </div>
-                        <div class="bg-white dark:bg-gray-800 p-5 rounded-xl shadow-md cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700 transition"
+                        <div class="bg-white dark:bg-gray-800 p-5 rounded-2xl shadow-md cursor-pointer hover:bg-blue-50 dark:hover:bg-blue-900/20 transition border border-gray-100 dark:border-gray-700"
                             onclick="showAdminUsersPageWithFilter('new')">
                             <h4 class="text-sm text-gray-500 dark:text-gray-400 font-medium">New Members (15 Days)</h4>
                             <p id="analytics-new-members" class="text-3xl font-bold mt-2 text-blue-500">0</p>
                         </div>
-                        <div class="bg-white dark:bg-gray-800 p-5 rounded-xl shadow-md">
+                        <div class="bg-white dark:bg-gray-800 p-5 rounded-2xl shadow-md border border-gray-100 dark:border-gray-700">
                             <h4 class="text-sm text-gray-500 dark:text-gray-400 font-medium">Pending Withdrawals</h4>
                             <p id="analytics-pending-reqs" class="text-3xl font-bold mt-2">0</p>
                         </div>
                     </div>
-                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
-                        <div class="bg-white dark:bg-gray-800 p-5 rounded-xl shadow-md">
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+                        <div class="bg-white dark:bg-gray-800 p-5 rounded-2xl shadow-md border border-gray-100 dark:border-gray-700">
                             <h4 class="text-sm text-gray-500 dark:text-gray-400 font-medium">Total Funds in Other
                                 Wallets</h4>
                             <p id="analytics-total-funds" class="text-3xl font-bold mt-2">₹0.00</p>
                         </div>
-                        <div class="bg-white dark:bg-gray-800 p-5 rounded-xl shadow-md">
+                        <div class="bg-white dark:bg-gray-800 p-5 rounded-2xl shadow-md border border-gray-100 dark:border-gray-700">
                             <h4 class="text-sm text-gray-500 dark:text-gray-400 font-medium">Gift Cards Redeemed</h4>
                             <p id="analytics-gift-cards" class="text-3xl font-bold mt-2">0</p>
                         </div>
                     </div>
 
                     <!-- Fixed Quick Actions Bar -->
-                    <div class="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-md mb-6">
+                    <div class="bg-white dark:bg-gray-800 p-5 sm:p-6 rounded-2xl shadow-md mb-6 border border-gray-100 dark:border-gray-700">
                         <h3 class="text-lg font-semibold mb-4">Quick Actions</h3>
                         <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
                             <button id="admin-withdrawals-btn"
-                                class="flex flex-col items-center justify-center p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg hover:bg-blue-100 dark:hover:bg-blue-900/30 transition border border-blue-200 dark:border-blue-800">
+                                class="flex flex-col items-center justify-center p-4 min-h-28 bg-blue-50 dark:bg-blue-900/20 rounded-2xl hover:bg-blue-100 dark:hover:bg-blue-900/30 transition border border-blue-200 dark:border-blue-800 shadow-sm">
                                 <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-blue-600 mb-2" fill="none"
                                     viewBox="0 0 24 24" stroke="currentColor">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
@@ -912,7 +914,7 @@
                                 <span class="text-sm font-medium text-blue-700 dark:text-blue-300">Withdrawals</span>
                             </button>
                             <button id="admin-users-btn"
-                                class="flex flex-col items-center justify-center p-4 bg-green-50 dark:bg-green-900/20 rounded-lg hover:bg-green-100 dark:hover:bg-green-900/30 transition border border-green-200 dark:border-green-800">
+                                class="flex flex-col items-center justify-center p-4 min-h-28 bg-green-50 dark:bg-green-900/20 rounded-2xl hover:bg-green-100 dark:hover:bg-green-900/30 transition border border-green-200 dark:border-green-800 shadow-sm">
                                 <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-green-600 mb-2" fill="none"
                                     viewBox="0 0 24 24" stroke="currentColor">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
@@ -921,7 +923,7 @@
                                 <span class="text-sm font-medium text-green-700 dark:text-green-300">Users</span>
                             </button>
                             <button id="admin-gift-codes-btn"
-                                class="flex flex-col items-center justify-center p-4 bg-purple-50 dark:bg-purple-900/20 rounded-lg hover:bg-purple-100 dark:hover:bg-purple-900/30 transition border border-purple-200 dark:border-purple-800">
+                                class="flex flex-col items-center justify-center p-4 min-h-28 bg-purple-50 dark:bg-purple-900/20 rounded-2xl hover:bg-purple-100 dark:hover:bg-purple-900/30 transition border border-purple-200 dark:border-purple-800 shadow-sm">
                                 <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-purple-600 mb-2" fill="none"
                                     viewBox="0 0 24 24" stroke="currentColor">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
@@ -930,7 +932,7 @@
                                 <span class="text-sm font-medium text-purple-700 dark:text-purple-300">Gift Codes</span>
                             </button>
                             <button id="admin-withdrawal-history-btn"
-                                class="flex flex-col items-center justify-center p-4 bg-yellow-50 dark:bg-yellow-900/20 rounded-lg hover:bg-yellow-100 dark:hover:bg-yellow-900/30 transition border border-yellow-200 dark:border-yellow-800">
+                                class="flex flex-col items-center justify-center p-4 min-h-28 bg-yellow-50 dark:bg-yellow-900/20 rounded-2xl hover:bg-yellow-100 dark:hover:bg-yellow-900/30 transition border border-yellow-200 dark:border-yellow-800 shadow-sm">
                                 <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-yellow-600 mb-2" fill="none"
                                     viewBox="0 0 24 24" stroke="currentColor">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
@@ -940,7 +942,7 @@
                                     History</span>
                             </button>
                             <button id="admin-withdraw-settings-btn"
-                                class="flex flex-col items-center justify-center p-4 bg-purple-50 dark:bg-purple-900/20 rounded-lg hover:bg-purple-100 dark:hover:bg-purple-900/30 transition border border-purple-200 dark:border-purple-800">
+                                class="flex flex-col items-center justify-center p-4 min-h-28 bg-purple-50 dark:bg-purple-900/20 rounded-2xl hover:bg-purple-100 dark:hover:bg-purple-900/30 transition border border-purple-200 dark:border-purple-800 shadow-sm">
                                 <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-purple-600 mb-2" fill="none"
                                     viewBox="0 0 24 24" stroke="currentColor">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
@@ -952,7 +954,7 @@
                                     Settings</span>
                             </button>
                             <button id="admin-pro-users-btn"
-                                class="flex flex-col items-center justify-center p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg hover:bg-blue-100 dark:hover:bg-blue-900/30 transition border border-blue-200 dark:border-blue-800">
+                                class="flex flex-col items-center justify-center p-4 min-h-28 bg-blue-50 dark:bg-blue-900/20 rounded-2xl hover:bg-blue-100 dark:hover:bg-blue-900/30 transition border border-blue-200 dark:border-blue-800 shadow-sm">
                                 <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-blue-600 mb-2" fill="none"
                                     viewBox="0 0 24 24" stroke="currentColor">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
@@ -962,7 +964,7 @@
                                     Verification</span>
                             </button>
                             <button id="admin-notifications-btn"
-                                class="flex flex-col items-center justify-center p-4 bg-indigo-50 dark:bg-indigo-900/20 rounded-lg hover:bg-indigo-100 dark:hover:bg-indigo-900/30 transition border border-indigo-200 dark:border-indigo-800">
+                                class="flex flex-col items-center justify-center p-4 min-h-28 bg-indigo-50 dark:bg-indigo-900/20 rounded-2xl hover:bg-indigo-100 dark:hover:bg-indigo-900/30 transition border border-indigo-200 dark:border-indigo-800 shadow-sm">
                                 <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-indigo-600 mb-2" fill="none"
                                     viewBox="0 0 24 24" stroke="currentColor">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
