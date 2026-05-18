@@ -46,7 +46,7 @@
             -webkit-font-smoothing: antialiased;
             -moz-osx-font-smoothing: grayscale;
             overflow-x: hidden;
-            padding-bottom: 5.5rem;
+            padding-bottom: 0;
         }
 
         #app {
@@ -54,9 +54,12 @@
             min-height: 100%;
         }
 
-        #main-content,
+        #main-content {
+            padding-bottom: 5.75rem;
+        }
+
         #dashboard-content {
-            padding-bottom: 7rem;
+            padding-bottom: 0;
         }
 
         .modal-backdrop {
@@ -93,15 +96,13 @@
         }
 
         #page-container {
-            position: absolute;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
+            position: fixed;
+            inset: 0;
             z-index: 30;
             overflow-y: auto;
             background-color: rgb(243 244 246);
-            padding-bottom: 7rem;
+            min-height: 100dvh;
+            padding-bottom: 1.5rem;
         }
 
         .dark #page-container {
@@ -719,7 +720,7 @@
                                     <span class="w-12 h-12 rounded-xl bg-green-500 flex items-center justify-center shadow-sm p-2">
                                         <img src="https://cdn-icons-png.flaticon.com/512/2611/2611152.png" alt="Gift card" class="w-full h-full object-contain">
                                     </span>
-                                    <span class="text-xs sm:text-sm leading-tight">Gift Card</span>
+                                    <span class="text-xs sm:text-sm leading-tight">Redeem Gift Card</span>
                                 </button>
                                 <button id="pay-to-wallet-btn"
                                     class="group w-full min-h-28 flex flex-col items-center justify-between gap-2 bg-purple-50 dark:bg-purple-900/20 text-purple-700 dark:text-purple-200 font-semibold p-3 rounded-xl hover:bg-purple-100 dark:hover:bg-purple-900/30 transition border border-purple-200 dark:border-purple-800 text-center">
@@ -740,9 +741,9 @@
                                     class="relative group w-full min-h-28 flex flex-col items-center justify-between gap-2 bg-indigo-50 dark:bg-indigo-900/20 text-indigo-700 dark:text-indigo-200 font-semibold p-3 rounded-xl hover:bg-indigo-100 dark:hover:bg-indigo-900/30 transition border border-indigo-200 dark:border-indigo-800 text-center">
                                     <span class="absolute right-1.5 top-1.5 rounded-full bg-red-600 px-1.5 py-0.5 text-[9px] font-bold text-white shadow-sm">2% intrest</span>
                                     <span class="w-12 h-12 rounded-xl bg-indigo-500 flex items-center justify-center shadow-sm p-2">
-                                        <img src="https://cdn-icons-png.flaticon.com/512/9197/9197103.png" alt="Loan" class="w-full h-full object-contain">
+                                        <img src="https://cdn-icons-png.flaticon.com/512/9197/9197103.png" alt="Take Loan" class="w-full h-full object-contain">
                                     </span>
-                                    <span class="text-xs sm:text-sm leading-tight">Loan</span>
+                                    <span class="text-xs sm:text-sm leading-tight">Take Loan</span>
                                 </button>
                                 <button id="partner-btn"
                                     class="relative group w-full min-h-28 flex flex-col items-center justify-between gap-2 bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-200 font-semibold p-3 rounded-xl hover:bg-emerald-100 dark:hover:bg-emerald-900/30 transition border border-emerald-200 dark:border-emerald-800 text-center">
@@ -1442,6 +1443,7 @@
             const pageContainer = document.getElementById('page-container');
             pageContainer.innerHTML = content;
             pageContainer.classList.remove('hidden');
+            pageContainer.style.paddingBottom = options.keepBottomNav ? '6.5rem' : '1.5rem';
             setMainChrome(!!options.keepBottomNav);
             document.getElementById('app-footer')?.classList.add('app-footer-hidden');
             const backButton = pageContainer.querySelector('.page-back-btn');
@@ -3224,7 +3226,7 @@
             ));
             if (!pendingReqSnap.empty) {
                 showPage(`
-                    ${getPageHeader('Loan')}
+                    ${getPageHeader('Take Loan')}
                     <div class="max-w-md mx-auto bg-white dark:bg-gray-800 p-6 rounded-xl shadow-md text-center space-y-3">
                         <div class="w-14 h-14 rounded-2xl bg-yellow-100 dark:bg-yellow-900/30 text-yellow-600 mx-auto flex items-center justify-center">
                             <svg class="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M12 2a10 10 0 100 20 10 10 0 000-20z"></path></svg>
@@ -3246,7 +3248,7 @@
 
         const showLoanApplicationPage = () => {
             const content = `
-                ${getPageHeader('Loan')}
+                ${getPageHeader('Take Loan')}
                 <div class="max-w-md mx-auto bg-white dark:bg-gray-800 p-6 rounded-xl shadow-md space-y-5">
                     <div class="text-center">
                         <h3 class="text-lg font-semibold">Loan Eligibility Request</h3>
@@ -6379,7 +6381,7 @@
 
         // Gift Card Button
         document.getElementById('redeem-gift-card-btn').addEventListener('click', () => {
-            renderModal('Gift Card',
+            renderModal('Redeem Gift Card',
                 `<input type="text" id="gift-code-input" placeholder="Enter your code" class="w-full px-4 py-3 bg-gray-100 dark:bg-gray-700 rounded-lg">`,
                 `<button onclick="window.closeModal()" class="px-4 py-2 text-sm bg-gray-200 dark:bg-gray-600 rounded-lg">Cancel</button>
                  <button id="modal-submit-btn" class="px-4 py-2 text-sm bg-green-500 text-white rounded-lg">Redeem</button>`);
