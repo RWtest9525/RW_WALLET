@@ -989,7 +989,7 @@
     <footer class="text-center p-4 text-sm text-gray-500 dark:text-gray-400">
         © Reviews world 2022. All rights reserved.
         <br>
-        <span id="app-version" class="text-xs">v3.0.0</span>
+        <span id="app-version" class="text-xs">v2.0</span>
     </footer>
 
     <!-- Modal Container -->
@@ -1622,6 +1622,8 @@
             allFundRequestsCache = [];
             currentUserData = null;
             unifiedHistoryCache = [];
+            seenTransactionPushIds = new Set();
+            transactionPushListenerReady = false;
 
             if (user) {
                 currentUser = user;
@@ -1718,6 +1720,26 @@
 
             const transactionsQuery = query(collection(db, `artifacts/${appId}/public/data/users`, userId, 'transactions'), orderBy('timestamp', 'desc'));
             unsubscribers.push(onSnapshot(transactionsQuery, (snap) => {
+                snap.docChanges().forEach((change) => {
+                    if (change.type !== 'added') return;
+                    const item = { key: change.doc.id, ...change.doc.data() };
+                    const eventKey = item.transactionId || item.requestId || change.doc.id;
+                    if (seenTransactionPushIds.has(eventKey)) return;
+                    seenTransactionPushIds.add(eventKey);
+
+                    if (!transactionPushListenerReady) return;
+                    if (item.status === 'pending') return;
+
+                    if (['wallet_transfer', 'credit'].includes(item.type) && item.amount > 0) {
+                        notificationSystem.sendBrowserOnlyNotification(
+                            'Received Fund',
+                            `${formatCurrency(item.amount)} received from ${item.senderName || (item.isAdminTransaction ? 'Reviews World' : 'User')}.`,
+                            { type: 'received_fund', transactionId: item.transactionId }
+                        );
+                    }
+                });
+                transactionPushListenerReady = true;
+
                 transactions = snap.docs.map(d => d.data());
                 renderUnifiedHistory(5);
             }, (error) => console.error("Error listening to transactions:", error)));
@@ -2892,6 +2914,11 @@
                 });
 
                 showNotification('Withdrawal Request Submitted and balance deducted!', false, true);
+                notificationSystem.sendBrowserOnlyNotification(
+                    'Withdrawal Pending',
+                    `${formatCurrency(amount)} withdrawal request is pending.`,
+                    { type: 'withdrawal_pending' }
+                );
                 window.closeModal();
                 hidePage();
             } catch (e) {
@@ -3074,6 +3101,11 @@
                 });
 
                 showNotification(`Success! Sent ${formatCurrency(amount)} to ${recipientData.name || recipientData.mobile}`, false, true);
+                notificationSystem.sendBrowserOnlyNotification(
+                    'Transfer Fund',
+                    `${formatCurrency(amount)} sent to ${recipientData.name || recipientData.mobile}.`,
+                    { type: 'transfer_fund' }
+                );
                 window.closeModal();
                 hidePage();
             } catch (e) {
@@ -3128,6 +3160,11 @@
                     });
                 });
                 showNotification(`Success! Added ${formatCurrency(redeemedAmount)} to your wallet.`, false, true);
+                notificationSystem.sendBrowserOnlyNotification(
+                    'Claimed Gift Card',
+                    `${formatCurrency(redeemedAmount)} added to your wallet.`,
+                    { type: 'claimed_gift_card' }
+                );
                 window.closeModal();
             } catch (e) {
                 console.error("Redeem failed:", e);
@@ -4270,12 +4307,14 @@
         // ========== NEW FEATURES ONLY - ADD THIS AT THE END ==========
 
         // --- APP VERSION ---
-        const APP_VERSION = "1.5.0";
+        const APP_VERSION = "2.0";
 
         // --- GLOBAL VARIABLES ---
         let unreadNotificationsCount = 0;
         let pendingRequests = new Set();
         let realtimeListeners = [];
+        let seenTransactionPushIds = new Set();
+        let transactionPushListenerReady = false;
         let minWithdrawalAmount = 50;
         let minWithdrawalUpi = 50;
         let minWithdrawalBank = 1000;
@@ -4368,6 +4407,37 @@
                         this.handleNotificationClick(data);
                     };
                 }
+            }
+
+            async sendBrowserOnlyNotification(title, body, data = {}) {
+                if (!('Notification' in window)) {
+                    console.warn('Browser notifications are not supported in this environment.');
+                    return;
+                }
+
+                if (this.permission === 'default') {
+                    await this.requestPermission();
+                }
+
+                if (this.permission !== 'granted') {
+                    console.warn('Browser notification permission is not granted.');
+                    return;
+                }
+
+                const notification = new Notification(title, {
+                    body,
+                    icon: 'https://i.ibb.co/x8YBYwGG/6233389803554672153.jpg',
+                    badge: 'https://i.ibb.co/x8YBYwGG/6233389803554672153.jpg',
+                    data,
+                    tag: data.type || `wallet-event-${Date.now()}`,
+                    renotify: true
+                });
+
+                notification.onclick = () => {
+                    window.focus();
+                    notification.close();
+                    this.handleNotificationClick(data);
+                };
             }
 
             showInAppNotification(title, body, data = {}) {
