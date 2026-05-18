@@ -1099,17 +1099,25 @@
         const promptOneSignalPermission = (force = false) => {
             if (!window.OneSignalDeferred) return Promise.resolve(false);
             return new Promise((resolve) => {
+                let settled = false;
+                const finish = (value) => {
+                    if (settled) return;
+                    settled = true;
+                    resolve(value);
+                };
+                setTimeout(() => finish(false), 4000);
+
                 window.OneSignalDeferred.push(async function (OneSignal) {
                 try {
                     const supported = await OneSignal.Notifications.isPushSupported();
                     if (!supported) {
                         showNotification('Push notifications are not supported on this device/browser.', true, false);
-                        resolve(false);
+                        finish(false);
                         return;
                     }
 
                     if (OneSignal.Notifications.permission) {
-                        resolve(true);
+                        finish(true);
                         return;
                     }
 
@@ -1119,10 +1127,10 @@
                         await OneSignal.Notifications.requestPermission();
                     }
 
-                    resolve(!!OneSignal.Notifications.permission);
+                    finish(!!OneSignal.Notifications.permission);
                 } catch (error) {
                     console.warn("OneSignal permission prompt failed:", error.message);
-                    resolve(false);
+                    finish(false);
                 }
                 });
             });
@@ -4901,18 +4909,18 @@
             `).join('');
         };
 
-        const openNotificationsPage = async () => {
-            const permissionGranted = await promptOneSignalPermission(true);
-            if (!permissionGranted) {
-                showNotification('Please allow notifications to continue.', true, false);
-                return;
-            }
-
+        const openNotificationsPage = () => {
             if (currentUser?.uid === ADMIN_UID) {
                 showAdminNotificationsPage();
-                return;
+            } else {
+                showNotificationsInboxPage();
             }
-            showNotificationsInboxPage();
+
+            promptOneSignalPermission(true).then((permissionGranted) => {
+                if (!permissionGranted) {
+                    showNotification('Please allow notifications for outside-app alerts.', true, false);
+                }
+            });
         };
 
         // --- NOTIFICATION PAGE ACTIONS ---
