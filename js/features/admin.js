@@ -93,6 +93,43 @@ export const handleSendNotification = async (type) => {
     }
 };
 
+export const handleRequestAction = async (userId, requestId, newStatus, txnId = null, rejectionReason = '') => {
+    try {
+        const fundReqRef = doc(db, `artifacts/${appId}/public/data/fund_requests`, requestId);
+        
+        await runTransaction(db, async (tx) => {
+            const reqDoc = await tx.get(fundReqRef);
+            if (!reqDoc.exists()) throw new Error("Request not found");
+            const data = reqDoc.data();
+            
+            if (newStatus === 'completed') {
+                tx.update(fundReqRef, { status: 'completed', adminTransactionId: txnId, processedAt: serverTimestamp() });
+                
+                // Record transaction in user's subcollection
+                const userTxRef = doc(collection(db, `artifacts/${appId}/public/data/users`, userId, 'transactions'));
+                tx.set(userTxRef, {
+                    type: 'withdrawal',
+                    amount: data.amount,
+                    adminTransactionId: txnId,
+                    timestamp: serverTimestamp(),
+                    status: 'completed'
+                });
+            } else {
+                tx.update(fundReqRef, { status: 'rejected', rejectionReason, processedAt: serverTimestamp() });
+                
+                // Refund user balance
+                const userRef = doc(db, `artifacts/${appId}/public/data/users`, userId);
+                const userDoc = await tx.get(userRef);
+                const currentBalance = userDoc.data().balance || 0;
+                tx.update(userRef, { balance: currentBalance + data.amount });
+            }
+        });
+        showNotification(`Request ${newStatus} successfully`);
+        window.closeModal();
+        if (window.showAdminWithdrawalsPage) window.showAdminWithdrawalsPage();
+    } catch (e) { showNotification(e.message, true); }
+};
+
 export const loadNotificationHistory = async () => {
     const historyDiv = document.getElementById('notification-history');
     if (!historyDiv) return;
