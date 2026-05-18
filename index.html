@@ -19,6 +19,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <script src="https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.page.js" defer></script>
     <script>
         tailwind.config = {
             darkMode: 'class',
@@ -30,6 +31,22 @@
                 },
             },
         }
+
+        window.OneSignalDeferred = window.OneSignalDeferred || [];
+        window.oneSignalReady = false;
+        OneSignalDeferred.push(async function (OneSignal) {
+            try {
+                await OneSignal.init({
+                    appId: "4affd7dd-a2c1-4b94-8253-dde142f4c847",
+                    safari_web_id: "web.onesignal.auto.1969a531-155e-4c74-883a-18e03006540c",
+                    notifyButton: { enable: true },
+                    allowLocalhostAsSecureOrigin: true,
+                });
+                window.oneSignalReady = true;
+            } catch (e) {
+                console.warn("OneSignal initialization failed:", e.message);
+            }
+        });
     </script>
     <style>
         html,
@@ -1022,6 +1039,30 @@
         const auth = getAuth(app);
         const db = getFirestore(app);
 
+        const syncOneSignalUser = (user) => {
+            if (!user || !window.OneSignalDeferred) return;
+            window.OneSignalDeferred.push(async function (OneSignal) {
+                try {
+                    await OneSignal.login(user.uid);
+                    OneSignal.User.addAlias("firebase_uid", user.uid);
+                    if (user.email) OneSignal.User.addAlias("email", user.email);
+                } catch (error) {
+                    console.warn("OneSignal user sync failed:", error.message);
+                }
+            });
+        };
+
+        const logoutOneSignalUser = () => {
+            if (!window.OneSignalDeferred) return;
+            window.OneSignalDeferred.push(async function (OneSignal) {
+                try {
+                    await OneSignal.logout();
+                } catch (error) {
+                    console.warn("OneSignal logout failed:", error.message);
+                }
+            });
+        };
+
         try {
             setLogLevel('Debug');
         } catch (e) {
@@ -1551,6 +1592,7 @@
 
             if (user) {
                 currentUser = user;
+                syncOneSignalUser(user);
 
                 // Hide loading overlay if shown
                 hideLoading();
@@ -1589,6 +1631,7 @@
                 localStorage.setItem('lastLoggedInUser', user.uid);
             } else {
                 currentUser = null;
+                logoutOneSignalUser();
                 hideLoading();
                 // Remove saved user
                 localStorage.removeItem('lastLoggedInUser');
@@ -4237,7 +4280,7 @@
         class PushNotificationSystem {
             constructor() {
                 this.notifications = [];
-                this.permission = Notification.permission;
+                this.permission = 'Notification' in window ? Notification.permission : 'unsupported';
                 this.initialize();
             }
 
@@ -4257,6 +4300,11 @@
             }
 
             async requestPermission() {
+                if (!('Notification' in window)) {
+                    console.warn('Browser notifications are not supported in this environment.');
+                    return;
+                }
+
                 try {
                     this.permission = await Notification.requestPermission();
                     if (this.permission === 'granted') {
@@ -4272,7 +4320,7 @@
                 this.showInAppNotification(title, body, data);
 
                 // Show browser notification if permission granted
-                if (this.permission === 'granted') {
+                if ('Notification' in window && this.permission === 'granted') {
                     const notification = new Notification(title, {
                         body: body,
                         icon: 'https://i.ibb.co/x8YBYwGG/6233389803554672153.jpg',
@@ -4399,8 +4447,9 @@
                         showAllTransactionsPage();
                     }
                 } else if (data.type === 'admin_message') {
-                    const center = document.getElementById('notification-center');
-                    if (center) center.classList.remove('hidden');
+                    showNotificationsInboxPage();
+                } else {
+                    showNotificationsInboxPage();
                 }
             }
 
@@ -4485,6 +4534,57 @@
                     }
                 }
             }
+
+            startNotificationListener() {
+                if (!currentUser) return;
+                if (this.notificationUnsubscribe) {
+                    this.notificationUnsubscribe();
+                }
+
+                const targets = currentUser.uid === ADMIN_UID ? ['admin', ADMIN_UID, 'all'] : [currentUser.uid, 'all'];
+                const notificationsQuery = query(
+                    collection(db, `artifacts/${appId}/notifications`),
+                    where("userId", "in", targets),
+                    orderBy("createdAt", "desc"),
+                    limit(25)
+                );
+
+                let isInitialSnapshot = true;
+                this.notificationUnsubscribe = onSnapshot(notificationsQuery, (snapshot) => {
+                    snapshot.docChanges().forEach((change) => {
+                        if (change.type !== 'added') return;
+
+                        const notificationId = change.doc.id;
+                        if (this.notifications.some(n => n.data?.notificationId === notificationId)) return;
+
+                        const data = change.doc.data();
+                        const notificationPayload = {
+                            type: 'admin_message',
+                            notificationId,
+                            important: !!data.important,
+                            createdAt: data.createdAt,
+                        };
+
+                        if (isInitialSnapshot) {
+                            this.addToNotificationsList({
+                                title: data.title,
+                                message: data.message,
+                                type: data.type || 'admin',
+                                createdAt: data.createdAt,
+                            });
+                            return;
+                        }
+
+                        this.sendNotification(data.title || 'Notification', data.message || '', notificationPayload);
+                    });
+
+                    isInitialSnapshot = false;
+                }, (error) => {
+                    console.error('Notification listener error:', error);
+                });
+
+                unsubscribers.push(this.notificationUnsubscribe);
+            }
         }
 
         // Initialize push notification system
@@ -4526,19 +4626,72 @@
             }
         };
 
-        // --- NOTIFICATION CENTER TOGGLE ---
+        const showNotificationsInboxPage = () => {
+            unreadNotificationsCount = 0;
+            notificationSystem.updateNotificationCount(0);
+            notificationSystem.notifications = notificationSystem.notifications.map(n => ({ ...n, read: true }));
+            notificationSystem.saveNotifications();
+
+            const notifications = [...notificationSystem.notifications].sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+            const listHtml = notifications.length ? notifications.map(notif => `
+                <div class="p-4 bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700">
+                    <div class="flex items-start gap-3">
+                        <div class="w-10 h-10 rounded-full bg-blue-100 dark:bg-blue-900 flex items-center justify-center flex-shrink-0">
+                            <svg class="w-5 h-5 text-blue-600 dark:text-blue-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6 6 0 10-12 0v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0a3 3 0 11-6 0"></path>
+                            </svg>
+                        </div>
+                        <div class="min-w-0 flex-1">
+                            <h4 class="font-semibold text-gray-900 dark:text-gray-100">${notif.title || 'Notification'}</h4>
+                            <p class="text-sm text-gray-600 dark:text-gray-400 mt-1">${notif.body || notif.message || ''}</p>
+                            <p class="text-xs text-gray-500 mt-2">${notificationSystem.formatTimeAgo(notif.timestamp)}</p>
+                        </div>
+                    </div>
+                </div>
+            `).join('') : '<div class="text-center py-12 text-gray-500 dark:text-gray-400">No notifications yet.</div>';
+
+            showPage(`
+                ${getPageHeader('Notifications')}
+                <div class="max-w-3xl mx-auto space-y-3">
+                    ${listHtml}
+                </div>
+                ${getPageFooter()}
+            `);
+        };
+
+        const getPushSupportStatus = () => {
+            const rows = [
+                { label: 'OneSignal SDK', ok: !!window.OneSignalDeferred, detail: window.oneSignalReady ? 'Initialized' : 'Loading' },
+                { label: 'Service Worker', ok: 'serviceWorker' in navigator, detail: 'OneSignalSDKWorker.js is present at site root' },
+                { label: 'Browser Push API', ok: 'PushManager' in window, detail: 'Required for Chrome/web push' },
+                { label: 'Notifications API', ok: 'Notification' in window, detail: 'Required for browser permission prompts' },
+                { label: 'Secure Context', ok: window.isSecureContext || location.hostname === 'localhost', detail: 'HTTPS is required after deployment' },
+            ];
+
+            return rows.map(row => `
+                <div class="flex items-center justify-between gap-3 p-3 bg-gray-50 dark:bg-gray-700/50 rounded-lg">
+                    <div>
+                        <p class="text-sm font-semibold">${row.label}</p>
+                        <p class="text-xs text-gray-500 dark:text-gray-400">${row.detail}</p>
+                    </div>
+                    <span class="text-xs font-bold px-2 py-1 rounded-full ${row.ok ? 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300' : 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300'}">${row.ok ? 'OK' : 'No'}</span>
+                </div>
+            `).join('');
+        };
+
+        const openNotificationsPage = () => {
+            if (currentUser?.uid === ADMIN_UID) {
+                showAdminNotificationsPage();
+                return;
+            }
+            showNotificationsInboxPage();
+        };
+
+        // --- NOTIFICATION PAGE ACTIONS ---
         document.addEventListener('click', (e) => {
             if (e.target.closest('#notification-bell')) {
-                const center = document.getElementById('notification-center');
-                if (center) {
-                    center.classList.toggle('hidden');
-
-                    if (!center.classList.contains('hidden')) {
-                        // Mark all as read when opening
-                        unreadNotificationsCount = 0;
-                        notificationSystem.updateNotificationCount(0);
-                    }
-                }
+                e.preventDefault();
+                openNotificationsPage();
             }
 
             if (e.target.closest('#mark-all-read')) {
@@ -4567,6 +4720,13 @@
             const content = `
         ${getPageHeader('Send Notifications')}
         <div class="max-w-2xl mx-auto bg-white dark:bg-gray-800 p-6 rounded-xl shadow-md space-y-6">
+            <div class="space-y-2">
+                <h4 class="font-semibold">Push Support</h4>
+                <div class="grid grid-cols-1 gap-2">
+                    ${getPushSupportStatus()}
+                </div>
+            </div>
+
             <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div class="p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
                     <h4 class="font-semibold text-blue-700 dark:text-blue-300">Send to All Users</h4>
