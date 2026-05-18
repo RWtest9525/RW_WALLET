@@ -117,9 +117,11 @@ export const handleWithdrawRequest = async (amount, method, methodName, paymentI
         showNotification('Withdrawal request submitted successfully!');
         window.hidePage();
     } catch (error) {
+        console.error("Withdrawal error:", error);
         showNotification(error.message, true);
     }
 };
+
 export const handleRedeem = async () => {
     const code = document.getElementById('gift-code-input').value.trim();
     if (!code) return showNotification('Please enter a gift code', true);

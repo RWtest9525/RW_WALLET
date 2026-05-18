@@ -168,6 +168,11 @@ const renderDashboardHistory = () => {
 };
 
 onAuthStateChanged(auth, (user) => {
+    console.log("Auth state changed:", user ? "User logged in" : "No user");
+    
+    // Hide initialization fallback
+    document.getElementById('js-fail-msg')?.classList.add('hidden');
+    
     setCurrentUser(user);
     const authScreen = document.getElementById('auth-screen');
     const mainContent = document.getElementById('main-content');

@@ -47,6 +47,15 @@
 </head>
 
 <body class="bg-gray-100 dark:bg-gray-900 text-gray-800 dark:text-gray-200 font-sans">
+    <!-- White Screen Fallback -->
+    <div id="js-fail-msg" class="fixed inset-0 flex items-center justify-center bg-white z-[100] text-center p-6">
+        <div>
+            <div class="loading-spinner w-12 h-12 border-4 mb-4 mx-auto"></div>
+            <h2 class="text-xl font-bold mb-2">Initializing Wallet...</h2>
+            <p class="text-gray-500 text-sm">If this takes too long, please refresh the page.</p>
+        </div>
+    </div>
+
     <!-- UI Infrastructure -->
     <div id="loading-overlay" class="loading-overlay hidden">
         <div class="loading-spinner"></div>
