@@ -797,34 +797,65 @@
 
                 <!-- User Panel -->
                 <div id="user-panel" class="tab-content">
-                    <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
-                        <div class="md:col-span-1 space-y-6">
-                            <div class="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-md">
-                                <h3 class="text-sm font-medium text-gray-500 dark:text-gray-400">Your Balance</h3>
-                                <p id="user-balance" class="text-4xl font-bold mt-2">₹0.00</p>
+                    <div class="grid grid-cols-1 lg:grid-cols-5 gap-5">
+                        <div class="lg:col-span-2 space-y-5">
+                            <div class="relative overflow-hidden bg-gradient-to-br from-slate-900 via-blue-900 to-emerald-700 dark:from-gray-800 dark:via-blue-950 dark:to-emerald-900 p-6 rounded-2xl shadow-xl text-white">
+                                <div class="absolute -right-10 -top-10 h-36 w-36 rounded-full border border-white/15"></div>
+                                <div class="absolute right-6 bottom-5 h-14 w-14 rounded-2xl bg-white/10 border border-white/15"></div>
+                                <div class="relative">
+                                    <div class="flex items-center justify-between">
+                                        <h3 class="text-sm font-medium text-white/75">Your Balance</h3>
+                                        <div class="w-10 h-10 rounded-xl bg-white/15 flex items-center justify-center">
+                                            <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 9V7a5 5 0 00-10 0v2M5 9h14l-1 11H6L5 9z"></path>
+                                            </svg>
+                                        </div>
+                                    </div>
+                                    <p id="user-balance" class="text-4xl font-bold mt-4 tracking-tight">₹0.00</p>
+                                </div>
                             </div>
-                            <div class="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-md space-y-3">
-                                <h3 class="text-lg font-semibold mb-3">Actions</h3>
+                            <div class="bg-white dark:bg-gray-800 p-5 rounded-2xl shadow-md border border-gray-100 dark:border-gray-700">
+                                <h3 class="text-lg font-semibold mb-4">Actions</h3>
+                                <div class="grid grid-cols-1 sm:grid-cols-3 lg:grid-cols-1 gap-3">
                                 <button id="withdraw-fund-btn"
-                                    class="w-full bg-yellow-500 text-white font-semibold py-3 rounded-lg hover:bg-yellow-600 transition">Withdraw
-                                    Fund</button>
+                                    class="group w-full flex items-center gap-3 bg-yellow-50 dark:bg-yellow-900/20 text-yellow-700 dark:text-yellow-200 font-semibold p-4 rounded-xl hover:bg-yellow-100 dark:hover:bg-yellow-900/30 transition border border-yellow-200 dark:border-yellow-800 text-left">
+                                    <span class="w-11 h-11 rounded-xl bg-yellow-500 text-white flex items-center justify-center shadow-sm group-hover:scale-105 transition">
+                                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v12m0 0l-4-4m4 4l4-4M5 19h14"></path>
+                                        </svg>
+                                    </span>
+                                    <span>Withdraw Fund</span>
+                                </button>
                                 <button id="redeem-gift-card-btn"
-                                    class="w-full bg-green-500 text-white font-semibold py-3 rounded-lg hover:bg-green-600 transition">Redeem
-                                    Gift Card</button>
+                                    class="group w-full flex items-center gap-3 bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-200 font-semibold p-4 rounded-xl hover:bg-green-100 dark:hover:bg-green-900/30 transition border border-green-200 dark:border-green-800 text-left">
+                                    <span class="w-11 h-11 rounded-xl bg-green-500 text-white flex items-center justify-center shadow-sm group-hover:scale-105 transition">
+                                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 12v8H4v-8m16 0H4m16 0V8H4v4m8-4v12m0-12h3a2 2 0 100-4c-2 0-3 4-3 4zm0 0H9a2 2 0 110-4c2 0 3 4 3 4z"></path>
+                                        </svg>
+                                    </span>
+                                    <span>Redeem Gift Card</span>
+                                </button>
                                 <button id="pay-to-wallet-btn"
-                                    class="w-full bg-purple-500 text-white font-semibold py-3 rounded-lg hover:bg-purple-600 transition">Pay
-                                    to Wallet</button>
+                                    class="group w-full flex items-center gap-3 bg-purple-50 dark:bg-purple-900/20 text-purple-700 dark:text-purple-200 font-semibold p-4 rounded-xl hover:bg-purple-100 dark:hover:bg-purple-900/30 transition border border-purple-200 dark:border-purple-800 text-left">
+                                    <span class="w-11 h-11 rounded-xl bg-purple-500 text-white flex items-center justify-center shadow-sm group-hover:scale-105 transition">
+                                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 8l4 4m0 0l-4 4m4-4H3"></path>
+                                        </svg>
+                                    </span>
+                                    <span>Pay to Wallet</span>
+                                </button>
+                                </div>
                             </div>
                         </div>
-                        <div class="md:col-span-2 space-y-6">
-                            <div class="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-md">
+                        <div class="lg:col-span-3 space-y-5">
+                            <div class="bg-white dark:bg-gray-800 p-5 sm:p-6 rounded-2xl shadow-md border border-gray-100 dark:border-gray-700 min-h-full">
                                 <div class="flex justify-between items-center mb-4">
                                     <h3 class="text-lg font-semibold">Transaction History</h3>
                                     <button id="view-all-tx-btn"
                                         class="text-sm font-medium text-blue-500 hover:underline">View All</button>
                                 </div>
-                                <div id="transactions-list" class="space-y-3 max-h-96 overflow-y-auto pr-2">
-                                    <p class="text-gray-500 dark:text-gray-400">No transactions yet.</p>
+                                <div id="transactions-list" class="space-y-3 max-h-[30rem] overflow-y-auto pr-2">
+                                    <p class="text-gray-500 dark:text-gray-400 text-center py-14 bg-gray-50 dark:bg-gray-700/40 rounded-xl border border-dashed border-gray-200 dark:border-gray-700">No transactions yet.</p>
                                 </div>
                             </div>
                         </div>
