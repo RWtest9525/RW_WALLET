@@ -1,0 +1,12 @@
+# IDE files
+.vscode/
+.trae/
+
+# Temp files
+temp.js
+*.tmp
+*.log
+
+# OS files
+Thumbs.db
+.DS_Store
