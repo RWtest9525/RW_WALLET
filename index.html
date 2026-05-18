@@ -658,7 +658,10 @@
                         <div class="lg:col-span-2 space-y-5">
                             <div class="relative overflow-hidden bg-gradient-to-br from-slate-900 via-blue-900 to-emerald-700 dark:from-gray-800 dark:via-blue-950 dark:to-emerald-900 p-6 rounded-2xl shadow-xl text-white">
                                 <div class="absolute -right-10 -top-10 h-36 w-36 rounded-full border border-white/15"></div>
-                                <div class="absolute right-6 bottom-5 h-14 w-14 rounded-2xl bg-white/10 border border-white/15"></div>
+                                <div class="absolute right-5 bottom-5 min-w-20 h-14 rounded-2xl bg-white/10 border border-white/15 flex flex-col items-center justify-center px-3 text-right">
+                                    <span class="text-[9px] uppercase tracking-wide text-white/55">USD</span>
+                                    <span id="user-balance-usd" class="text-sm font-bold text-white">$--</span>
+                                </div>
                                 <div class="relative">
                                     <div class="flex items-center justify-between">
                                         <h3 class="text-sm font-medium text-white/75">Your Balance</h3>
@@ -1000,6 +1003,49 @@
 
         // --- UI UTILS ---
         const formatCurrency = (amount) => new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR' }).format(amount || 0);
+        const formatUsd = (amount) => `$${Number(amount || 0).toFixed(2)}`;
+
+        let usdInrRateCache = null;
+        let usdInrRateDate = '';
+        let usdRateFetchPromise = null;
+
+        const updateDollarBalanceDisplay = async (balance) => {
+            const usdEl = document.getElementById('user-balance-usd');
+            if (!usdEl) return;
+            usdEl.textContent = '$--';
+
+            try {
+                const rate = await fetchUsdInrRate();
+                usdEl.textContent = formatUsd((balance || 0) / rate);
+            } catch (e) {
+                console.error('USD balance update failed:', e);
+                usdEl.textContent = '$--';
+            }
+        };
+
+        const fetchUsdInrRate = async () => {
+            const today = new Date().toISOString().slice(0, 10);
+            if (usdInrRateCache && usdInrRateDate === today) return usdInrRateCache;
+            if (usdRateFetchPromise) return usdRateFetchPromise;
+
+            usdRateFetchPromise = fetch('https://open.er-api.com/v6/latest/USD')
+                .then(res => {
+                    if (!res.ok) throw new Error(`Rate API error ${res.status}`);
+                    return res.json();
+                })
+                .then(data => {
+                    const rate = data?.rates?.INR;
+                    if (!rate) throw new Error('INR rate missing');
+                    usdInrRateCache = rate;
+                    usdInrRateDate = today;
+                    return rate;
+                })
+                .finally(() => {
+                    usdRateFetchPromise = null;
+                });
+
+            return usdRateFetchPromise;
+        };
 
         const formatDate = (timestamp) => {
             if (!timestamp) return 'N/A';
@@ -1295,6 +1341,7 @@
             document.getElementById('dashboard-content').classList.remove('hidden');
             document.getElementById('page-container').classList.add('hidden');
             document.getElementById('page-container').innerHTML = '';
+            updateDollarBalanceDisplay(currentUserData?.balance || 0);
             const selectedTab = document.querySelector('.tab-button[aria-selected="true"]');
             if (selectedTab) {
                 switchTab(selectedTab.dataset.tab);
@@ -1587,6 +1634,7 @@
                     console.log("User data snapshot received:", doc.data());
                     const data = doc.data();
                     document.getElementById('user-balance').textContent = formatCurrency(data.balance);
+                    updateDollarBalanceDisplay(data.balance);
                     currentUserData = data;
                     processDuePartnerInvestmentsForUser(userId).catch(e => console.error('Auto partner interest check failed:', e));
                     processDueLoansForUser(userId).catch(e => console.error('Auto loan debit check failed:', e));
@@ -5487,6 +5535,7 @@
             document.querySelectorAll('.tab-content').forEach(content => content.classList.add('hidden'));
             const panel = document.getElementById(tabId);
             if (panel) panel.classList.remove('hidden');
+            if (tabId === 'user-panel') updateDollarBalanceDisplay(currentUserData?.balance || 0);
         };
 
         // --- MASTER EVENT LISTENER (for data-action buttons) ---
