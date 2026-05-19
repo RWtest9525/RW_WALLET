@@ -523,6 +523,132 @@
         .fade-in {
             animation: fadeIn 0.3s ease-in;
         }
+
+        /* Dark theme polish only. Light theme is intentionally untouched. */
+        .dark body {
+            background:
+                radial-gradient(circle at top left, rgba(37, 99, 235, 0.12), transparent 34rem),
+                linear-gradient(180deg, #090f1d 0%, #0b1120 48%, #111827 100%) !important;
+            color: #e5e7eb;
+        }
+
+        .dark #page-container,
+        .dark #transaction-overlay,
+        .dark .bg-gray-100,
+        .dark .bg-gray-50 {
+            background-color: #0b1120 !important;
+        }
+
+        .dark .bg-white,
+        .dark .dark\:bg-gray-800 {
+            background-color: #151c2b !important;
+        }
+
+        .dark .dark\:bg-gray-800\/95 {
+            background-color: rgba(21, 28, 43, 0.96) !important;
+        }
+
+        .dark .dark\:bg-gray-700,
+        .dark .dark\:bg-gray-700\/50 {
+            background-color: #20293a !important;
+        }
+
+        .dark input,
+        .dark select,
+        .dark textarea {
+            background-color: #111827 !important;
+            border: 1px solid #334155 !important;
+            color: #f8fafc !important;
+        }
+
+        .dark input::placeholder,
+        .dark textarea::placeholder {
+            color: #94a3b8 !important;
+        }
+
+        .dark .border-gray-100,
+        .dark .border-gray-200,
+        .dark .dark\:border-gray-700,
+        .dark .dark\:border-gray-600 {
+            border-color: #2f3b52 !important;
+        }
+
+        .dark .shadow-md,
+        .dark .shadow-lg,
+        .dark .shadow-xl,
+        .dark .shadow-2xl {
+            box-shadow: 0 18px 45px rgba(0, 0, 0, 0.34) !important;
+        }
+
+        .dark .text-gray-800,
+        .dark .text-gray-900 {
+            color: #f8fafc !important;
+        }
+
+        .dark .text-gray-500,
+        .dark .text-gray-400,
+        .dark .dark\:text-gray-400 {
+            color: #a8b3c7 !important;
+        }
+
+        .dark .page-header-fixed,
+        .dark #bottom-nav {
+            background-color: rgba(15, 23, 42, 0.94) !important;
+            border-color: #2f3b52 !important;
+            backdrop-filter: blur(16px);
+        }
+
+        .dark .bottom-nav-icon {
+            background-color: #20293a !important;
+            color: #cbd5e1;
+        }
+
+        .dark .bottom-nav-btn.active .bottom-nav-icon {
+            background: linear-gradient(135deg, #2563eb, #06b6d4) !important;
+            color: #ffffff !important;
+        }
+
+        .dark .filter-btn {
+            background-color: #111827 !important;
+            border-color: #334155 !important;
+            color: #cbd5e1 !important;
+        }
+
+        .dark .filter-btn.active-filter {
+            background: linear-gradient(135deg, #2563eb, #06b6d4) !important;
+            color: #ffffff !important;
+            border-color: transparent !important;
+        }
+
+        .dark .modal-backdrop {
+            background-color: rgba(2, 6, 23, 0.78);
+        }
+
+        .dark .chat-bubble-user {
+            background-color: rgba(16, 185, 129, 0.18) !important;
+            border-color: rgba(16, 185, 129, 0.34) !important;
+        }
+
+        .dark .chat-bubble-admin {
+            background-color: #1b2433 !important;
+            border-color: #334155 !important;
+        }
+
+        .dark img[src*="flaticon.com"],
+        .dark img[src*="wikimedia.org"],
+        .dark img[src*="iconscout.com"] {
+            background-color: rgba(255, 255, 255, 0.94);
+            border-radius: 12px;
+            padding: 3px;
+            box-shadow: 0 8px 18px rgba(0, 0, 0, 0.22);
+        }
+
+        .dark img[alt="Reviews World Logo"],
+        .dark img[src*="i.ibb.co"] {
+            background-color: transparent;
+            padding: 0;
+            box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.18), 0 10px 22px rgba(0, 0, 0, 0.28);
+        }
     </style>
 </head>
 
@@ -1153,6 +1279,8 @@
             balance: data.balance || 0,
             paymentMethod: data.paymentMethod || '',
             paymentDetails: data.paymentDetails || {},
+            whatsappNumber: data.whatsappNumber || data.mobile || '',
+            websiteLinks: Array.isArray(data.websiteLinks) ? data.websiteLinks.slice(0, 3) : [],
             isProProfile: !!data.isProProfile,
             isFlagged: !!data.isFlagged,
             loanEligible: !!data.loanEligible
@@ -2065,6 +2193,8 @@
 
         const showProfilePage = () => {
             if (!currentUserData) return showNotification('User data not loaded. Please wait.', true);
+            const isAdminProfile = currentUser?.uid === ADMIN_UID;
+            const websiteLinks = Array.isArray(currentUserData.websiteLinks) ? currentUserData.websiteLinks.slice(0, 3) : [];
 
             const paymentMethods = [
                 { value: '', label: 'Select Payment Method' },
@@ -2110,6 +2240,21 @@
                     <div id="payment-details-container">
                         ${paymentDetailsForm}
                     </div>
+                    ${isAdminProfile ? `
+                    <div class="rounded-2xl border border-blue-100 dark:border-blue-800 bg-blue-50/60 dark:bg-blue-900/20 p-4 space-y-3">
+                        <div>
+                            <p class="text-sm font-bold text-blue-900 dark:text-blue-100">Support Profile</p>
+                            <p class="text-xs text-blue-600 dark:text-blue-300">Shown in chat profile details.</p>
+                        </div>
+                        <div class="space-y-1">
+                            <label class="text-sm font-medium text-gray-500 dark:text-gray-400">WhatsApp Number</label>
+                            <input type="tel" id="profile-whatsapp-input" value="${currentUserData.whatsappNumber || currentUserData.mobile || ''}" maxlength="15" placeholder="WhatsApp number" class="w-full px-4 py-3 bg-white dark:bg-gray-700 border-transparent rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+                        </div>
+                        <div class="space-y-2">
+                            <label class="text-sm font-medium text-gray-500 dark:text-gray-400">Website Links (optional, max 3)</label>
+                            ${[0, 1, 2].map(i => `<input type="url" id="profile-website-${i}" value="${escapeHtml(websiteLinks[i] || '')}" placeholder="https://example.com" class="w-full px-4 py-3 bg-white dark:bg-gray-700 border-transparent rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">`).join('')}
+                        </div>
+                    </div>` : ''}
                     <button id="save-profile-btn" class="w-full bg-blue-600 text-white font-semibold py-3 rounded-lg hover:bg-blue-700 transition">Save Changes</button>
                 </div>
                 ${getPageFooter()}`;
@@ -2410,8 +2555,8 @@
                                         <td class="px-4 py-4 font-black text-red-600 dark:text-red-300">${formatCurrency(item.amount || 0)}</td>
                                         <td class="px-4 py-4 text-slate-600 dark:text-slate-300">${formatDateDDMMYY(item.timestamp || item.requestedAt)}</td>
                                         <td class="px-4 py-4 text-slate-600 dark:text-slate-300">${formatDateDDMMYY(item.processedAt || item.timestamp)}</td>
-                                        <td class="px-4 py-4"><span class="rounded-full bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-200 px-3 py-1 text-xs font-bold">${escapeHtml(item.method || item.paymentMethod || 'N/A')}</span></td>
-                                        <td class="px-4 py-4 text-slate-600 dark:text-slate-300 max-w-[220px] break-words">${escapeHtml(item.upiId || item.accountNumber || item.email || item.paymentDetails || item.comment || 'N/A')}</td>
+                                        <td class="px-4 py-4"><span class="rounded-full bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-200 px-3 py-1 text-xs font-bold">${escapeHtml(item.method || getWithdrawalMethodName(item.methodId || item.paymentMethod, 'N/A'))}</span></td>
+                                        <td class="px-4 py-4 text-slate-600 dark:text-slate-300 max-w-[220px] break-words">${escapeHtml(getWithdrawalDetailText(item))}</td>
                                         <td class="px-4 py-4 font-mono text-xs text-slate-500 dark:text-slate-400">${escapeHtml(item.adminTransactionId || item.transactionId || 'N/A')}</td>
                                     </tr>`).join('')}
                             </tbody>
@@ -2488,8 +2633,8 @@
                 text(formatPdfCurrency(item.amount || 0), 50, y, 8, 'F2', '0.78 0.12 0.12');
                 text(truncatePdfText(formatDateDDMMYY(item.timestamp || item.requestedAt), 16), 125, y, 8, 'F1', '0.18 0.24 0.33');
                 text(truncatePdfText(formatDateDDMMYY(item.processedAt || item.timestamp), 16), 225, y, 8, 'F1', '0.18 0.24 0.33');
-                text(truncatePdfText(item.method || item.paymentMethod || 'N/A', 10), 325, y, 8, 'F2', '0.05 0.35 0.75');
-                text(truncatePdfText(item.upiId || item.accountNumber || item.email || item.comment || 'N/A', 18), 395, y, 8, 'F1', '0.18 0.24 0.33');
+                text(truncatePdfText(item.method || getWithdrawalMethodName(item.methodId || item.paymentMethod, 'N/A'), 10), 325, y, 8, 'F2', '0.05 0.35 0.75');
+                text(truncatePdfText(getWithdrawalDetailText(item), 18), 395, y, 8, 'F1', '0.18 0.24 0.33');
                 text(truncatePdfText(item.adminTransactionId || item.transactionId || 'N/A', 10), 505, y, 8, 'F1', '0.18 0.24 0.33');
                 y -= 30;
             });
@@ -2541,13 +2686,43 @@
 
         const getSupportLogo = () => 'https://i.ibb.co/x8YBYwGG/6233389803554672153.jpg';
 
-        const showSupportProfileModal = () => {
+        const showSupportProfileModal = async () => {
+            let supportProfile = allUsersCache.find(u => u.id === ADMIN_UID) || {};
+            try {
+                const adminDoc = await getDoc(doc(db, `artifacts/${appId}/public/data/users`, ADMIN_UID));
+                if (adminDoc.exists()) supportProfile = { id: ADMIN_UID, ...adminDoc.data() };
+            } catch (e) {
+                console.error('Support profile load failed:', e);
+            }
+
+            const whatsappNumber = supportProfile.whatsappNumber || supportProfile.mobile || '';
+            const whatsappDigits = whatsappNumber.replace(/\D/g, '');
+            const whatsappHrefNumber = whatsappDigits.length > 10 ? whatsappDigits : `91${whatsappDigits.slice(-10)}`;
+            const websiteLinks = Array.isArray(supportProfile.websiteLinks) ? supportProfile.websiteLinks.slice(0, 3) : [];
+            const renderSupportLink = (link) => {
+                const safeLink = escapeHtml(link);
+                return `<a href="${safeLink}" target="_blank" rel="noopener noreferrer" class="block rounded-xl border border-blue-100 dark:border-blue-800 bg-white dark:bg-gray-800 px-3 py-2 text-sm font-semibold text-blue-700 dark:text-blue-300 break-all hover:underline">${safeLink}</a>`;
+            };
             renderModal('REVIEWS WORLD',
                 `<div class="space-y-4 text-center">
                     <img src="${getSupportLogo()}" alt="REVIEWS WORLD" class="h-20 w-20 rounded-full mx-auto object-cover shadow-md">
                     <div class="rounded-2xl bg-blue-50 dark:bg-blue-900/20 border border-blue-100 dark:border-blue-800 p-4">
                         <h3 class="text-lg font-bold text-blue-900 dark:text-blue-100">REVIEWS WORLD</h3>
-                        <p class="text-sm text-blue-600 dark:text-blue-300">${escapeHtml(currentUserData?.email || currentUser?.email || '')}</p>
+                        <p class="text-sm text-blue-600 dark:text-blue-300">${escapeHtml(supportProfile.email || 'reviewsworld01@gmail.com')}</p>
+                    </div>
+                    <div class="grid grid-cols-1 gap-3 text-left">
+                        <div class="rounded-2xl bg-green-50 dark:bg-green-900/20 border border-green-100 dark:border-green-800 p-4">
+                            <p class="text-xs font-bold uppercase text-green-600 dark:text-green-300 mb-2">WhatsApp</p>
+                            ${whatsappNumber
+                                ? `<a href="https://wa.me/${escapeHtml(whatsappHrefNumber)}" target="_blank" rel="noopener noreferrer" class="text-sm font-bold text-green-800 dark:text-green-100 hover:underline">${escapeHtml(whatsappNumber)}</a>`
+                                : '<p class="text-sm text-gray-500 dark:text-gray-400">Not added yet</p>'}
+                        </div>
+                        <div class="rounded-2xl bg-blue-50 dark:bg-blue-900/20 border border-blue-100 dark:border-blue-800 p-4">
+                            <p class="text-xs font-bold uppercase text-blue-600 dark:text-blue-300 mb-2">Website Links</p>
+                            <div class="space-y-2">
+                                ${websiteLinks.length ? websiteLinks.map(renderSupportLink).join('') : '<p class="text-sm text-gray-500 dark:text-gray-400">No website links added</p>'}
+                            </div>
+                        </div>
                     </div>
                     <div class="rounded-2xl bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-100 dark:border-emerald-800 p-4 text-left">
                         <p class="text-xs font-bold uppercase text-emerald-600 dark:text-emerald-300 mb-2">Description</p>
@@ -2562,6 +2737,15 @@
             if (!timestamp) return '';
             const date = timestamp.toDate ? timestamp.toDate() : new Date(timestamp);
             return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        };
+        const formatChatDate = (timestamp) => {
+            if (!timestamp) return '';
+            const date = timestamp.toDate ? timestamp.toDate() : new Date(timestamp);
+            if (Number.isNaN(date.getTime())) return '';
+            const dd = String(date.getDate()).padStart(2, '0');
+            const mm = String(date.getMonth() + 1).padStart(2, '0');
+            const yyyy = date.getFullYear();
+            return `${dd}/${mm}/${yyyy}`;
         };
 
         const renderMessageTicks = (message, isMine) => {
@@ -2591,9 +2775,17 @@
             const wasNearBottom = list.scrollHeight - list.scrollTop - list.clientHeight < 90;
             list.innerHTML = messages.length === 0
                 ? '<p class="text-center text-sm text-gray-500 dark:text-gray-400 py-8">Start a chat with Reviews World support.</p>'
-                : messages.map(message => {
+                : messages.map((message, index) => {
                     const isMine = message.senderRole === viewerRole;
+                    const messageDate = formatChatDate(message.createdAt);
+                    const previousDate = index > 0 ? formatChatDate(messages[index - 1].createdAt) : '';
+                    const dateDivider = messageDate && messageDate !== previousDate
+                        ? `<div class="flex justify-center py-1">
+                                <span class="rounded-full bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 px-3 py-1 text-[10px] font-bold text-gray-500 dark:text-gray-400 shadow-sm">${messageDate}</span>
+                           </div>`
+                        : '';
                     return `
+                        ${dateDivider}
                         <div class="flex ${isMine ? 'justify-end' : 'justify-start'}" data-message-id="${message.id}">
                             <div class="w-fit max-w-[82%] px-3 py-1.5 shadow-sm ${isMine ? 'chat-bubble-user bg-emerald-50 dark:bg-emerald-900/40 text-gray-900 dark:text-white border border-emerald-100 dark:border-emerald-800' : 'chat-bubble-admin bg-white dark:bg-gray-800 text-gray-900 dark:text-white border border-gray-100 dark:border-gray-700'}">
                                 <span class="text-sm leading-5 break-words align-baseline">${escapeHtml(message.text || '')}</span>
@@ -2751,9 +2943,19 @@
         const renderAdminChatsList = () => {
             const list = document.getElementById('admin-chats-list');
             if (!list) return;
-            list.innerHTML = allSupportChatsCache.length === 0
+            const searchTerm = (document.getElementById('admin-chat-search')?.value || '').trim().toLowerCase();
+            const chatsToRender = searchTerm
+                ? allSupportChatsCache.filter(chat => [
+                    chat.userName,
+                    chat.userEmail,
+                    chat.userMobile,
+                    chat.lastMessage
+                ].some(value => String(value || '').toLowerCase().includes(searchTerm)))
+                : allSupportChatsCache;
+
+            list.innerHTML = chatsToRender.length === 0
                 ? '<p class="text-center text-gray-500 dark:text-gray-400 py-8">No chats received yet.</p>'
-                : allSupportChatsCache.map(chat => `
+                : chatsToRender.map(chat => `
                     <button data-chat-userid="${chat.userId || chat.id}" class="admin-chat-row w-full flex items-center gap-3 p-4 bg-white dark:bg-gray-800 border border-gray-100 dark:border-gray-700 rounded-2xl shadow-sm text-left hover:bg-gray-50 dark:hover:bg-gray-700/50 transition">
                         <img src="https://cdn-icons-png.flaticon.com/512/3135/3135715.png" alt="${escapeHtml(chat.userName || 'User')}" class="h-12 w-12 rounded-full object-contain bg-blue-50 p-2">
                         <div class="flex-1 min-w-0">
@@ -2761,6 +2963,7 @@
                                 <h3 class="font-bold truncate">${escapeHtml(chat.userName || 'User')}</h3>
                                 <span class="text-[10px] text-gray-400">${formatChatTime(chat.updatedAt)}</span>
                             </div>
+                            <p class="text-xs text-gray-400 dark:text-gray-500 truncate">${escapeHtml(chat.userMobile || chat.userEmail || '')}</p>
                             <p class="text-sm text-gray-500 dark:text-gray-400 truncate">${escapeHtml(chat.lastMessage || 'No message')}</p>
                         </div>
                     </button>`).join('');
@@ -2775,10 +2978,16 @@
         const showAdminChatsPage = () => {
             const content = `
                 ${getPageHeader('Manage Chat')}
-                <div id="admin-chats-list" class="max-w-2xl mx-auto space-y-3"></div>
+                <div class="max-w-2xl mx-auto space-y-3">
+                    <div class="bg-white dark:bg-gray-800 border border-gray-100 dark:border-gray-700 rounded-2xl shadow-sm p-3">
+                        <input id="admin-chat-search" type="search" placeholder="Search by name, email, or phone" class="w-full px-4 py-3 bg-gray-100 dark:bg-gray-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    </div>
+                    <div id="admin-chats-list" class="space-y-3"></div>
+                </div>
                 ${getPageFooter()}`;
             showPage(content);
             setBottomNavActive('bottom-settings-btn');
+            document.getElementById('admin-chat-search').addEventListener('input', renderAdminChatsList);
             renderAdminChatsList();
         };
 
@@ -2881,6 +3090,45 @@
             const logo = getWithdrawMethodLogo(methodId);
             return logo ? `<img src="${logo}" class="w-full h-full object-contain ${extraClass}" alt="${altText}" loading="eager">` : '';
         };
+        const getWithdrawalMethodName = (methodId, fallback = '') => {
+            const names = {
+                upi: 'UPI',
+                bank: 'Bank Account',
+                play_store: 'Google Play Gift Card',
+                amazon_gift: 'Amazon Gift Card',
+                flipkart_gift: 'Flipkart Gift Card',
+                paypal: 'PayPal',
+                crypto: 'Crypto'
+            };
+            return names[methodId] || fallback || 'Withdrawal Method';
+        };
+        const getWithdrawalDetailText = (item = {}) => {
+            const methodId = item.methodId || item.paymentMethod || (item.upiId ? 'upi' : item.accountNumber ? 'bank' : '');
+            if (methodId === 'upi') return item.upiId || item.paymentDetails || 'N/A';
+            if (methodId === 'bank') {
+                return [
+                    item.accountNumber ? `A/C: ${item.accountNumber}` : '',
+                    item.ifsc ? `IFSC: ${item.ifsc}` : '',
+                    item.bankName || '',
+                    item.accountName ? `Name: ${item.accountName}` : ''
+                ].filter(Boolean).join(' | ') || item.paymentDetails || 'N/A';
+            }
+            if (['play_store', 'amazon_gift', 'flipkart_gift', 'paypal'].includes(methodId)) {
+                return item.email || item.paymentEmail || item.paymentDetails || 'N/A';
+            }
+            return item.paymentDetails || item.upiId || item.accountNumber || item.email || 'N/A';
+        };
+        const getWithdrawalSnapshot = (data = {}) => ({
+            method: data.method || getWithdrawalMethodName(data.methodId),
+            methodId: data.methodId || data.paymentMethod || '',
+            upiId: data.upiId || '',
+            accountNumber: data.accountNumber || '',
+            ifsc: data.ifsc || '',
+            bankName: data.bankName || '',
+            accountName: data.accountName || '',
+            email: data.email || '',
+            paymentDetails: data.paymentDetails || ''
+        });
 
         // Show Withdraw Page with Professional Logos
         const showWithdrawPage = async () => {
@@ -3880,6 +4128,7 @@
                         w.status === 'rejected' ? 'bg-red-100 dark:bg-red-900/30' : 'bg-yellow-100 dark:bg-yellow-900/30';
                     const statusText = w.status === 'completed' ? 'Approved' :
                         w.status === 'rejected' ? 'Rejected' : 'Pending';
+                    const payoutDetails = getWithdrawalDetailText(w);
 
                     // Format date safely
                     let requestDate = 'N/A';
@@ -3910,8 +4159,8 @@
                                     <p class="font-semibold text-gray-800 dark:text-gray-200">${w.method || 'N/A'}</p>
                                 </div>
                                 <div class="bg-white dark:bg-gray-800 p-2 rounded">
-                                    <p class="text-gray-500 dark:text-gray-400 text-xs">UPI ID</p>
-                                    <p class="font-semibold text-gray-800 dark:text-gray-200 text-sm">${maskUpi(w.upiId || '')}</p>
+                                    <p class="text-gray-500 dark:text-gray-400 text-xs">Payout Details</p>
+                                    <p class="font-semibold text-gray-800 dark:text-gray-200 text-sm break-words">${escapeHtml(payoutDetails)}</p>
                                 </div>
                                 <div class="bg-white dark:bg-gray-800 p-2 rounded">
                                     <p class="text-gray-500 dark:text-gray-400 text-xs">Date</p>
@@ -5532,7 +5781,9 @@
                     const reqDoc = await tx.get(reqRef);
                     if (!reqDoc.exists() || reqDoc.data().status !== 'pending') throw new Error("Request not found or already processed.");
 
-                    const amount = reqDoc.data().amount;
+                    const requestData = reqDoc.data();
+                    const amount = requestData.amount;
+                    const withdrawalSnapshot = getWithdrawalSnapshot(requestData);
                     processedAmount = amount;
                     const userRef = doc(db, `artifacts/${appId}/public/data/users`, userId);
                     const userDoc = await tx.get(userRef);
@@ -5554,7 +5805,8 @@
                                     status: 'completed',
                                     adminTransactionId: txnId,
                                     transactionId: txnId,
-                                    processedAt: serverTimestamp()
+                                    processedAt: serverTimestamp(),
+                                    ...withdrawalSnapshot
                                 });
                             } else {
                                 // Fallback if transaction record not found
@@ -5565,7 +5817,9 @@
                                     timestamp: serverTimestamp(),
                                     adminTransactionId: txnId,
                                     status: 'completed',
-                                    transactionId: txnId
+                                    transactionId: txnId,
+                                    requestId,
+                                    ...withdrawalSnapshot
                                 });
                             }
                         }
@@ -5590,7 +5844,8 @@
                                     status: 'rejected',
                                     rejectionReason: rejectionReason,
                                     processedAt: serverTimestamp(),
-                                    comment: `Withdrawal Rejected: ${rejectionReason}`
+                                    comment: `Withdrawal Rejected: ${rejectionReason}`,
+                                    ...withdrawalSnapshot
                                 });
                             } else {
                                 // Fallback
@@ -5601,7 +5856,9 @@
                                     timestamp: serverTimestamp(),
                                     status: 'rejected',
                                     rejectionReason: rejectionReason,
-                                    transactionId: generateTransactionId()
+                                    transactionId: generateTransactionId(),
+                                    requestId,
+                                    ...withdrawalSnapshot
                                 });
                             }
                         } else {
@@ -6035,6 +6292,7 @@
             const newName = document.getElementById('profile-name-input').value.trim();
             const newMobile = document.getElementById('profile-mobile-input').value.trim();
             const paymentMethod = document.getElementById('profile-payment-method').value;
+            const isAdminProfile = currentUser?.uid === ADMIN_UID;
 
             if (!newName || !newMobile) {
                 return showNotification('Name and Mobile are required.', true);
@@ -6081,15 +6339,33 @@
                     paymentDetails = { email };
                     break;
             }
+            const profileUpdate = {
+                name: newName,
+                mobile: newMobile,
+                paymentMethod: paymentMethod,
+                paymentDetails: paymentDetails
+            };
+
+            if (isAdminProfile) {
+                const whatsappNumber = document.getElementById('profile-whatsapp-input')?.value.trim() || newMobile;
+                if (!/^\d{10,15}$/.test(whatsappNumber)) {
+                    return showNotification('WhatsApp number must be 10 to 15 digits.', true);
+                }
+
+                const websiteLinks = [0, 1, 2]
+                    .map(i => document.getElementById(`profile-website-${i}`)?.value.trim())
+                    .filter(Boolean);
+                const invalidLink = websiteLinks.find(link => !/^https?:\/\/.+\..+/.test(link));
+                if (invalidLink) {
+                    return showNotification('Website links must start with http:// or https://', true);
+                }
+                profileUpdate.whatsappNumber = whatsappNumber;
+                profileUpdate.websiteLinks = websiteLinks.slice(0, 3);
+            }
 
             try {
                 const userRef = doc(db, `artifacts/${appId}/public/data/users`, currentUser.uid);
-                await updateDoc(userRef, {
-                    name: newName,
-                    mobile: newMobile,
-                    paymentMethod: paymentMethod,
-                    paymentDetails: paymentDetails
-                });
+                await updateDoc(userRef, profileUpdate);
                 showNotification('Profile updated successfully!');
                 hidePage();
             } catch (e) {
@@ -6169,21 +6445,9 @@
             const isAdminCredit = item.isAdminTransaction || (item.type === 'credit' && isReviewsWorldName(remarks));
             const giftCodeFromComment = (remarks.match(/redeemed code\s+([A-Z0-9-]+)/i) || [])[1] || '';
             const txnDisplayId = isGiftCard ? (item.giftCode || giftCodeFromComment || item.transactionId) : (item.adminTransactionId || item.transactionId);
-            const methodId = item.methodId || (item.upiId ? 'upi' : item.accountNumber ? 'bank' : remarks.toLowerCase().includes('amazon') ? 'amazon_gift' : remarks.toLowerCase().includes('flipkart') ? 'flipkart_gift' : remarks.toLowerCase().includes('play') ? 'play_store' : '');
-            const methodNameMap = {
-                upi: 'UPI',
-                bank: 'Bank Account',
-                play_store: 'Google Play Gift Card',
-                amazon_gift: 'Amazon Gift Card',
-                flipkart_gift: 'Flipkart Gift Card',
-                paypal: 'PayPal'
-            };
-            const methodName = item.method || methodNameMap[methodId] || 'Withdrawal Method';
-            const methodDetail = methodId === 'upi'
-                ? (item.upiId || item.paymentDetails || '')
-                : methodId === 'bank'
-                    ? [item.bankName, item.accountNumber ? `A/C ${item.accountNumber}` : '', item.ifsc ? `IFSC ${item.ifsc}` : ''].filter(Boolean).join(' | ') || item.paymentDetails || ''
-                    : item.email || item.paymentDetails || '';
+            const methodId = item.methodId || (item.upiId ? 'upi' : item.accountNumber ? 'bank' : remarks.toLowerCase().includes('amazon') ? 'amazon_gift' : remarks.toLowerCase().includes('flipkart') ? 'flipkart_gift' : remarks.toLowerCase().includes('play') ? 'play_store' : remarks.toLowerCase().includes('paypal') ? 'paypal' : '');
+            const methodName = item.method || getWithdrawalMethodName(methodId);
+            const methodDetail = getWithdrawalDetailText({ ...item, methodId });
 
             let statusTitle = isCredit ? 'Money Received' : 'Money Sent';
             let statusLabel = isCredit ? 'Money Received' : 'Money Sent';
@@ -6687,7 +6951,7 @@
 
             try {
                 await sendPasswordResetEmail(auth, email);
-                showNotification('Password reset email sent! Check your inbox.');
+                showNotification('Password reset link has been sent to your email. Please check your inbox and spam folder.');
                 window.closeForgotPasswordModal();
             } catch (error) {
                 errorElement.textContent = error.message;
