@@ -1173,6 +1173,8 @@
         let allInvestmentsCache = [];
         let allSupportChatsCache = [];
         let unifiedHistoryCache = [];
+        const TRANSACTION_PAGE_SIZE = 10;
+        let transactionListState = { filter: 'all', visibleCount: TRANSACTION_PAGE_SIZE, items: [] };
         let lastAutoProcessCheckAt = 0;
         let activeWithdrawalHistoryFilter = { filter: 'today', fromDate: null, toDate: null };
         let activeChatUnsubscribe = null;
@@ -2020,7 +2022,7 @@
                 const listElement = document.getElementById('transactions-list');
                 if (document.getElementById('all-transactions-list')) {
                     const activeFilter = document.querySelector('#filter-bar .active-filter')?.dataset.filter || 'all';
-                    renderFilteredTransactions(activeFilter);
+                    renderFilteredTransactions(activeFilter, { reset: false });
                 }
                 const limitedList = limit ? combined.slice(0, limit) : combined;
                 if (!listElement) return;
@@ -2991,39 +2993,66 @@
             renderAdminChatsList();
         };
 
-        const renderFilteredTransactions = (filter) => {
+        const getFilteredTransactions = (filter) => {
             if ((!unifiedHistoryCache || unifiedHistoryCache.length === 0) && currentUser?.uid) {
                 unifiedHistoryCache = readHistoryItemsFromCache(currentUser.uid);
             }
 
-            let filteredList = [];
-
             if (filter === 'all') {
-                filteredList = unifiedHistoryCache;
-            } else if (filter === 'withdrawal') {
-                filteredList = unifiedHistoryCache.filter(item =>
+                return unifiedHistoryCache;
+            }
+
+            if (filter === 'withdrawal') {
+                return unifiedHistoryCache.filter(item =>
                     item.type === 'withdrawal' ||
                     (item.status === 'pending' && item.type !== 'loan')
                 );
-            } else if (filter === 'received') {
-                filteredList = unifiedHistoryCache.filter(item =>
+            }
+
+            if (filter === 'received') {
+                return unifiedHistoryCache.filter(item =>
                     ['credit', 'gift_card', 'wallet_transfer'].includes(item.type) ||
                     (item.type === 'wallet_transfer' && item.amount > 0)
                 );
-            } else if (filter === 'sent') {
-                filteredList = unifiedHistoryCache.filter(item =>
+            }
+
+            if (filter === 'sent') {
+                return unifiedHistoryCache.filter(item =>
                     item.type === 'debit' ||
                     item.type === 'mobile_recharge' ||
                     (item.type === 'wallet_transfer' && item.amount < 0)
                 );
             }
 
+            return unifiedHistoryCache;
+        };
+
+        const renderFilteredTransactions = (filter, options = {}) => {
+            const { reset = true } = options;
+            const filteredList = getFilteredTransactions(filter);
+            transactionListState.filter = filter;
+            transactionListState.items = filteredList;
+            if (reset) {
+                transactionListState.visibleCount = TRANSACTION_PAGE_SIZE;
+            }
+
             const listElement = document.getElementById('all-transactions-list');
             if (listElement) {
+                const visibleItems = filteredList.slice(0, transactionListState.visibleCount);
+                const hasMore = transactionListState.visibleCount < filteredList.length;
                 listElement.innerHTML = filteredList.length === 0
                     ? '<p class="text-gray-500 dark:text-gray-400 text-center py-4">No transactions found for this filter.</p>'
-                    : filteredList.map(item => renderTransactionItem(item, true)).join('');
+                    : `${visibleItems.map(item => renderTransactionItem(item, true)).join('')}
+                       ${hasMore ? '<p id="transactions-load-hint" class="text-center text-xs font-semibold text-gray-500 dark:text-gray-400 py-3">Scroll to load more</p>' : ''}`;
             }
+        };
+
+        const loadMoreTransactionsIfNeeded = () => {
+            if (!document.getElementById('all-transactions-list')) return;
+            if (transactionListState.visibleCount >= transactionListState.items.length) return;
+
+            transactionListState.visibleCount += TRANSACTION_PAGE_SIZE;
+            renderFilteredTransactions(transactionListState.filter, { reset: false });
         };
 
         const showAllTransactionsPage = () => {
@@ -3049,6 +3078,7 @@
             showPage(content, { keepBottomNav: true });
             currentMainSection = 'transactions';
             setBottomNavActive('bottom-transactions-btn');
+            const pageContainer = document.getElementById('page-container');
 
             // Initial render of all transactions
             renderFilteredTransactions('all');
@@ -3063,8 +3093,17 @@
                     // Filter the list
                     const filter = e.target.dataset.filter;
                     renderFilteredTransactions(filter);
+                    pageContainer.scrollTop = 0;
                 }
             });
+
+            pageContainer.onscroll = () => {
+                if (currentMainSection !== 'transactions') return;
+                const distanceFromBottom = pageContainer.scrollHeight - pageContainer.scrollTop - pageContainer.clientHeight;
+                if (distanceFromBottom < 180) {
+                    loadMoreTransactionsIfNeeded();
+                }
+            };
 
             // Keep the click listener for transaction details
             document.getElementById('all-transactions-list').addEventListener('click', (e) => {
