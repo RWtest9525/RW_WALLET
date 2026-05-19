@@ -543,10 +543,18 @@
                     const cachedUser = JSON.parse(localStorage.getItem(`rw_wallet_user_cache_${lastUser}`) || 'null');
                     if (cachedUser) {
                         const formatInr = (amount) => new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR' }).format(amount || 0);
+                        const formatCompactInr = (amount) => {
+                            const value = Number(amount || 0);
+                            if (Math.abs(value) < 10000) return formatInr(value);
+                            const compact = new Intl.NumberFormat('en-IN', {
+                                maximumFractionDigits: value % 1000 === 0 ? 0 : 1
+                            }).format(value / 1000);
+                            return `₹${compact}k`;
+                        };
                         const balanceEl = document.getElementById('user-balance');
                         const adminBalanceEl = document.getElementById('admin-wallet-balance');
-                        if (balanceEl) balanceEl.textContent = formatInr(cachedUser.balance || 0);
-                        if (adminBalanceEl) adminBalanceEl.textContent = formatInr(cachedUser.balance || 0);
+                        if (balanceEl) balanceEl.textContent = formatCompactInr(cachedUser.balance || 0);
+                        if (adminBalanceEl) adminBalanceEl.textContent = formatCompactInr(cachedUser.balance || 0);
                     }
                     const cachedHistory = localStorage.getItem(`rw_wallet_history_cache_${lastUser}`);
                     if (cachedHistory && document.getElementById('transactions-list')) {
@@ -615,6 +623,9 @@
                                     <line x1="2" x2="22" y1="2" y2="22" />
                                 </svg>
                             </button>
+                        </div>
+                        <div id="forgot-password-row" class="text-right -mt-2">
+                            <a href="#" id="forgot-password-link" class="text-sm font-semibold text-blue-500 hover:underline">Forgot Password?</a>
                         </div>
                         <button type="submit" id="auth-button"
                             class="w-full bg-blue-600 text-white font-semibold py-3 rounded-lg hover:bg-blue-700 transition duration-300 flex justify-center items-center h-[52px]">
@@ -1054,6 +1065,14 @@
 
         // --- UI UTILS ---
         const formatCurrency = (amount) => new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR' }).format(amount || 0);
+        const formatCompactBalance = (amount) => {
+            const value = Number(amount || 0);
+            if (Math.abs(value) < 10000) return formatCurrency(value);
+            const compact = new Intl.NumberFormat('en-IN', {
+                maximumFractionDigits: value % 1000 === 0 ? 0 : 1
+            }).format(value / 1000);
+            return `₹${compact}k`;
+        };
         const formatUsd = (amount) => `$${Number(amount || 0).toFixed(2)}`;
         const escapeHtml = (value = '') => String(value)
             .replace(/&/g, '&amp;')
@@ -1063,6 +1082,7 @@
             .replace(/'/g, '&#039;');
         const getUserCacheKey = (userId) => `rw_wallet_user_cache_${userId}`;
         const getHistoryCacheKey = (userId) => `rw_wallet_history_cache_${userId}`;
+        const getHistoryDataCacheKey = (userId) => `rw_wallet_history_data_cache_${userId}`;
 
         const readJsonCache = (key) => {
             try {
@@ -1079,6 +1099,50 @@
             } catch (e) {
                 console.warn('Cache write failed:', e);
             }
+        };
+
+        const timestampToMillis = (timestamp) => {
+            if (!timestamp) return 0;
+            if (typeof timestamp.toMillis === 'function') return timestamp.toMillis();
+            if (typeof timestamp.toDate === 'function') return timestamp.toDate().getTime();
+            if (typeof timestamp === 'number') return timestamp;
+            const parsed = new Date(timestamp).getTime();
+            return Number.isNaN(parsed) ? 0 : parsed;
+        };
+
+        const reviveCachedTimestamp = (value) => {
+            const millis = timestampToMillis(value);
+            if (!millis) return null;
+            return {
+                toMillis: () => millis,
+                toDate: () => new Date(millis)
+            };
+        };
+
+        const normalizeHistoryItemForCache = (item = {}) => {
+            const cached = { ...item };
+            ['timestamp', 'requestedAt', 'processedAt'].forEach(field => {
+                if (cached[field]) cached[field] = timestampToMillis(cached[field]);
+            });
+            return cached;
+        };
+
+        const reviveHistoryItemFromCache = (item = {}) => {
+            const revived = { ...item };
+            ['timestamp', 'requestedAt', 'processedAt'].forEach(field => {
+                if (revived[field]) revived[field] = reviveCachedTimestamp(revived[field]);
+            });
+            return revived;
+        };
+
+        const readHistoryItemsFromCache = (userId) => {
+            const cached = readJsonCache(getHistoryDataCacheKey(userId));
+            return Array.isArray(cached) ? cached.map(reviveHistoryItemFromCache) : [];
+        };
+
+        const writeHistoryItemsToCache = (userId, items) => {
+            if (!userId || !Array.isArray(items)) return;
+            writeJsonCache(getHistoryDataCacheKey(userId), items.map(normalizeHistoryItemForCache));
         };
 
         const sanitizeUserForCache = (data = {}, uid = '') => ({
@@ -1099,10 +1163,10 @@
             if (!cached) return false;
 
             currentUserData = cached;
-            document.getElementById('user-balance').textContent = formatCurrency(cached.balance || 0);
+            document.getElementById('user-balance').textContent = formatCompactBalance(cached.balance || 0);
             updateDollarBalanceDisplay(cached.balance || 0);
             if (userId === ADMIN_UID) {
-                document.getElementById('admin-wallet-balance').textContent = formatCurrency(cached.balance || 0);
+                document.getElementById('admin-wallet-balance').textContent = formatCompactBalance(cached.balance || 0);
             }
             return true;
         };
@@ -1151,7 +1215,7 @@
 
         const formatDate = (timestamp) => {
             if (!timestamp) return 'N/A';
-            const d = timestamp.toDate();
+            const d = timestamp.toDate ? timestamp.toDate() : new Date(timestamp);
             const date = d.toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata' });
             const time = d.toLocaleTimeString('en-IN', {
                 timeZone: 'Asia/Kolkata',
@@ -1164,7 +1228,7 @@
 
         const formatDateDDMMYY = (timestamp) => {
             if (!timestamp) return 'N/A';
-            const d = timestamp.toDate();
+            const d = timestamp.toDate ? timestamp.toDate() : new Date(timestamp);
             const dd = String(d.getDate()).padStart(2, '0');
             const mm = String(d.getMonth() + 1).padStart(2, '0');
             const yy = String(d.getFullYear()).slice(-2);
@@ -1178,7 +1242,7 @@
 
         const getTimeFromTimestamp = (timestamp) => {
             if (!timestamp) return 'N/A';
-            const d = timestamp.toDate();
+            const d = timestamp.toDate ? timestamp.toDate() : new Date(timestamp);
             return d.toLocaleTimeString('en-IN', {
                 timeZone: 'Asia/Kolkata',
                 hour: '2-digit',
@@ -1652,6 +1716,7 @@
             document.getElementById('auth-error').textContent = '';
             form.reset();
             document.getElementById('auth-title').textContent = isLogin ? 'Login to your Wallet' : 'Create a New Wallet';
+            document.getElementById('forgot-password-row')?.classList.toggle('hidden', !isLogin);
 
             // Get button elements
             const authButton = document.getElementById('auth-button');
@@ -1776,7 +1841,7 @@
                 if (doc.exists()) {
                     console.log("User data snapshot received:", doc.data());
                     const data = doc.data();
-                    document.getElementById('user-balance').textContent = formatCurrency(data.balance);
+                    document.getElementById('user-balance').textContent = formatCompactBalance(data.balance);
                     updateDollarBalanceDisplay(data.balance);
                     currentUserData = data;
                     writeJsonCache(getUserCacheKey(userId), sanitizeUserForCache(data, userId));
@@ -1787,7 +1852,7 @@
                         processDueLoansForUser(userId).catch(e => console.error('Auto loan debit check failed:', e));
                     }
                     if (userId === ADMIN_UID) {
-                        document.getElementById('admin-wallet-balance').textContent = formatCurrency(data.balance);
+                        document.getElementById('admin-wallet-balance').textContent = formatCompactBalance(data.balance);
                     }
                 } else {
                     console.warn(`User document not found for ${userId} (snapshot listener)`);
@@ -1800,15 +1865,19 @@
             if (cachedHistoryHtml && document.getElementById('transactions-list')) {
                 document.getElementById('transactions-list').innerHTML = cachedHistoryHtml;
             }
+            const cachedHistoryItems = readHistoryItemsFromCache(userId);
+            if (cachedHistoryItems.length) {
+                unifiedHistoryCache = cachedHistoryItems;
+            }
 
             const renderUnifiedHistory = (limit) => {
                 let combined = [
-                    ...transactions.map(t => ({ ...t, key: `tx-${t.timestamp?.toMillis()}`, ...t })),
+                    ...transactions.map(t => ({ ...t, key: `tx-${timestampToMillis(t.timestamp)}` })),
                     ...pendingRequests.map(p => {
                         const requestType = p.type || 'withdrawal';
                         return {
                             ...p,
-                            key: `req-${p.id || p.requestedAt?.toMillis()}`,
+                            key: `req-${p.id || timestampToMillis(p.requestedAt)}`,
                             type: requestType,
                             comment: requestType === 'mobile_recharge' ? 'Mobile Recharge Request' : 'Withdrawal Request',
                             timestamp: p.requestedAt,
@@ -1816,10 +1885,15 @@
                         };
                     })
                 ];
-                combined.sort((a, b) => (b.timestamp?.toMillis() || 0) - (a.timestamp?.toMillis() || 0));
+                combined.sort((a, b) => timestampToMillis(b.timestamp) - timestampToMillis(a.timestamp));
                 unifiedHistoryCache = combined;
+                writeHistoryItemsToCache(userId, combined);
 
                 const listElement = document.getElementById('transactions-list');
+                if (document.getElementById('all-transactions-list')) {
+                    const activeFilter = document.querySelector('#filter-bar .active-filter')?.dataset.filter || 'all';
+                    renderFilteredTransactions(activeFilter);
+                }
                 const limitedList = limit ? combined.slice(0, limit) : combined;
                 if (!listElement) return;
 
@@ -2496,12 +2570,10 @@
             return `<span class="${tickClass} font-bold tracking-[-3px] ml-1">✓✓</span>`;
         };
 
-        const markChatMessagesRead = async (chatUserId, readerRole) => {
-            const messagesRef = collection(db, `artifacts/${appId}/public/data/support_chats`, chatUserId, 'messages');
-            const snap = await getDocs(messagesRef);
+        const markChatMessagesRead = async (messageDocs, readerRole) => {
             const batch = writeBatch(db);
             let hasUpdates = false;
-            snap.docs.forEach(messageDoc => {
+            messageDocs.forEach(messageDoc => {
                 const data = messageDoc.data();
                 if (data.senderRole !== readerRole && !data.readAt) {
                     batch.update(messageDoc.ref, { readAt: serverTimestamp() });
@@ -2516,22 +2588,25 @@
         const renderSupportMessages = (messages, viewerRole) => {
             const list = document.getElementById('support-chat-messages');
             if (!list) return;
+            const wasNearBottom = list.scrollHeight - list.scrollTop - list.clientHeight < 90;
             list.innerHTML = messages.length === 0
                 ? '<p class="text-center text-sm text-gray-500 dark:text-gray-400 py-8">Start a chat with Reviews World support.</p>'
                 : messages.map(message => {
                     const isMine = message.senderRole === viewerRole;
                     return `
-                        <div class="flex ${isMine ? 'justify-end' : 'justify-start'}">
-                            <div class="max-w-[78%] px-4 py-2 shadow-sm ${isMine ? 'chat-bubble-user bg-emerald-50 dark:bg-emerald-900/40 text-gray-900 dark:text-white border border-emerald-100 dark:border-emerald-800' : 'chat-bubble-admin bg-white dark:bg-gray-800 text-gray-900 dark:text-white border border-gray-100 dark:border-gray-700'}">
-                                <p class="text-sm leading-5 break-words">${escapeHtml(message.text || '')}</p>
-                                <div class="flex justify-end items-center text-[10px] mt-1 text-gray-400">
+                        <div class="flex ${isMine ? 'justify-end' : 'justify-start'}" data-message-id="${message.id}">
+                            <div class="w-fit max-w-[82%] px-3 py-1.5 shadow-sm ${isMine ? 'chat-bubble-user bg-emerald-50 dark:bg-emerald-900/40 text-gray-900 dark:text-white border border-emerald-100 dark:border-emerald-800' : 'chat-bubble-admin bg-white dark:bg-gray-800 text-gray-900 dark:text-white border border-gray-100 dark:border-gray-700'}">
+                                <span class="text-sm leading-5 break-words align-baseline">${escapeHtml(message.text || '')}</span>
+                                <span class="inline-flex items-center text-[10px] ml-2 text-gray-400 align-baseline">
                                     <span>${formatChatTime(message.createdAt)}</span>
                                     ${renderMessageTicks(message, isMine)}
-                                </div>
+                                </span>
                             </div>
                         </div>`;
                 }).join('');
-            list.scrollTop = list.scrollHeight;
+            if (wasNearBottom) {
+                list.scrollTop = list.scrollHeight;
+            }
         };
 
         const openSupportChatPage = async (chatUserId, viewerRole = 'user', chatMeta = {}) => {
@@ -2546,13 +2621,13 @@
                 : (currentUserData?.email || currentUser?.email || '');
             const logo = isAdminView ? 'https://cdn-icons-png.flaticon.com/512/3135/3135715.png' : getSupportLogo();
             const content = `
-                <div class="max-w-2xl mx-auto bg-gray-100 dark:bg-gray-900 min-h-[calc(100vh-4rem)] flex flex-col">
-                    <div class="bg-white dark:bg-gray-800 border border-gray-100 dark:border-gray-700 rounded-2xl shadow-md overflow-hidden flex flex-col min-h-[calc(100vh-10rem)]">
-                        <div class="flex items-center gap-3 p-4 border-b border-gray-100 dark:border-gray-700">
+                <div class="max-w-xl mx-auto bg-gray-100 dark:bg-gray-900 min-h-[calc(100vh-4rem)] flex flex-col">
+                    <div class="bg-white dark:bg-gray-800 border border-gray-100 dark:border-gray-700 rounded-xl shadow-sm overflow-hidden flex flex-col min-h-[calc(100vh-9rem)]">
+                        <div class="flex items-center gap-3 p-3 border-b border-gray-100 dark:border-gray-700">
                             <button class="page-back-btn h-10 w-10 shrink-0 rounded-full bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 flex items-center justify-center">
                                 <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5"></path><path d="M12 19l-7-7 7-7"></path></svg>
                             </button>
-                            <img src="${logo}" alt="${escapeHtml(displayName)}" class="h-12 w-12 rounded-full object-cover">
+                            <img src="${logo}" alt="${escapeHtml(displayName)}" class="h-10 w-10 rounded-full object-cover">
                             <button id="support-profile-btn" class="min-w-0 flex-1 text-left">
                                 <h3 class="font-bold truncate">${escapeHtml(displayName)}</h3>
                                 <p class="text-xs text-gray-500 dark:text-gray-400 truncate">${escapeHtml(displayEmail)}</p>
@@ -2564,7 +2639,7 @@
                         </div>
                         <div class="flex items-center gap-2 p-3 border-t border-gray-100 dark:border-gray-700 bg-white dark:bg-gray-800">
                             <button id="emoji-toggle-btn" class="h-10 w-10 rounded-full bg-gray-100 dark:bg-gray-700 text-xl">☺</button>
-                            <input id="support-message-input" type="text" placeholder="Type a message" class="flex-1 px-4 py-3 bg-gray-100 dark:bg-gray-700 rounded-full focus:outline-none focus:ring-2 focus:ring-blue-500">
+                            <input id="support-message-input" type="text" placeholder="Type a message" class="flex-1 min-w-0 px-4 py-2.5 bg-gray-100 dark:bg-gray-700 rounded-full focus:outline-none focus:ring-2 focus:ring-blue-500">
                             <button id="support-send-btn" class="h-10 w-10 rounded-full bg-blue-600 text-white flex items-center justify-center">
                                 <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M2 21l21-9L2 3v7l15 2-15 2v7z"></path></svg>
                             </button>
@@ -2608,7 +2683,7 @@
             activeChatUnsubscribe = onSnapshot(messagesQuery, (snap) => {
                 const messages = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
                 renderSupportMessages(messages, viewerRole);
-                markChatMessagesRead(chatUserId, viewerRole).catch(e => console.error('Mark chat read failed:', e));
+                markChatMessagesRead(snap.docs, viewerRole).catch(e => console.error('Mark chat read failed:', e));
             }, (error) => console.error('Support chat listener failed:', error));
 
             const sendMessage = async () => {
@@ -2633,7 +2708,7 @@
                     senderRole: viewerRole,
                     senderId: currentUser.uid,
                     senderName,
-                    createdAt: serverTimestamp(),
+                    createdAt: Timestamp.now(),
                     deliveredAt: serverTimestamp(),
                     readAt: null
                 });
@@ -2708,6 +2783,10 @@
         };
 
         const renderFilteredTransactions = (filter) => {
+            if ((!unifiedHistoryCache || unifiedHistoryCache.length === 0) && currentUser?.uid) {
+                unifiedHistoryCache = readHistoryItemsFromCache(currentUser.uid);
+            }
+
             let filteredList = [];
 
             if (filter === 'all') {
@@ -2739,6 +2818,10 @@
         };
 
         const showAllTransactionsPage = () => {
+            if ((!unifiedHistoryCache || unifiedHistoryCache.length === 0) && currentUser?.uid) {
+                unifiedHistoryCache = readHistoryItemsFromCache(currentUser.uid);
+            }
+
             const content = `
                 ${getPageHeader('All Transactions')}
                 <div class="max-w-2xl mx-auto bg-white dark:bg-gray-800 p-6 rounded-xl shadow-md">
@@ -5839,7 +5922,7 @@
             if (!currentUserData) return showNotification("Your admin data is not loaded yet. Please wait.", true);
             const content = `
                 <div class="space-y-3 p-4 bg-gray-100 dark:bg-gray-700/50 rounded-lg">
-                    <p>Current Balance: <strong>${formatCurrency(currentUserData.balance)}</strong></p>
+                    <p>Current Balance: <strong>${formatCompactBalance(currentUserData.balance)}</strong></p>
                     <input type="number" id="admin-fund-amount-input" placeholder="Amount (e.g., 10000 or -50)" class="w-full px-4 py-2 bg-white dark:bg-gray-700 rounded-lg">
                     <input type="text" id="admin-fund-comment-input" placeholder="Remarks (e.g., Initial Deposit)" class="w-full px-4 py-2 bg-white dark:bg-gray-700 rounded-lg">
                 </div>`;
@@ -6267,7 +6350,7 @@
                         </div>
 
                         <!-- RW Wallet Watermark Footer -->
-                        <div class="mt-6 flex flex-col items-center justify-center space-y-1.5 opacity-30 select-none">
+                        <div class="mt-3 mb-3 flex flex-col items-center justify-center space-y-1.5 opacity-35 select-none">
                              <div class="flex items-center gap-2 grayscale">
                                 <img src="https://i.ibb.co/x8YBYwGG/6233389803554672153.jpg" class="w-6 h-6 rounded-full" alt="RW">
                                 <span class="text-[10px] font-black tracking-widest uppercase">RW WALLET SECURE</span>
@@ -6419,7 +6502,12 @@
         });
 
         document.getElementById('tabs-container').addEventListener('click', (e) => {
-            if (e.target.matches('.tab-button')) switchTab(e.target.dataset.tab);
+            if (e.target.matches('.tab-button')) {
+                const tabId = e.target.dataset.tab;
+                currentMainSection = tabId === 'admin-panel' ? 'admin' : 'home';
+                switchTab(tabId);
+                setBottomNavActive(tabId === 'admin-panel' ? 'bottom-admin-btn' : 'bottom-home-btn');
+            }
         });
         document.getElementById('bottom-home-btn').addEventListener('click', () => {
             showHomeMainPage();
@@ -6434,17 +6522,23 @@
 
         document.getElementById('manage-admin-wallet-btn').addEventListener('click', showManageAdminWalletModal);
 
+        const openAdminQuickAction = (handler) => {
+            currentMainSection = 'admin';
+            setBottomNavActive('bottom-admin-btn');
+            handler();
+        };
+
         // Admin panel quick action buttons
-        document.getElementById('admin-withdrawals-btn').addEventListener('click', showAdminWithdrawalsPage);
-        document.getElementById('admin-users-btn').addEventListener('click', showAdminUsersPage);
-        document.getElementById('admin-gift-codes-btn').addEventListener('click', showAdminGiftCodesPage);
-        document.getElementById('admin-withdrawal-history-btn').addEventListener('click', showWithdrawalHistoryPage);
-        document.getElementById('admin-withdraw-settings-btn').addEventListener('click', showAdminWithdrawSettingsModal);
-        document.getElementById('admin-pro-users-btn').addEventListener('click', showAdminUsersPage);
-        document.getElementById('admin-recharge-requests-btn').addEventListener('click', showAdminRechargeRequestsPage);
-        document.getElementById('admin-loans-btn').addEventListener('click', showAdminLoanPage);
-        document.getElementById('admin-investments-btn').addEventListener('click', showAdminInvestmentsPage);
-        document.getElementById('admin-chats-btn').addEventListener('click', showAdminChatsPage);
+        document.getElementById('admin-withdrawals-btn').addEventListener('click', () => openAdminQuickAction(showAdminWithdrawalsPage));
+        document.getElementById('admin-users-btn').addEventListener('click', () => openAdminQuickAction(showAdminUsersPage));
+        document.getElementById('admin-gift-codes-btn').addEventListener('click', () => openAdminQuickAction(showAdminGiftCodesPage));
+        document.getElementById('admin-withdrawal-history-btn').addEventListener('click', () => openAdminQuickAction(showWithdrawalHistoryPage));
+        document.getElementById('admin-withdraw-settings-btn').addEventListener('click', () => openAdminQuickAction(showAdminWithdrawSettingsModal));
+        document.getElementById('admin-pro-users-btn').addEventListener('click', () => openAdminQuickAction(showAdminUsersPage));
+        document.getElementById('admin-recharge-requests-btn').addEventListener('click', () => openAdminQuickAction(showAdminRechargeRequestsPage));
+        document.getElementById('admin-loans-btn').addEventListener('click', () => openAdminQuickAction(showAdminLoanPage));
+        document.getElementById('admin-investments-btn').addEventListener('click', () => openAdminQuickAction(showAdminInvestmentsPage));
+        document.getElementById('admin-chats-btn').addEventListener('click', () => openAdminQuickAction(showAdminChatsPage));
 
         // Withdraw Fund Button - Now opens full page
         document.getElementById('withdraw-fund-btn').addEventListener('click', showWithdrawPage);
