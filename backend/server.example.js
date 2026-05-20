@@ -9,6 +9,7 @@ const { createCloudflareWalletService } = require('./cloudflareWalletService');
 
 async function main() {
   const app = express();
+  app.disable('etag');
   const server = http.createServer(app);
   const io = new Server(server, {
     cors: {
@@ -24,8 +25,27 @@ async function main() {
   walletService.registerRoutes(app);
   walletService.registerSocketHandlers(io);
 
+  app.use((req, res, next) => {
+    if (req.method === 'GET' && (req.path === '/' || req.path.endsWith('.html'))) {
+      res.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+      res.set('Pragma', 'no-cache');
+      res.set('Expires', '0');
+      res.set('Surrogate-Control', 'no-store');
+    }
+    next();
+  });
+
   app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, '..', 'index.html'));
+  });
+
+  app.get('/app-version', (req, res) => {
+    res.set('Cache-Control', 'no-store');
+    res.json({
+      ok: true,
+      version: process.env.RENDER_GIT_COMMIT || process.env.COMMIT_SHA || 'local',
+      startedAt: new Date().toISOString()
+    });
   });
 
   app.get('/health', (req, res) => {

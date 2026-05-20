@@ -1301,11 +1301,21 @@
             };
         };
 
+        const fetchWithTimeout = async (url, options = {}, timeoutMs = 8000) => {
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+            try {
+                return await fetch(url, { ...options, signal: controller.signal });
+            } finally {
+                clearTimeout(timeoutId);
+            }
+        };
+
         const fetchCloudTransactionHistory = async (userId, limit = 100) => {
             const token = await getBackendAuthToken();
-            const response = await fetch(`${BACKEND_BASE_URL}/api/transactions/${encodeURIComponent(userId)}?limit=${limit}`, {
+            const response = await fetchWithTimeout(`${BACKEND_BASE_URL}/api/transactions/${encodeURIComponent(userId)}?limit=${limit}`, {
                 headers: { Authorization: `Bearer ${token}` }
-            });
+            }, 7000);
             const data = await response.json().catch(() => ({}));
             if (!response.ok || !data.ok) throw new Error(data.error || 'Cloudflare history load failed');
             return (data.history || []).map(normalizeCloudTransaction);
@@ -1562,14 +1572,14 @@
             if (backendAuthPromise && !forceRefresh) return backendAuthPromise;
 
             backendAuthPromise = currentUser.getIdToken(forceRefresh)
-                .then(idToken => fetch(`${BACKEND_BASE_URL}/api/session/firebase`, {
+                .then(idToken => fetchWithTimeout(`${BACKEND_BASE_URL}/api/session/firebase`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
                         idToken,
                         profile: getBackendProfilePayload()
                     })
-                }))
+                }, 7000))
                 .then(async res => {
                     const data = await res.json().catch(() => ({}));
                     if (!res.ok || !data.ok || !data.token) {
@@ -2316,6 +2326,9 @@
             const cachedHistoryItems = readHistoryItemsFromCache(userId);
             if (cachedHistoryItems.length) {
                 unifiedHistoryCache = cachedHistoryItems;
+                transactions = cachedHistoryItems.filter(item => !String(item.key || '').startsWith('req-') && item.status !== 'pending');
+                pendingRequests = cachedHistoryItems.filter(item => String(item.key || '').startsWith('req-') || item.status === 'pending');
+                renderUnifiedHistory(5);
             }
 
             const renderUnifiedHistory = (limit) => {
@@ -2372,7 +2385,12 @@
                     return null;
                 })
                 .catch((error) => {
-                    console.error("Cloudflare history load failed, using one-time Firebase fallback:", error);
+                    console.error("Cloudflare history load failed:", error);
+                    if (cachedHistoryItems.length) {
+                        renderUnifiedHistory(5);
+                        return null;
+                    }
+                    console.warn("No cached history found, using one-time Firebase fallback.");
                     const transactionsQuery = query(collection(db, `artifacts/${appId}/public/data/users`, userId, 'transactions'), orderBy('timestamp', 'desc'));
                     return getDocs(transactionsQuery).then((snap) => {
                         transactions = snap.docs.map(d => d.data());
@@ -2381,13 +2399,25 @@
                     });
                 });
 
-            const requestsQuery = query(collection(db, `artifacts/${appId}/public/data/fund_requests`), where("userId", "==", userId), where("status", "==", "pending"));
-            getDocs(requestsQuery)
-                .then((snap) => {
-                    pendingRequests = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+            loadCloudFundRequests({ status: 'pending', userId })
+                .then((requests) => {
+                    pendingRequests = requests;
                     renderUnifiedHistory(5);
                 })
-                .catch((error) => console.error("Error loading pending fund requests:", error));
+                .catch((error) => {
+                    console.error("Cloud pending fund request load failed:", error);
+                    if (cachedHistoryItems.length) {
+                        renderUnifiedHistory(5);
+                        return;
+                    }
+                    const requestsQuery = query(collection(db, `artifacts/${appId}/public/data/fund_requests`), where("userId", "==", userId), where("status", "==", "pending"));
+                    getDocs(requestsQuery)
+                        .then((snap) => {
+                            pendingRequests = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+                            renderUnifiedHistory(5);
+                        })
+                        .catch((firebaseError) => console.error("Error loading pending fund requests:", firebaseError));
+                });
         };
 
         let initializeAdminListeners = () => {
