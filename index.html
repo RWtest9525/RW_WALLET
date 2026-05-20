@@ -1331,11 +1331,48 @@
                 .sort((a, b) => timestampToMillis(b.timestamp || b.requestedAt) - timestampToMillis(a.timestamp || a.requestedAt));
         };
 
-        const loadFirebaseTransactions = async (userId, maxItems = 2000) => {
-            const snap = await getDocs(collection(db, `artifacts/${appId}/public/data/users`, userId, 'transactions'));
-            return snap.docs
-                .map((doc, index) => normalizeTransactionForHistory({ id: doc.id, ...doc.data() }, index))
-                .sort((a, b) => timestampToMillis(b.timestamp) - timestampToMillis(a.timestamp))
+        const loadFirebaseTransactions = async (userId, maxItems = 5000) => {
+            const docsByPath = new Map();
+            const addSnapshot = (snap, source) => {
+                snap.docs.forEach((docSnap, index) => {
+                    docsByPath.set(`${source}:${docSnap.ref.path}`, {
+                        id: docSnap.id,
+                        sourcePath: docSnap.ref.path,
+                        ...docSnap.data(),
+                        _sourceIndex: index
+                    });
+                });
+            };
+
+            const directCollections = [
+                `artifacts/${appId}/public/data/users/${userId}/transactions`,
+                'artifacts/digital-wallet-prod/public/data/users/' + userId + '/transactions',
+                'users/' + userId + '/transactions',
+                'wallet_users/' + userId + '/transactions'
+            ];
+
+            for (const path of [...new Set(directCollections)]) {
+                try {
+                    addSnapshot(await getDocs(collection(db, path)), path);
+                } catch (error) {
+                    console.warn('Transaction path load skipped:', path, error);
+                }
+            }
+
+            const rootTransactionCollections = ['transactions', 'transaction_history', 'wallet_transactions'];
+            const userFields = ['userId', 'uid', 'user_id'];
+            for (const rootPath of rootTransactionCollections) {
+                for (const field of userFields) {
+                    try {
+                        const snap = await getDocs(query(collection(db, rootPath), where(field, '==', userId)));
+                        addSnapshot(snap, `${rootPath}:${field}`);
+                    } catch (error) {
+                        console.warn('Root transaction query skipped:', rootPath, field, error);
+                    }
+                }
+            }
+
+            return mergeTransactionsByKey(Array.from(docsByPath.values()))
                 .slice(0, maxItems);
         };
 
@@ -2851,12 +2888,13 @@
 
         const getIncomeTransactions = () => unifiedHistoryCache.filter(item => {
             if (item.status && item.status !== 'completed') return false;
-            return item.type === 'credit' || item.type === 'gift_card' || (item.type === 'wallet_transfer' && item.amount > 0);
+            const type = normalizeTransactionType(item);
+            return type === 'credit' || type === 'gift_card' || (type === 'wallet_transfer' && Number(item.amount || 0) > 0);
         });
 
         const getWithdrawalTransactions = () => unifiedHistoryCache.filter(item => {
             if (item.status && item.status !== 'completed') return false;
-            return item.type === 'withdrawal';
+            return normalizeTransactionType(item) === 'withdrawal';
         });
 
         const showTrackIncomePage = () => {
