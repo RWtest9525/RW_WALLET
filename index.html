@@ -1468,15 +1468,41 @@
             }
         };
 
+        const loadFirebasePendingFundRequests = async (userId = '') => {
+            const conditions = [where("status", "==", "pending")];
+            if (userId) conditions.push(where("userId", "==", userId));
+            const pendingQuery = query(collection(db, `artifacts/${appId}/public/data/fund_requests`), ...conditions);
+            const snap = await getDocs(pendingQuery);
+            return snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        };
+
+        const mergeFundRequestsById = (...groups) => {
+            const merged = new Map();
+            groups.flat().forEach((request) => {
+                const id = request.id || request.requestId || request.request_id;
+                if (!id) return;
+                merged.set(id, { ...(merged.get(id) || {}), ...request, id });
+            });
+            return Array.from(merged.values())
+                .filter(req => (req.status || 'pending') === 'pending')
+                .sort((a, b) => timestampToMillis(b.requestedAt || b.requested_at) - timestampToMillis(a.requestedAt || a.requested_at));
+        };
+
         const refreshAdminFundRequestsFromCloud = async () => {
             if (currentUser?.uid !== ADMIN_UID) return;
             try {
-                const allRequests = await loadCloudFundRequests({ status: 'pending' });
-                if (!allRequests.length && !fundRequestsImportedFromFirebase) {
-                    await importFirebaseFundRequestsForAdmin();
+                const cloudRequests = await loadCloudFundRequests({ status: 'pending' });
+                let firebasePendingRequests = [];
+                if (!fundRequestsImportedFromFirebase) {
+                    firebasePendingRequests = await loadFirebasePendingFundRequests();
+                    const cloudIds = new Set(cloudRequests.map(req => req.id || req.requestId || req.request_id));
+                    const missingFirebaseRequests = firebasePendingRequests.filter(req => !cloudIds.has(req.id));
+                    if (missingFirebaseRequests.length) {
+                        await importCloudFundRequests(missingFirebaseRequests);
+                    }
                     fundRequestsImportedFromFirebase = true;
-                    return;
                 }
+                const allRequests = mergeFundRequestsById(cloudRequests, firebasePendingRequests);
                 allFundRequestsCache = allRequests.filter(req => (req.type || 'withdrawal') === 'withdrawal');
                 allRechargeRequestsCache = allRequests.filter(req => req.type === 'mobile_recharge');
                 updateAdminPendingRequestSummary();
@@ -1489,9 +1515,7 @@
         };
 
         const importFirebaseFundRequestsForAdmin = async () => {
-            const allFundRequestsQuery = query(collection(db, `artifacts/${appId}/public/data/fund_requests`));
-            const snap = await getDocs(allFundRequestsQuery);
-            const allRequests = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+            const allRequests = await loadFirebasePendingFundRequests();
             await importCloudFundRequests(allRequests);
             fundRequestsImportedFromFirebase = true;
             allFundRequestsCache = allRequests.filter(req => req.status === 'pending' && (req.type || 'withdrawal') === 'withdrawal');
@@ -2400,8 +2424,18 @@
                 });
 
             loadCloudFundRequests({ status: 'pending', userId })
-                .then((requests) => {
-                    pendingRequests = requests;
+                .then(async (requests) => {
+                    if (!requests.length) {
+                        const firebasePending = await loadFirebasePendingFundRequests(userId);
+                        if (firebasePending.length) {
+                            pendingRequests = firebasePending;
+                            firebasePending.forEach(request => upsertCloudFundRequest(request));
+                        } else {
+                            pendingRequests = requests;
+                        }
+                    } else {
+                        pendingRequests = requests;
+                    }
                     renderUnifiedHistory(5);
                 })
                 .catch((error) => {
@@ -2410,10 +2444,9 @@
                         renderUnifiedHistory(5);
                         return;
                     }
-                    const requestsQuery = query(collection(db, `artifacts/${appId}/public/data/fund_requests`), where("userId", "==", userId), where("status", "==", "pending"));
-                    getDocs(requestsQuery)
-                        .then((snap) => {
-                            pendingRequests = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+                    loadFirebasePendingFundRequests(userId)
+                        .then((requests) => {
+                            pendingRequests = requests;
                             renderUnifiedHistory(5);
                         })
                         .catch((firebaseError) => console.error("Error loading pending fund requests:", firebaseError));
@@ -3209,14 +3242,35 @@
             }
         };
 
+        const mergeSupportMessages = (...groups) => {
+            const merged = new Map();
+            groups.flat().forEach((message) => {
+                if (!message) return;
+                const normalized = normalizeBackendMessage(message);
+                const key = normalized.id || `${normalized.senderId}-${normalized.createdAt}-${normalized.text}`;
+                merged.set(key, { ...(merged.get(key) || {}), ...normalized });
+            });
+            return Array.from(merged.values()).sort((a, b) => timestampToMillis(a.createdAt) - timestampToMillis(b.createdAt));
+        };
+
         const normalizeBackendMessage = (message) => ({
-            id: `${message.roomId || message.room_id || activeSupportRoomId}-${message.timestamp || Date.now()}-${message.senderId || message.sender_id || ''}`,
+            id: message.id || `${message.roomId || message.room_id || activeSupportRoomId}-${message.timestamp || message.createdAt || Date.now()}-${message.senderId || message.sender_id || ''}`,
             text: message.message || message.text || '',
             senderId: message.senderId || message.sender_id || '',
             senderRole: (message.senderId || message.sender_id) === ADMIN_UID ? 'admin' : 'user',
             createdAt: message.timestamp || message.createdAt || Date.now(),
             readAt: message.readAt || message.readByAdminAt || message.read_by_admin_at || null
         });
+
+        const fetchSupportChatHistory = async (roomId, limit = 80) => {
+            const token = await getBackendAuthToken();
+            const response = await fetchWithTimeout(`${BACKEND_BASE_URL}/api/chats/${encodeURIComponent(roomId)}?limit=${limit}`, {
+                headers: { Authorization: `Bearer ${token}` }
+            }, 6000);
+            const data = await response.json().catch(() => ({}));
+            if (!response.ok || !data.ok) throw new Error(data.error || 'Chat history load failed');
+            return data.history || [];
+        };
 
         const openSupportChatPage = async (chatUserId, viewerRole = 'user', chatMeta = {}) => {
             if (activeChatUnsubscribe) {
@@ -3310,16 +3364,25 @@
             activeSupportRoomId = getSupportRoomId(chatUserId);
             activeSupportMessages = readSupportChatCache(activeSupportRoomId);
             renderSupportMessages(activeSupportMessages, viewerRole);
+            fetchSupportChatHistory(activeSupportRoomId, 80)
+                .then((history) => {
+                    if (!history.length && activeSupportMessages.length) return;
+                    activeSupportMessages = mergeSupportMessages(activeSupportMessages, history);
+                    writeSupportChatCache(activeSupportRoomId, activeSupportMessages);
+                    renderSupportMessages(activeSupportMessages, viewerRole);
+                })
+                .catch((error) => console.warn('Fast chat history fetch failed:', error));
             const socket = await getSupportSocket();
             const handleHistory = ({ roomId, history = [] }) => {
                 if (roomId !== activeSupportRoomId) return;
-                activeSupportMessages = history.map(normalizeBackendMessage);
+                if (!history.length && activeSupportMessages.length) return;
+                activeSupportMessages = mergeSupportMessages(activeSupportMessages, history);
                 writeSupportChatCache(activeSupportRoomId, activeSupportMessages);
                 renderSupportMessages(activeSupportMessages, viewerRole);
             };
             const handleNewMessage = (message) => {
                 if (message.roomId !== activeSupportRoomId) return;
-                activeSupportMessages = [...activeSupportMessages, normalizeBackendMessage(message)];
+                activeSupportMessages = mergeSupportMessages(activeSupportMessages, [message]);
                 writeSupportChatCache(activeSupportRoomId, activeSupportMessages);
                 renderSupportMessages(activeSupportMessages, viewerRole);
             };
@@ -5184,7 +5247,7 @@
             if (!listEl) return;
 
             const pendingRequests = [...requests];
-            pendingRequests.sort((a, b) => (a.requestedAt?.toMillis() || 0) - (b.requestedAt?.toMillis() || 0));
+            pendingRequests.sort((a, b) => timestampToMillis(a.requestedAt || a.requested_at) - timestampToMillis(b.requestedAt || b.requested_at));
 
             listEl.innerHTML = pendingRequests.length === 0 ? '<p class="text-gray-500 dark:text-gray-400 text-sm p-4 text-center">No pending recharge requests.</p>' : pendingRequests.map(r => `
                 <div class="p-4 mb-3 bg-sky-50 dark:bg-sky-900/20 rounded-xl border border-sky-100 dark:border-sky-800">

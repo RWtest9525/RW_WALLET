@@ -726,6 +726,17 @@ function registerRoutes(app, { d1, r2 }) {
 
     res.json({ ok: true, chats: rooms });
   });
+
+  app.get('/api/chats/:roomId', requireHttpAuth, async (req, res) => {
+    const roomId = String(req.params.roomId || '');
+    const roomUserId = roomId.replace(/^support_/, '');
+    if (!roomId || (!req.auth.isAdmin && req.auth.sub !== roomUserId)) {
+      return res.status(403).json({ ok: false, error: 'FORBIDDEN' });
+    }
+
+    const history = await recentChatHistory(d1, roomId, Math.min(Number(req.query.limit || 80), 200));
+    res.json({ ok: true, history });
+  });
 }
 
 function requireHttpAuth(req, res, next) {
