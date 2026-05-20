@@ -2639,6 +2639,73 @@
 
         const getPageFooter = () => `</div>`;
 
+        const getProfilePaymentDetails = (method, data = currentUserData || {}) => {
+            const details = data.paymentDetails && typeof data.paymentDetails === 'object' ? { ...data.paymentDetails } : {};
+            if (method === 'upi') {
+                return {
+                    ...details,
+                    upiId: details.upiId || data.upiId || (typeof data.paymentDetails === 'string' ? data.paymentDetails : '')
+                };
+            }
+            if (method === 'bank') {
+                return {
+                    ...details,
+                    accountNumber: details.accountNumber || data.accountNumber || '',
+                    ifsc: details.ifsc || data.ifsc || '',
+                    bankName: details.bankName || data.bankName || '',
+                    accountName: details.accountName || data.accountName || ''
+                };
+            }
+            if (['play_store', 'amazon_gift', 'flipkart_gift', 'paypal'].includes(method)) {
+                const stringDetails = typeof data.paymentDetails === 'string' ? data.paymentDetails : '';
+                return {
+                    ...details,
+                    email: details.email || data.paymentEmail || (stringDetails.includes('@') ? stringDetails : '')
+                };
+            }
+            return details;
+        };
+
+        const renderWebsiteLinkInputs = (links = []) => {
+            const cleanLinks = Array.isArray(links) ? links.slice(0, 3) : [];
+            const visibleCount = Math.max(1, cleanLinks.length);
+            const inputs = Array.from({ length: visibleCount }, (_, i) => `
+                <div class="flex items-center gap-2">
+                    <input type="url" value="${escapeHtml(cleanLinks[i] || '')}" placeholder="https://example.com" class="profile-website-input w-full px-4 py-3 bg-white dark:bg-gray-700 border-transparent rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    ${i > 0 ? '<button type="button" class="remove-website-link-btn h-10 w-10 shrink-0 rounded-full bg-red-50 dark:bg-red-900/30 text-red-600 dark:text-red-200 font-bold">-</button>' : ''}
+                </div>
+            `).join('');
+            const addButton = visibleCount < 3
+                ? '<button type="button" id="add-website-link-btn" class="w-full rounded-xl border border-dashed border-blue-300 dark:border-blue-700 py-2 text-sm font-bold text-blue-700 dark:text-blue-200">+ Add website link</button>'
+                : '';
+            return `${inputs}${addButton}`;
+        };
+
+        const bindWebsiteLinkControls = () => {
+            const container = document.getElementById('website-links-container');
+            if (!container) return;
+            const readLinks = () => Array.from(container.querySelectorAll('.profile-website-input'))
+                .map(input => input.value.trim())
+                .filter((value, index) => value || index === 0)
+                .slice(0, 3);
+            const rerender = (links) => {
+                container.innerHTML = renderWebsiteLinkInputs(links);
+                bindWebsiteLinkControls();
+            };
+            document.getElementById('add-website-link-btn')?.addEventListener('click', () => {
+                const links = readLinks();
+                if (links.length < 3) links.push('');
+                rerender(links);
+            });
+            container.querySelectorAll('.remove-website-link-btn').forEach((btn, index) => {
+                btn.addEventListener('click', () => {
+                    const links = readLinks();
+                    links.splice(index + 1, 1);
+                    rerender(links);
+                });
+            });
+        };
+
         const showProfilePage = (focusMethod = '') => {
             if (!currentUserData) return showNotification('User data not loaded. Please wait.', true);
             const isAdminProfile = currentUser?.uid === ADMIN_UID;
@@ -2661,7 +2728,7 @@
 
             let paymentDetailsForm = '';
             if (currentUserData.paymentMethod) {
-                paymentDetailsForm = renderPaymentDetailsForm(currentUserData.paymentMethod, currentUserData.paymentDetails || {});
+                paymentDetailsForm = renderPaymentDetailsForm(currentUserData.paymentMethod, getProfilePaymentDetails(currentUserData.paymentMethod));
             }
 
             const content = `
@@ -2669,15 +2736,15 @@
                 <div class="max-w-lg mx-auto bg-white dark:bg-gray-800 p-6 rounded-xl shadow-md space-y-4">
                     <div class="space-y-1">
                         <label class="text-sm font-medium text-gray-500 dark:text-gray-400">Email Address</label>
-                        <input type="email" value="${currentUserData.email}" class="w-full px-4 py-3 bg-gray-100 dark:bg-gray-700 border-transparent rounded-lg cursor-not-allowed" readonly>
+                        <input type="email" value="${escapeHtml(currentUserData.email || '')}" class="w-full px-4 py-3 bg-gray-100 dark:bg-gray-700 border-transparent rounded-lg cursor-not-allowed" readonly>
                     </div>
                     <div class="space-y-1">
                         <label class="text-sm font-medium text-gray-500 dark:text-gray-400">Full Name</label>
-                        <input type="text" id="profile-name-input" value="${currentUserData.name || ''}" class="w-full px-4 py-3 bg-gray-100 dark:bg-gray-700 border-transparent rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+                        <input type="text" id="profile-name-input" value="${escapeHtml(currentUserData.name || '')}" class="w-full px-4 py-3 bg-gray-100 dark:bg-gray-700 border-transparent rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
                     </div>
                     <div class="space-y-1">
                         <label class="text-sm font-medium text-gray-500 dark:text-gray-400">Mobile Number</label>
-                        <input type="tel" id="profile-mobile-input" value="${currentUserData.mobile || ''}" class="w-full px-4 py-3 bg-gray-100 dark:bg-gray-700 border-transparent rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+                        <input type="tel" id="profile-mobile-input" value="${escapeHtml(currentUserData.mobile || '')}" class="w-full px-4 py-3 bg-gray-100 dark:bg-gray-700 border-transparent rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
                     </div>
                     <div class="space-y-1">
                         <label class="text-sm font-medium text-gray-500 dark:text-gray-400">Payment Method</label>
@@ -2696,11 +2763,11 @@
                         </div>
                         <div class="space-y-1">
                             <label class="text-sm font-medium text-gray-500 dark:text-gray-400">WhatsApp Number</label>
-                            <input type="tel" id="profile-whatsapp-input" value="${currentUserData.whatsappNumber || currentUserData.mobile || ''}" maxlength="15" placeholder="WhatsApp number" class="w-full px-4 py-3 bg-white dark:bg-gray-700 border-transparent rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+                            <input type="tel" id="profile-whatsapp-input" value="${escapeHtml(currentUserData.whatsappNumber || currentUserData.mobile || '')}" maxlength="15" placeholder="WhatsApp number" class="w-full px-4 py-3 bg-white dark:bg-gray-700 border-transparent rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
                         </div>
                         <div class="space-y-2">
                             <label class="text-sm font-medium text-gray-500 dark:text-gray-400">Website Links (optional, max 3)</label>
-                            ${[0, 1, 2].map(i => `<input type="url" id="profile-website-${i}" value="${escapeHtml(websiteLinks[i] || '')}" placeholder="https://example.com" class="w-full px-4 py-3 bg-white dark:bg-gray-700 border-transparent rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">`).join('')}
+                            <div id="website-links-container" class="space-y-2">${renderWebsiteLinkInputs(websiteLinks)}</div>
                         </div>
                     </div>` : ''}
                     <button id="save-profile-btn" class="w-full bg-blue-600 text-white font-semibold py-3 rounded-lg hover:bg-blue-700 transition">Save Changes</button>
@@ -2710,13 +2777,14 @@
 
             document.getElementById('profile-payment-method').addEventListener('change', function () {
                 const method = this.value;
-                document.getElementById('payment-details-container').innerHTML = renderPaymentDetailsForm(method, {});
+                document.getElementById('payment-details-container').innerHTML = renderPaymentDetailsForm(method, getProfilePaymentDetails(method));
             });
 
             document.getElementById('save-profile-btn').onclick = handleUpdateProfile;
+            bindWebsiteLinkControls();
             if (focusMethod) {
                 document.getElementById('profile-payment-method').value = focusMethod;
-                document.getElementById('payment-details-container').innerHTML = renderPaymentDetailsForm(focusMethod, currentUserData.paymentDetails || {});
+                document.getElementById('payment-details-container').innerHTML = renderPaymentDetailsForm(focusMethod, getProfilePaymentDetails(focusMethod));
                 setTimeout(() => document.getElementById('payment-details-container')?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 50);
             }
         };
@@ -2727,26 +2795,26 @@
                     return `
                         <div class="space-y-1">
                             <label class="text-sm font-medium text-gray-500 dark:text-gray-400">UPI ID</label>
-                            <input type="text" id="payment-upi-id" value="${currentDetails.upiId || ''}" placeholder="e.g. yourname@bank" class="w-full px-4 py-3 bg-gray-100 dark:bg-gray-700 border-transparent rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+                            <input type="text" id="payment-upi-id" value="${escapeHtml(currentDetails.upiId || '')}" placeholder="e.g. yourname@bank" class="w-full px-4 py-3 bg-gray-100 dark:bg-gray-700 border-transparent rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
                         </div>`;
                 case 'bank':
                     return `
                         <div class="space-y-3">
                             <div class="space-y-1">
                                 <label class="text-sm font-medium text-gray-500 dark:text-gray-400">Bank Account Number</label>
-                                <input type="text" id="payment-bank-account" value="${currentDetails.accountNumber || ''}" placeholder="Enter bank account number" class="w-full px-4 py-3 bg-gray-100 dark:bg-gray-700 border-transparent rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+                                <input type="text" id="payment-bank-account" value="${escapeHtml(currentDetails.accountNumber || '')}" placeholder="Enter bank account number" class="w-full px-4 py-3 bg-gray-100 dark:bg-gray-700 border-transparent rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
                             </div>
                             <div class="space-y-1">
                                 <label class="text-sm font-medium text-gray-500 dark:text-gray-400">IFSC Code</label>
-                                <input type="text" id="payment-ifsc" value="${currentDetails.ifsc || ''}" placeholder="Enter IFSC code" class="w-full px-4 py-3 bg-gray-100 dark:bg-gray-700 border-transparent rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+                                <input type="text" id="payment-ifsc" value="${escapeHtml(currentDetails.ifsc || '')}" placeholder="Enter IFSC code" class="w-full px-4 py-3 bg-gray-100 dark:bg-gray-700 border-transparent rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
                             </div>
                             <div class="space-y-1">
                                 <label class="text-sm font-medium text-gray-500 dark:text-gray-400">Bank Name</label>
-                                <input type="text" id="payment-bank-name" value="${currentDetails.bankName || ''}" placeholder="Enter bank name" class="w-full px-4 py-3 bg-gray-100 dark:bg-gray-700 border-transparent rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+                                <input type="text" id="payment-bank-name" value="${escapeHtml(currentDetails.bankName || '')}" placeholder="Enter bank name" class="w-full px-4 py-3 bg-gray-100 dark:bg-gray-700 border-transparent rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
                             </div>
                             <div class="space-y-1">
                                 <label class="text-sm font-medium text-gray-500 dark:text-gray-400">Account Holder Name</label>
-                                <input type="text" id="payment-account-name" value="${currentDetails.accountName || ''}" placeholder="Enter account holder name" class="w-full px-4 py-3 bg-gray-100 dark:bg-gray-700 border-transparent rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+                                <input type="text" id="payment-account-name" value="${escapeHtml(currentDetails.accountName || '')}" placeholder="Enter account holder name" class="w-full px-4 py-3 bg-gray-100 dark:bg-gray-700 border-transparent rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
                             </div>
                         </div>`;
                 case 'play_store':
@@ -2756,7 +2824,7 @@
                     return `
                         <div class="space-y-1">
                             <label class="text-sm font-medium text-gray-500 dark:text-gray-400">Email Address</label>
-                            <input type="email" id="payment-email" value="${currentDetails.email || ''}" placeholder="Enter your email" class="w-full px-4 py-3 bg-gray-100 dark:bg-gray-700 border-transparent rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+                            <input type="email" id="payment-email" value="${escapeHtml(currentDetails.email || '')}" placeholder="Enter your email" class="w-full px-4 py-3 bg-gray-100 dark:bg-gray-700 border-transparent rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
                         </div>`;
                 case 'crypto':
                     return `<div class="text-center py-4 text-gray-500 dark:text-gray-400">Crypto Currency withdrawal is coming soon.</div>`;
@@ -7584,7 +7652,7 @@
                 return showNotification('Mobile number must be exactly 10 digits.', true);
             }
 
-            let paymentDetails = {};
+            let paymentDetails = getProfilePaymentDetails(paymentMethod);
 
             // Collect payment details based on selected method
             switch (paymentMethod) {
@@ -7623,7 +7691,7 @@
                 name: newName,
                 mobile: newMobile,
                 paymentMethod: paymentMethod,
-                paymentDetails: paymentDetails
+                paymentDetails: paymentMethod ? paymentDetails : getProfilePaymentDetails(currentUserData?.paymentMethod || '')
             };
 
             if (isAdminProfile) {
@@ -7632,9 +7700,10 @@
                     return showNotification('WhatsApp number must be 10 to 15 digits.', true);
                 }
 
-                const websiteLinks = [0, 1, 2]
-                    .map(i => document.getElementById(`profile-website-${i}`)?.value.trim())
-                    .filter(Boolean);
+                const websiteLinks = Array.from(document.querySelectorAll('.profile-website-input'))
+                    .map(input => input.value.trim())
+                    .filter(Boolean)
+                    .slice(0, 3);
                 const invalidLink = websiteLinks.find(link => !/^https?:\/\/.+\..+/.test(link));
                 if (invalidLink) {
                     return showNotification('Website links must start with http:// or https://', true);
@@ -7646,6 +7715,8 @@
             try {
                 const userRef = doc(db, `artifacts/${appId}/public/data/users`, currentUser.uid);
                 await updateDoc(userRef, profileUpdate);
+                currentUserData = { ...(currentUserData || {}), ...profileUpdate };
+                writeJsonCache(getUserCacheKey(currentUser.uid), sanitizeUserForCache(currentUserData, currentUser.uid));
                 showNotification('Profile updated successfully!');
                 hidePage();
             } catch (e) {
