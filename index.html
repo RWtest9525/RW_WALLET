@@ -2759,16 +2759,21 @@
         };
 
         const getSupportLogo = () => 'https://i.ibb.co/x8YBYwGG/6233389803554672153.jpg';
+        const CHATBOT_ICON_URL = 'https://cdn-icons-png.flaticon.com/512/2040/2040946.png';
         const getVerifiedBadge = (extraClass = '') => `
             <span class="inline-flex h-4 w-4 items-center justify-center rounded-full bg-blue-600 text-white align-middle ${extraClass}" title="Verified">
                 <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"></path></svg>
             </span>`;
-        const getRevyBotLogo = (sizeClass = 'h-14 w-14') => `
-            <div class="${sizeClass} rounded-full bg-gradient-to-br from-indigo-600 via-blue-600 to-emerald-500 p-[2px] shadow-sm">
-                <div class="h-full w-full rounded-full bg-white dark:bg-gray-900 flex items-center justify-center">
-                    <span class="text-xs font-black tracking-wide text-blue-700 dark:text-blue-300">AI</span>
+        const getPremiumLogoFrame = (innerHtml, sizeClass = 'h-14 w-14', extraClass = '') => `
+            <div class="${sizeClass} ${extraClass} rounded-full bg-gradient-to-br from-indigo-600 via-blue-600 to-emerald-500 p-[2px] shadow-sm">
+                <div class="h-full w-full rounded-full bg-white dark:bg-gray-900 p-[3px] flex items-center justify-center overflow-hidden">
+                    ${innerHtml}
                 </div>
             </div>`;
+        const getRevyBotLogo = (sizeClass = 'h-14 w-14') => `
+            ${getPremiumLogoFrame(`<img src="${CHATBOT_ICON_URL}" alt="REVY AI" class="h-full w-full rounded-full object-contain">`, sizeClass)}`;
+        const getSupportLogoFrame = (sizeClass = 'h-14 w-14', extraClass = '') => `
+            ${getPremiumLogoFrame(`<img src="${getSupportLogo()}" alt="REVIEWS WORLD" class="h-full w-full rounded-full object-cover">`, sizeClass, extraClass)}`;
 
         const showSupportProfileModal = async () => {
             let supportProfile = allUsersCache.find(u => u.id === ADMIN_UID) || {};
@@ -2789,7 +2794,7 @@
             };
             renderModal('REVIEWS WORLD',
                 `<div class="space-y-4 text-center">
-                    <img src="${getSupportLogo()}" alt="REVIEWS WORLD" class="h-20 w-20 rounded-full mx-auto object-cover shadow-md">
+                    ${getSupportLogoFrame('h-20 w-20', 'mx-auto')}
                     <div class="rounded-2xl bg-blue-50 dark:bg-blue-900/20 border border-blue-100 dark:border-blue-800 p-4">
                         <h3 class="text-lg font-bold text-blue-900 dark:text-blue-100 inline-flex items-center justify-center gap-1">REVIEWS WORLD ${getVerifiedBadge()}</h3>
                         <p class="text-sm text-blue-600 dark:text-blue-300">${escapeHtml(supportProfile.email || 'reviewsworld01@gmail.com')}</p>
@@ -2915,7 +2920,7 @@
                             <button class="page-back-btn h-10 w-10 shrink-0 rounded-full bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 flex items-center justify-center">
                                 <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5"></path><path d="M12 19l-7-7 7-7"></path></svg>
                             </button>
-                            <img src="${logo}" alt="${escapeHtml(displayName)}" class="h-10 w-10 rounded-full object-cover">
+                            ${isAdminView ? `<img src="${logo}" alt="${escapeHtml(displayName)}" class="h-10 w-10 rounded-full object-cover">` : getSupportLogoFrame('h-10 w-10 shrink-0')}
                             <button id="support-profile-btn" class="min-w-0 flex-1 text-left">
                                 <h3 class="font-bold truncate inline-flex items-center gap-1">${escapeHtml(displayName)} ${!isAdminView ? getVerifiedBadge() : ''}</h3>
                                 <p class="text-xs text-gray-500 dark:text-gray-400 truncate">${escapeHtml(displayEmail)}</p>
@@ -3276,7 +3281,7 @@
                         <span class="text-blue-600 dark:text-blue-300 font-bold">Ask</span>
                     </button>
                     <button id="reviews-world-chat-card" class="w-full flex items-center gap-4 p-4 bg-white dark:bg-gray-800 border border-gray-100 dark:border-gray-700 rounded-2xl shadow-md text-left hover:bg-gray-50 dark:hover:bg-gray-700/50 transition">
-                        <img src="${getSupportLogo()}" alt="REVIEWS WORLD" class="h-14 w-14 rounded-full object-cover shadow-sm">
+                        ${getSupportLogoFrame('h-14 w-14 shrink-0')}
                         <div class="flex-1 min-w-0">
                             <h3 class="font-bold text-gray-900 dark:text-white inline-flex items-center gap-1">REVIEWS WORLD ${getVerifiedBadge()}</h3>
                             <p class="text-sm text-gray-500 dark:text-gray-400 truncate">Chat with admin support</p>
