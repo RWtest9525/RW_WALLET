@@ -2415,9 +2415,10 @@
                         console.error("Error initializing admin listeners:", err);
                     }
                 }
-                switchTab(isAdmin ? 'admin-panel' : 'user-panel');
+                currentMainSection = 'home';
+                switchTab('user-panel');
                 setMainChrome(true);
-                setBottomNavActive(isAdmin ? 'bottom-admin-btn' : 'bottom-home-btn');
+                setBottomNavActive('bottom-home-btn');
 
             } else {
                 currentUser = null;
@@ -3950,8 +3951,9 @@
             revyBotMessages = [];
             revyBotLastQuestion = '';
             hidePage();
-            switchTab(currentUser?.uid === ADMIN_UID ? 'admin-panel' : 'user-panel');
-            setBottomNavActive(currentUser?.uid === ADMIN_UID ? 'bottom-admin-btn' : 'bottom-home-btn');
+            currentMainSection = 'home';
+            switchTab('user-panel');
+            setBottomNavActive('bottom-home-btn');
         };
 
         const getPendingWithdrawalForBot = async () => {
