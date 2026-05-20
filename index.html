@@ -3754,21 +3754,22 @@
                     </div>
                 </div>
                 ${getPageFooter()}`;
-            showPage(content, { fullHeight: true });
+            const goBackFromSupportChat = () => {
+                if (activeChatUnsubscribe) {
+                    activeChatUnsubscribe();
+                    activeChatUnsubscribe = null;
+                }
+                if (isAdminView) {
+                    showAdminChatsPage();
+                } else {
+                    showHelpSupportPage();
+                }
+            };
+            showPage(content, { fullHeight: true, onBack: goBackFromSupportChat });
             setBottomNavActive(isAdminView ? 'bottom-settings-btn' : 'bottom-help-btn');
             const chatBackBtn = document.querySelector('#page-container .page-back-btn');
             if (chatBackBtn) {
-                chatBackBtn.onclick = () => {
-                    if (activeChatUnsubscribe) {
-                        activeChatUnsubscribe();
-                        activeChatUnsubscribe = null;
-                    }
-                    if (isAdminView) {
-                        showAdminChatsPage();
-                    } else {
-                        showHelpSupportPage();
-                    }
-                };
+                chatBackBtn.onclick = goBackFromSupportChat;
             }
 
             document.getElementById('support-profile-btn').onclick = () => {
