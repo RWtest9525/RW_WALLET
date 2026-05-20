@@ -3285,7 +3285,7 @@
             const logo = isAdminView ? 'https://cdn-icons-png.flaticon.com/512/3135/3135715.png' : getSupportLogo();
             const initialMessage = chatMeta.initialMessage || '';
             const content = `
-                <div class="max-w-xl mx-auto bg-gray-100 dark:bg-gray-900 h-[100dvh] flex flex-col">
+                <div id="support-chat-shell" class="max-w-xl mx-auto bg-gray-100 dark:bg-gray-900 h-[100dvh] flex flex-col">
                     <div class="bg-white dark:bg-gray-800 border border-gray-100 dark:border-gray-700 rounded-xl shadow-sm overflow-hidden flex flex-col h-full min-h-0">
                         <div class="relative flex items-center gap-3 p-3 border-b border-gray-100 dark:border-gray-700">
                             <button class="page-back-btn h-10 w-10 shrink-0 rounded-full bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 flex items-center justify-center">
@@ -3305,7 +3305,7 @@
                         <div id="emoji-panel" class="hidden flex flex-wrap gap-2 p-3 border-t border-gray-100 dark:border-gray-700 bg-white dark:bg-gray-800">
                             ${['😀','😁','🙏','👍','❤️','🔥','🎉','😊','🤗','✅','💰','📞'].map(emoji => `<button class="emoji-choice text-xl">${emoji}</button>`).join('')}
                         </div>
-                        <div class="shrink-0 flex items-center gap-2 p-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] border-t border-gray-100 dark:border-gray-700 bg-white dark:bg-gray-800">
+                        <div id="support-chat-composer" class="shrink-0 flex items-center gap-2 p-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] border-t border-gray-100 dark:border-gray-700 bg-white dark:bg-gray-800 transition-transform duration-150">
                             <button id="emoji-toggle-btn" class="h-10 w-10 rounded-full bg-gray-100 dark:bg-gray-700 text-xl">☺</button>
                             <input id="support-message-input" type="text" placeholder="Type a message" class="flex-1 min-w-0 px-4 py-2.5 bg-gray-100 dark:bg-gray-700 rounded-full focus:outline-none focus:ring-2 focus:ring-blue-500">
                             <button id="support-send-btn" class="h-10 w-10 rounded-full bg-blue-600 text-white flex items-center justify-center">
@@ -3361,6 +3361,48 @@
                 }
             });
 
+            let keyboardCleanup = null;
+            const installMobileChatKeyboardLift = () => {
+                const shell = document.getElementById('support-chat-shell');
+                const composer = document.getElementById('support-chat-composer');
+                const input = document.getElementById('support-message-input');
+                const messages = document.getElementById('support-chat-messages');
+                if (!shell || !composer || !input || !messages) return null;
+
+                const keepTypingVisible = () => {
+                    if (window.visualViewport) {
+                        const visibleHeight = Math.max(360, window.visualViewport.height);
+                        shell.style.height = `${visibleHeight}px`;
+                        shell.style.maxHeight = `${visibleHeight}px`;
+                    }
+                    setTimeout(() => {
+                        composer.scrollIntoView({ block: 'end', behavior: 'smooth' });
+                        messages.scrollTop = messages.scrollHeight;
+                    }, 80);
+                };
+
+                const resetTypingPosition = () => {
+                    if (window.visualViewport) {
+                        shell.style.height = '';
+                        shell.style.maxHeight = '';
+                    }
+                };
+
+                input.addEventListener('focus', keepTypingVisible);
+                input.addEventListener('input', keepTypingVisible);
+                window.visualViewport?.addEventListener('resize', keepTypingVisible);
+                window.visualViewport?.addEventListener('scroll', keepTypingVisible);
+
+                return () => {
+                    input.removeEventListener('focus', keepTypingVisible);
+                    input.removeEventListener('input', keepTypingVisible);
+                    window.visualViewport?.removeEventListener('resize', keepTypingVisible);
+                    window.visualViewport?.removeEventListener('scroll', keepTypingVisible);
+                    resetTypingPosition();
+                };
+            };
+            keyboardCleanup = installMobileChatKeyboardLift();
+
             activeSupportRoomId = getSupportRoomId(chatUserId);
             activeSupportMessages = readSupportChatCache(activeSupportRoomId);
             renderSupportMessages(activeSupportMessages, viewerRole);
@@ -3397,6 +3439,7 @@
                 }
             });
             activeChatUnsubscribe = () => {
+                if (keyboardCleanup) keyboardCleanup();
                 socket.off('chat_history', handleHistory);
                 socket.off('new_message', handleNewMessage);
                 socket.emit('leave_room', { roomId: activeSupportRoomId });
@@ -3444,7 +3487,10 @@
             document.getElementById('support-message-input').addEventListener('keydown', (e) => {
                 if (e.key === 'Enter') sendMessage();
             });
-            document.getElementById('emoji-toggle-btn').onclick = () => document.getElementById('emoji-panel').classList.toggle('hidden');
+            document.getElementById('emoji-toggle-btn').onclick = () => {
+                document.getElementById('emoji-panel').classList.toggle('hidden');
+                document.getElementById('support-message-input').focus();
+            };
             document.querySelectorAll('.emoji-choice').forEach(btn => {
                 btn.onclick = () => {
                     const input = document.getElementById('support-message-input');
@@ -3477,13 +3523,9 @@
         const getPendingWithdrawalForBot = async () => {
             if (!currentUser) return null;
             try {
-                const pendingQuery = query(
-                    collection(db, `artifacts/${appId}/public/data/fund_requests`),
-                    where('userId', '==', currentUser.uid),
-                    where('status', '==', 'pending')
-                );
-                const snap = await getDocs(pendingQuery);
-                return snap.docs.map(doc => ({ id: doc.id, ...doc.data() }))
+                const cloudPending = await loadCloudFundRequests({ status: 'pending', userId: currentUser.uid });
+                const pending = cloudPending.length ? cloudPending : await loadFirebasePendingFundRequests(currentUser.uid);
+                return pending
                     .find(item => (item.type || 'withdrawal') === 'withdrawal') || null;
             } catch (error) {
                 console.error('Bot pending withdrawal check failed:', error);
@@ -3491,39 +3533,61 @@
             }
         };
 
+        const getLatestTransactionsForBot = async (limit = 5) => {
+            const cachedHistory = unifiedHistoryCache?.length
+                ? unifiedHistoryCache
+                : readHistoryItemsFromCache(currentUser?.uid || '');
+            try {
+                if (currentUser?.uid) {
+                    const cloudHistory = await fetchCloudTransactionHistory(currentUser.uid, limit);
+                    if (cloudHistory.length) return cloudHistory.slice(0, limit);
+                }
+            } catch (error) {
+                console.warn('Bot cloud transaction lookup failed:', error);
+            }
+            return (cachedHistory || []).slice(0, limit);
+        };
+
         const getRevyBotReply = async (question) => {
             const text = String(question || '').toLowerCase();
             const compactText = text.replace(/[^a-z0-9]+/g, ' ').trim();
             const hasAny = (...words) => words.some(word => compactText.includes(String(word).toLowerCase()));
-            const pendingWithdrawal = await getPendingWithdrawalForBot();
-            const latestHistory = unifiedHistoryCache?.[0] || readHistoryItemsFromCache(currentUser?.uid || '')?.[0];
             const activeLoan = allLoansCache.find(loan => loan.userId === currentUser?.uid && loan.status === 'active');
             const activeInvestment = allInvestmentsCache.find(item => item.userId === currentUser?.uid && item.status === 'active');
 
-            if (hasAny('earn', 'earning', 'income', 'make money', 'track income', 'work', 'task', 'review work', 'reviews work')) {
-                return 'You can earn through REVIEWS WORLD work opportunities and wallet activities shared by admin. In the app, use Track Income to see your income records, Become Partner for partner investment income if available, Gift Codes when admin provides codes, and contact REVIEWS WORLD support for available review work or earning tasks.';
+            if (hasAny('earn', 'earning', 'income', 'make money', 'track income', 'work', 'task', 'review work', 'reviews work', 'map review', 'download work', 'like comment')) {
+                return 'Main earning work in REVIEWS WORLD is app reviews work, map review work, app download work, and like/comment work. Work updates are shared on the WhatsApp channel by admin. Complete the given task properly, then admin verifies it and wallet income/payment records can be tracked in the app. You can also check Track Income, Gift Codes if admin gives codes, and Become Partner if investment options are available.';
             }
 
-            if (hasAny('add money', 'add fund', 'add funds', 'deposit', 'recharge wallet', 'top up', 'load wallet')) {
-                return 'To add wallet funds, use Add Fund from the wallet dashboard and submit the request with payment details. After admin verifies it, your wallet balance will update. If it is delayed, open admin support chat with your payment proof/details.';
+            if (hasAny('add money', 'add fund', 'add funds', 'deposit', 'recharge wallet', 'top up', 'load wallet', 'add balance')) {
+                return 'To add wallet funds, open Add Fund from the dashboard, enter amount and payment details, then submit. After admin verifies your payment, balance is credited. If delayed, send payment proof in REVIEWS WORLD support chat.';
             }
 
             if (hasAny('send money', 'pay to wallet', 'transfer money', 'wallet transfer', 'pay user', 'send fund')) {
-                return 'Use Pay to Wallet to send money to another RW Wallet user. Enter the recipient mobile number, amount, and details. The app will find the user, confirm the transfer, and then record it in both users transaction history.';
+                return 'Use Pay to Wallet to send money to another RW Wallet user. Enter recipient mobile number, amount, and note/details. The app finds the user, asks confirmation, transfers wallet balance, and saves the record in both users transaction history.';
             }
 
             if (hasAny('withdraw', 'withdrawal', 'payout', 'payment pending', 'pending')) {
+                const pendingWithdrawal = await getPendingWithdrawalForBot();
                 if (pendingWithdrawal) {
-                    return `Your withdrawal request of ${formatCurrency(pendingWithdrawal.amount || 0)} is currently pending. It has not been rejected. Due to processing delay it may take some time, and admin will process it soon.`;
+                    return `Your withdrawal request of ${formatCurrency(pendingWithdrawal.amount || 0)} is pending. Method: ${pendingWithdrawal.method || getWithdrawalMethodName(pendingWithdrawal.methodId) || 'saved payout method'}. It is not rejected. Admin will process it soon if details are correct.`;
                 }
                 return 'I do not see a pending withdrawal request right now. To withdraw, first add your payout details in Settings > My Profile, then open Withdraw Fund, choose UPI/Bank/Gift Card/PayPal, enter the amount, and submit. The amount is deducted immediately and stays pending until admin approves or rejects it.';
             }
             if (hasAny('balance', 'wallet', 'fund')) {
                 return `Your current wallet balance is ${formatCurrency(currentUserData?.balance || 0)}. If a withdrawal is submitted, the amount is deducted immediately and shown as pending until admin approves or rejects it.`;
             }
-            if (hasAny('transaction', 'history', 'invoice', 'receipt')) {
+            if (hasAny('transaction', 'history', 'invoice', 'receipt', 'last transaction', 'latest transaction', 'recent transaction', 'last 5', 'latest 5')) {
+                const latestTransactions = await getLatestTransactionsForBot(5);
+                const latestHistory = latestTransactions[0];
                 if (latestHistory) {
-                    return `Your latest wallet activity is ${latestHistory.comment || latestHistory.type || 'a transaction'} for ${formatCurrency(latestHistory.amount || 0)}. Open Transaction History to view full details and receipts.`;
+                    if (hasAny('last 5', 'latest 5', 'recent transaction', 'recent transactions', 'latest transactions', 'transaction history')) {
+                        const summary = latestTransactions.map((item, index) =>
+                            `${index + 1}. ${item.comment || item.type || 'Transaction'} - ${formatCurrency(Math.abs(item.amount || item.chargeAmount || 0))} - ${item.status || 'completed'}`
+                        ).join('\n');
+                        return `Your latest ${latestTransactions.length} wallet records:\n${summary}\nOpen Transaction History to view full details, IDs, and receipts.`;
+                    }
+                    return `Your latest wallet activity is ${latestHistory.comment || latestHistory.type || 'a transaction'} for ${formatCurrency(Math.abs(latestHistory.amount || latestHistory.chargeAmount || 0))}. Status: ${latestHistory.status || 'completed'}. Open Transaction History to view full details and receipts.`;
                 }
                 return 'You can check all wallet activity from Transaction History. It shows deposits, withdrawals, transfers, recharge, gift code, and other wallet records.';
             }
@@ -3537,7 +3601,7 @@
                 return 'For password help, use Forgot Password on the login page. A reset link will be sent to your email, and you should also check the spam folder.';
             }
             if (hasAny('recharge', 'mobile recharge')) {
-                return 'For mobile recharge, open Mobile Recharge, enter the number, choose operator and circle, then submit. The request is processed through your wallet balance.';
+                return 'For mobile recharge, open Mobile Recharge, enter number, choose operator and circle/state, select or type plan details, then submit. Wallet amount is deducted and the request stays pending until admin completes or rejects it.';
             }
             if (hasAny('loan', 'borrow')) {
                 if (activeLoan) {
@@ -3555,13 +3619,13 @@
                 return 'Gift codes can be redeemed from the Gift Code section when you have a valid code. Gift card withdrawals use the email saved in your profile payout details.';
             }
             if (hasAny('admin', 'support', 'contact', 'help from admin', 'human', 'whatsapp')) {
-                return 'For direct help, open REVIEWS WORLD chat from Help. You can also check the REVIEWS WORLD profile in chat for WhatsApp and website links added by admin.';
+                return 'For direct help, open REVIEWS WORLD chat from Help. Work updates are shared on the WhatsApp channel, and you can check the REVIEWS WORLD profile in chat for WhatsApp number and website links added by admin.';
             }
             if (hasAny('delete chat', 'chat delete', 'disappear', '15 days', 'privacy')) {
                 return 'Support chat messages are kept until admin reads them. After admin reads a chat, those read messages automatically become eligible for deletion after 15 days to save storage.';
             }
             if (hasAny('company', 'reviews world', 'rw wallet', 'app', 'developer', 'yash', 'about', 'platform')) {
-                return 'RW Wallet is the digital wallet platform of REVIEWS WORLD, developed by YASH VISHAL. It includes wallet balance, add fund, pay to wallet, withdrawals, transaction history, mobile recharge, gift codes, partner investment, loan tools, withdrawal invoices, profile payout details, support chat, and REVY instant help.';
+                return 'RW Wallet is the digital wallet platform of REVIEWS WORLD, developed by YASH VISHAL. It supports wallet balance, add fund, pay to wallet, withdrawals, transaction history, mobile recharge, gift codes, partner investment, loan tools, withdrawal invoices, payout profile details, support chat, and REVY instant help. REVIEWS WORLD work includes app review, map review, app download, and like/comment tasks shared by admin.';
             }
             if (hasAny('hello', 'hi', 'hey', 'help', 'start')) {
                 return 'Hi, I am REVY, RW AI BOT. I can help with earning, add fund, pay to wallet, wallet balance, pending withdrawals, transaction history, payout details, password reset, recharge, gift codes, loans, partner investment, invoices, and how to use the app.';
@@ -3586,7 +3650,7 @@
                 return `
                     <div class="flex ${isMine ? 'justify-end' : 'justify-start'}">
                         <div class="w-fit max-w-[84%] rounded-2xl px-3 py-2 shadow-sm ${isMine ? 'chat-bubble-user bg-emerald-50 dark:bg-emerald-900/40 border border-emerald-100 dark:border-emerald-800' : 'chat-bubble-admin bg-white dark:bg-gray-800 border border-gray-100 dark:border-gray-700'}">
-                            <p class="text-sm leading-5 break-words">${escapeHtml(message.text)}</p>
+                            <p class="text-sm leading-5 break-words whitespace-pre-line">${escapeHtml(message.text)}</p>
                             <p class="text-[10px] mt-1 text-gray-400">${formatChatTime(message.createdAt)}</p>
                             ${showActions ? `
                                 <div class="mt-3 flex flex-wrap gap-2">
