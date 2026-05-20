@@ -99,6 +99,7 @@ function nowMs() {
 }
 
 const ADMIN_UID = process.env.ADMIN_UID || 'mOs5Fmp4RoRzeBDH4pZLMOpQx7Q2';
+const CHAT_RETENTION_AFTER_ADMIN_READ_MS = 15 * 24 * 60 * 60 * 1000;
 
 function createAppToken(user) {
   return jwt.sign(
@@ -177,13 +178,21 @@ async function initSchema(d1) {
       room_id TEXT NOT NULL,
       sender_id TEXT NOT NULL,
       message TEXT NOT NULL,
-      timestamp INTEGER NOT NULL
+      timestamp INTEGER NOT NULL,
+      read_by_admin_at INTEGER
     )
   `);
+
+  await ensureColumn(d1, 'chats', 'read_by_admin_at', 'INTEGER');
 
   await d1.query(`
     CREATE INDEX IF NOT EXISTS idx_chats_room_time
     ON chats (room_id, timestamp DESC)
+  `);
+
+  await d1.query(`
+    CREATE INDEX IF NOT EXISTS idx_chats_admin_read_cleanup
+    ON chats (read_by_admin_at)
   `);
 
   await d1.query(`
@@ -288,8 +297,9 @@ async function upsertFirebaseUser(d1, decodedToken, profile = {}) {
 }
 
 async function recentChatHistory(d1, roomId, limit = 50) {
+  await cleanupExpiredReadChats(d1);
   const rows = await d1.all(
-    `SELECT room_id, sender_id, message, timestamp
+    `SELECT room_id, sender_id, message, timestamp, read_by_admin_at
      FROM chats
      WHERE room_id = ?
      ORDER BY timestamp DESC
@@ -300,11 +310,62 @@ async function recentChatHistory(d1, roomId, limit = 50) {
   return rows.reverse();
 }
 
-async function saveChatMessage(d1, { roomId, senderId, message, timestamp }) {
+async function saveChatMessage(d1, { roomId, senderId, message, timestamp, readByAdminAt = null }) {
   await d1.query(
-    `INSERT INTO chats (room_id, sender_id, message, timestamp)
-     VALUES (?, ?, ?, ?)`,
-    [roomId, senderId, message, timestamp]
+    `INSERT INTO chats (room_id, sender_id, message, timestamp, read_by_admin_at)
+     VALUES (?, ?, ?, ?, ?)`,
+    [roomId, senderId, message, timestamp, readByAdminAt]
+  );
+}
+
+async function markRoomReadByAdmin(d1, roomId, readAt = nowMs()) {
+  await d1.query(
+    `UPDATE chats
+     SET read_by_admin_at = COALESCE(read_by_admin_at, ?)
+     WHERE room_id = ?`,
+    [readAt, roomId]
+  );
+}
+
+async function cleanupExpiredReadChats(d1) {
+  const cutoff = nowMs() - CHAT_RETENTION_AFTER_ADMIN_READ_MS;
+  await d1.query(
+    `DELETE FROM chats
+     WHERE read_by_admin_at IS NOT NULL
+       AND read_by_admin_at <= ?`,
+    [cutoff]
+  );
+  await d1.query(
+    `DELETE FROM chat_rooms
+     WHERE NOT EXISTS (
+       SELECT 1 FROM chats
+       WHERE chats.room_id = chat_rooms.room_id
+     )`
+  );
+  await d1.query(
+    `UPDATE chat_rooms
+     SET last_message = (
+         SELECT message FROM chats
+         WHERE chats.room_id = chat_rooms.room_id
+         ORDER BY timestamp DESC
+         LIMIT 1
+       ),
+       last_sender_id = (
+         SELECT sender_id FROM chats
+         WHERE chats.room_id = chat_rooms.room_id
+         ORDER BY timestamp DESC
+         LIMIT 1
+       ),
+       updated_at = (
+         SELECT timestamp FROM chats
+         WHERE chats.room_id = chat_rooms.room_id
+         ORDER BY timestamp DESC
+         LIMIT 1
+       )
+     WHERE EXISTS (
+       SELECT 1 FROM chats
+       WHERE chats.room_id = chat_rooms.room_id
+     )`
   );
 }
 
@@ -502,6 +563,21 @@ function requireHttpAuth(req, res, next) {
 }
 
 function registerSocketHandlers(io, { d1 }) {
+  const adminRooms = new Map();
+
+  const addAdminRoomPresence = (roomId, socketId) => {
+    const sockets = adminRooms.get(roomId) || new Set();
+    sockets.add(socketId);
+    adminRooms.set(roomId, sockets);
+  };
+
+  const removeAdminRoomPresence = (roomId, socketId) => {
+    const sockets = adminRooms.get(roomId);
+    if (!sockets) return;
+    sockets.delete(socketId);
+    if (sockets.size === 0) adminRooms.delete(roomId);
+  };
+
   io.use((socket, next) => {
     try {
       const token = socket.handshake.auth?.token || socket.handshake.headers.authorization?.replace(/^Bearer\s+/i, '');
@@ -514,10 +590,18 @@ function registerSocketHandlers(io, { d1 }) {
   });
 
   io.on('connection', (socket) => {
+    socket.adminJoinedRooms = new Set();
+
     socket.on('join_room', async ({ roomId, limit = 50 }, ack) => {
       try {
         if (!roomId) throw new Error('ROOM_REQUIRED');
         socket.join(roomId);
+        if (socket.user.isAdmin) {
+          addAdminRoomPresence(roomId, socket.id);
+          socket.adminJoinedRooms.add(roomId);
+          await markRoomReadByAdmin(d1, roomId);
+          cleanupExpiredReadChats(d1).catch((error) => console.error('Chat cleanup failed:', error));
+        }
         const history = await recentChatHistory(d1, roomId, limit);
         socket.emit('chat_history', { roomId, history });
         if (ack) ack({ ok: true });
@@ -527,7 +611,11 @@ function registerSocketHandlers(io, { d1 }) {
     });
 
     socket.on('leave_room', ({ roomId }, ack) => {
-      if (roomId) socket.leave(roomId);
+      if (roomId) {
+        socket.leave(roomId);
+        removeAdminRoomPresence(roomId, socket.id);
+        socket.adminJoinedRooms.delete(roomId);
+      }
       if (ack) ack({ ok: true });
     });
 
@@ -536,11 +624,13 @@ function registerSocketHandlers(io, { d1 }) {
         if (!roomId || !String(message || '').trim()) throw new Error('ROOM_AND_MESSAGE_REQUIRED');
 
         const timestamp = nowMs();
+        const readByAdminAt = (socket.user.isAdmin || adminRooms.has(roomId)) ? timestamp : null;
         const chatMessage = {
           roomId,
           senderId: socket.user.sub,
           message: String(message).slice(0, 4000),
-          timestamp
+          timestamp,
+          readByAdminAt
         };
 
         io.to(roomId).emit('new_message', chatMessage);
@@ -563,6 +653,11 @@ function registerSocketHandlers(io, { d1 }) {
         if (ack) ack({ ok: false, error: error.message });
       }
     });
+
+    socket.on('disconnect', () => {
+      socket.adminJoinedRooms.forEach((roomId) => removeAdminRoomPresence(roomId, socket.id));
+      socket.adminJoinedRooms.clear();
+    });
   });
 }
 
@@ -574,6 +669,11 @@ async function createCloudflareWalletService() {
   const r2 = createR2Client();
 
   await initSchema(d1);
+  cleanupExpiredReadChats(d1).catch((error) => console.error('Initial chat cleanup failed:', error));
+  const cleanupTimer = setInterval(() => {
+    cleanupExpiredReadChats(d1).catch((error) => console.error('Scheduled chat cleanup failed:', error));
+  }, 60 * 60 * 1000);
+  cleanupTimer.unref?.();
 
   return {
     d1,

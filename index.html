@@ -2880,7 +2880,7 @@
             senderId: message.senderId || message.sender_id || '',
             senderRole: (message.senderId || message.sender_id) === ADMIN_UID ? 'admin' : 'user',
             createdAt: message.timestamp || message.createdAt || Date.now(),
-            readAt: message.readAt || null
+            readAt: message.readAt || message.readByAdminAt || message.read_by_admin_at || null
         });
 
         const openSupportChatPage = async (chatUserId, viewerRole = 'user', chatMeta = {}) => {
@@ -2897,7 +2897,7 @@
             const content = `
                 <div class="max-w-xl mx-auto bg-gray-100 dark:bg-gray-900 h-[calc(100dvh-5.5rem)] flex flex-col">
                     <div class="bg-white dark:bg-gray-800 border border-gray-100 dark:border-gray-700 rounded-xl shadow-sm overflow-hidden flex flex-col h-full min-h-0">
-                        <div class="flex items-center gap-3 p-3 border-b border-gray-100 dark:border-gray-700">
+                        <div class="relative flex items-center gap-3 p-3 border-b border-gray-100 dark:border-gray-700">
                             <button class="page-back-btn h-10 w-10 shrink-0 rounded-full bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 flex items-center justify-center">
                                 <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5"></path><path d="M12 19l-7-7 7-7"></path></svg>
                             </button>
@@ -2906,6 +2906,10 @@
                                 <h3 class="font-bold truncate">${escapeHtml(displayName)}</h3>
                                 <p class="text-xs text-gray-500 dark:text-gray-400 truncate">${escapeHtml(displayEmail)}</p>
                             </button>
+                            <button id="chat-disappear-info-btn" class="h-9 w-9 shrink-0 rounded-full bg-gray-100 dark:bg-gray-700 text-xs font-bold text-gray-600 dark:text-gray-200 hover:bg-gray-200 dark:hover:bg-gray-600" title="Disappearing chat">15d</button>
+                            <div id="chat-disappear-info-popup" class="hidden absolute right-3 top-14 z-20 w-64 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-3 text-xs leading-5 text-gray-600 dark:text-gray-300 shadow-xl">
+                                All chat will automatically delete after 15 days after read by admin.
+                            </div>
                         </div>
                         <div id="support-chat-messages" class="flex-1 min-h-0 space-y-3 overflow-y-auto p-4 bg-gray-50 dark:bg-gray-900"></div>
                         <div id="emoji-panel" class="hidden flex flex-wrap gap-2 p-3 border-t border-gray-100 dark:border-gray-700 bg-white dark:bg-gray-800">
@@ -2951,6 +2955,21 @@
                     showSupportProfileModal();
                 }
             };
+            document.getElementById('chat-disappear-info-btn').onclick = (event) => {
+                event.stopPropagation();
+                document.getElementById('chat-disappear-info-popup').classList.toggle('hidden');
+            };
+            document.addEventListener('click', function closeDisappearPopup(event) {
+                const popup = document.getElementById('chat-disappear-info-popup');
+                const button = document.getElementById('chat-disappear-info-btn');
+                if (!popup || !button) {
+                    document.removeEventListener('click', closeDisappearPopup);
+                    return;
+                }
+                if (!popup.contains(event.target) && !button.contains(event.target)) {
+                    popup.classList.add('hidden');
+                }
+            });
 
             activeSupportRoomId = getSupportRoomId(chatUserId);
             activeSupportMessages = [];
