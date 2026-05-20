@@ -1997,6 +1997,7 @@
         const showPage = (content, options = {}) => {
             document.getElementById('dashboard-content').classList.add('hidden');
             const pageContainer = document.getElementById('page-container');
+            const returnSection = options.returnTo || currentMainSection;
             pageContainer.innerHTML = content;
             pageContainer.classList.remove('hidden');
             pageContainer.style.paddingBottom = options.fullHeight ? '0' : (options.keepBottomNav ? '6.5rem' : '1.5rem');
@@ -2006,12 +2007,14 @@
             const backButton = pageContainer.querySelector('.page-back-btn');
             if (backButton) {
                 backButton.onclick = options.onBack || (() => {
-                    if (currentMainSection === 'settings' && !options.keepBottomNav) {
+                    if (returnSection === 'settings' && !options.keepBottomNav) {
                         showSettingsPage();
-                    } else if (currentMainSection === 'transactions' && !options.keepBottomNav) {
+                    } else if (returnSection === 'transactions' && !options.keepBottomNav) {
                         showAllTransactionsPage();
-                    } else if (currentMainSection === 'help' && !options.keepBottomNav) {
+                    } else if (returnSection === 'help' && !options.keepBottomNav) {
                         showHelpSupportPage();
+                    } else if (returnSection === 'admin' && !options.keepBottomNav) {
+                        showAdminMainPage();
                     } else {
                         hidePage();
                     }
@@ -3397,13 +3400,17 @@
                 if (!shell || !composer || !input || !messages) return null;
 
                 const keepTypingVisible = () => {
+                    let keyboardHeight = 0;
                     if (window.visualViewport) {
-                        const visibleHeight = Math.max(360, window.visualViewport.height);
+                        keyboardHeight = Math.max(0, window.innerHeight - window.visualViewport.height - window.visualViewport.offsetTop);
+                        const visibleHeight = Math.max(360, window.visualViewport.height + window.visualViewport.offsetTop);
                         shell.style.height = `${visibleHeight}px`;
                         shell.style.maxHeight = `${visibleHeight}px`;
                     }
+                    composer.style.transform = keyboardHeight > 40 ? `translateY(-${keyboardHeight}px)` : '';
+                    messages.style.paddingBottom = keyboardHeight > 40 ? `${keyboardHeight + 88}px` : '';
                     setTimeout(() => {
-                        composer.scrollIntoView({ block: 'end', behavior: 'smooth' });
+                        input.scrollIntoView({ block: 'center', behavior: 'smooth' });
                         messages.scrollTop = messages.scrollHeight;
                     }, 80);
                 };
@@ -3413,16 +3420,21 @@
                         shell.style.height = '';
                         shell.style.maxHeight = '';
                     }
+                    composer.style.transform = '';
+                    messages.style.paddingBottom = '';
                 };
 
+                const handleInputBlur = () => setTimeout(resetTypingPosition, 180);
                 input.addEventListener('focus', keepTypingVisible);
                 input.addEventListener('input', keepTypingVisible);
+                input.addEventListener('blur', handleInputBlur);
                 window.visualViewport?.addEventListener('resize', keepTypingVisible);
                 window.visualViewport?.addEventListener('scroll', keepTypingVisible);
 
                 return () => {
                     input.removeEventListener('focus', keepTypingVisible);
                     input.removeEventListener('input', keepTypingVisible);
+                    input.removeEventListener('blur', handleInputBlur);
                     window.visualViewport?.removeEventListener('resize', keepTypingVisible);
                     window.visualViewport?.removeEventListener('scroll', keepTypingVisible);
                     resetTypingPosition();
@@ -7860,6 +7872,12 @@
             handler();
         };
 
+        const openUserQuickAction = (handler) => {
+            currentMainSection = 'home';
+            setBottomNavActive('bottom-home-btn');
+            handler();
+        };
+
         // Admin panel quick action buttons
         document.getElementById('admin-withdrawals-btn').addEventListener('click', () => openAdminQuickAction(showAdminWithdrawalsPage));
         document.getElementById('admin-users-btn').addEventListener('click', () => openAdminQuickAction(showAdminUsersPage));
@@ -7872,7 +7890,7 @@
         document.getElementById('admin-chats-btn').addEventListener('click', () => openAdminQuickAction(showAdminChatsPage));
 
         // Withdraw Fund Button - Now opens full page
-        document.getElementById('withdraw-fund-btn').addEventListener('click', showWithdrawPage);
+        document.getElementById('withdraw-fund-btn').addEventListener('click', () => openUserQuickAction(showWithdrawPage));
 
         // Gift Card Button
         document.getElementById('redeem-gift-card-btn').addEventListener('click', () => {
@@ -7884,10 +7902,10 @@
         });
 
         // Pay to Wallet Button - Now opens full page
-        document.getElementById('pay-to-wallet-btn').addEventListener('click', showPayToWalletPage);
-        document.getElementById('mobile-recharge-btn').addEventListener('click', showMobileRechargePage);
-        document.getElementById('loan-btn').addEventListener('click', showLoanPage);
-        document.getElementById('partner-btn').addEventListener('click', showPartnerPage);
+        document.getElementById('pay-to-wallet-btn').addEventListener('click', () => openUserQuickAction(showPayToWalletPage));
+        document.getElementById('mobile-recharge-btn').addEventListener('click', () => openUserQuickAction(showMobileRechargePage));
+        document.getElementById('loan-btn').addEventListener('click', () => openUserQuickAction(showLoanPage));
+        document.getElementById('partner-btn').addEventListener('click', () => openUserQuickAction(showPartnerPage));
 
         // Preload logo images to prevent loading flicker
         const preloadLogoImages = () => {
