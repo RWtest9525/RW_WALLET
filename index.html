@@ -8,6 +8,9 @@
     <title>Digital Wallet - Reviews World</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="preconnect" href="https://i.ibb.co">
+    <link rel="preconnect" href="https://cdn-icons-png.flaticon.com">
+    <link rel="preconnect" href="https://cdn.iconscout.com">
+    <link rel="preconnect" href="https://upload.wikimedia.org">
     <link rel="icon" href="https://i.ibb.co/x8YBYwGG/6233389803554672153.jpg">
     <link rel="apple-touch-icon" href="https://i.ibb.co/x8YBYwGG/6233389803554672153.jpg">
     <link rel="preload" as="image" href="https://i.ibb.co/x8YBYwGG/6233389803554672153.jpg" fetchpriority="high">
@@ -15,6 +18,8 @@
     <link rel="preload" as="image"
         href="https://upload.wikimedia.org/wikipedia/commons/d/d0/Google_Play_Arrow_logo.svg">
     <link rel="preload" as="image" href="https://upload.wikimedia.org/wikipedia/commons/a/a9/Amazon_logo.svg">
+    <link rel="preload" as="image"
+        href="https://cdn.iconscout.com/icon/free/png-256/free-flipkart-logo-icon-download-in-svg-png-gif-file-formats--online-shopping-brand-logos-pack-icons-226594.png">
     <link rel="preload" as="image" href="https://upload.wikimedia.org/wikipedia/commons/b/b5/PayPal.svg">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -55,7 +60,7 @@
         }
 
         #main-content {
-            padding-bottom: 5.75rem;
+            padding-bottom: calc(5.25rem + env(safe-area-inset-bottom));
         }
 
         #dashboard-content {
@@ -232,6 +237,26 @@
             background: #2563eb;
             color: white;
             box-shadow: 0 10px 22px rgba(37, 99, 235, 0.28);
+        }
+
+        #bottom-nav {
+            padding-bottom: env(safe-area-inset-bottom);
+        }
+
+        #bottom-nav-grid {
+            min-height: 4.75rem;
+        }
+
+        .bottom-nav-btn {
+            min-width: 0;
+            line-height: 1;
+        }
+
+        .bottom-nav-btn>span:last-child {
+            max-width: 100%;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
         }
 
         .chat-bubble-user {
@@ -1008,13 +1033,13 @@
                 </div>
             </div>
 
-            <nav id="bottom-nav" class="fixed left-1/2 bottom-3 z-50 w-[calc(100%-1.5rem)] max-w-xl -translate-x-1/2 rounded-2xl border border-gray-200 dark:border-gray-700 bg-white/95 dark:bg-gray-800/95 shadow-2xl backdrop-blur">
-                <div id="bottom-nav-grid" class="grid grid-cols-4 items-center px-2 py-2 text-xs font-semibold text-gray-500 dark:text-gray-400">
+            <nav id="bottom-nav" class="fixed inset-x-0 bottom-0 z-50 w-full border-t border-gray-200 dark:border-gray-700 bg-white/98 dark:bg-gray-800/98 shadow-[0_-10px_28px_rgba(15,23,42,0.12)] backdrop-blur">
+                <div id="bottom-nav-grid" class="mx-auto grid max-w-xl grid-cols-4 items-center px-2 pt-2 text-[10px] sm:text-xs font-semibold text-gray-500 dark:text-gray-400">
                     <button id="bottom-transactions-btn" class="bottom-nav-btn flex flex-col items-center gap-1 py-1">
                         <span class="bottom-nav-icon flex h-9 w-9 items-center justify-center rounded-xl bg-gray-100 dark:bg-gray-700 transition">
                             <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16"></path><path d="M4 12h16"></path><path d="M4 17h10"></path></svg>
                         </span>
-                        <span>Transaction</span>
+                        <span>History</span>
                     </button>
                     <button id="bottom-home-btn" class="bottom-nav-btn active flex flex-col items-center gap-1 py-1">
                         <span class="bottom-nav-icon flex h-10 w-10 items-center justify-center rounded-xl bg-gray-100 dark:bg-gray-700 transition">
@@ -1039,7 +1064,7 @@
                         <span class="bottom-nav-icon flex h-9 w-9 items-center justify-center rounded-xl bg-gray-100 dark:bg-gray-700 transition">
                             <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06A1.65 1.65 0 0 0 15 19.4a1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.6 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06A2 2 0 0 1 7.1 4.29l.06.06A1.65 1.65 0 0 0 9 4.6a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
                         </span>
-                        <span>Setting</span>
+                        <span>Settings</span>
                     </button>
                 </div>
             </nav>
@@ -1053,7 +1078,7 @@
     </div>
 
     <!-- Footer -->
-    <footer id="app-footer" class="text-center p-4 text-sm text-gray-500 dark:text-gray-400">
+    <footer id="app-footer" class="hidden app-footer-hidden text-center p-4 text-sm text-gray-500 dark:text-gray-400">
         © Reviews world 2022. All rights reserved.
         <br>
         <span id="app-version" class="text-xs">v2.0</span>
@@ -1088,7 +1113,7 @@
     <!-- Firebase & App Logic Script -->
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, onAuthStateChanged, sendPasswordResetEmail } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, onAuthStateChanged, sendPasswordResetEmail, setPersistence, browserLocalPersistence } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
         import { getFirestore, doc, setDoc, getDoc, collection, collectionGroup, addDoc, onSnapshot, query, orderBy, Timestamp, writeBatch, runTransaction, deleteDoc, getDocs, serverTimestamp, where, arrayUnion, updateDoc, deleteField, setLogLevel, limit as firestoreLimit } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
         // --- THEME LOGIC ---
@@ -1150,6 +1175,9 @@
         const app = initializeApp(firebaseConfig);
         const auth = getAuth(app);
         const db = getFirestore(app);
+        setPersistence(auth, browserLocalPersistence).catch(error => {
+            console.warn('Could not enable local auth persistence:', error);
+        });
 
         try {
             setLogLevel('Debug');
@@ -1721,7 +1749,7 @@
             });
 
             supportSocket.on('connect_error', async (error) => {
-                console.error('Support socket connection failed:', error);
+                console.warn('Support socket connection failed:', error?.message || error);
                 if (/token|auth/i.test(error.message || '')) {
                     backendAuthToken = '';
                 }
@@ -2100,7 +2128,7 @@
             document.getElementById('page-container').style.overflowY = 'auto';
             updateDollarBalanceDisplay(currentUserData?.balance || 0);
             setMainChrome(true);
-            document.getElementById('app-footer')?.classList.remove('app-footer-hidden');
+            document.getElementById('app-footer')?.classList.add('app-footer-hidden');
             const selectedTab = document.querySelector('.tab-button[aria-selected="true"]');
             if (selectedTab) {
                 switchTab(selectedTab.dataset.tab);
@@ -2213,6 +2241,7 @@
             document.getElementById('auth-error').textContent = '';
 
             try {
+                await setPersistence(auth, browserLocalPersistence);
                 if (e.target.dataset.authMode === 'login') {
                     const cred = await signInWithEmailAndPassword(auth, email, password);
 
@@ -2351,6 +2380,7 @@
 
             if (user) {
                 currentUser = user;
+                localStorage.setItem('lastLoggedInUser', user.uid);
 
                 // Hide loading overlay if shown
                 hideLoading();
@@ -2374,7 +2404,7 @@
 
                 document.getElementById('admin-tab-button').classList.toggle('hidden', !isAdmin);
                 document.getElementById('bottom-admin-btn').classList.toggle('hidden', !isAdmin);
-                document.getElementById('bottom-nav-grid').className = `grid ${isAdmin ? 'grid-cols-5' : 'grid-cols-4'} items-center px-2 py-2 text-xs font-semibold text-gray-500 dark:text-gray-400`;
+                document.getElementById('bottom-nav-grid').className = `mx-auto grid max-w-xl ${isAdmin ? 'grid-cols-5' : 'grid-cols-4'} items-center px-2 pt-2 text-[10px] sm:text-xs font-semibold text-gray-500 dark:text-gray-400`;
 
                 if (isAdmin) {
                     console.log("User is Admin, initializing admin listeners...");
@@ -2389,8 +2419,6 @@
                 setMainChrome(true);
                 setBottomNavActive(isAdmin ? 'bottom-admin-btn' : 'bottom-home-btn');
 
-                // Save user to localStorage for auto-login
-                localStorage.setItem('lastLoggedInUser', user.uid);
             } else {
                 currentUser = null;
                 backendAuthToken = '';
@@ -2399,7 +2427,10 @@
                     supportSocket = null;
                 }
                 hideLoading();
-                // Remove saved user
+                const hadCachedUser = !!localStorage.getItem('lastLoggedInUser');
+                if (hadCachedUser) {
+                    console.warn('Saved login was found but Firebase session is not active. Showing login again.');
+                }
                 localStorage.removeItem('lastLoggedInUser');
 
                 // Show auth screen immediately
@@ -3073,7 +3104,7 @@
             document.getElementById('page-container').classList.add('hidden');
             document.getElementById('page-container').innerHTML = '';
             setMainChrome(true);
-            document.getElementById('app-footer')?.classList.remove('app-footer-hidden');
+            document.getElementById('app-footer')?.classList.add('app-footer-hidden');
             currentMainSection = 'home';
             switchTab('user-panel');
             setBottomNavActive('bottom-home-btn');
@@ -3089,7 +3120,7 @@
             document.getElementById('page-container').classList.add('hidden');
             document.getElementById('page-container').innerHTML = '';
             setMainChrome(true);
-            document.getElementById('app-footer')?.classList.remove('app-footer-hidden');
+            document.getElementById('app-footer')?.classList.add('app-footer-hidden');
             currentMainSection = 'admin';
             switchTab('admin-panel');
             setBottomNavActive('bottom-admin-btn');
@@ -3838,8 +3869,7 @@
             socket.on('new_message', handleNewMessage);
             socket.emit('join_room', { roomId: activeSupportRoomId, limit: 200 }, (response) => {
                 if (!response?.ok) {
-                    console.error('Join support room failed:', response?.error);
-                    showNotification('Chat connection failed. Please reopen chat.', true);
+                    console.warn('Join support room failed:', response?.error);
                 }
             });
             activeChatUnsubscribe = () => {
@@ -4476,7 +4506,7 @@
         const getWithdrawMethodLogo = (methodId) => WITHDRAW_METHOD_LOGOS[methodId] || '';
         const renderWithdrawMethodLogo = (methodId, altText, extraClass = '') => {
             const logo = getWithdrawMethodLogo(methodId);
-            return logo ? `<img src="${logo}" class="w-full h-full object-contain ${extraClass}" alt="${altText}" loading="eager">` : '';
+            return logo ? `<img src="${logo}" class="w-full h-full object-contain ${extraClass}" alt="${altText}" loading="eager" fetchpriority="high" decoding="async">` : '';
         };
         const getWithdrawalMethodName = (methodId, fallback = '') => {
             const names = {
@@ -8357,6 +8387,7 @@
                 'https://upload.wikimedia.org/wikipedia/commons/e/e1/UPI-Logo-vector.svg',
                 'https://upload.wikimedia.org/wikipedia/commons/d/d0/Google_Play_Arrow_logo.svg',
                 'https://upload.wikimedia.org/wikipedia/commons/a/a9/Amazon_logo.svg',
+                'https://cdn.iconscout.com/icon/free/png-256/free-flipkart-logo-icon-download-in-svg-png-gif-file-formats--online-shopping-brand-logos-pack-icons-226594.png',
                 'https://upload.wikimedia.org/wikipedia/commons/b/b5/PayPal.svg',
                 'https://cdn-icons-png.flaticon.com/512/7939/7939990.png',
                 'https://cdn-icons-png.flaticon.com/512/681/681494.png',
