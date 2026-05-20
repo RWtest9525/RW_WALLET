@@ -1522,16 +1522,25 @@
             };
         };
 
-        const normalizeCloudFundRequest = (request = {}) => ({
-            ...request,
-            id: request.request_id || request.requestId || request.id,
-            userId: request.user_id || request.userId,
-            requestedAt: Number(request.requested_at || request.requestedAt || Date.now()),
-            processedAt: request.processed_at || request.processedAt || null,
-            amount: Number(request.amount || 0),
-            status: request.status || 'pending',
-            type: request.type || 'withdrawal'
-        });
+        const normalizeCloudFundRequest = (request = {}) => {
+            const details = request.details && typeof request.details === 'object' ? request.details : {};
+            const merged = { ...details, ...request };
+            return {
+                ...merged,
+                id: request.request_id || request.requestId || request.id || details.id || details.requestId,
+                userId: request.user_id || request.userId || details.userId,
+                requestedAt: Number(request.requested_at || request.requestedAt || details.requestedAt || Date.now()),
+                processedAt: request.processed_at || request.processedAt || details.processedAt || null,
+                amount: Number(request.amount || details.amount || 0),
+                status: request.status || details.status || 'pending',
+                type: request.type || details.type || 'withdrawal',
+                method: details.method || request.method || getWithdrawalMethodName(details.methodId || request.methodId, 'N/A'),
+                methodId: details.methodId || request.methodId || details.paymentMethod || request.paymentMethod || '',
+                userName: details.userName || request.userName || request.user_name || 'No Name',
+                userEmail: details.userEmail || request.userEmail || request.user_email || '',
+                userMobile: details.userMobile || request.userMobile || request.user_mobile || ''
+            };
+        };
 
         const upsertCloudFundRequest = async (request) => {
             try {
@@ -1571,9 +1580,9 @@
             const params = new URLSearchParams({ status, limit: String(limit) });
             if (type) params.set('type', type);
             if (userId) params.set('userId', userId);
-            const response = await fetch(`${BACKEND_BASE_URL}/api/fund-requests?${params.toString()}`, {
+            const response = await fetchWithTimeout(`${BACKEND_BASE_URL}/api/fund-requests?${params.toString()}`, {
                 headers: { Authorization: `Bearer ${token}` }
-            });
+            }, 8000);
             const data = await response.json().catch(() => ({}));
             if (!response.ok || !data.ok) throw new Error(data.error || 'Cloudflare fund request load failed');
             return (data.requests || []).map(normalizeCloudFundRequest);
@@ -1637,7 +1646,14 @@
                 if (document.getElementById('admin-recharge-requests-list-page')) renderAdminRechargeRequests(allRechargeRequestsCache);
             } catch (error) {
                 console.error('Cloudflare fund request load failed:', error);
-                await importFirebaseFundRequestsForAdmin();
+                try {
+                    await importFirebaseFundRequestsForAdmin();
+                } catch (fallbackError) {
+                    console.error('Firebase pending fund request fallback failed:', fallbackError);
+                    if (document.getElementById('admin-fund-requests-list-page')) {
+                        renderAdminFundRequests(allFundRequestsCache || []);
+                    }
+                }
             }
         };
 
@@ -3710,7 +3726,7 @@
             const content = `
                 <div id="support-chat-shell" class="max-w-xl mx-auto bg-gray-100 dark:bg-gray-900 h-[100dvh] flex flex-col">
                     <div class="bg-white dark:bg-gray-800 border border-gray-100 dark:border-gray-700 rounded-xl shadow-sm overflow-hidden flex flex-col h-full min-h-0">
-                        <div class="relative flex items-center gap-3 p-3 border-b border-gray-100 dark:border-gray-700">
+                        <div class="relative flex items-center gap-3 px-3 pb-3 pt-[calc(0.9rem+env(safe-area-inset-top))] border-b border-gray-100 dark:border-gray-700">
                             <button class="page-back-btn h-10 w-10 shrink-0 rounded-full bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 flex items-center justify-center">
                                 <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5"></path><path d="M12 19l-7-7 7-7"></path></svg>
                             </button>
@@ -4961,7 +4977,11 @@
                 </div>
                 ${getPageFooter()}`;
             showPage(content);
-            renderAdminFundRequests(allFundRequestsCache);
+            if (allFundRequestsCache.length) {
+                renderAdminFundRequests(allFundRequestsCache);
+            } else {
+                document.getElementById('admin-fund-requests-list-page').innerHTML = '<p class="text-gray-500 dark:text-gray-400 text-sm p-4 text-center">Loading pending withdrawal requests...</p>';
+            }
             refreshAdminFundRequestsFromCloud();
         };
 
@@ -5749,7 +5769,7 @@
             if (!listEl) return;
 
             const pendingRequests = [...requests];
-            pendingRequests.sort((a, b) => (a.requestedAt?.toMillis() || 0) - (b.requestedAt?.toMillis() || 0));
+            pendingRequests.sort((a, b) => timestampToMillis(a.requestedAt || a.requested_at) - timestampToMillis(b.requestedAt || b.requested_at));
 
             listEl.innerHTML = pendingRequests.length === 0 ? '<p class="text-gray-500 dark:text-gray-400 text-sm p-4 text-center">No pending requests.</p>' : pendingRequests.map(r => `
                 <div class="p-3 mb-2 bg-gray-50 dark:bg-gray-700/50 rounded-lg">
@@ -5760,7 +5780,7 @@
                             <p class="text-xs text-gray-500 dark:text-gray-400">${r.userEmail || 'No Email'}</p>
                             <p class="text-xs text-gray-500 dark:text-gray-400">${r.userMobile || 'No Mobile'}</p>
                             <div class="flex flex-col mt-2 gap-2">
-                                <p class="text-xs font-mono bg-gray-200 dark:bg-gray-600 px-2 py-1 rounded w-fit">Method: ${r.method || 'N/A'}</p>
+                                <p class="text-xs font-mono bg-gray-200 dark:bg-gray-600 px-2 py-1 rounded w-fit">Method: ${escapeHtml(r.method || getWithdrawalMethodName(r.methodId, 'N/A'))}</p>
                                 
                                 ${r.upiId ? `
                                     <div class="flex items-center">
