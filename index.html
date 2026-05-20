@@ -1802,7 +1802,8 @@
             const pageContainer = document.getElementById('page-container');
             pageContainer.innerHTML = content;
             pageContainer.classList.remove('hidden');
-            pageContainer.style.paddingBottom = options.keepBottomNav ? '6.5rem' : '1.5rem';
+            pageContainer.style.paddingBottom = options.fullHeight ? '0' : (options.keepBottomNav ? '6.5rem' : '1.5rem');
+            pageContainer.style.overflowY = options.fullHeight ? 'hidden' : 'auto';
             setMainChrome(!!options.keepBottomNav);
             document.getElementById('app-footer')?.classList.add('app-footer-hidden');
             const backButton = pageContainer.querySelector('.page-back-btn');
@@ -1829,6 +1830,7 @@
             document.getElementById('dashboard-content').classList.remove('hidden');
             document.getElementById('page-container').classList.add('hidden');
             document.getElementById('page-container').innerHTML = '';
+            document.getElementById('page-container').style.overflowY = 'auto';
             updateDollarBalanceDisplay(currentUserData?.balance || 0);
             setMainChrome(true);
             document.getElementById('app-footer')?.classList.remove('app-footer-hidden');
@@ -2241,10 +2243,12 @@
                 });
 
             const requestsQuery = query(collection(db, `artifacts/${appId}/public/data/fund_requests`), where("userId", "==", userId), where("status", "==", "pending"));
-            unsubscribers.push(onSnapshot(requestsQuery, (snap) => {
-                pendingRequests = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-                renderUnifiedHistory(5);
-            }, (error) => console.error("Error listening to fund requests:", error)));
+            getDocs(requestsQuery)
+                .then((snap) => {
+                    pendingRequests = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+                    renderUnifiedHistory(5);
+                })
+                .catch((error) => console.error("Error loading pending fund requests:", error));
         };
 
         let initializeAdminListeners = () => {
@@ -3080,7 +3084,7 @@
             const logo = isAdminView ? 'https://cdn-icons-png.flaticon.com/512/3135/3135715.png' : getSupportLogo();
             const initialMessage = chatMeta.initialMessage || '';
             const content = `
-                <div class="max-w-xl mx-auto bg-gray-100 dark:bg-gray-900 h-[calc(100dvh-5.5rem)] flex flex-col">
+                <div class="max-w-xl mx-auto bg-gray-100 dark:bg-gray-900 h-[100dvh] flex flex-col">
                     <div class="bg-white dark:bg-gray-800 border border-gray-100 dark:border-gray-700 rounded-xl shadow-sm overflow-hidden flex flex-col h-full min-h-0">
                         <div class="relative flex items-center gap-3 p-3 border-b border-gray-100 dark:border-gray-700">
                             <button class="page-back-btn h-10 w-10 shrink-0 rounded-full bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 flex items-center justify-center">
@@ -3100,7 +3104,7 @@
                         <div id="emoji-panel" class="hidden flex flex-wrap gap-2 p-3 border-t border-gray-100 dark:border-gray-700 bg-white dark:bg-gray-800">
                             ${['😀','😁','🙏','👍','❤️','🔥','🎉','😊','🤗','✅','💰','📞'].map(emoji => `<button class="emoji-choice text-xl">${emoji}</button>`).join('')}
                         </div>
-                        <div class="shrink-0 flex items-center gap-2 p-3 border-t border-gray-100 dark:border-gray-700 bg-white dark:bg-gray-800">
+                        <div class="shrink-0 flex items-center gap-2 p-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] border-t border-gray-100 dark:border-gray-700 bg-white dark:bg-gray-800">
                             <button id="emoji-toggle-btn" class="h-10 w-10 rounded-full bg-gray-100 dark:bg-gray-700 text-xl">☺</button>
                             <input id="support-message-input" type="text" placeholder="Type a message" class="flex-1 min-w-0 px-4 py-2.5 bg-gray-100 dark:bg-gray-700 rounded-full focus:outline-none focus:ring-2 focus:ring-blue-500">
                             <button id="support-send-btn" class="h-10 w-10 rounded-full bg-blue-600 text-white flex items-center justify-center">
@@ -3110,7 +3114,7 @@
                     </div>
                 </div>
                 ${getPageFooter()}`;
-            showPage(content);
+            showPage(content, { fullHeight: true });
             setBottomNavActive(isAdminView ? 'bottom-settings-btn' : 'bottom-help-btn');
             const chatBackBtn = document.querySelector('#page-container .page-back-btn');
             if (chatBackBtn) {
@@ -3425,7 +3429,7 @@
             }
             revyBotMessages = [];
             const content = `
-                <div class="max-w-xl mx-auto bg-gray-100 dark:bg-gray-900 h-[calc(100dvh-5.5rem)] flex flex-col">
+                <div class="max-w-xl mx-auto bg-gray-100 dark:bg-gray-900 h-[100dvh] flex flex-col">
                     <div class="bg-white dark:bg-gray-800 border border-gray-100 dark:border-gray-700 rounded-xl shadow-sm overflow-hidden flex flex-col h-full min-h-0">
                         <div class="flex items-center gap-3 p-3 border-b border-gray-100 dark:border-gray-700">
                             <button id="revy-back-btn" class="h-10 w-10 shrink-0 rounded-full bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 flex items-center justify-center">
@@ -3453,7 +3457,7 @@
                                 ['contact admin', 'Admin']
                             ].map(([question, label]) => `<button data-revy-question="${question}" class="revy-option shrink-0 px-3 py-1.5 rounded-full bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-200 text-xs font-bold">${label}</button>`).join('')}
                         </div>
-                        <div class="shrink-0 flex items-center gap-2 p-3 border-t border-gray-100 dark:border-gray-700 bg-white dark:bg-gray-800">
+                        <div class="shrink-0 flex items-center gap-2 p-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] border-t border-gray-100 dark:border-gray-700 bg-white dark:bg-gray-800">
                             <input id="revy-message-input" type="text" placeholder="Or type your question" class="flex-1 min-w-0 px-4 py-2.5 bg-gray-100 dark:bg-gray-700 rounded-full focus:outline-none focus:ring-2 focus:ring-blue-500">
                             <button id="revy-send-btn" class="h-10 w-10 rounded-full bg-blue-600 text-white flex items-center justify-center">
                                 <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M2 21l21-9L2 3v7l15 2-15 2v7z"></path></svg>
@@ -3462,7 +3466,7 @@
                     </div>
                 </div>
                 ${getPageFooter()}`;
-            showPage(content);
+            showPage(content, { fullHeight: true });
             setBottomNavActive('bottom-help-btn');
             const sendBotMessage = async () => {
                 const input = document.getElementById('revy-message-input');
