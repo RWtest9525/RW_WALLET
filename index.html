@@ -1287,6 +1287,31 @@
             status: item.status || 'completed'
         });
 
+        const getTransactionKey = (item = {}, index = 0) => {
+            const timestamp = timestampToMillis(item.timestamp || item.requestedAt || item.createdAt || item.processedAt) || Date.now();
+            const existingKey = String(item.key || '');
+            if (existingKey.startsWith('req-')) return existingKey;
+            return String(item.transactionId || item.adminTransactionId || item.requestId || item.id || existingKey || `${item.type || 'tx'}-${timestamp}-${item.amount || 0}-${index}`);
+        };
+
+        const mergeTransactionsByKey = (...groups) => {
+            const merged = new Map();
+            groups.flat().forEach((item, index) => {
+                if (!item) return;
+                const normalized = normalizeHistoryItemForCache(item);
+                const key = getTransactionKey(normalized, index);
+                merged.set(key, { ...(merged.get(key) || {}), ...normalized, key });
+            });
+            return Array.from(merged.values())
+                .sort((a, b) => timestampToMillis(b.timestamp || b.requestedAt) - timestampToMillis(a.timestamp || a.requestedAt));
+        };
+
+        const loadFirebaseTransactions = async (userId, maxItems = 500) => {
+            const transactionsQuery = query(collection(db, `artifacts/${appId}/public/data/users`, userId, 'transactions'), orderBy('timestamp', 'desc'), firestoreLimit(maxItems));
+            const snap = await getDocs(transactionsQuery);
+            return snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        };
+
         const serializeCloudTransaction = (item = {}, userId = currentUser?.uid) => {
             const timestamp = timestampToMillis(item.timestamp || item.requestedAt || item.createdAt || item.processedAt) || Date.now();
             const transactionId = String(item.transactionId || item.adminTransactionId || item.requestId || item.id || `${item.type || 'tx'}-${timestamp}`);
@@ -1940,7 +1965,7 @@
             const colorClass = isCredit ? 'text-green-500' : 'text-red-500';
 
             // Check if this is a debit (wallet send) and use recipientName if available
-            let displayText = item.comment.replace(/_/g, ' ');
+            let displayText = (item.comment || item.type || 'Wallet Transaction').replace(/_/g, ' ');
             if (item.type === 'debit' && item.recipientName) {
                 displayText = item.recipientName;
             }
@@ -2357,12 +2382,12 @@
 
             const renderUnifiedHistory = (limit) => {
                 let combined = [
-                    ...transactions.map(t => ({ ...t, key: `tx-${timestampToMillis(t.timestamp)}` })),
+                    ...mergeTransactionsByKey(transactions),
                     ...pendingRequests.map(p => {
                         const requestType = p.type || 'withdrawal';
                         return {
                             ...p,
-                            key: `req-${p.id || timestampToMillis(p.requestedAt)}`,
+                            key: `req-${p.id || p.requestId || timestampToMillis(p.requestedAt)}`,
                             type: requestType,
                             comment: requestType === 'mobile_recharge' ? 'Mobile Recharge Request' : 'Withdrawal Request',
                             timestamp: p.requestedAt,
@@ -2394,17 +2419,20 @@
                 }
             };
 
-            fetchCloudTransactionHistory(userId, 120)
-                .then(history => {
-                    transactions = history;
+            fetchCloudTransactionHistory(userId, 500)
+                .then(async history => {
+                    transactions = mergeTransactionsByKey(cachedHistoryItems.filter(item => !String(item.key || '').startsWith('req-')), history);
                     renderUnifiedHistory(5);
-                    if (history.length === 0) {
-                        const transactionsQuery = query(collection(db, `artifacts/${appId}/public/data/users`, userId, 'transactions'), orderBy('timestamp', 'desc'));
-                        return getDocs(transactionsQuery).then((snap) => {
-                            transactions = snap.docs.map(d => d.data());
+                    try {
+                        const firebaseTransactions = await loadFirebaseTransactions(userId, 500);
+                        const mergedTransactions = mergeTransactionsByKey(transactions, firebaseTransactions);
+                        if (mergedTransactions.length !== transactions.length || firebaseTransactions.length > history.length) {
+                            transactions = mergedTransactions;
                             renderUnifiedHistory(5);
-                            importFirestoreTransactionsToCloud(userId, transactions);
-                        });
+                            importFirestoreTransactionsToCloud(userId, firebaseTransactions);
+                        }
+                    } catch (firebaseError) {
+                        console.warn("Old Firebase transaction merge failed:", firebaseError);
                     }
                     return null;
                 })
@@ -2415,11 +2443,10 @@
                         return null;
                     }
                     console.warn("No cached history found, using one-time Firebase fallback.");
-                    const transactionsQuery = query(collection(db, `artifacts/${appId}/public/data/users`, userId, 'transactions'), orderBy('timestamp', 'desc'));
-                    return getDocs(transactionsQuery).then((snap) => {
-                        transactions = snap.docs.map(d => d.data());
+                    return loadFirebaseTransactions(userId, 500).then((firebaseTransactions) => {
+                        transactions = mergeTransactionsByKey(firebaseTransactions);
                         renderUnifiedHistory(5);
-                        importFirestoreTransactionsToCloud(userId, transactions);
+                        importFirestoreTransactionsToCloud(userId, firebaseTransactions);
                     });
                 });
 
