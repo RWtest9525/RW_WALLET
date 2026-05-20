@@ -7267,12 +7267,11 @@
                 if (parts.length === 1) return parts[0].substring(0, 2).toUpperCase();
                 return (parts[0][0] + parts[1][0]).toUpperCase();
             };
-            const verifiedBadge = `
-                <span class="inline-flex items-center justify-center w-4 h-4 rounded-full bg-blue-500 text-white shadow-sm ring-2 ring-white dark:ring-gray-800" title="Verified">
-                    <svg class="w-3 h-3" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
-                        <path fill-rule="evenodd" d="M16.704 5.29a1 1 0 0 1 .006 1.414l-8 8.08a1 1 0 0 1-1.419.001l-4-4.04a1 1 0 1 1 1.418-1.41l3.29 3.322 7.29-7.36a1 1 0 0 1 1.415-.006Z" clip-rule="evenodd"/>
-                    </svg>
-                </span>`;
+            const verifiedBadge = getVerifiedBadge('h-4 w-4 shrink-0');
+            const isVerifiedTransactionParty = (party = {}) =>
+                !!party.appLogo ||
+                isReviewsWorldName(party.name || '') ||
+                /admin wallet|rw wallet|digital wallet/i.test(`${party.detail || ''} ${party.name || ''}`);
             const renderTransactionAvatar = (name, forceAppLogo = false, logoUrl = '') => logoUrl ? `
                 <div class="w-10 h-10 bg-white dark:bg-gray-700 rounded-full flex items-center justify-center shadow-inner shrink-0 border border-gray-100 dark:border-gray-600 p-1.5">
                     <img src="${logoUrl}" class="w-full h-full object-contain rounded-full" alt="${name}" loading="eager">
@@ -7443,9 +7442,9 @@
                                 <div class="flex justify-between items-center gap-3 p-3 bg-gray-50/40 dark:bg-gray-900/20">
                                     <div class="space-y-0.5 min-w-0">
                                         <p class="text-xs text-gray-500 dark:text-gray-400">${fromParty.label}</p>
-                                        <div class="flex items-center gap-1.5">
+                                        <div class="flex items-center gap-1.5 min-w-0">
                                             <span class="text-base font-bold truncate">${fromParty.name}</span>
-                                            ${(fromParty.appLogo || isReviewsWorldName(fromParty.name)) ? verifiedBadge : ''}
+                                            ${isVerifiedTransactionParty(fromParty) ? verifiedBadge : ''}
                                         </div>
                                         ${fromParty.detail ? `<p class="text-xs text-gray-400 font-mono truncate">${fromParty.detail}</p>` : ''}
                                     </div>
@@ -7456,9 +7455,9 @@
                                 <div class="flex justify-between items-center gap-3 p-3">
                                     <div class="space-y-0.5 min-w-0">
                                         <p class="text-xs text-gray-500 dark:text-gray-400">${toParty.label}</p>
-                                        <div class="flex items-center gap-1.5">
+                                        <div class="flex items-center gap-1.5 min-w-0">
                                             <span class="text-base font-bold truncate">${toParty.name}</span>
-                                            ${(toParty.appLogo || isReviewsWorldName(toParty.name)) ? verifiedBadge : ''}
+                                            ${isVerifiedTransactionParty(toParty) ? verifiedBadge : ''}
                                         </div>
                                         ${toParty.detail ? `<p class="text-xs text-gray-400 font-mono truncate">${toParty.detail}</p>` : ''}
                                     </div>
@@ -7475,6 +7474,12 @@
                                     <span class="text-gray-500 dark:text-gray-400">Status</span>
                                     <span class="font-semibold text-right">${statusLabel}</span>
                                 </div>
+                                ${item.adminTransactionId ? `
+                                    <div class="flex justify-between gap-3 px-3 py-2">
+                                        <span class="text-gray-500 dark:text-gray-400">Processed By</span>
+                                        <span class="font-semibold text-right inline-flex items-center justify-end gap-1.5">REVIEWS WORLD ${verifiedBadge}</span>
+                                    </div>
+                                ` : ''}
                                 ${extraDetail}
                             </div>
 
