@@ -2666,6 +2666,44 @@
             return details;
         };
 
+        const normalizeProfilePaymentMethod = (data = currentUserData || {}) => {
+            const rawMethod = String(data.paymentMethod || data.methodId || data.withdrawMethod || data.method || '')
+                .trim()
+                .toLowerCase()
+                .replace(/[\s-]+/g, '_');
+            const methodAliases = {
+                upi: 'upi',
+                upi_id: 'upi',
+                bank: 'bank',
+                bank_account: 'bank',
+                account: 'bank',
+                play_store: 'play_store',
+                playstore: 'play_store',
+                redeem_code: 'play_store',
+                amazon: 'amazon_gift',
+                amazon_gift: 'amazon_gift',
+                amazon_gift_card: 'amazon_gift',
+                flipkart: 'flipkart_gift',
+                flipkart_gift: 'flipkart_gift',
+                flipkart_gift_card: 'flipkart_gift',
+                paypal: 'paypal'
+            };
+            if (methodAliases[rawMethod]) return methodAliases[rawMethod];
+            if (rawMethod.includes('upi')) return 'upi';
+            if (rawMethod.includes('bank') || rawMethod.includes('account')) return 'bank';
+            if (rawMethod.includes('play')) return 'play_store';
+            if (rawMethod.includes('amazon')) return 'amazon_gift';
+            if (rawMethod.includes('flipkart')) return 'flipkart_gift';
+            if (rawMethod.includes('paypal')) return 'paypal';
+
+            const details = data.paymentDetails && typeof data.paymentDetails === 'object' ? data.paymentDetails : {};
+            const stringDetails = typeof data.paymentDetails === 'string' ? data.paymentDetails : '';
+            if (details.upiId || data.upiId) return 'upi';
+            if (details.accountNumber || details.ifsc || data.accountNumber || data.ifsc) return 'bank';
+            if (details.email || data.paymentEmail || stringDetails.includes('@')) return 'paypal';
+            return '';
+        };
+
         const renderWebsiteLinkInputs = (links = []) => {
             const cleanLinks = Array.isArray(links) ? links.slice(0, 3) : [];
             const visibleCount = Math.max(1, cleanLinks.length);
@@ -2710,6 +2748,7 @@
             if (!currentUserData) return showNotification('User data not loaded. Please wait.', true);
             const isAdminProfile = currentUser?.uid === ADMIN_UID;
             const websiteLinks = Array.isArray(currentUserData.websiteLinks) ? currentUserData.websiteLinks.slice(0, 3) : [];
+            const activePaymentMethod = focusMethod || normalizeProfilePaymentMethod(currentUserData);
 
             const paymentMethods = [
                 { value: '', label: 'Select Payment Method' },
@@ -2723,12 +2762,12 @@
             ];
 
             const paymentOptions = paymentMethods.map(method =>
-                `<option value="${method.value}" ${method.disabled ? 'disabled' : ''} ${currentUserData.paymentMethod === method.value ? 'selected' : ''}>${method.label}</option>`
+                `<option value="${method.value}" ${method.disabled ? 'disabled' : ''} ${activePaymentMethod === method.value ? 'selected' : ''}>${method.label}</option>`
             ).join('');
 
             let paymentDetailsForm = '';
-            if (currentUserData.paymentMethod) {
-                paymentDetailsForm = renderPaymentDetailsForm(currentUserData.paymentMethod, getProfilePaymentDetails(currentUserData.paymentMethod));
+            if (activePaymentMethod) {
+                paymentDetailsForm = renderPaymentDetailsForm(activePaymentMethod, getProfilePaymentDetails(activePaymentMethod));
             }
 
             const content = `
@@ -2834,7 +2873,7 @@
         };
 
         const isWithdrawMethodDetailsComplete = (method) => {
-            const details = currentUserData?.paymentDetails || {};
+            const details = getProfilePaymentDetails(method);
             if (method === 'upi') return !!String(details.upiId || '').trim();
             if (method === 'bank') {
                 return ['accountNumber', 'ifsc', 'bankName', 'accountName'].every(key => !!String(details[key] || '').trim());
@@ -4483,27 +4522,28 @@
             switch (method) {
                 case 'upi':
                     methodName = 'UPI';
-                    methodDetails = currentUserData.paymentDetails?.upiId || 'Not set';
+                    methodDetails = getProfilePaymentDetails(method).upiId || 'Not set';
                     break;
                 case 'bank':
                     methodName = 'Bank Account';
-                    methodDetails = `${currentUserData.paymentDetails?.accountNumber || 'Not set'} - ${currentUserData.paymentDetails?.bankName || 'Not set'}`;
+                    const bankDetails = getProfilePaymentDetails(method);
+                    methodDetails = `${bankDetails.accountNumber || 'Not set'} - ${bankDetails.bankName || 'Not set'}`;
                     break;
                 case 'play_store':
                     methodName = 'Redeem Code';
-                    methodDetails = currentUserData.paymentDetails?.email || 'Not set';
+                    methodDetails = getProfilePaymentDetails(method).email || 'Not set';
                     break;
                 case 'amazon_gift':
                     methodName = 'Gift Card';
-                    methodDetails = currentUserData.paymentDetails?.email || 'Not set';
+                    methodDetails = getProfilePaymentDetails(method).email || 'Not set';
                     break;
                 case 'flipkart_gift':
                     methodName = 'Gift Card';
-                    methodDetails = currentUserData.paymentDetails?.email || 'Not set';
+                    methodDetails = getProfilePaymentDetails(method).email || 'Not set';
                     break;
                 case 'paypal':
                     methodName = 'PayPal';
-                    methodDetails = currentUserData.paymentDetails?.email || 'Not set';
+                    methodDetails = getProfilePaymentDetails(method).email || 'Not set';
                     break;
             }
 
@@ -6377,12 +6417,12 @@
 
             switch (method) {
                 case 'upi':
-                    paymentDetails = currentUserData.paymentDetails?.upiId || 'Not set';
+                    paymentDetails = getProfilePaymentDetails(method).upiId || 'Not set';
                     methodSpecificDetails = { upiId: paymentDetails };
                     if (amount < minWithdrawalUpi) return showNotification(`Minimum withdrawal for UPI is ₹${minWithdrawalUpi}`, true);
                     break;
                 case 'bank':
-                    const bankData = currentUserData.paymentDetails || {};
+                    const bankData = getProfilePaymentDetails(method);
                     // If bank details are missing in current profile, try to fetch from user data
                     const accountNumber = bankData.accountNumber || currentUserData.accountNumber || 'N/A';
                     const ifsc = bankData.ifsc || currentUserData.ifsc || 'N/A';
@@ -6399,7 +6439,7 @@
                     if (amount < minWithdrawalBank) return showNotification(`Minimum withdrawal for Bank is ₹${minWithdrawalBank}`, true);
                     break;
                 default:
-                    paymentDetails = currentUserData.paymentDetails?.email || 'Not set';
+                    paymentDetails = getProfilePaymentDetails(method).email || 'Not set';
                     methodSpecificDetails = { email: paymentDetails };
                     if (amount < minWithdrawalRedeem) return showNotification(`Minimum withdrawal for this method is ₹${minWithdrawalRedeem}`, true);
             }
@@ -7639,7 +7679,8 @@
         const handleUpdateProfile = async () => {
             const newName = document.getElementById('profile-name-input').value.trim();
             const newMobile = document.getElementById('profile-mobile-input').value.trim();
-            const paymentMethod = document.getElementById('profile-payment-method').value;
+            const selectedPaymentMethod = document.getElementById('profile-payment-method').value;
+            const paymentMethod = selectedPaymentMethod || normalizeProfilePaymentMethod(currentUserData);
             const isAdminProfile = currentUser?.uid === ADMIN_UID;
 
             if (!newName || !newMobile) {
@@ -7693,6 +7734,16 @@
                 paymentMethod: paymentMethod,
                 paymentDetails: paymentMethod ? paymentDetails : getProfilePaymentDetails(currentUserData?.paymentMethod || '')
             };
+            if (paymentMethod === 'upi') {
+                profileUpdate.upiId = paymentDetails.upiId || '';
+            } else if (paymentMethod === 'bank') {
+                profileUpdate.accountNumber = paymentDetails.accountNumber || '';
+                profileUpdate.ifsc = paymentDetails.ifsc || '';
+                profileUpdate.bankName = paymentDetails.bankName || '';
+                profileUpdate.accountName = paymentDetails.accountName || '';
+            } else if (['play_store', 'amazon_gift', 'flipkart_gift', 'paypal'].includes(paymentMethod)) {
+                profileUpdate.paymentEmail = paymentDetails.email || '';
+            }
 
             if (isAdminProfile) {
                 const whatsappNumber = document.getElementById('profile-whatsapp-input')?.value.trim() || newMobile;
