@@ -9,6 +9,7 @@ const { createCloudflareWalletService } = require('./cloudflareWalletService');
 
 async function main() {
   const app = express();
+  const startedAt = new Date().toISOString();
   app.disable('etag');
   const server = http.createServer(app);
   const io = new Server(server, {
@@ -40,19 +41,30 @@ async function main() {
     res.json({
       ok: true,
       version: process.env.RENDER_GIT_COMMIT || process.env.COMMIT_SHA || 'local',
-      startedAt: new Date().toISOString(),
+      startedAt,
       backendReady: !app.locals.walletServiceError,
       backendError: app.locals.walletServiceError || ''
     });
   });
 
-  app.get('/health', (req, res) => {
+  const sendHealth = (req, res) => {
     const degraded = !!app.locals.walletServiceError;
-    res.status(degraded ? 503 : 200).json({
-      ok: !degraded,
+    res.set('Cache-Control', 'no-store');
+    res.status(200).json({
+      ok: true,
       service: 'rw-wallet-cloudflare-backend',
+      status: degraded ? 'degraded' : 'healthy',
+      uptimeSeconds: Math.floor(process.uptime()),
+      startedAt,
+      backendReady: !degraded,
       backendError: app.locals.walletServiceError || ''
     });
+  };
+
+  app.get('/ping', sendHealth);
+
+  app.get('/health', (req, res) => {
+    sendHealth(req, res);
   });
 
   try {
