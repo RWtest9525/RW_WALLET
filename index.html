@@ -1704,7 +1704,9 @@
             websiteLinks: Array.isArray(data.websiteLinks) ? data.websiteLinks.slice(0, 3) : [],
             isProProfile: !!data.isProProfile,
             isFlagged: !!data.isFlagged,
-            loanEligible: !!data.loanEligible
+            loanEligible: !!data.loanEligible,
+            maxLoanAmount: data.maxLoanAmount || data.loanMaxAmount || 0,
+            loanMaxAmount: data.loanMaxAmount || data.maxLoanAmount || 0
         });
 
         const hydrateUserFromCache = (userId) => {
@@ -5126,6 +5128,7 @@
 
         const showTakeLoanPage = () => {
             const dueDate = getNextMonthRepaymentDate();
+            const maxLoanAmount = Math.max(1, Number(currentUserData.maxLoanAmount || currentUserData.loanMaxAmount || 500));
             const content = `
                 ${getPageHeader('Take Loan')}
                 <div class="max-w-md mx-auto bg-white dark:bg-gray-800 p-6 rounded-xl shadow-md space-y-5">
@@ -5140,6 +5143,13 @@
                 </div>
                 ${getPageFooter()}`;
             showPage(content);
+            const amountInput = document.getElementById('loan-amount-input');
+            if (amountInput) {
+                amountInput.max = String(maxLoanAmount);
+                amountInput.placeholder = `Enter amount up to ${formatCurrency(maxLoanAmount)}`;
+            }
+            const loanHelpText = amountInput?.closest('.space-y-5')?.querySelector('.text-center p');
+            if (loanHelpText) loanHelpText.textContent = `Amount between ₹1 and ${formatCurrency(maxLoanAmount)}. Interest is 2% for 1 month.`;
             const updateSummary = () => {
                 const amount = parseFloat(document.getElementById('loan-amount-input').value) || 0;
                 const interest = Number((amount * 0.02).toFixed(2));
@@ -5948,6 +5958,7 @@
                             <p class="text-xs text-gray-500">DOB: ${r.dob || 'N/A'}</p>
                             <p class="text-xs text-gray-500">Aadhaar: ${r.aadhaar || 'N/A'}</p>
                             <p class="text-xs text-gray-500">User: ${r.userEmail || 'N/A'}</p>
+                            ${r.maxLoanAmount ? `<p class="text-xs font-semibold text-indigo-600 dark:text-indigo-300">Approved Max: ${formatCurrency(r.maxLoanAmount)}</p>` : ''}
                         </div>
                         ${r.status === 'pending' ? `
                             <div class="flex sm:flex-col gap-2">
@@ -6168,8 +6179,9 @@
 
         const handleTakeLoan = async () => {
             const amount = parseFloat(document.getElementById('loan-amount-input').value);
-            if (isNaN(amount) || amount < 1 || amount > 500) {
-                return showNotification('Loan amount must be between ₹1 and ₹500.', true);
+            const maxLoanAmount = Math.max(1, Number(currentUserData.maxLoanAmount || currentUserData.loanMaxAmount || 500));
+            if (isNaN(amount) || amount < 1 || amount > maxLoanAmount) {
+                return showNotification(`Loan amount must be between ₹1 and ${formatCurrency(maxLoanAmount)}.`, true);
             }
             const interest = Number((amount * 0.02).toFixed(2));
             const totalRepayable = Number((amount + interest).toFixed(2));
@@ -6181,6 +6193,8 @@
                     const userDoc = await tx.get(userRef);
                     if (!userDoc.exists()) throw new Error('User not found.');
                     if (!userDoc.data().loanEligible) throw new Error('Loan is not approved for your account.');
+                    const approvedMaxLoan = Math.max(1, Number(userDoc.data().maxLoanAmount || userDoc.data().loanMaxAmount || 500));
+                    if (amount > approvedMaxLoan) throw new Error(`Loan amount cannot exceed ${formatCurrency(approvedMaxLoan)}.`);
 
                     const loanRef = doc(collection(db, `artifacts/${appId}/public/data/loans`));
                     tx.update(userRef, {
@@ -7209,8 +7223,38 @@
             }
         };
 
-        const handleLoanRequestAction = async (userId, requestId, newStatus) => {
+        const showApproveLoanRequestModal = (userId, requestId) => {
+            const request = allLoanRequestsCache.find(item => item.id === requestId) || {};
+            renderModal('Approve Loan Request',
+                `<div class="space-y-4">
+                    <div class="rounded-xl bg-indigo-50 dark:bg-indigo-900/20 border border-indigo-100 dark:border-indigo-800 p-3 text-sm">
+                        <p class="font-bold text-gray-900 dark:text-white">${escapeHtml(request.name || 'User')}</p>
+                        <p class="text-xs text-gray-500 dark:text-gray-400">${escapeHtml(request.mobile || request.userEmail || '')}</p>
+                    </div>
+                    <div>
+                        <label class="text-sm font-medium text-gray-500 dark:text-gray-400">Maximum loan amount for this user</label>
+                        <input type="number" id="approve-loan-max-input" min="1" step="1" placeholder="Enter maximum amount" class="w-full mt-1 px-4 py-3 bg-gray-100 dark:bg-gray-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                        <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">User can take loan only up to this approved amount.</p>
+                    </div>
+                </div>`,
+                `<button onclick="window.closeModal()" class="px-4 py-2 text-sm bg-gray-200 dark:bg-gray-600 rounded-lg">Cancel</button>
+                 <button id="confirm-approve-loan-btn" class="px-4 py-2 text-sm bg-green-600 text-white rounded-lg">Approve</button>`,
+                'max-w-md');
+            document.getElementById('confirm-approve-loan-btn').onclick = () => {
+                const maxLoanAmount = parseFloat(document.getElementById('approve-loan-max-input')?.value || '0');
+                if (!Number.isFinite(maxLoanAmount) || maxLoanAmount < 1) {
+                    return showNotification('Please enter a valid maximum loan amount.', true);
+                }
+                window.closeModal();
+                handleLoanRequestAction(userId, requestId, 'approved', maxLoanAmount);
+            };
+        };
+
+        const handleLoanRequestAction = async (userId, requestId, newStatus, maxLoanAmount = 0) => {
             try {
+                if (newStatus === 'approved' && (!Number.isFinite(Number(maxLoanAmount)) || Number(maxLoanAmount) < 1)) {
+                    return showApproveLoanRequestModal(userId, requestId);
+                }
                 const requestRef = doc(db, `artifacts/${appId}/public/data/loan_requests`, requestId);
                 const userRef = doc(db, `artifacts/${appId}/public/data/users`, userId);
                 await runTransaction(db, async (tx) => {
@@ -7222,7 +7266,14 @@
                         processedBy: currentUser.uid
                     });
                     if (newStatus === 'approved') {
-                        tx.update(userRef, { loanEligible: true });
+                        tx.update(userRef, {
+                            loanEligible: true,
+                            maxLoanAmount: Number(maxLoanAmount),
+                            loanMaxAmount: Number(maxLoanAmount)
+                        });
+                        tx.update(requestRef, {
+                            maxLoanAmount: Number(maxLoanAmount)
+                        });
                     }
                 });
                 showNotification(`Loan request ${newStatus}.`);
@@ -8313,7 +8364,7 @@
                     break;
 
                 case 'approve-loan-request':
-                    handleLoanRequestAction(userid, requestid, 'approved');
+                    showApproveLoanRequestModal(userid, requestid);
                     break;
 
                 case 'reject-loan-request':
