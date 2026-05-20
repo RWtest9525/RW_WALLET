@@ -1,6 +1,7 @@
 require('dotenv').config();
 
 const http = require('http');
+const path = require('path');
 const cors = require('cors');
 const express = require('express');
 const { Server } = require('socket.io');
@@ -22,6 +23,10 @@ async function main() {
   const walletService = await createCloudflareWalletService();
   walletService.registerRoutes(app);
   walletService.registerSocketHandlers(io);
+
+  app.get('/', (req, res) => {
+    res.sendFile(path.join(__dirname, '..', 'index.html'));
+  });
 
   app.get('/health', (req, res) => {
     res.json({ ok: true, service: 'rw-wallet-cloudflare-backend' });
