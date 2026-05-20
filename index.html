@@ -2714,14 +2714,24 @@
             return '';
         };
 
-        const getProfilePaymentMethodLabel = (method) => ({
+        const toTitleText = (value = '') => String(value)
+            .replace(/[_-]+/g, ' ')
+            .trim()
+            .replace(/\b\w/g, char => char.toUpperCase());
+
+        const getRawProfilePaymentMethod = (data = currentUserData || {}) =>
+            data.paymentMethod || data.payment_method || data.selectedPaymentMethod || data.withdrawalMethod ||
+            data.withdrawMethod || data.withdraw_method || data.methodId || data.method || '';
+
+        const getProfilePaymentMethodLabel = (method, data = currentUserData || {}) => ({
             upi: 'UPI ID',
             bank: 'Bank Account',
             play_store: 'Play Store Redeem Code',
             amazon_gift: 'Amazon Gift Card',
             flipkart_gift: 'Flipkart Gift Card',
-            paypal: 'PayPal'
-        }[method] || 'Payment Method');
+            paypal: 'PayPal',
+            crypto: 'Crypto Currency'
+        }[method] || toTitleText(getRawProfilePaymentMethod(data)) || 'Payment Method');
 
         const getProfilePaymentSummaryText = (method, data = currentUserData || {}) => {
             const details = getProfilePaymentDetails(method, data);
@@ -2738,7 +2748,28 @@
                 return details.email || data.paymentEmail || '';
             }
             if (typeof data.paymentDetails === 'string') return data.paymentDetails;
-            return '';
+            if (data.paymentDetails && typeof data.paymentDetails === 'object') {
+                const detailLabels = {
+                    upiId: 'UPI',
+                    accountNumber: 'A/C',
+                    ifsc: 'IFSC',
+                    bankName: 'Bank',
+                    accountName: 'Name',
+                    email: 'Email'
+                };
+                return Object.entries(data.paymentDetails)
+                    .filter(([, value]) => value !== undefined && value !== null && String(value).trim())
+                    .map(([key, value]) => `${detailLabels[key] || toTitleText(key)}: ${value}`)
+                    .join(' | ');
+            }
+            return [
+                data.upiId && `UPI: ${data.upiId}`,
+                data.accountNumber && `A/C: ${data.accountNumber}`,
+                data.ifsc && `IFSC: ${data.ifsc}`,
+                data.bankName && `Bank: ${data.bankName}`,
+                data.accountName && `Name: ${data.accountName}`,
+                data.paymentEmail && `Email: ${data.paymentEmail}`
+            ].filter(Boolean).join(' | ');
         };
 
         const renderWebsiteLinkInputs = (links = []) => {
@@ -2810,7 +2841,7 @@
             const savedPaymentCard = activePaymentMethod ? `
                     <div class="rounded-xl border border-emerald-100 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-900/20 p-3">
                         <p class="text-xs font-semibold uppercase text-emerald-600 dark:text-emerald-300">Saved Payment Method</p>
-                        <p class="mt-1 text-sm font-bold text-gray-900 dark:text-white">${escapeHtml(getProfilePaymentMethodLabel(activePaymentMethod))}</p>
+                        <p class="mt-1 text-sm font-bold text-gray-900 dark:text-white">${escapeHtml(getProfilePaymentMethodLabel(activePaymentMethod, currentUserData))}</p>
                         ${savedPaymentSummary ? `<p class="mt-1 text-sm text-gray-600 dark:text-gray-300 break-words">${escapeHtml(savedPaymentSummary)}</p>` : ''}
                         <button type="button" id="delete-payment-method-btn" class="mt-3 w-full rounded-lg bg-red-50 dark:bg-red-900/30 px-3 py-2 text-sm font-bold text-red-600 dark:text-red-200">Delete payment method</button>
                     </div>` : '';
