@@ -1088,7 +1088,7 @@
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
         import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, onAuthStateChanged, sendPasswordResetEmail } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { getFirestore, doc, setDoc, getDoc, collection, addDoc, onSnapshot, query, orderBy, Timestamp, writeBatch, runTransaction, deleteDoc, getDocs, serverTimestamp, where, arrayUnion, updateDoc, deleteField, setLogLevel } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        import { getFirestore, doc, setDoc, getDoc, collection, addDoc, onSnapshot, query, orderBy, Timestamp, writeBatch, runTransaction, deleteDoc, getDocs, serverTimestamp, where, arrayUnion, updateDoc, deleteField, setLogLevel, limit as firestoreLimit } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
         // --- THEME LOGIC ---
         const applyTheme = (theme) => {
@@ -1275,6 +1275,113 @@
         const writeHistoryItemsToCache = (userId, items) => {
             if (!userId || !Array.isArray(items)) return;
             writeJsonCache(getHistoryDataCacheKey(userId), items.map(normalizeHistoryItemForCache));
+        };
+
+        const normalizeCloudTransaction = (item = {}) => ({
+            ...item,
+            userId: item.user_id || item.userId || currentUser?.uid || '',
+            transactionId: item.transaction_id || item.transactionId || item.id || `TX-${item.timestamp || Date.now()}`,
+            timestamp: Number(item.timestamp || timestampToMillis(item.createdAt) || Date.now()),
+            amount: Number(item.amount || 0),
+            status: item.status || 'completed'
+        });
+
+        const serializeCloudTransaction = (item = {}, userId = currentUser?.uid) => {
+            const timestamp = timestampToMillis(item.timestamp || item.requestedAt || item.createdAt || item.processedAt) || Date.now();
+            const transactionId = String(item.transactionId || item.adminTransactionId || item.requestId || item.id || `${item.type || 'tx'}-${timestamp}`);
+            return {
+                userId,
+                transactionId,
+                type: item.type || 'transaction',
+                amount: Number(item.amount || 0),
+                status: item.status || 'completed',
+                timestamp,
+                details: normalizeHistoryItemForCache({ ...item, transactionId, timestamp })
+            };
+        };
+
+        const fetchCloudTransactionHistory = async (userId, limit = 100) => {
+            const token = await getBackendAuthToken();
+            const response = await fetch(`${BACKEND_BASE_URL}/api/transactions/${encodeURIComponent(userId)}?limit=${limit}`, {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+            const data = await response.json().catch(() => ({}));
+            if (!response.ok || !data.ok) throw new Error(data.error || 'Cloudflare history load failed');
+            return (data.history || []).map(normalizeCloudTransaction);
+        };
+
+        const importFirestoreTransactionsToCloud = async (userId, items) => {
+            if (!items.length) return;
+            try {
+                const token = await getBackendAuthToken();
+                await fetch(`${BACKEND_BASE_URL}/api/transactions/import`, {
+                    method: 'POST',
+                    headers: {
+                        Authorization: `Bearer ${token}`,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        userId,
+                        transactions: items.map(item => serializeCloudTransaction(item, userId))
+                    })
+                });
+            } catch (error) {
+                console.warn('Cloudflare history import failed:', error);
+            }
+        };
+
+        const recordCloudTransaction = async (userId, item) => {
+            try {
+                const token = await getBackendAuthToken();
+                await fetch(`${BACKEND_BASE_URL}/api/transactions`, {
+                    method: 'POST',
+                    headers: {
+                        Authorization: `Bearer ${token}`,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(serializeCloudTransaction(item, userId))
+                });
+            } catch (error) {
+                console.warn('Cloudflare transaction save failed:', error);
+            }
+        };
+
+        const recordCloudTransfer = async (senderItem, recipientItem, recipientUserId) => {
+            try {
+                const token = await getBackendAuthToken();
+                await fetch(`${BACKEND_BASE_URL}/api/transactions/transfer`, {
+                    method: 'POST',
+                    headers: {
+                        Authorization: `Bearer ${token}`,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        sender: serializeCloudTransaction(senderItem, currentUser.uid),
+                        recipient: serializeCloudTransaction(recipientItem, recipientUserId)
+                    })
+                });
+            } catch (error) {
+                console.warn('Cloudflare transfer save failed:', error);
+            }
+        };
+
+        const syncRecentTransactionsToCloud = async (userId = currentUser?.uid) => {
+            if (!userId) return;
+            try {
+                const transactionsQuery = query(
+                    collection(db, `artifacts/${appId}/public/data/users`, userId, 'transactions'),
+                    orderBy('timestamp', 'desc'),
+                    firestoreLimit(25)
+                );
+                const snap = await getDocs(transactionsQuery);
+                const items = snap.docs.map(d => d.data());
+                await importFirestoreTransactionsToCloud(userId, items);
+                const history = await fetchCloudTransactionHistory(userId, 120);
+                unifiedHistoryCache = history;
+                writeHistoryItemsToCache(userId, history);
+            } catch (error) {
+                console.warn('Recent transaction Cloudflare sync failed:', error);
+            }
         };
 
         const sanitizeUserForCache = (data = {}, uid = '') => ({
@@ -2109,11 +2216,29 @@
                 }
             };
 
-            const transactionsQuery = query(collection(db, `artifacts/${appId}/public/data/users`, userId, 'transactions'), orderBy('timestamp', 'desc'));
-            unsubscribers.push(onSnapshot(transactionsQuery, (snap) => {
-                transactions = snap.docs.map(d => d.data());
-                renderUnifiedHistory(5);
-            }, (error) => console.error("Error listening to transactions:", error)));
+            fetchCloudTransactionHistory(userId, 120)
+                .then(history => {
+                    transactions = history;
+                    renderUnifiedHistory(5);
+                    if (history.length === 0) {
+                        const transactionsQuery = query(collection(db, `artifacts/${appId}/public/data/users`, userId, 'transactions'), orderBy('timestamp', 'desc'));
+                        return getDocs(transactionsQuery).then((snap) => {
+                            transactions = snap.docs.map(d => d.data());
+                            renderUnifiedHistory(5);
+                            importFirestoreTransactionsToCloud(userId, transactions);
+                        });
+                    }
+                    return null;
+                })
+                .catch((error) => {
+                    console.error("Cloudflare history load failed, using one-time Firebase fallback:", error);
+                    const transactionsQuery = query(collection(db, `artifacts/${appId}/public/data/users`, userId, 'transactions'), orderBy('timestamp', 'desc'));
+                    return getDocs(transactionsQuery).then((snap) => {
+                        transactions = snap.docs.map(d => d.data());
+                        renderUnifiedHistory(5);
+                        importFirestoreTransactionsToCloud(userId, transactions);
+                    });
+                });
 
             const requestsQuery = query(collection(db, `artifacts/${appId}/public/data/fund_requests`), where("userId", "==", userId), where("status", "==", "pending"));
             unsubscribers.push(onSnapshot(requestsQuery, (snap) => {
@@ -5173,6 +5298,7 @@
                     });
                 });
 
+                await syncRecentTransactionsToCloud(currentUser.uid);
                 showNotification('Recharge request submitted and wallet amount deducted!', false, true);
                 window.closeModal();
                 hidePage();
@@ -5283,6 +5409,7 @@
                         recipientMobile: currentUserData.mobile || ''
                     });
                 });
+                await syncRecentTransactionsToCloud(currentUser.uid);
                 showNotification('Loan amount added to wallet.');
                 hidePage();
             } catch (e) {
@@ -5321,6 +5448,7 @@
                         recipientMobile: ''
                     });
                 });
+                await syncRecentTransactionsToCloud(currentUser.uid);
                 showNotification('Loan repaid successfully.');
                 hidePage();
             } catch (e) {
@@ -5401,6 +5529,7 @@
                     status: 'active',
                     createdAt: new Date()
                 };
+                await syncRecentTransactionsToCloud(currentUser.uid);
                 renderModal('Investment Created',
                     `<div class="text-center space-y-3">
                         <div class="w-16 h-16 rounded-full bg-emerald-100 mx-auto p-3"><img src="${PARTNER_ICON_URL}" class="w-full h-full object-contain" alt="Partner"></div>
@@ -5716,6 +5845,7 @@
                     });
                 });
 
+                await syncRecentTransactionsToCloud(currentUser.uid);
                 showNotification('Withdrawal Request Submitted and balance deducted!', false, true);
                 window.closeModal();
                 hidePage();
@@ -5845,6 +5975,10 @@
             }
 
             try {
+                const senderTxnId = generateTransactionId();
+                const recipientTxnId = generateTransactionId();
+                let senderCloudTxn = null;
+                let recipientCloudTxn = null;
                 await runTransaction(db, async (tx) => {
                     // Get sender and recipient documents
                     const senderRef = doc(db, `artifacts/${appId}/public/data/users`, currentUser.uid);
@@ -5874,8 +6008,34 @@
                     const recipientComment = comment || `Received from ${currentUserData.name || currentUser.email}`;
 
                     // Generate transaction IDs
-                    const senderTxnId = generateTransactionId();
-                    const recipientTxnId = generateTransactionId();
+                    senderCloudTxn = {
+                        type: 'debit',
+                        amount,
+                        comment: senderComment,
+                        timestamp: Date.now(),
+                        recipientName: recipientData.name,
+                        recipientMobile: recipientData.mobile,
+                        recipientIsProProfile: !!recipientData.isProProfile,
+                        senderName: currentUserData.name,
+                        senderMobile: currentUserData.mobile,
+                        senderIsProProfile: !!currentUserData.isProProfile,
+                        transactionId: senderTxnId,
+                        status: 'completed'
+                    };
+                    recipientCloudTxn = {
+                        type: 'wallet_transfer',
+                        amount,
+                        comment: recipientComment,
+                        timestamp: Date.now(),
+                        senderName: currentUserData.name,
+                        senderMobile: currentUserData.mobile,
+                        senderIsProProfile: !!currentUserData.isProProfile,
+                        recipientName: recipientData.name,
+                        recipientMobile: recipientData.mobile,
+                        recipientIsProProfile: !!recipientData.isProProfile,
+                        transactionId: recipientTxnId,
+                        status: 'completed'
+                    };
 
                     // For sender - debit transaction with recipient details
                     tx.set(doc(collection(senderRef, 'transactions')), {
@@ -5910,6 +6070,8 @@
                     });
                 });
 
+                await recordCloudTransfer(senderCloudTxn, recipientCloudTxn, recipientData.uid);
+                await syncRecentTransactionsToCloud(currentUser.uid);
                 showNotification(`Success! Sent ${formatCurrency(amount)} to ${recipientData.name || recipientData.mobile}`, false, true);
                 window.closeModal();
                 hidePage();
@@ -5964,6 +6126,7 @@
                         status: 'completed'
                     });
                 });
+                await syncRecentTransactionsToCloud(currentUser.uid);
                 showNotification(`Success! Added ${formatCurrency(redeemedAmount)} to your wallet.`, false, true);
                 window.closeModal();
             } catch (e) {

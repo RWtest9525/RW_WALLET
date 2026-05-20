@@ -203,9 +203,12 @@ async function initSchema(d1) {
       type TEXT NOT NULL,
       amount REAL NOT NULL,
       status TEXT NOT NULL,
-      timestamp INTEGER NOT NULL
+      timestamp INTEGER NOT NULL,
+      details_json TEXT
     )
   `);
+
+  await ensureColumn(d1, 'transactions', 'details_json', 'TEXT');
 
   await d1.query(`
     CREATE INDEX IF NOT EXISTS idx_transactions_user_time
@@ -395,28 +398,39 @@ async function listChatRooms(d1, { limit = 100 } = {}) {
   );
 }
 
-async function saveTransaction(d1, { userId, transactionId, type, amount, status, timestamp = nowMs() }) {
+async function saveTransaction(d1, { userId, transactionId, type, amount, status, timestamp = nowMs(), details = {} }) {
   await d1.query(
-    `INSERT INTO transactions (user_id, transaction_id, type, amount, status, timestamp)
-     VALUES (?, ?, ?, ?, ?, ?)
+    `INSERT INTO transactions (user_id, transaction_id, type, amount, status, timestamp, details_json)
+     VALUES (?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT(transaction_id) DO UPDATE SET
        type = excluded.type,
        amount = excluded.amount,
        status = excluded.status,
-       timestamp = excluded.timestamp`,
-    [userId, transactionId, type, Number(amount || 0), status, timestamp]
+       timestamp = excluded.timestamp,
+       details_json = excluded.details_json`,
+    [userId, transactionId, type, Number(amount || 0), status, timestamp, JSON.stringify(details || {})]
   );
 }
 
 async function getTransactionHistory(d1, userId, { limit = 50, before = Number.MAX_SAFE_INTEGER } = {}) {
-  return d1.all(
+  const rows = await d1.all(
     `SELECT user_id, transaction_id, type, amount, status, timestamp
+          , details_json
      FROM transactions
      WHERE user_id = ? AND timestamp < ?
      ORDER BY timestamp DESC
      LIMIT ?`,
     [userId, before, limit]
   );
+  return rows.map((row) => {
+    let details = {};
+    try {
+      details = row.details_json ? JSON.parse(row.details_json) : {};
+    } catch {
+      details = {};
+    }
+    return { ...details, ...row, details_json: undefined };
+  });
 }
 
 async function putR2Object(r2, key, body, contentType = 'application/json') {
@@ -511,7 +525,7 @@ function registerRoutes(app, { d1, r2 }) {
   });
 
   app.get('/api/transactions/:userId', requireHttpAuth, async (req, res) => {
-    if (req.auth.sub !== req.params.userId) {
+    if (req.auth.sub !== req.params.userId && !req.auth.isAdmin) {
       return res.status(403).json({ ok: false, error: 'FORBIDDEN' });
     }
 
@@ -524,11 +538,40 @@ function registerRoutes(app, { d1, r2 }) {
   });
 
   app.post('/api/transactions', requireHttpAuth, async (req, res) => {
-    if (req.auth.sub !== req.body.userId) {
+    if (req.auth.sub !== req.body.userId && !req.auth.isAdmin) {
       return res.status(403).json({ ok: false, error: 'FORBIDDEN' });
     }
 
     await saveTransaction(d1, req.body);
+    res.json({ ok: true });
+  });
+
+  app.post('/api/transactions/import', requireHttpAuth, async (req, res) => {
+    const userId = String(req.body.userId || '');
+    const transactions = Array.isArray(req.body.transactions) ? req.body.transactions : [];
+    if (req.auth.sub !== userId && !req.auth.isAdmin) {
+      return res.status(403).json({ ok: false, error: 'FORBIDDEN' });
+    }
+
+    const limited = transactions.slice(0, 500);
+    for (const transaction of limited) {
+      await saveTransaction(d1, { ...transaction, userId });
+    }
+    res.json({ ok: true, imported: limited.length });
+  });
+
+  app.post('/api/transactions/transfer', requireHttpAuth, async (req, res) => {
+    const sender = req.body.sender || {};
+    const recipient = req.body.recipient || {};
+    if (req.auth.sub !== sender.userId) {
+      return res.status(403).json({ ok: false, error: 'FORBIDDEN' });
+    }
+    if (!recipient.userId) {
+      return res.status(400).json({ ok: false, error: 'RECIPIENT_REQUIRED' });
+    }
+
+    await saveTransaction(d1, sender);
+    await saveTransaction(d1, recipient);
     res.json({ ok: true });
   });
 
