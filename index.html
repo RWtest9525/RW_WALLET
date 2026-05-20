@@ -4027,6 +4027,16 @@
             renderFilteredTransactions(transactionListState.filter, { reset: false });
         };
 
+        const refreshTransactionHistoryFromFirebase = async (userId = currentUser?.uid) => {
+            if (!userId) return [];
+            const firebaseTransactions = await loadFirebaseTransactions(userId, 5000);
+            const cachedPending = (unifiedHistoryCache || []).filter(item => String(item.key || '').startsWith('req-') || item.status === 'pending');
+            unifiedHistoryCache = mergeTransactionsByKey(firebaseTransactions, cachedPending);
+            writeHistoryItemsToCache(userId, unifiedHistoryCache);
+            importFirestoreTransactionsToCloud(userId, firebaseTransactions);
+            return unifiedHistoryCache;
+        };
+
         const showAllTransactionsPage = () => {
             if ((!unifiedHistoryCache || unifiedHistoryCache.length === 0) && currentUser?.uid) {
                 unifiedHistoryCache = readHistoryItemsFromCache(currentUser.uid);
@@ -4054,6 +4064,20 @@
 
             // Initial render of all transactions
             renderFilteredTransactions('all');
+            const listElement = document.getElementById('all-transactions-list');
+            if (listElement) {
+                listElement.insertAdjacentHTML('afterbegin', '<p id="transaction-refresh-status" class="text-center text-xs font-semibold text-blue-500 dark:text-blue-300 py-2">Refreshing full Firebase history...</p>');
+            }
+            refreshTransactionHistoryFromFirebase(currentUser?.uid)
+                .then(() => {
+                    const activeFilter = document.querySelector('#filter-bar .active-filter')?.dataset.filter || 'all';
+                    renderFilteredTransactions(activeFilter, { reset: true });
+                })
+                .catch((error) => {
+                    console.error('Full Firebase transaction refresh failed:', error);
+                    document.getElementById('transaction-refresh-status')?.remove();
+                    showNotification('Could not refresh full transaction history. Please reopen after network is stable.', true);
+                });
 
             // Add click listener for filter buttons
             document.getElementById('filter-bar').addEventListener('click', (e) => {
