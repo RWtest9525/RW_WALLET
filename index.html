@@ -1278,14 +1278,39 @@
             writeJsonCache(getHistoryDataCacheKey(userId), items.map(normalizeHistoryItemForCache));
         };
 
-        const normalizeCloudTransaction = (item = {}) => ({
-            ...item,
-            userId: item.user_id || item.userId || currentUser?.uid || '',
-            transactionId: item.transaction_id || item.transactionId || item.id || `TX-${item.timestamp || Date.now()}`,
-            timestamp: Number(item.timestamp || timestampToMillis(item.createdAt) || Date.now()),
-            amount: Number(item.amount || 0),
-            status: item.status || 'completed'
-        });
+        const normalizeTransactionType = (item = {}) => {
+            const rawType = String(item.type || '').toLowerCase().replace(/\s+/g, '_');
+            const comment = String(item.comment || item.remarks || '').toLowerCase();
+            if (rawType.includes('withdraw') || comment.includes('withdraw')) return 'withdrawal';
+            if (rawType.includes('recharge') || comment.includes('recharge')) return 'mobile_recharge';
+            if (rawType.includes('gift')) return 'gift_card';
+            if (rawType.includes('wallet_transfer') || rawType === 'transfer') return 'wallet_transfer';
+            if (rawType === 'debit' || rawType.includes('sent') || comment.includes('money sent')) return 'debit';
+            if (rawType === 'credit' || rawType.includes('received') || rawType.includes('deposit') || rawType.includes('add_fund') || rawType.includes('admin')) return 'credit';
+            if (Number(item.amount || 0) > 0) return 'credit';
+            if (Number(item.amount || 0) < 0) return 'debit';
+            return rawType || 'transaction';
+        };
+
+        const normalizeTransactionForHistory = (item = {}, index = 0) => {
+            const timestamp = timestampToMillis(item.timestamp || item.requestedAt || item.createdAt || item.processedAt || item.date) || Date.now();
+            const type = normalizeTransactionType(item);
+            const amount = Number(item.amount || item.chargeAmount || 0);
+            const transactionId = String(item.transaction_id || item.transactionId || item.adminTransactionId || item.id || `TX-${timestamp}-${index}`);
+            return {
+                ...item,
+                id: item.id || transactionId,
+                userId: item.user_id || item.userId || currentUser?.uid || '',
+                transactionId,
+                type,
+                timestamp,
+                amount,
+                status: item.status || 'completed',
+                comment: item.comment || item.remarks || item.description || (type === 'credit' ? 'Money Received' : type === 'withdrawal' ? 'Withdrawal' : 'Wallet Transaction')
+            };
+        };
+
+        const normalizeCloudTransaction = (item = {}) => normalizeTransactionForHistory(item);
 
         const getTransactionKey = (item = {}, index = 0) => {
             const timestamp = timestampToMillis(item.timestamp || item.requestedAt || item.createdAt || item.processedAt) || Date.now();
@@ -1298,7 +1323,7 @@
             const merged = new Map();
             groups.flat().forEach((item, index) => {
                 if (!item) return;
-                const normalized = normalizeHistoryItemForCache(item);
+                const normalized = normalizeTransactionForHistory(item, index);
                 const key = getTransactionKey(normalized, index);
                 merged.set(key, { ...(merged.get(key) || {}), ...normalized, key });
             });
@@ -1306,10 +1331,12 @@
                 .sort((a, b) => timestampToMillis(b.timestamp || b.requestedAt) - timestampToMillis(a.timestamp || a.requestedAt));
         };
 
-        const loadFirebaseTransactions = async (userId, maxItems = 500) => {
-            const transactionsQuery = query(collection(db, `artifacts/${appId}/public/data/users`, userId, 'transactions'), orderBy('timestamp', 'desc'), firestoreLimit(maxItems));
-            const snap = await getDocs(transactionsQuery);
-            return snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        const loadFirebaseTransactions = async (userId, maxItems = 2000) => {
+            const snap = await getDocs(collection(db, `artifacts/${appId}/public/data/users`, userId, 'transactions'));
+            return snap.docs
+                .map((doc, index) => normalizeTransactionForHistory({ id: doc.id, ...doc.data() }, index))
+                .sort((a, b) => timestampToMillis(b.timestamp) - timestampToMillis(a.timestamp))
+                .slice(0, maxItems);
         };
 
         const serializeCloudTransaction = (item = {}, userId = currentUser?.uid) => {
@@ -1350,17 +1377,20 @@
             if (!items.length) return;
             try {
                 const token = await getBackendAuthToken();
-                await fetch(`${BACKEND_BASE_URL}/api/transactions/import`, {
-                    method: 'POST',
-                    headers: {
-                        Authorization: `Bearer ${token}`,
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({
-                        userId,
-                        transactions: items.map(item => serializeCloudTransaction(item, userId))
-                    })
-                });
+                for (let index = 0; index < items.length; index += 500) {
+                    const chunk = items.slice(index, index + 500);
+                    await fetch(`${BACKEND_BASE_URL}/api/transactions/import`, {
+                        method: 'POST',
+                        headers: {
+                            Authorization: `Bearer ${token}`,
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({
+                            userId,
+                            transactions: chunk.map(item => serializeCloudTransaction(item, userId))
+                        })
+                    });
+                }
             } catch (error) {
                 console.warn('Cloudflare history import failed:', error);
             }
@@ -1573,9 +1603,9 @@
                 const snap = await getDocs(transactionsQuery);
                 const items = snap.docs.map(d => d.data());
                 await importFirestoreTransactionsToCloud(userId, items);
-                const history = await fetchCloudTransactionHistory(userId, 120);
-                unifiedHistoryCache = history;
-                writeHistoryItemsToCache(userId, history);
+                const history = await fetchCloudTransactionHistory(userId, 2000);
+                unifiedHistoryCache = mergeTransactionsByKey(readHistoryItemsFromCache(userId), unifiedHistoryCache, history);
+                writeHistoryItemsToCache(userId, unifiedHistoryCache);
             } catch (error) {
                 console.warn('Recent transaction Cloudflare sync failed:', error);
             }
@@ -1960,7 +1990,7 @@
             }
 
             // Handle other transaction types
-            const isCredit = ['credit', 'gift_card'].includes(item.type);
+            const isCredit = ['credit', 'gift_card'].includes(normalizeTransactionType(item)) || Number(item.amount || 0) > 0;
             const sign = isCredit ? '+' : '-';
             const colorClass = isCredit ? 'text-green-500' : 'text-red-500';
 
@@ -2422,12 +2452,12 @@
                 }
             };
 
-            fetchCloudTransactionHistory(userId, 500)
+            fetchCloudTransactionHistory(userId, 2000)
                 .then(async history => {
                     transactions = mergeTransactionsByKey(cachedHistoryItems.filter(item => !String(item.key || '').startsWith('req-')), history);
                     renderUnifiedHistory(5);
                     try {
-                        const firebaseTransactions = await loadFirebaseTransactions(userId, 500);
+                        const firebaseTransactions = await loadFirebaseTransactions(userId, 2000);
                         const mergedTransactions = mergeTransactionsByKey(transactions, firebaseTransactions);
                         if (mergedTransactions.length !== transactions.length || firebaseTransactions.length > history.length) {
                             transactions = mergedTransactions;
@@ -2446,7 +2476,7 @@
                         return null;
                     }
                     console.warn("No cached history found, using one-time Firebase fallback.");
-                    return loadFirebaseTransactions(userId, 500).then((firebaseTransactions) => {
+                    return loadFirebaseTransactions(userId, 2000).then((firebaseTransactions) => {
                         transactions = mergeTransactionsByKey(firebaseTransactions);
                         renderUnifiedHistory(5);
                         importFirestoreTransactionsToCloud(userId, firebaseTransactions);
@@ -3932,24 +3962,23 @@
 
             if (filter === 'withdrawal') {
                 return unifiedHistoryCache.filter(item =>
-                    item.type === 'withdrawal' ||
-                    (item.status === 'pending' && item.type !== 'loan')
+                    normalizeTransactionType(item) === 'withdrawal' ||
+                    (item.status === 'pending' && normalizeTransactionType(item) !== 'loan')
                 );
             }
 
             if (filter === 'received') {
-                return unifiedHistoryCache.filter(item =>
-                    ['credit', 'gift_card', 'wallet_transfer'].includes(item.type) ||
-                    (item.type === 'wallet_transfer' && item.amount > 0)
-                );
+                return unifiedHistoryCache.filter(item => {
+                    const type = normalizeTransactionType(item);
+                    return ['credit', 'gift_card'].includes(type) || (type === 'wallet_transfer' && Number(item.amount || 0) > 0);
+                });
             }
 
             if (filter === 'sent') {
-                return unifiedHistoryCache.filter(item =>
-                    item.type === 'debit' ||
-                    item.type === 'mobile_recharge' ||
-                    (item.type === 'wallet_transfer' && item.amount < 0)
-                );
+                return unifiedHistoryCache.filter(item => {
+                    const type = normalizeTransactionType(item);
+                    return type === 'debit' || type === 'mobile_recharge' || type === 'withdrawal' || (type === 'wallet_transfer' && Number(item.amount || 0) < 0);
+                });
             }
 
             return unifiedHistoryCache;
