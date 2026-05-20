@@ -98,12 +98,15 @@ function nowMs() {
   return Date.now();
 }
 
+const ADMIN_UID = process.env.ADMIN_UID || 'mOs5Fmp4RoRzeBDH4pZLMOpQx7Q2';
+
 function createAppToken(user) {
   return jwt.sign(
     {
       sub: user.id,
       email: user.email,
-      firebaseUid: user.firebase_uid || null
+      firebaseUid: user.firebase_uid || null,
+      isAdmin: user.id === ADMIN_UID || user.firebase_uid === ADMIN_UID
     },
     process.env.APP_JWT_SECRET,
     { expiresIn: '7d' }
@@ -140,9 +143,32 @@ async function initSchema(d1) {
       firebase_uid TEXT UNIQUE,
       email TEXT UNIQUE NOT NULL,
       password_hash TEXT,
+      name TEXT,
+      mobile TEXT,
       created_at INTEGER NOT NULL,
       migrated_at INTEGER
     )
+  `);
+
+  await ensureColumn(d1, 'users', 'name', 'TEXT');
+  await ensureColumn(d1, 'users', 'mobile', 'TEXT');
+
+  await d1.query(`
+    CREATE TABLE IF NOT EXISTS chat_rooms (
+      room_id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      user_name TEXT,
+      user_email TEXT,
+      user_mobile TEXT,
+      last_message TEXT,
+      last_sender_id TEXT,
+      updated_at INTEGER NOT NULL
+    )
+  `);
+
+  await d1.query(`
+    CREATE INDEX IF NOT EXISTS idx_chat_rooms_updated
+    ON chat_rooms (updated_at DESC)
   `);
 
   await d1.query(`
@@ -178,12 +204,30 @@ async function initSchema(d1) {
   `);
 }
 
-async function createUser(d1, { id, firebaseUid = null, email, passwordHash, migratedAt = null }) {
+async function ensureColumn(d1, table, column, type) {
+  try {
+    await d1.query(`ALTER TABLE ${table} ADD COLUMN ${column} ${type}`);
+  } catch (error) {
+    if (!String(error.message || '').toLowerCase().includes('duplicate column')) {
+      throw error;
+    }
+  }
+}
+
+function normalizeProfile(profile = {}) {
+  return {
+    name: String(profile.name || '').trim().slice(0, 120),
+    mobile: String(profile.mobile || '').trim().slice(0, 30)
+  };
+}
+
+async function createUser(d1, { id, firebaseUid = null, email, passwordHash, migratedAt = null, profile = {} }) {
   const createdAt = nowMs();
+  const cleanProfile = normalizeProfile(profile);
   await d1.query(
-    `INSERT INTO users (id, firebase_uid, email, password_hash, created_at, migrated_at)
-     VALUES (?, ?, ?, ?, ?, ?)`,
-    [id, firebaseUid, normalizeEmail(email), passwordHash, createdAt, migratedAt]
+    `INSERT INTO users (id, firebase_uid, email, password_hash, name, mobile, created_at, migrated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+    [id, firebaseUid, normalizeEmail(email), passwordHash, cleanProfile.name, cleanProfile.mobile, createdAt, migratedAt]
   );
 
   return {
@@ -191,6 +235,8 @@ async function createUser(d1, { id, firebaseUid = null, email, passwordHash, mig
     firebase_uid: firebaseUid,
     email: normalizeEmail(email),
     password_hash: passwordHash,
+    name: cleanProfile.name,
+    mobile: cleanProfile.mobile,
     created_at: createdAt,
     migrated_at: migratedAt
   };
@@ -200,9 +246,13 @@ async function findUserByEmail(d1, email) {
   return d1.first('SELECT * FROM users WHERE email = ? LIMIT 1', [normalizeEmail(email)]);
 }
 
-async function upsertFirebaseUser(d1, decodedToken) {
+async function upsertFirebaseUser(d1, decodedToken, profile = {}) {
   const firebaseUid = decodedToken.uid;
   const email = normalizeEmail(decodedToken.email || `${firebaseUid}@firebase.local`);
+  const cleanProfile = normalizeProfile({
+    name: profile.name || decodedToken.name || '',
+    mobile: profile.mobile || profile.phoneNumber || decodedToken.phone_number || ''
+  });
   const existing = await d1.first(
     'SELECT * FROM users WHERE firebase_uid = ? OR email = ? LIMIT 1',
     [firebaseUid, email]
@@ -213,6 +263,17 @@ async function upsertFirebaseUser(d1, decodedToken) {
       await d1.query('UPDATE users SET firebase_uid = ? WHERE id = ?', [firebaseUid, existing.id]);
       existing.firebase_uid = firebaseUid;
     }
+    if (cleanProfile.name || cleanProfile.mobile) {
+      await d1.query(
+        `UPDATE users
+         SET name = COALESCE(NULLIF(?, ''), name),
+             mobile = COALESCE(NULLIF(?, ''), mobile)
+         WHERE id = ?`,
+        [cleanProfile.name, cleanProfile.mobile, existing.id]
+      );
+      existing.name = cleanProfile.name || existing.name;
+      existing.mobile = cleanProfile.mobile || existing.mobile;
+    }
     return existing;
   }
 
@@ -221,7 +282,8 @@ async function upsertFirebaseUser(d1, decodedToken) {
     firebaseUid,
     email,
     passwordHash: '',
-    migratedAt: nowMs()
+    migratedAt: nowMs(),
+    profile: cleanProfile
   });
 }
 
@@ -243,6 +305,32 @@ async function saveChatMessage(d1, { roomId, senderId, message, timestamp }) {
     `INSERT INTO chats (room_id, sender_id, message, timestamp)
      VALUES (?, ?, ?, ?)`,
     [roomId, senderId, message, timestamp]
+  );
+}
+
+async function upsertChatRoom(d1, { roomId, userId, userName = '', userEmail = '', userMobile = '', lastMessage = '', lastSenderId = '', updatedAt = nowMs() }) {
+  await d1.query(
+    `INSERT INTO chat_rooms (room_id, user_id, user_name, user_email, user_mobile, last_message, last_sender_id, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+     ON CONFLICT(room_id) DO UPDATE SET
+       user_id = COALESCE(NULLIF(excluded.user_id, ''), chat_rooms.user_id),
+       user_name = COALESCE(NULLIF(excluded.user_name, ''), chat_rooms.user_name),
+       user_email = COALESCE(NULLIF(excluded.user_email, ''), chat_rooms.user_email),
+       user_mobile = COALESCE(NULLIF(excluded.user_mobile, ''), chat_rooms.user_mobile),
+       last_message = excluded.last_message,
+       last_sender_id = excluded.last_sender_id,
+       updated_at = excluded.updated_at`,
+    [roomId, userId, userName, userEmail, userMobile, lastMessage, lastSenderId, updatedAt]
+  );
+}
+
+async function listChatRooms(d1, { limit = 100 } = {}) {
+  return d1.all(
+    `SELECT room_id, user_id, user_name, user_email, user_mobile, last_message, last_sender_id, updated_at
+     FROM chat_rooms
+     ORDER BY updated_at DESC
+     LIMIT ?`,
+    [limit]
   );
 }
 
@@ -302,12 +390,12 @@ function registerRoutes(app, { d1, r2 }) {
       if (!idToken) return res.status(400).json({ ok: false, error: 'FIREBASE_ID_TOKEN_REQUIRED' });
 
       const decoded = await admin.auth().verifyIdToken(idToken);
-      const user = await upsertFirebaseUser(d1, decoded);
+      const user = await upsertFirebaseUser(d1, decoded, req.body.profile || {});
 
       return res.json({
         ok: true,
         token: createAppToken(user),
-        user: { id: user.id, email: user.email, firebaseUid: user.firebase_uid }
+        user: { id: user.id, email: user.email, firebaseUid: user.firebase_uid, name: user.name || '', mobile: user.mobile || '' }
       });
     } catch (error) {
       console.error('Firebase session failed:', error);
@@ -388,6 +476,18 @@ function registerRoutes(app, { d1, r2 }) {
     const urlOrKey = await putR2Object(r2, key, JSON.stringify(req.body, null, 2));
     res.json({ ok: true, key: urlOrKey });
   });
+
+  app.get('/api/admin/chats', requireHttpAuth, async (req, res) => {
+    if (!req.auth.isAdmin) {
+      return res.status(403).json({ ok: false, error: 'ADMIN_REQUIRED' });
+    }
+
+    const rooms = await listChatRooms(d1, {
+      limit: Math.min(Number(req.query.limit || 100), 300)
+    });
+
+    res.json({ ok: true, chats: rooms });
+  });
 }
 
 function requireHttpAuth(req, res, next) {
@@ -426,21 +526,37 @@ function registerSocketHandlers(io, { d1 }) {
       }
     });
 
-    socket.on('send_message', ({ roomId, message }, ack) => {
+    socket.on('leave_room', ({ roomId }, ack) => {
+      if (roomId) socket.leave(roomId);
+      if (ack) ack({ ok: true });
+    });
+
+    socket.on('send_message', ({ roomId, message, userMeta = {} }, ack) => {
       try {
         if (!roomId || !String(message || '').trim()) throw new Error('ROOM_AND_MESSAGE_REQUIRED');
 
+        const timestamp = nowMs();
         const chatMessage = {
           roomId,
           senderId: socket.user.sub,
           message: String(message).slice(0, 4000),
-          timestamp: nowMs()
+          timestamp
         };
 
         io.to(roomId).emit('new_message', chatMessage);
-        saveChatMessage(d1, chatMessage).catch((error) => {
-          console.error('Async chat persist failed:', error);
-        });
+        Promise.all([
+          saveChatMessage(d1, chatMessage),
+          upsertChatRoom(d1, {
+            roomId,
+            userId: userMeta.userId || roomId.replace(/^support_/, ''),
+            userName: String(userMeta.userName || '').slice(0, 120),
+            userEmail: normalizeEmail(userMeta.userEmail || ''),
+            userMobile: String(userMeta.userMobile || '').slice(0, 30),
+            lastMessage: chatMessage.message,
+            lastSenderId: chatMessage.senderId,
+            updatedAt: timestamp
+          })
+        ]).catch((error) => console.error('Async chat persist failed:', error));
 
         if (ack) ack({ ok: true, message: chatMessage });
       } catch (error) {
@@ -466,6 +582,7 @@ async function createCloudflareWalletService() {
     registerSocketHandlers: (io) => registerSocketHandlers(io, { d1 }),
     saveTransaction: (transaction) => saveTransaction(d1, transaction),
     getTransactionHistory: (userId, options) => getTransactionHistory(d1, userId, options),
+    listChatRooms: (options) => listChatRooms(d1, options),
     putInvoice: (userId, invoiceId, data) =>
       putR2Object(r2, `invoices/${userId}/${invoiceId}.json`, JSON.stringify(data, null, 2)),
     getInvoice: (userId, invoiceId) =>
@@ -480,5 +597,6 @@ module.exports = {
   registerRoutes,
   registerSocketHandlers,
   saveTransaction,
-  getTransactionHistory
+  getTransactionHistory,
+  listChatRooms
 };

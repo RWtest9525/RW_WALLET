@@ -1091,6 +1091,7 @@
             type="audio/mpeg">
     </audio>
 
+    <script src="https://cdn.socket.io/4.8.1/socket.io.min.js"></script>
     <!-- Firebase & App Logic Script -->
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
@@ -1151,6 +1152,7 @@
             'Maharashtra Goa', 'Mumbai', 'North East', 'Odisha', 'Punjab', 'Rajasthan', 'Tamil Nadu',
             'Uttar Pradesh East', 'Uttar Pradesh West', 'West Bengal'
         ];
+        const BACKEND_BASE_URL = 'https://rw-wallet.onrender.com';
 
         const app = initializeApp(firebaseConfig);
         const auth = getAuth(app);
@@ -1179,6 +1181,11 @@
         let lastAutoProcessCheckAt = 0;
         let activeWithdrawalHistoryFilter = { filter: 'today', fromDate: null, toDate: null };
         let activeChatUnsubscribe = null;
+        let backendAuthToken = '';
+        let backendAuthPromise = null;
+        let supportSocket = null;
+        let activeSupportRoomId = '';
+        let activeSupportMessages = [];
         let currentMainSection = 'home';
         let notificationTimeout;
 
@@ -1300,6 +1307,60 @@
                 document.getElementById('admin-wallet-balance').textContent = formatCompactBalance(cached.balance || 0);
             }
             return true;
+        };
+
+        const getBackendProfilePayload = () => ({
+            name: currentUserData?.name || currentUser?.displayName || '',
+            mobile: currentUserData?.mobile || '',
+            phoneNumber: currentUserData?.mobile || ''
+        });
+
+        const getBackendAuthToken = async (forceRefresh = false) => {
+            if (!currentUser) throw new Error('Login required');
+            if (backendAuthToken && !forceRefresh) return backendAuthToken;
+            if (backendAuthPromise && !forceRefresh) return backendAuthPromise;
+
+            backendAuthPromise = currentUser.getIdToken(forceRefresh)
+                .then(idToken => fetch(`${BACKEND_BASE_URL}/api/session/firebase`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        idToken,
+                        profile: getBackendProfilePayload()
+                    })
+                }))
+                .then(async res => {
+                    const data = await res.json().catch(() => ({}));
+                    if (!res.ok || !data.ok || !data.token) {
+                        throw new Error(data.error || 'Backend session failed');
+                    }
+                    backendAuthToken = data.token;
+                    return backendAuthToken;
+                })
+                .finally(() => {
+                    backendAuthPromise = null;
+                });
+
+            return backendAuthPromise;
+        };
+
+        const getSupportSocket = async () => {
+            const token = await getBackendAuthToken();
+            if (supportSocket?.connected) return supportSocket;
+
+            supportSocket = window.io(BACKEND_BASE_URL, {
+                transports: ['websocket', 'polling'],
+                auth: { token }
+            });
+
+            supportSocket.on('connect_error', async (error) => {
+                console.error('Support socket connection failed:', error);
+                if (/token|auth/i.test(error.message || '')) {
+                    backendAuthToken = '';
+                }
+            });
+
+            return supportSocket;
         };
 
         let usdInrRateCache = null;
@@ -1904,6 +1965,12 @@
                 activeChatUnsubscribe();
                 activeChatUnsubscribe = null;
             }
+            activeSupportRoomId = '';
+            activeSupportMessages = [];
+            if (supportSocket) {
+                supportSocket.off('chat_history');
+                supportSocket.off('new_message');
+            }
 
             if (user) {
                 currentUser = user;
@@ -1949,6 +2016,11 @@
                 localStorage.setItem('lastLoggedInUser', user.uid);
             } else {
                 currentUser = null;
+                backendAuthToken = '';
+                if (supportSocket) {
+                    supportSocket.disconnect();
+                    supportSocket = null;
+                }
                 hideLoading();
                 // Remove saved user
                 localStorage.removeItem('lastLoggedInUser');
@@ -1976,6 +2048,7 @@
                     updateDollarBalanceDisplay(data.balance);
                     currentUserData = data;
                     writeJsonCache(getUserCacheKey(userId), sanitizeUserForCache(data, userId));
+                    getBackendAuthToken().catch(e => console.error('Backend session warmup failed:', e));
                     const now = Date.now();
                     if (now - lastAutoProcessCheckAt > 60000) {
                         lastAutoProcessCheckAt = now;
@@ -2157,13 +2230,7 @@
                 }
             }, (error) => console.error("Admin: Error listening to partner investments:", error)));
 
-            const supportChatsQuery = query(collection(db, `artifacts/${appId}/public/data/support_chats`), orderBy("updatedAt", "desc"));
-            unsubscribers.push(onSnapshot(supportChatsQuery, (snap) => {
-                allSupportChatsCache = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-                if (document.getElementById('admin-chats-list')) {
-                    renderAdminChatsList();
-                }
-            }, (error) => console.error("Admin: Error listening to support chats:", error)));
+            loadAdminChatsFromBackend().catch(error => console.error("Admin: Error loading Cloudflare support chats:", error));
         };
 
         // --- FULL PAGE RENDERERS ---
@@ -2804,6 +2871,17 @@
             }
         };
 
+        const getSupportRoomId = (chatUserId) => `support_${chatUserId}`;
+
+        const normalizeBackendMessage = (message) => ({
+            id: `${message.roomId || message.room_id || activeSupportRoomId}-${message.timestamp || Date.now()}-${message.senderId || message.sender_id || ''}`,
+            text: message.message || message.text || '',
+            senderId: message.senderId || message.sender_id || '',
+            senderRole: (message.senderId || message.sender_id) === ADMIN_UID ? 'admin' : 'user',
+            createdAt: message.timestamp || message.createdAt || Date.now(),
+            readAt: message.readAt || null
+        });
+
         const openSupportChatPage = async (chatUserId, viewerRole = 'user', chatMeta = {}) => {
             if (activeChatUnsubscribe) {
                 activeChatUnsubscribe();
@@ -2873,40 +2951,72 @@
                 }
             };
 
-            const messagesRef = collection(db, `artifacts/${appId}/public/data/support_chats`, chatUserId, 'messages');
-            const messagesQuery = query(messagesRef, orderBy('createdAt', 'asc'));
-            activeChatUnsubscribe = onSnapshot(messagesQuery, (snap) => {
-                const messages = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-                renderSupportMessages(messages, viewerRole);
-                markChatMessagesRead(snap.docs, viewerRole).catch(e => console.error('Mark chat read failed:', e));
-            }, (error) => console.error('Support chat listener failed:', error));
+            activeSupportRoomId = getSupportRoomId(chatUserId);
+            activeSupportMessages = [];
+            renderSupportMessages(activeSupportMessages, viewerRole);
+            const socket = await getSupportSocket();
+            const handleHistory = ({ roomId, history = [] }) => {
+                if (roomId !== activeSupportRoomId) return;
+                activeSupportMessages = history.map(normalizeBackendMessage);
+                renderSupportMessages(activeSupportMessages, viewerRole);
+            };
+            const handleNewMessage = (message) => {
+                if (message.roomId !== activeSupportRoomId) return;
+                activeSupportMessages = [...activeSupportMessages, normalizeBackendMessage(message)];
+                renderSupportMessages(activeSupportMessages, viewerRole);
+            };
+            socket.off('chat_history');
+            socket.off('new_message');
+            socket.on('chat_history', handleHistory);
+            socket.on('new_message', handleNewMessage);
+            socket.emit('join_room', { roomId: activeSupportRoomId, limit: 80 }, (response) => {
+                if (!response?.ok) {
+                    console.error('Join support room failed:', response?.error);
+                    showNotification('Chat connection failed. Please reopen chat.', true);
+                }
+            });
+            activeChatUnsubscribe = () => {
+                socket.off('chat_history', handleHistory);
+                socket.off('new_message', handleNewMessage);
+                socket.emit('leave_room', { roomId: activeSupportRoomId });
+            };
 
             const sendMessage = async () => {
                 const input = document.getElementById('support-message-input');
                 const text = input.value.trim();
                 if (!text) return;
                 input.value = '';
-                const chatRef = doc(db, `artifacts/${appId}/public/data/support_chats`, chatUserId);
-                const senderName = isAdminView ? 'REVIEWS WORLD' : (currentUserData?.name || currentUser?.email || 'User');
-                const chatPayload = {
+                const userMeta = {
                     userId: chatUserId,
                     userName: chatMeta.userName || currentUserData?.name || currentUser?.email || 'User',
                     userEmail: chatMeta.userEmail || currentUserData?.email || currentUser?.email || '',
-                    userMobile: chatMeta.userMobile || currentUserData?.mobile || '',
+                    userMobile: chatMeta.userMobile || currentUserData?.mobile || ''
+                };
+                socket.emit('send_message', {
+                    roomId: activeSupportRoomId,
+                    message: text,
+                    userMeta
+                }, (response) => {
+                    if (!response?.ok) {
+                        console.error('Send support message failed:', response?.error);
+                        showNotification('Message not sent. Please try again.', true);
+                    }
+                });
+                const updatedChat = {
+                    userId: chatUserId,
+                    userName: userMeta.userName,
+                    userEmail: userMeta.userEmail,
+                    userMobile: userMeta.userMobile,
                     lastMessage: text,
                     lastSenderRole: viewerRole,
-                    updatedAt: serverTimestamp()
+                    updatedAt: Date.now()
                 };
-                await setDoc(chatRef, chatPayload, { merge: true });
-                await addDoc(messagesRef, {
-                    text,
-                    senderRole: viewerRole,
-                    senderId: currentUser.uid,
-                    senderName,
-                    createdAt: Timestamp.now(),
-                    deliveredAt: serverTimestamp(),
-                    readAt: null
-                });
+                const index = allSupportChatsCache.findIndex(chat => (chat.userId || chat.id) === chatUserId);
+                if (index >= 0) {
+                    allSupportChatsCache[index] = { ...allSupportChatsCache[index], ...updatedChat };
+                } else {
+                    allSupportChatsCache.unshift({ id: chatUserId, ...updatedChat });
+                }
             };
 
             document.getElementById('support-send-btn').onclick = sendMessage;
@@ -2941,6 +3051,34 @@
             currentMainSection = 'help';
             setBottomNavActive('bottom-help-btn');
             document.getElementById('reviews-world-chat-card').onclick = () => openSupportChatPage(currentUser.uid, 'user');
+        };
+
+        const loadAdminChatsFromBackend = async () => {
+            if (currentUser?.uid !== ADMIN_UID) return;
+            try {
+                const token = await getBackendAuthToken();
+                const response = await fetch(`${BACKEND_BASE_URL}/api/admin/chats?limit=200`, {
+                    headers: { Authorization: `Bearer ${token}` }
+                });
+                const data = await response.json().catch(() => ({}));
+                if (!response.ok || !data.ok) {
+                    throw new Error(data.error || 'Admin chat load failed');
+                }
+                allSupportChatsCache = (data.chats || []).map(chat => ({
+                    id: chat.user_id || chat.room_id?.replace(/^support_/, ''),
+                    userId: chat.user_id || chat.room_id?.replace(/^support_/, ''),
+                    userName: chat.user_name || 'User',
+                    userEmail: chat.user_email || '',
+                    userMobile: chat.user_mobile || '',
+                    lastMessage: chat.last_message || '',
+                    lastSenderId: chat.last_sender_id || '',
+                    updatedAt: chat.updated_at || Date.now()
+                }));
+                renderAdminChatsList();
+            } catch (error) {
+                console.error('Cloudflare admin chat list failed:', error);
+                showNotification('Could not load chat list from backend.', true);
+            }
         };
 
         const renderAdminChatsList = () => {
@@ -2992,6 +3130,7 @@
             setBottomNavActive('bottom-settings-btn');
             document.getElementById('admin-chat-search').addEventListener('input', renderAdminChatsList);
             renderAdminChatsList();
+            loadAdminChatsFromBackend();
         };
 
         const getFilteredTransactions = (filter) => {
