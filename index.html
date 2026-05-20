@@ -1161,6 +1161,7 @@
         let allUsersCache = [];
         let allFundRequestsCache = [];
         let allRechargeRequestsCache = [];
+        let fundRequestsImportedFromFirebase = false;
         let allLoanRequestsCache = [];
         let allLoansCache = [];
         let allGiftCodesCache = [];
@@ -1362,6 +1363,143 @@
                 });
             } catch (error) {
                 console.warn('Cloudflare transfer save failed:', error);
+            }
+        };
+
+        const serializeCloudFundRequest = (request = {}) => {
+            const requestedAt = timestampToMillis(request.requestedAt || request.timestamp || request.createdAt) || Date.now();
+            const processedAt = request.processedAt ? timestampToMillis(request.processedAt) : null;
+            const requestId = String(request.requestId || request.id || `${request.type || 'request'}-${requestedAt}`);
+            return {
+                requestId,
+                userId: request.userId || currentUser?.uid || '',
+                type: request.type || 'withdrawal',
+                amount: Number(request.amount || 0),
+                status: request.status || 'pending',
+                requestedAt,
+                processedAt,
+                details: {
+                    ...normalizeHistoryItemForCache({ ...request, id: requestId, requestedAt, processedAt }),
+                    id: requestId
+                }
+            };
+        };
+
+        const normalizeCloudFundRequest = (request = {}) => ({
+            ...request,
+            id: request.request_id || request.requestId || request.id,
+            userId: request.user_id || request.userId,
+            requestedAt: Number(request.requested_at || request.requestedAt || Date.now()),
+            processedAt: request.processed_at || request.processedAt || null,
+            amount: Number(request.amount || 0),
+            status: request.status || 'pending',
+            type: request.type || 'withdrawal'
+        });
+
+        const upsertCloudFundRequest = async (request) => {
+            try {
+                const token = await getBackendAuthToken();
+                await fetch(`${BACKEND_BASE_URL}/api/fund-requests`, {
+                    method: 'POST',
+                    headers: {
+                        Authorization: `Bearer ${token}`,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(serializeCloudFundRequest(request))
+                });
+            } catch (error) {
+                console.warn('Cloudflare fund request save failed:', error);
+            }
+        };
+
+        const importCloudFundRequests = async (requests) => {
+            if (!requests.length || currentUser?.uid !== ADMIN_UID) return;
+            try {
+                const token = await getBackendAuthToken();
+                await fetch(`${BACKEND_BASE_URL}/api/fund-requests/import`, {
+                    method: 'POST',
+                    headers: {
+                        Authorization: `Bearer ${token}`,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ requests: requests.map(serializeCloudFundRequest) })
+                });
+            } catch (error) {
+                console.warn('Cloudflare fund request import failed:', error);
+            }
+        };
+
+        const loadCloudFundRequests = async ({ status = 'pending', type = '', userId = '' } = {}) => {
+            const token = await getBackendAuthToken();
+            const params = new URLSearchParams({ status, limit: '300' });
+            if (type) params.set('type', type);
+            if (userId) params.set('userId', userId);
+            const response = await fetch(`${BACKEND_BASE_URL}/api/fund-requests?${params.toString()}`, {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+            const data = await response.json().catch(() => ({}));
+            if (!response.ok || !data.ok) throw new Error(data.error || 'Cloudflare fund request load failed');
+            return (data.requests || []).map(normalizeCloudFundRequest);
+        };
+
+        const updateCloudFundRequestStatus = async (requestId, status, details = {}) => {
+            try {
+                const token = await getBackendAuthToken();
+                await fetch(`${BACKEND_BASE_URL}/api/fund-requests/${encodeURIComponent(requestId)}`, {
+                    method: 'PATCH',
+                    headers: {
+                        Authorization: `Bearer ${token}`,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ status, details })
+                });
+            } catch (error) {
+                console.warn('Cloudflare fund request update failed:', error);
+            }
+        };
+
+        const refreshAdminFundRequestsFromCloud = async () => {
+            if (currentUser?.uid !== ADMIN_UID) return;
+            try {
+                const allRequests = await loadCloudFundRequests({ status: 'pending' });
+                if (!allRequests.length && !fundRequestsImportedFromFirebase) {
+                    await importFirebaseFundRequestsForAdmin();
+                    fundRequestsImportedFromFirebase = true;
+                    return;
+                }
+                allFundRequestsCache = allRequests.filter(req => (req.type || 'withdrawal') === 'withdrawal');
+                allRechargeRequestsCache = allRequests.filter(req => req.type === 'mobile_recharge');
+                updateAdminPendingRequestSummary();
+                if (document.getElementById('admin-fund-requests-list-page')) renderAdminFundRequests(allFundRequestsCache);
+                if (document.getElementById('admin-recharge-requests-list-page')) renderAdminRechargeRequests(allRechargeRequestsCache);
+            } catch (error) {
+                console.error('Cloudflare fund request load failed:', error);
+                await importFirebaseFundRequestsForAdmin();
+            }
+        };
+
+        const importFirebaseFundRequestsForAdmin = async () => {
+            const allFundRequestsQuery = query(collection(db, `artifacts/${appId}/public/data/fund_requests`));
+            const snap = await getDocs(allFundRequestsQuery);
+            const allRequests = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+            await importCloudFundRequests(allRequests);
+            fundRequestsImportedFromFirebase = true;
+            allFundRequestsCache = allRequests.filter(req => req.status === 'pending' && (req.type || 'withdrawal') === 'withdrawal');
+            allRechargeRequestsCache = allRequests.filter(req => req.status === 'pending' && req.type === 'mobile_recharge');
+            updateAdminPendingRequestSummary();
+            if (document.getElementById('admin-fund-requests-list-page')) renderAdminFundRequests(allFundRequestsCache);
+            if (document.getElementById('admin-recharge-requests-list-page')) renderAdminRechargeRequests(allRechargeRequestsCache);
+        };
+
+        const updateAdminPendingRequestSummary = () => {
+            const totalPendingAmount = allFundRequestsCache.reduce((total, req) => total + (req.amount || 0), 0);
+            const pendingElement = document.getElementById('admin-pending-withdrawals');
+            if (pendingElement) {
+                pendingElement.innerHTML = `${allFundRequestsCache.length}<br><span class="text-sm font-normal">${formatCurrency(totalPendingAmount)}</span>`;
+            }
+            const analyticsPendingElement = document.getElementById('analytics-pending-reqs');
+            if (analyticsPendingElement) {
+                analyticsPendingElement.innerHTML = `${allFundRequestsCache.length}<br><span class="text-sm font-normal">${formatCurrency(totalPendingAmount)}</span>`;
             }
         };
 
@@ -2060,6 +2198,7 @@
             allUsersCache = [];
             allFundRequestsCache = [];
             allRechargeRequestsCache = [];
+            fundRequestsImportedFromFirebase = false;
             allLoanRequestsCache = [];
             allLoansCache = [];
             allInvestmentsCache = [];
@@ -2299,32 +2438,7 @@
                 }
             }, (error) => console.error("Admin: Error listening to gift codes:", error)));
 
-            const allFundRequestsQuery = query(collection(db, `artifacts/${appId}/public/data/fund_requests`));
-            unsubscribers.push(onSnapshot(allFundRequestsQuery, (snap) => {
-                console.log(`Admin listener: ${snap.docs.length} fund requests fetched.`);
-                const allRequests = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-                allFundRequestsCache = allRequests.filter(req => req.status === 'pending' && (req.type || 'withdrawal') === 'withdrawal');
-                allRechargeRequestsCache = allRequests.filter(req => req.status === 'pending' && req.type === 'mobile_recharge');
-
-                // Calculate total pending amount
-                const totalPendingAmount = allFundRequestsCache.reduce((total, req) => total + (req.amount || 0), 0);
-
-                const pendingElement = document.getElementById('analytics-pending-reqs');
-                if (pendingElement) {
-                    pendingElement.innerHTML = `${allFundRequestsCache.length}<br><span class="text-sm font-normal">${formatCurrency(totalPendingAmount)}</span>`;
-                }
-
-                if (document.getElementById('admin-fund-requests-list-page')) {
-                    renderAdminFundRequests(allFundRequestsCache);
-                }
-                if (document.getElementById('admin-recharge-requests-list-page')) {
-                    renderAdminRechargeRequests(allRechargeRequestsCache);
-                }
-                if (document.getElementById('withdrawal-history-list')) {
-                    const { filter, fromDate, toDate } = activeWithdrawalHistoryFilter;
-                    loadWithdrawalHistory(filter, fromDate, toDate).catch(e => console.error("Admin: Error refreshing withdrawal history:", e));
-                }
-            }, (error) => console.error("Admin: Error listening to all fund requests:", error)));
+            refreshAdminFundRequestsFromCloud();
 
             const loanRequestsQuery = query(collection(db, `artifacts/${appId}/public/data/loan_requests`), orderBy("requestedAt", "desc"));
             unsubscribers.push(onSnapshot(loanRequestsQuery, (snap) => {
@@ -4195,6 +4309,7 @@
                 ${getPageFooter()}`;
             showPage(content);
             renderAdminFundRequests(allFundRequestsCache);
+            refreshAdminFundRequestsFromCloud();
         };
 
         const showAdminRechargeRequestsPage = () => {
@@ -4206,6 +4321,7 @@
                 ${getPageFooter()}`;
             showPage(content);
             renderAdminRechargeRequests(allRechargeRequestsCache);
+            refreshAdminFundRequestsFromCloud();
         };
 
         const getNextMonthRepaymentDate = (fromDate = new Date()) => {
@@ -5256,6 +5372,26 @@
 
             try {
                 const userRef = doc(db, `artifacts/${appId}/public/data/users`, currentUser.uid);
+                const reqRef = doc(collection(db, `artifacts/${appId}/public/data/fund_requests`));
+                const requestedAt = Date.now();
+                const requestPayload = {
+                    id: reqRef.id,
+                    userId: currentUser.uid,
+                    userName: currentUserData.name || 'N/A',
+                    userMobile: currentUserData.mobile || 'N/A',
+                    userEmail: currentUserData.email || 'N/A',
+                    type: 'mobile_recharge',
+                    mobileNumber,
+                    operator,
+                    state,
+                    planDetails,
+                    amount,
+                    discount,
+                    discountRate: RECHARGE_DISCOUNT_RATE,
+                    chargeAmount,
+                    status: 'pending',
+                    requestedAt
+                };
 
                 await runTransaction(db, async (tx) => {
                     const userDoc = await tx.get(userRef);
@@ -5264,24 +5400,11 @@
                     const currentBalance = userDoc.data().balance || 0;
                     if (currentBalance < chargeAmount) throw new Error("Insufficient wallet balance for this recharge.");
 
-                    const reqRef = doc(collection(db, `artifacts/${appId}/public/data/fund_requests`));
                     tx.update(userRef, { balance: currentBalance - chargeAmount });
 
+                    const { id, ...firebaseRequestPayload } = requestPayload;
                     tx.set(reqRef, {
-                        userId: currentUser.uid,
-                        userName: currentUserData.name || 'N/A',
-                        userMobile: currentUserData.mobile || 'N/A',
-                        userEmail: currentUserData.email || 'N/A',
-                        type: 'mobile_recharge',
-                        mobileNumber,
-                        operator,
-                        state,
-                        planDetails,
-                        amount,
-                        discount,
-                        discountRate: RECHARGE_DISCOUNT_RATE,
-                        chargeAmount,
-                        status: 'pending',
+                        ...firebaseRequestPayload,
                         requestedAt: serverTimestamp()
                     });
 
@@ -5302,6 +5425,7 @@
                     });
                 });
 
+                await upsertCloudFundRequest(requestPayload);
                 await syncRecentTransactionsToCloud(currentUser.uid);
                 showNotification('Recharge request submitted and wallet amount deducted!', false, true);
                 window.closeModal();
@@ -5756,14 +5880,20 @@
                 return showNotification('Your user data is still loading. Please try again.', true);
             }
 
-            // Check if user already has pending withdrawal (respect admin limit)
-            const q = query(
-                collection(db, `artifacts/${appId}/public/data/fund_requests`),
-                where("userId", "==", currentUser.uid),
-                where("status", "==", "pending")
-            );
-            const snap = await getDocs(q);
-            const pendingWithdrawalCount = snap.docs.filter(d => (d.data().type || 'withdrawal') === 'withdrawal').length;
+            let pendingWithdrawalCount = 0;
+            try {
+                const pendingRequests = await loadCloudFundRequests({ status: 'pending', userId: currentUser.uid });
+                pendingWithdrawalCount = pendingRequests.filter(d => (d.type || 'withdrawal') === 'withdrawal').length;
+            } catch (error) {
+                console.warn('Cloud pending withdrawal check failed, using Firebase fallback:', error);
+                const q = query(
+                    collection(db, `artifacts/${appId}/public/data/fund_requests`),
+                    where("userId", "==", currentUser.uid),
+                    where("status", "==", "pending")
+                );
+                const snap = await getDocs(q);
+                pendingWithdrawalCount = snap.docs.filter(d => (d.data().type || 'withdrawal') === 'withdrawal').length;
+            }
             if (pendingWithdrawalCount >= maxPendingWithdrawalsPerUser) {
                 return showNotification(`You already have ${pendingWithdrawalCount} pending withdrawal request(s). Please wait for them to be processed.`, true);
             }
@@ -5802,6 +5932,24 @@
 
             try {
                 const userRef = doc(db, `artifacts/${appId}/public/data/users`, currentUser.uid);
+                const reqRef = doc(collection(db, `artifacts/${appId}/public/data/fund_requests`));
+                const requestedAt = Date.now();
+                const requestPayload = {
+                    id: reqRef.id,
+                    userId: currentUser.uid,
+                    userName: currentUserData.name || 'N/A',
+                    userMobile: currentUserData.mobile || 'N/A',
+                    userEmail: currentUserData.email || 'N/A',
+                    type: 'withdrawal',
+                    amount,
+                    method: methodName,
+                    methodId: method,
+                    upiId: method === 'upi' ? paymentDetails : '',
+                    paymentDetails,
+                    ...methodSpecificDetails,
+                    status: 'pending',
+                    requestedAt
+                };
 
                 await runTransaction(db, async (tx) => {
                     const userDoc = await tx.get(userRef);
@@ -5814,20 +5962,9 @@
                     tx.update(userRef, { balance: currentBalance - amount });
 
                     // 2. Add fund request (with snapshot of payment details)
-                    const reqRef = doc(collection(db, `artifacts/${appId}/public/data/fund_requests`));
+                    const { id, ...firebaseRequestPayload } = requestPayload;
                     tx.set(reqRef, {
-                        userId: currentUser.uid,
-                        userName: currentUserData.name || 'N/A',
-                        userMobile: currentUserData.mobile || 'N/A',
-                        userEmail: currentUserData.email || 'N/A',
-                        type: 'withdrawal',
-                        amount,
-                        method: methodName,
-                        methodId: method,
-                        upiId: method === 'upi' ? paymentDetails : '',
-                        paymentDetails: paymentDetails,
-                        ...methodSpecificDetails,
-                        status: 'pending',
+                        ...firebaseRequestPayload,
                         requestedAt: serverTimestamp()
                     });
 
@@ -5849,6 +5986,7 @@
                     });
                 });
 
+                await upsertCloudFundRequest(requestPayload);
                 await syncRecentTransactionsToCloud(currentUser.uid);
                 showNotification('Withdrawal Request Submitted and balance deducted!', false, true);
                 window.closeModal();
@@ -6478,6 +6616,15 @@
                         }
                     }
                 });
+                await updateCloudFundRequestStatus(requestId, newStatus, {
+                    ...(reqData || {}),
+                    status: newStatus,
+                    adminTransactionId: txnId || '',
+                    rejectionReason,
+                    processedAt: Date.now()
+                });
+                await syncRecentTransactionsToCloud(userId);
+                await refreshAdminFundRequestsFromCloud();
                 showNotification(`Recharge request has been ${newStatus === 'completed' ? 'completed' : 'rejected'}.`);
                 window.closeModal();
             } catch (e) {
@@ -6585,6 +6732,16 @@
                         }
                     }
                 });
+                await updateCloudFundRequestStatus(requestId, newStatus, {
+                    ...(reqData || {}),
+                    status: newStatus,
+                    adminTransactionId: txnId || '',
+                    rejectionReason,
+                    processedAt: Date.now(),
+                    amount: processedAmount
+                });
+                await syncRecentTransactionsToCloud(userId);
+                await refreshAdminFundRequestsFromCloud();
                 showNotification(`Success! Request has been ${newStatus}.`);
                 window.closeModal();
             } catch (e) {

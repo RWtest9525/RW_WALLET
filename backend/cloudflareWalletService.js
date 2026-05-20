@@ -214,6 +214,29 @@ async function initSchema(d1) {
     CREATE INDEX IF NOT EXISTS idx_transactions_user_time
     ON transactions (user_id, timestamp DESC)
   `);
+
+  await d1.query(`
+    CREATE TABLE IF NOT EXISTS fund_requests (
+      request_id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      type TEXT NOT NULL,
+      amount REAL NOT NULL,
+      status TEXT NOT NULL,
+      requested_at INTEGER NOT NULL,
+      processed_at INTEGER,
+      details_json TEXT
+    )
+  `);
+
+  await d1.query(`
+    CREATE INDEX IF NOT EXISTS idx_fund_requests_status_time
+    ON fund_requests (status, requested_at DESC)
+  `);
+
+  await d1.query(`
+    CREATE INDEX IF NOT EXISTS idx_fund_requests_user_status
+    ON fund_requests (user_id, status)
+  `);
 }
 
 async function ensureColumn(d1, table, column, type) {
@@ -433,6 +456,68 @@ async function getTransactionHistory(d1, userId, { limit = 50, before = Number.M
   });
 }
 
+async function saveFundRequest(d1, { requestId, userId, type = 'withdrawal', amount = 0, status = 'pending', requestedAt = nowMs(), processedAt = null, details = {} }) {
+  await d1.query(
+    `INSERT INTO fund_requests (request_id, user_id, type, amount, status, requested_at, processed_at, details_json)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+     ON CONFLICT(request_id) DO UPDATE SET
+       user_id = excluded.user_id,
+       type = excluded.type,
+       amount = excluded.amount,
+       status = excluded.status,
+       requested_at = excluded.requested_at,
+       processed_at = excluded.processed_at,
+       details_json = excluded.details_json`,
+    [requestId, userId, type, Number(amount || 0), status, requestedAt, processedAt, JSON.stringify(details || {})]
+  );
+}
+
+async function listFundRequests(d1, { status = 'pending', type = null, userId = null, limit = 200 } = {}) {
+  const conditions = [];
+  const params = [];
+  if (status) {
+    conditions.push('status = ?');
+    params.push(status);
+  }
+  if (type) {
+    conditions.push('type = ?');
+    params.push(type);
+  }
+  if (userId) {
+    conditions.push('user_id = ?');
+    params.push(userId);
+  }
+  params.push(limit);
+
+  const rows = await d1.all(
+    `SELECT request_id, user_id, type, amount, status, requested_at, processed_at, details_json
+     FROM fund_requests
+     ${conditions.length ? `WHERE ${conditions.join(' AND ')}` : ''}
+     ORDER BY requested_at DESC
+     LIMIT ?`,
+    params
+  );
+
+  return rows.map((row) => {
+    let details = {};
+    try {
+      details = row.details_json ? JSON.parse(row.details_json) : {};
+    } catch {
+      details = {};
+    }
+    return { ...details, ...row, details_json: undefined };
+  });
+}
+
+async function updateFundRequestStatus(d1, { requestId, status, processedAt = nowMs(), details = {} }) {
+  await d1.query(
+    `UPDATE fund_requests
+     SET status = ?, processed_at = ?, details_json = json_patch(COALESCE(details_json, '{}'), ?)
+     WHERE request_id = ?`,
+    [status, processedAt, JSON.stringify(details || {}), requestId]
+  );
+}
+
 async function putR2Object(r2, key, body, contentType = 'application/json') {
   if (!r2) throw new Error('R2 is not configured');
 
@@ -572,6 +657,55 @@ function registerRoutes(app, { d1, r2 }) {
 
     await saveTransaction(d1, sender);
     await saveTransaction(d1, recipient);
+    res.json({ ok: true });
+  });
+
+  app.get('/api/fund-requests', requireHttpAuth, async (req, res) => {
+    const userId = req.query.userId ? String(req.query.userId) : null;
+    if (userId && req.auth.sub !== userId && !req.auth.isAdmin) {
+      return res.status(403).json({ ok: false, error: 'FORBIDDEN' });
+    }
+    if (!userId && !req.auth.isAdmin) {
+      return res.status(403).json({ ok: false, error: 'ADMIN_REQUIRED' });
+    }
+
+    const requests = await listFundRequests(d1, {
+      status: req.query.status ? String(req.query.status) : 'pending',
+      type: req.query.type ? String(req.query.type) : null,
+      userId,
+      limit: Math.min(Number(req.query.limit || 200), 500)
+    });
+    res.json({ ok: true, requests });
+  });
+
+  app.post('/api/fund-requests', requireHttpAuth, async (req, res) => {
+    if (req.auth.sub !== req.body.userId && !req.auth.isAdmin) {
+      return res.status(403).json({ ok: false, error: 'FORBIDDEN' });
+    }
+    await saveFundRequest(d1, req.body);
+    res.json({ ok: true });
+  });
+
+  app.post('/api/fund-requests/import', requireHttpAuth, async (req, res) => {
+    if (!req.auth.isAdmin) {
+      return res.status(403).json({ ok: false, error: 'ADMIN_REQUIRED' });
+    }
+    const requests = Array.isArray(req.body.requests) ? req.body.requests.slice(0, 500) : [];
+    for (const request of requests) {
+      await saveFundRequest(d1, request);
+    }
+    res.json({ ok: true, imported: requests.length });
+  });
+
+  app.patch('/api/fund-requests/:requestId', requireHttpAuth, async (req, res) => {
+    if (!req.auth.isAdmin) {
+      return res.status(403).json({ ok: false, error: 'ADMIN_REQUIRED' });
+    }
+    await updateFundRequestStatus(d1, {
+      requestId: req.params.requestId,
+      status: req.body.status,
+      details: req.body.details || {}
+    });
     res.json({ ok: true });
   });
 
@@ -725,6 +859,8 @@ async function createCloudflareWalletService() {
     registerSocketHandlers: (io) => registerSocketHandlers(io, { d1 }),
     saveTransaction: (transaction) => saveTransaction(d1, transaction),
     getTransactionHistory: (userId, options) => getTransactionHistory(d1, userId, options),
+    saveFundRequest: (request) => saveFundRequest(d1, request),
+    listFundRequests: (options) => listFundRequests(d1, options),
     listChatRooms: (options) => listChatRooms(d1, options),
     putInvoice: (userId, invoiceId, data) =>
       putR2Object(r2, `invoices/${userId}/${invoiceId}.json`, JSON.stringify(data, null, 2)),
@@ -741,5 +877,7 @@ module.exports = {
   registerSocketHandlers,
   saveTransaction,
   getTransactionHistory,
+  saveFundRequest,
+  listFundRequests,
   listChatRooms
 };
