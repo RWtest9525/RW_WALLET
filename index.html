@@ -2667,7 +2667,17 @@
         };
 
         const normalizeProfilePaymentMethod = (data = currentUserData || {}) => {
-            const rawMethod = String(data.paymentMethod || data.methodId || data.withdrawMethod || data.method || '')
+            const rawMethod = String(
+                data.paymentMethod ||
+                data.payment_method ||
+                data.selectedPaymentMethod ||
+                data.withdrawalMethod ||
+                data.withdrawMethod ||
+                data.withdraw_method ||
+                data.methodId ||
+                data.method ||
+                ''
+            )
                 .trim()
                 .toLowerCase()
                 .replace(/[\s-]+/g, '_');
@@ -2701,6 +2711,33 @@
             if (details.upiId || data.upiId) return 'upi';
             if (details.accountNumber || details.ifsc || data.accountNumber || data.ifsc) return 'bank';
             if (details.email || data.paymentEmail || stringDetails.includes('@')) return 'paypal';
+            return '';
+        };
+
+        const getProfilePaymentMethodLabel = (method) => ({
+            upi: 'UPI ID',
+            bank: 'Bank Account',
+            play_store: 'Play Store Redeem Code',
+            amazon_gift: 'Amazon Gift Card',
+            flipkart_gift: 'Flipkart Gift Card',
+            paypal: 'PayPal'
+        }[method] || 'Payment Method');
+
+        const getProfilePaymentSummaryText = (method, data = currentUserData || {}) => {
+            const details = getProfilePaymentDetails(method, data);
+            if (method === 'upi') return details.upiId || data.upiId || '';
+            if (method === 'bank') {
+                return [
+                    details.accountNumber || data.accountNumber,
+                    details.ifsc || data.ifsc,
+                    details.bankName || data.bankName,
+                    details.accountName || data.accountName
+                ].filter(Boolean).join(' | ');
+            }
+            if (['play_store', 'amazon_gift', 'flipkart_gift', 'paypal'].includes(method)) {
+                return details.email || data.paymentEmail || '';
+            }
+            if (typeof data.paymentDetails === 'string') return data.paymentDetails;
             return '';
         };
 
@@ -2769,6 +2806,13 @@
             if (activePaymentMethod) {
                 paymentDetailsForm = renderPaymentDetailsForm(activePaymentMethod, getProfilePaymentDetails(activePaymentMethod));
             }
+            const savedPaymentSummary = activePaymentMethod ? getProfilePaymentSummaryText(activePaymentMethod) : '';
+            const savedPaymentCard = activePaymentMethod ? `
+                    <div class="rounded-xl border border-emerald-100 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-900/20 p-3">
+                        <p class="text-xs font-semibold uppercase text-emerald-600 dark:text-emerald-300">Saved Payment Method</p>
+                        <p class="mt-1 text-sm font-bold text-gray-900 dark:text-white">${escapeHtml(getProfilePaymentMethodLabel(activePaymentMethod))}</p>
+                        ${savedPaymentSummary ? `<p class="mt-1 text-sm text-gray-600 dark:text-gray-300 break-words">${escapeHtml(savedPaymentSummary)}</p>` : ''}
+                    </div>` : '';
 
             const content = `
                 ${getPageHeader('My Profile')}
@@ -2787,10 +2831,11 @@
                     </div>
                     <div class="space-y-1">
                         <label class="text-sm font-medium text-gray-500 dark:text-gray-400">Payment Method</label>
-                        <select id="profile-payment-method" class="w-full px-4 py-3 bg-gray-100 dark:bg-gray-700 border-transparent rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+                        <select id="profile-payment-method" class="w-full px-4 py-3 bg-gray-100 dark:bg-gray-700 border-transparent rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-white">
                             ${paymentOptions}
                         </select>
                     </div>
+                    ${savedPaymentCard}
                     <div id="payment-details-container">
                         ${paymentDetailsForm}
                     </div>
@@ -2814,7 +2859,9 @@
                 ${getPageFooter()}`;
             showPage(content);
 
-            document.getElementById('profile-payment-method').addEventListener('change', function () {
+            const paymentSelect = document.getElementById('profile-payment-method');
+            paymentSelect.value = activePaymentMethod;
+            paymentSelect.addEventListener('change', function () {
                 const method = this.value;
                 document.getElementById('payment-details-container').innerHTML = renderPaymentDetailsForm(method, getProfilePaymentDetails(method));
             });
@@ -2822,7 +2869,7 @@
             document.getElementById('save-profile-btn').onclick = handleUpdateProfile;
             bindWebsiteLinkControls();
             if (focusMethod) {
-                document.getElementById('profile-payment-method').value = focusMethod;
+                paymentSelect.value = focusMethod;
                 document.getElementById('payment-details-container').innerHTML = renderPaymentDetailsForm(focusMethod, getProfilePaymentDetails(focusMethod));
                 setTimeout(() => document.getElementById('payment-details-container')?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 50);
             }
