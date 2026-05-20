@@ -1029,8 +1029,9 @@
                         <span>Admin</span>
                     </button>
                     <button id="bottom-help-btn" class="bottom-nav-btn flex flex-col items-center gap-1 py-1">
-                        <span class="bottom-nav-icon flex h-9 w-9 items-center justify-center rounded-xl bg-gray-100 dark:bg-gray-700 transition">
+                        <span class="bottom-nav-icon relative flex h-9 w-9 items-center justify-center rounded-xl bg-gray-100 dark:bg-gray-700 transition">
                             <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a4 4 0 0 1-4 4H8l-5 3V7a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4z"></path></svg>
+                            <span id="bottom-help-unread-badge" class="hidden absolute -right-1 -top-1 min-w-5 h-5 rounded-full bg-red-600 px-1 text-[10px] font-black leading-5 text-white shadow"></span>
                         </span>
                         <span>Help</span>
                     </button>
@@ -1180,6 +1181,9 @@
         let supportSocket = null;
         let activeSupportRoomId = '';
         let activeSupportMessages = [];
+        let supportChatUnreadCount = 0;
+        let supportChatPreloadUserId = '';
+        let supportChatBackgroundHandlers = null;
         let revyBotMessages = [];
         let revyBotLastQuestion = '';
         let revyBotTimer = null;
@@ -2336,10 +2340,14 @@
             }
             activeSupportRoomId = '';
             activeSupportMessages = [];
+            supportChatUnreadCount = 0;
+            supportChatPreloadUserId = '';
+            supportChatBackgroundHandlers = null;
             if (supportSocket) {
                 supportSocket.off('chat_history');
                 supportSocket.off('new_message');
             }
+            updateSupportChatUnreadBadges();
 
             if (user) {
                 currentUser = user;
@@ -2418,6 +2426,7 @@
                     currentUserData = data;
                     writeJsonCache(getUserCacheKey(userId), sanitizeUserForCache(data, userId));
                     getBackendAuthToken().catch(e => console.error('Backend session warmup failed:', e));
+                    preloadSupportChatForUser(userId).catch(e => console.warn('Support chat preload skipped:', e));
                     const now = Date.now();
                     if (now - lastAutoProcessCheckAt > 60000) {
                         lastAutoProcessCheckAt = now;
@@ -3295,6 +3304,7 @@
 
         const getSupportRoomId = (chatUserId) => `support_${chatUserId}`;
         const getSupportChatCacheKey = (roomId) => `rw_support_chat_${roomId}`;
+        const getSupportChatSeenKey = (roomId) => `rw_support_seen_${roomId}`;
 
         const readSupportChatCache = (roomId) => {
             try {
@@ -3341,6 +3351,101 @@
             const data = await response.json().catch(() => ({}));
             if (!response.ok || !data.ok) throw new Error(data.error || 'Chat history load failed');
             return data.history || [];
+        };
+
+        const getLatestAdminMessageTime = (messages = []) => Math.max(0, ...messages
+            .map(normalizeBackendMessage)
+            .filter(message => message.senderRole === 'admin')
+            .map(message => timestampToMillis(message.createdAt)));
+
+        const calculateSupportUnreadCount = (roomId, messages = readSupportChatCache(roomId)) => {
+            const lastSeen = Number(localStorage.getItem(getSupportChatSeenKey(roomId)) || 0);
+            return messages
+                .map(normalizeBackendMessage)
+                .filter(message => message.senderRole === 'admin' && timestampToMillis(message.createdAt) > lastSeen)
+                .length;
+        };
+
+        const updateSupportChatUnreadBadges = () => {
+            const countText = supportChatUnreadCount > 99 ? '99+' : String(supportChatUnreadCount || '');
+            ['bottom-help-unread-badge', 'support-chat-unread-badge'].forEach(id => {
+                const badge = document.getElementById(id);
+                if (!badge) return;
+                badge.textContent = countText;
+                badge.classList.toggle('hidden', supportChatUnreadCount <= 0);
+            });
+        };
+
+        const markSupportChatSeen = (roomId, messages = readSupportChatCache(roomId)) => {
+            const latestAdminTime = getLatestAdminMessageTime(messages);
+            if (latestAdminTime) {
+                localStorage.setItem(getSupportChatSeenKey(roomId), String(latestAdminTime));
+            }
+            supportChatUnreadCount = 0;
+            updateSupportChatUnreadBadges();
+        };
+
+        const refreshSupportUnreadFromCache = (roomId) => {
+            supportChatUnreadCount = calculateSupportUnreadCount(roomId);
+            updateSupportChatUnreadBadges();
+        };
+
+        const preloadSupportChatForUser = async (userId = currentUser?.uid) => {
+            if (!userId || userId === ADMIN_UID || supportChatPreloadUserId === userId) return;
+            supportChatPreloadUserId = userId;
+            const roomId = getSupportRoomId(userId);
+            const cached = readSupportChatCache(roomId);
+            if (cached.length) refreshSupportUnreadFromCache(roomId);
+
+            try {
+                const history = await fetchSupportChatHistory(roomId, 200);
+                const merged = mergeSupportMessages(cached, history);
+                writeSupportChatCache(roomId, merged);
+                refreshSupportUnreadFromCache(roomId);
+            } catch (error) {
+                console.warn('Support chat preload failed:', error);
+            }
+
+            try {
+                const socket = await getSupportSocket();
+                if (supportChatBackgroundHandlers) {
+                    socket.off('chat_history', supportChatBackgroundHandlers.history);
+                    socket.off('new_message', supportChatBackgroundHandlers.message);
+                }
+                const handleBackgroundHistory = ({ roomId: incomingRoomId, history = [] }) => {
+                    if (incomingRoomId !== roomId) return;
+                    const merged = mergeSupportMessages(readSupportChatCache(roomId), history);
+                    writeSupportChatCache(roomId, merged);
+                    if (activeSupportRoomId === roomId && document.getElementById('support-chat-messages')) {
+                        activeSupportMessages = mergeSupportMessages(activeSupportMessages, merged);
+                        renderSupportMessages(activeSupportMessages, 'user');
+                        markSupportChatSeen(roomId, activeSupportMessages);
+                    } else {
+                        refreshSupportUnreadFromCache(roomId);
+                    }
+                };
+                const handleBackgroundMessage = (message) => {
+                    if (message.roomId !== roomId) return;
+                    const merged = mergeSupportMessages(readSupportChatCache(roomId), [message]);
+                    writeSupportChatCache(roomId, merged);
+                    if (activeSupportRoomId === roomId && document.getElementById('support-chat-messages')) {
+                        activeSupportMessages = mergeSupportMessages(activeSupportMessages, [message]);
+                        renderSupportMessages(activeSupportMessages, 'user');
+                        markSupportChatSeen(roomId, activeSupportMessages);
+                    } else {
+                        refreshSupportUnreadFromCache(roomId);
+                    }
+                };
+                supportChatBackgroundHandlers = {
+                    history: handleBackgroundHistory,
+                    message: handleBackgroundMessage
+                };
+                socket.on('chat_history', handleBackgroundHistory);
+                socket.on('new_message', handleBackgroundMessage);
+                socket.emit('join_room', { roomId, limit: 200 });
+            } catch (error) {
+                console.warn('Support chat background join failed:', error);
+            }
         };
 
         const openSupportChatPage = async (chatUserId, viewerRole = 'user', chatMeta = {}) => {
@@ -3488,12 +3593,14 @@
             activeSupportRoomId = getSupportRoomId(chatUserId);
             activeSupportMessages = readSupportChatCache(activeSupportRoomId);
             renderSupportMessages(activeSupportMessages, viewerRole);
+            if (!isAdminView) markSupportChatSeen(activeSupportRoomId, activeSupportMessages);
             fetchSupportChatHistory(activeSupportRoomId, 200)
                 .then((history) => {
                     if (!history.length && activeSupportMessages.length) return;
                     activeSupportMessages = mergeSupportMessages(activeSupportMessages, history);
                     writeSupportChatCache(activeSupportRoomId, activeSupportMessages);
                     renderSupportMessages(activeSupportMessages, viewerRole);
+                    if (!isAdminView) markSupportChatSeen(activeSupportRoomId, activeSupportMessages);
                 })
                 .catch((error) => console.warn('Fast chat history fetch failed:', error));
             const socket = await getSupportSocket();
@@ -3503,15 +3610,15 @@
                 activeSupportMessages = mergeSupportMessages(activeSupportMessages, history);
                 writeSupportChatCache(activeSupportRoomId, activeSupportMessages);
                 renderSupportMessages(activeSupportMessages, viewerRole);
+                if (!isAdminView) markSupportChatSeen(activeSupportRoomId, activeSupportMessages);
             };
             const handleNewMessage = (message) => {
                 if (message.roomId !== activeSupportRoomId) return;
                 activeSupportMessages = mergeSupportMessages(activeSupportMessages, [message]);
                 writeSupportChatCache(activeSupportRoomId, activeSupportMessages);
                 renderSupportMessages(activeSupportMessages, viewerRole);
+                if (!isAdminView) markSupportChatSeen(activeSupportRoomId, activeSupportMessages);
             };
-            socket.off('chat_history');
-            socket.off('new_message');
             socket.on('chat_history', handleHistory);
             socket.on('new_message', handleNewMessage);
             socket.emit('join_room', { roomId: activeSupportRoomId, limit: 200 }, (response) => {
@@ -3904,6 +4011,7 @@
                             <h3 class="font-bold text-gray-900 dark:text-white inline-flex items-center gap-1">REVIEWS WORLD ${getVerifiedBadge()}</h3>
                             <p class="text-sm text-gray-500 dark:text-gray-400 truncate">Chat with admin support</p>
                         </div>
+                        <span id="support-chat-unread-badge" class="hidden min-w-6 h-6 rounded-full bg-red-600 px-2 text-center text-xs font-black leading-6 text-white shadow"></span>
                         <span class="text-blue-600 dark:text-blue-300 font-bold">Chat</span>
                     </button>
                 </div>
@@ -3911,6 +4019,7 @@
             showPage(content, { keepBottomNav: true });
             currentMainSection = 'help';
             setBottomNavActive('bottom-help-btn');
+            updateSupportChatUnreadBadges();
             document.getElementById('revy-ai-chat-card').onclick = openRevyBotChatPage;
             document.getElementById('reviews-world-chat-card').onclick = () => openSupportChatPage(currentUser.uid, 'user');
         };
