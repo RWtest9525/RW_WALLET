@@ -3630,6 +3630,37 @@
             return (cachedHistory || []).slice(0, limit);
         };
 
+        const getBotTransactionSummary = (item = {}) => {
+            const type = normalizeTransactionType(item);
+            const amount = formatCurrencyAbs(item.amount || item.chargeAmount || 0);
+            const status = item.status || 'completed';
+            const senderName = item.senderName || item.fromName || item.payerName || '';
+            const recipientName = item.recipientName || item.toName || item.payeeName || '';
+            const methodName = item.method || getWithdrawalMethodName(item.methodId || item.paymentMethod, '');
+            const adminName = 'REVIEWS WORLD';
+
+            let title = 'Wallet transaction';
+            if (type === 'debit') {
+                title = `Paid to ${recipientName || item.recipientMobile || 'user'}`;
+            } else if (type === 'wallet_transfer') {
+                title = Number(item.amount || 0) < 0
+                    ? `Paid to ${recipientName || item.recipientMobile || 'user'}`
+                    : `Received from ${senderName || item.senderMobile || 'user'}`;
+            } else if (type === 'credit') {
+                title = `Received from ${item.isAdminTransaction ? adminName : (senderName || adminName)}`;
+            } else if (type === 'withdrawal') {
+                title = methodName ? `Withdrawal to ${methodName}` : 'Withdrawal request';
+            } else if (type === 'mobile_recharge') {
+                title = `Mobile recharge for ${item.mobileNumber || 'saved number'}`;
+            } else if (type === 'gift_card') {
+                title = `Gift code redeemed${item.giftCode ? ` (${item.giftCode})` : ''}`;
+            } else if (item.type) {
+                title = String(item.type).replace(/_/g, ' ');
+            }
+
+            return `${title} - ${amount} - ${status}`;
+        };
+
         const getRevyBotReply = async (question) => {
             const text = String(question || '').toLowerCase();
             const compactText = text.replace(/[^a-z0-9]+/g, ' ').trim();
@@ -3665,11 +3696,11 @@
                 if (latestHistory) {
                     if (hasAny('last 5', 'latest 5', 'recent transaction', 'recent transactions', 'latest transactions', 'transaction history')) {
                         const summary = latestTransactions.map((item, index) =>
-                            `${index + 1}. ${item.comment || item.type || 'Transaction'} - ${formatCurrency(Math.abs(item.amount || item.chargeAmount || 0))} - ${item.status || 'completed'}`
+                            `${index + 1}. ${getBotTransactionSummary(item)}`
                         ).join('\n');
                         return `Your latest ${latestTransactions.length} wallet records:\n${summary}\nOpen Transaction History to view full details, IDs, and receipts.`;
                     }
-                    return `Your latest wallet activity is ${latestHistory.comment || latestHistory.type || 'a transaction'} for ${formatCurrency(Math.abs(latestHistory.amount || latestHistory.chargeAmount || 0))}. Status: ${latestHistory.status || 'completed'}. Open Transaction History to view full details and receipts.`;
+                    return `Your latest wallet activity is ${getBotTransactionSummary(latestHistory)}. Open Transaction History to view full details and receipts.`;
                 }
                 return 'You can check all wallet activity from Transaction History. It shows deposits, withdrawals, transfers, recharge, gift code, and other wallet records.';
             }
