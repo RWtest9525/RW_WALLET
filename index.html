@@ -2812,7 +2812,16 @@
                         <p class="text-xs font-semibold uppercase text-emerald-600 dark:text-emerald-300">Saved Payment Method</p>
                         <p class="mt-1 text-sm font-bold text-gray-900 dark:text-white">${escapeHtml(getProfilePaymentMethodLabel(activePaymentMethod))}</p>
                         ${savedPaymentSummary ? `<p class="mt-1 text-sm text-gray-600 dark:text-gray-300 break-words">${escapeHtml(savedPaymentSummary)}</p>` : ''}
+                        <button type="button" id="delete-payment-method-btn" class="mt-3 w-full rounded-lg bg-red-50 dark:bg-red-900/30 px-3 py-2 text-sm font-bold text-red-600 dark:text-red-200">Delete payment method</button>
                     </div>` : '';
+            const paymentMethodControl = activePaymentMethod ? `
+                    <input type="hidden" id="profile-payment-method" value="${escapeHtml(activePaymentMethod)}">` : `
+                    <div class="space-y-1">
+                        <label class="text-sm font-medium text-gray-500 dark:text-gray-400">Payment Method</label>
+                        <select id="profile-payment-method" class="w-full px-4 py-3 bg-gray-100 dark:bg-gray-700 border-transparent rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-white">
+                            ${paymentOptions}
+                        </select>
+                    </div>`;
 
             const content = `
                 ${getPageHeader('My Profile')}
@@ -2829,12 +2838,7 @@
                         <label class="text-sm font-medium text-gray-500 dark:text-gray-400">Mobile Number</label>
                         <input type="tel" id="profile-mobile-input" value="${escapeHtml(currentUserData.mobile || '')}" class="w-full px-4 py-3 bg-gray-100 dark:bg-gray-700 border-transparent rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
                     </div>
-                    <div class="space-y-1">
-                        <label class="text-sm font-medium text-gray-500 dark:text-gray-400">Payment Method</label>
-                        <select id="profile-payment-method" class="w-full px-4 py-3 bg-gray-100 dark:bg-gray-700 border-transparent rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-white">
-                            ${paymentOptions}
-                        </select>
-                    </div>
+                    ${paymentMethodControl}
                     ${savedPaymentCard}
                     <div id="payment-details-container">
                         ${paymentDetailsForm}
@@ -2860,16 +2864,42 @@
             showPage(content);
 
             const paymentSelect = document.getElementById('profile-payment-method');
-            paymentSelect.value = activePaymentMethod;
-            paymentSelect.addEventListener('change', function () {
-                const method = this.value;
-                document.getElementById('payment-details-container').innerHTML = renderPaymentDetailsForm(method, getProfilePaymentDetails(method));
-            });
+            if (paymentSelect?.tagName === 'SELECT') {
+                paymentSelect.value = activePaymentMethod;
+                paymentSelect.addEventListener('change', function () {
+                    const method = this.value;
+                    document.getElementById('payment-details-container').innerHTML = renderPaymentDetailsForm(method, getProfilePaymentDetails(method));
+                });
+            }
 
             document.getElementById('save-profile-btn').onclick = handleUpdateProfile;
+            document.getElementById('delete-payment-method-btn')?.addEventListener('click', async () => {
+                if (!confirm('Delete saved payment method? You can add a new one after deleting it.')) return;
+                try {
+                    const userRef = doc(db, `artifacts/${appId}/public/data/users`, currentUser.uid);
+                    await updateDoc(userRef, {
+                        paymentMethod: '',
+                        paymentDetails: {},
+                        upiId: deleteField(),
+                        accountNumber: deleteField(),
+                        ifsc: deleteField(),
+                        bankName: deleteField(),
+                        accountName: deleteField(),
+                        paymentEmail: deleteField()
+                    });
+                    currentUserData = { ...(currentUserData || {}), paymentMethod: '', paymentDetails: {} };
+                    ['upiId', 'accountNumber', 'ifsc', 'bankName', 'accountName', 'paymentEmail'].forEach(key => delete currentUserData[key]);
+                    writeJsonCache(getUserCacheKey(currentUser.uid), sanitizeUserForCache(currentUserData, currentUser.uid));
+                    showNotification('Payment method deleted. You can add a new one now.');
+                    showProfilePage();
+                } catch (error) {
+                    console.error('Delete payment method failed:', error);
+                    showNotification('Could not delete payment method.', true);
+                }
+            });
             bindWebsiteLinkControls();
             if (focusMethod) {
-                paymentSelect.value = focusMethod;
+                if (paymentSelect) paymentSelect.value = focusMethod;
                 document.getElementById('payment-details-container').innerHTML = renderPaymentDetailsForm(focusMethod, getProfilePaymentDetails(focusMethod));
                 setTimeout(() => document.getElementById('payment-details-container')?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 50);
             }
