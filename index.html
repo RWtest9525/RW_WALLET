@@ -1595,19 +1595,12 @@
         const syncRecentTransactionsToCloud = async (userId = currentUser?.uid) => {
             if (!userId) return;
             try {
-                const transactionsQuery = query(
-                    collection(db, `artifacts/${appId}/public/data/users`, userId, 'transactions'),
-                    orderBy('timestamp', 'desc'),
-                    firestoreLimit(25)
-                );
-                const snap = await getDocs(transactionsQuery);
-                const items = snap.docs.map(d => d.data());
+                const items = await loadFirebaseTransactions(userId, 2000);
                 await importFirestoreTransactionsToCloud(userId, items);
-                const history = await fetchCloudTransactionHistory(userId, 2000);
-                unifiedHistoryCache = mergeTransactionsByKey(readHistoryItemsFromCache(userId), unifiedHistoryCache, history);
+                unifiedHistoryCache = mergeTransactionsByKey(readHistoryItemsFromCache(userId), unifiedHistoryCache, items);
                 writeHistoryItemsToCache(userId, unifiedHistoryCache);
             } catch (error) {
-                console.warn('Recent transaction Cloudflare sync failed:', error);
+                console.warn('Firebase transaction cache sync failed:', error);
             }
         };
 
@@ -2452,35 +2445,19 @@
                 }
             };
 
-            fetchCloudTransactionHistory(userId, 2000)
-                .then(async history => {
-                    transactions = mergeTransactionsByKey(cachedHistoryItems.filter(item => !String(item.key || '').startsWith('req-')), history);
+            loadFirebaseTransactions(userId, 2000)
+                .then(firebaseTransactions => {
+                    transactions = mergeTransactionsByKey(cachedHistoryItems.filter(item => !String(item.key || '').startsWith('req-')), firebaseTransactions);
                     renderUnifiedHistory(5);
-                    try {
-                        const firebaseTransactions = await loadFirebaseTransactions(userId, 2000);
-                        const mergedTransactions = mergeTransactionsByKey(transactions, firebaseTransactions);
-                        if (mergedTransactions.length !== transactions.length || firebaseTransactions.length > history.length) {
-                            transactions = mergedTransactions;
-                            renderUnifiedHistory(5);
-                            importFirestoreTransactionsToCloud(userId, firebaseTransactions);
-                        }
-                    } catch (firebaseError) {
-                        console.warn("Old Firebase transaction merge failed:", firebaseError);
-                    }
-                    return null;
+                    return importFirestoreTransactionsToCloud(userId, firebaseTransactions);
                 })
                 .catch((error) => {
-                    console.error("Cloudflare history load failed:", error);
+                    console.error("Firebase transaction history load failed:", error);
                     if (cachedHistoryItems.length) {
                         renderUnifiedHistory(5);
-                        return null;
+                        return;
                     }
-                    console.warn("No cached history found, using one-time Firebase fallback.");
-                    return loadFirebaseTransactions(userId, 2000).then((firebaseTransactions) => {
-                        transactions = mergeTransactionsByKey(firebaseTransactions);
-                        renderUnifiedHistory(5);
-                        importFirestoreTransactionsToCloud(userId, firebaseTransactions);
-                    });
+                    showNotification('Could not load transaction history. Please refresh once.', true);
                 });
 
             loadCloudFundRequests({ status: 'pending', userId })
@@ -3608,11 +3585,11 @@
                 : readHistoryItemsFromCache(currentUser?.uid || '');
             try {
                 if (currentUser?.uid) {
-                    const cloudHistory = await fetchCloudTransactionHistory(currentUser.uid, limit);
-                    if (cloudHistory.length) return cloudHistory.slice(0, limit);
+                    const firebaseHistory = await loadFirebaseTransactions(currentUser.uid, Math.max(limit, 25));
+                    if (firebaseHistory.length) return firebaseHistory.slice(0, limit);
                 }
             } catch (error) {
-                console.warn('Bot cloud transaction lookup failed:', error);
+                console.warn('Bot Firebase transaction lookup failed:', error);
             }
             return (cachedHistory || []).slice(0, limit);
         };
