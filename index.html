@@ -975,14 +975,6 @@
                                 <span class="text-sm font-medium text-purple-700 dark:text-purple-300">Withdrawal
                                     Settings</span>
                             </button>
-                            <button id="admin-pro-users-btn"
-                                class="flex flex-col items-center justify-center p-3 min-h-28 bg-blue-50 dark:bg-blue-900/20 rounded-2xl hover:bg-blue-100 dark:hover:bg-blue-900/30 transition border border-blue-200 dark:border-blue-800 shadow-sm">
-                                <span class="flex h-12 w-12 items-center justify-center rounded-2xl bg-white dark:bg-gray-800 shadow-sm mb-2">
-                                    <img src="https://cdn-icons-png.flaticon.com/512/942/942748.png" class="h-8 w-8 object-contain" alt="Pro Verification">
-                                </span>
-                                <span class="text-sm font-medium text-blue-700 dark:text-blue-300">Pro
-                                    Verification</span>
-                            </button>
                             <button id="admin-recharge-requests-btn"
                                 class="flex flex-col items-center justify-center p-3 min-h-28 bg-sky-50 dark:bg-sky-900/20 rounded-2xl hover:bg-sky-100 dark:hover:bg-sky-900/30 transition border border-sky-200 dark:border-sky-800 shadow-sm">
                                 <span class="flex h-12 w-12 items-center justify-center rounded-2xl bg-white dark:bg-gray-800 shadow-sm mb-2">
@@ -1538,13 +1530,13 @@
             document.getElementById('modal-container').innerHTML = `
                 <div id="app-modal" class="fixed inset-0 z-40 flex items-center justify-center p-4">
                     <div class="fixed inset-0 modal-backdrop" onclick="window.closeModal()"></div>
-                    <div class="bg-white dark:bg-gray-800 rounded-xl shadow-2xl z-50 w-full ${size} p-6 transform transition-all scale-95 opacity-0 animate-modal-in ${borderClass}">
+                    <div class="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl z-50 w-full ${size} max-h-[88dvh] overflow-hidden border border-gray-100 dark:border-gray-700 p-0 transform transition-all scale-95 opacity-0 animate-modal-in ${borderClass}">
                         <div class="flex justify-between items-center mb-4">
-                            <h3 class="text-lg font-semibold">${title}</h3>
-                            <button onclick="window.closeModal()" class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 text-2xl">&times;</button>
+                            <h3 class="text-lg font-semibold px-6 pt-6">${title}</h3>
+                            <button onclick="window.closeModal()" class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 text-2xl px-6 pt-6">&times;</button>
                         </div>
-                        <div>${content}</div>
-                        <div class="mt-6 flex justify-end space-x-3">${actions}</div>
+                        <div class="px-6 ${actions ? 'max-h-[62dvh]' : 'max-h-[70dvh] pb-6'} overflow-y-auto">${content}</div>
+                        ${actions ? `<div class="mt-6 flex justify-end space-x-3 border-t border-gray-100 dark:border-gray-700 px-6 py-4 bg-white dark:bg-gray-800">${actions}</div>` : ''}
                     </div>
                 </div>
                 <style> 
@@ -2207,10 +2199,7 @@
 
             const loanRequestsQuery = query(collection(db, `artifacts/${appId}/public/data/loan_requests`), orderBy("requestedAt", "desc"));
             unsubscribers.push(onSnapshot(loanRequestsQuery, (snap) => {
-                const rejectedLoanRequestDocs = snap.docs.filter(doc => doc.data().status === 'rejected');
-                deleteRejectedLoanRequests(rejectedLoanRequestDocs);
                 allLoanRequestsCache = snap.docs
-                    .filter(doc => doc.data().status !== 'rejected')
                     .map(doc => ({ id: doc.id, ...doc.data() }));
                 if (document.getElementById('admin-loan-page')) {
                     renderAdminLoanPage();
@@ -2265,7 +2254,7 @@
 
         const getPageFooter = () => `</div>`;
 
-        const showProfilePage = () => {
+        const showProfilePage = (focusMethod = '') => {
             if (!currentUserData) return showNotification('User data not loaded. Please wait.', true);
             const isAdminProfile = currentUser?.uid === ADMIN_UID;
             const websiteLinks = Array.isArray(currentUserData.websiteLinks) ? currentUserData.websiteLinks.slice(0, 3) : [];
@@ -2340,6 +2329,11 @@
             });
 
             document.getElementById('save-profile-btn').onclick = handleUpdateProfile;
+            if (focusMethod) {
+                document.getElementById('profile-payment-method').value = focusMethod;
+                document.getElementById('payment-details-container').innerHTML = renderPaymentDetailsForm(focusMethod, currentUserData.paymentDetails || {});
+                setTimeout(() => document.getElementById('payment-details-container')?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 50);
+            }
         };
 
         const renderPaymentDetailsForm = (method, currentDetails) => {
@@ -2384,6 +2378,35 @@
                 default:
                     return '';
             }
+        };
+
+        const isWithdrawMethodDetailsComplete = (method) => {
+            const details = currentUserData?.paymentDetails || {};
+            if (method === 'upi') return !!String(details.upiId || '').trim();
+            if (method === 'bank') {
+                return ['accountNumber', 'ifsc', 'bankName', 'accountName'].every(key => !!String(details[key] || '').trim());
+            }
+            if (['play_store', 'amazon_gift', 'flipkart_gift', 'paypal'].includes(method)) {
+                return !!String(details.email || '').trim();
+            }
+            return false;
+        };
+
+        const showWithdrawDetailsMissingModal = (method, methodName) => {
+            renderModal('Update Withdraw Method',
+                `<div class="space-y-3">
+                    <div class="rounded-2xl border border-yellow-100 dark:border-yellow-800 bg-yellow-50 dark:bg-yellow-900/20 p-4">
+                        <p class="text-sm font-bold text-yellow-800 dark:text-yellow-100">${escapeHtml(methodName)} details are missing.</p>
+                        <p class="text-sm text-yellow-700 dark:text-yellow-200 mt-1">Please update your withdraw method first, then request withdrawal.</p>
+                    </div>
+                </div>`,
+                `<button onclick="window.closeModal()" class="px-4 py-2 text-sm bg-gray-200 dark:bg-gray-600 rounded-lg">Cancel</button>
+                 <button id="set-withdraw-method-now-btn" class="px-4 py-2 text-sm bg-blue-600 text-white rounded-lg">Set Now</button>`,
+                'max-w-sm');
+            document.getElementById('set-withdraw-method-now-btn').onclick = () => {
+                window.closeModal();
+                showProfilePage(method);
+            };
         };
 
         const renderSettingAction = (id, label, iconUrl, tone = 'gray') => `
@@ -2761,17 +2784,17 @@
         const getSupportLogo = () => 'https://i.ibb.co/x8YBYwGG/6233389803554672153.jpg';
         const CHATBOT_ICON_URL = 'https://cdn-icons-png.flaticon.com/512/2040/2040946.png';
         const getVerifiedBadge = (extraClass = '') => `
-            <span class="inline-flex h-4 w-4 items-center justify-center rounded-full bg-blue-600 text-white align-middle ${extraClass}" title="Verified">
-                <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"></path></svg>
+            <span class="inline-flex h-4 w-4 items-center justify-center bg-blue-500 text-white align-middle ${extraClass}" style="clip-path: polygon(50% 0%, 61% 11%, 76% 6%, 83% 20%, 98% 24%, 94% 39%, 100% 50%, 89% 61%, 94% 76%, 80% 83%, 76% 98%, 61% 94%, 50% 100%, 39% 89%, 24% 94%, 17% 80%, 2% 76%, 6% 61%, 0% 50%, 11% 39%, 6% 24%, 20% 17%, 24% 2%, 39% 6%);" title="Verified">
+                <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"></path></svg>
             </span>`;
         const getPremiumLogoFrame = (innerHtml, sizeClass = 'h-14 w-14', extraClass = '') => `
             <div class="${sizeClass} ${extraClass} rounded-full bg-gradient-to-br from-indigo-600 via-blue-600 to-emerald-500 p-[2px] shadow-sm">
-                <div class="h-full w-full rounded-full bg-white dark:bg-gray-900 p-[3px] flex items-center justify-center overflow-hidden">
+                <div class="h-full w-full rounded-full bg-white dark:bg-gray-900 p-[5px] flex items-center justify-center overflow-hidden">
                     ${innerHtml}
                 </div>
             </div>`;
         const getRevyBotLogo = (sizeClass = 'h-14 w-14') => `
-            ${getPremiumLogoFrame(`<img src="${CHATBOT_ICON_URL}" alt="REVY AI" class="h-full w-full rounded-full object-contain">`, sizeClass)}`;
+            ${getPremiumLogoFrame(`<img src="${CHATBOT_ICON_URL}" alt="REVY AI" class="max-h-full max-w-full rounded-full object-contain">`, sizeClass)}`;
         const getSupportLogoFrame = (sizeClass = 'h-14 w-14', extraClass = '') => `
             ${getPremiumLogoFrame(`<img src="${getSupportLogo()}" alt="REVIEWS WORLD" class="h-full w-full rounded-full object-cover">`, sizeClass, extraClass)}`;
 
@@ -2891,6 +2914,24 @@
         };
 
         const getSupportRoomId = (chatUserId) => `support_${chatUserId}`;
+        const getSupportChatCacheKey = (roomId) => `rw_support_chat_${roomId}`;
+
+        const readSupportChatCache = (roomId) => {
+            try {
+                const cached = JSON.parse(localStorage.getItem(getSupportChatCacheKey(roomId)) || '[]');
+                return Array.isArray(cached) ? cached : [];
+            } catch {
+                return [];
+            }
+        };
+
+        const writeSupportChatCache = (roomId, messages) => {
+            try {
+                localStorage.setItem(getSupportChatCacheKey(roomId), JSON.stringify(messages.slice(-80)));
+            } catch (error) {
+                console.warn('Support chat cache write failed:', error);
+            }
+        };
 
         const normalizeBackendMessage = (message) => ({
             id: `${message.roomId || message.room_id || activeSupportRoomId}-${message.timestamp || Date.now()}-${message.senderId || message.sender_id || ''}`,
@@ -2991,17 +3032,19 @@
             });
 
             activeSupportRoomId = getSupportRoomId(chatUserId);
-            activeSupportMessages = [];
+            activeSupportMessages = readSupportChatCache(activeSupportRoomId);
             renderSupportMessages(activeSupportMessages, viewerRole);
             const socket = await getSupportSocket();
             const handleHistory = ({ roomId, history = [] }) => {
                 if (roomId !== activeSupportRoomId) return;
                 activeSupportMessages = history.map(normalizeBackendMessage);
+                writeSupportChatCache(activeSupportRoomId, activeSupportMessages);
                 renderSupportMessages(activeSupportMessages, viewerRole);
             };
             const handleNewMessage = (message) => {
                 if (message.roomId !== activeSupportRoomId) return;
                 activeSupportMessages = [...activeSupportMessages, normalizeBackendMessage(message)];
+                writeSupportChatCache(activeSupportRoomId, activeSupportMessages);
                 renderSupportMessages(activeSupportMessages, viewerRole);
             };
             socket.off('chat_history');
@@ -3271,8 +3314,22 @@
                             <button id="revy-close-btn" class="px-3 py-1.5 rounded-full bg-red-50 dark:bg-red-900/30 text-red-600 dark:text-red-200 text-xs font-bold">Exit</button>
                         </div>
                         <div id="revy-bot-messages" class="flex-1 min-h-0 space-y-3 overflow-y-auto p-4 bg-gray-50 dark:bg-gray-900"></div>
+                        <div id="revy-quick-options" class="shrink-0 flex gap-2 overflow-x-auto px-3 py-2 border-t border-gray-100 dark:border-gray-700 bg-white dark:bg-gray-800">
+                            ${[
+                                ['how to earn', 'Earn'],
+                                ['how to add fund', 'Add Fund'],
+                                ['how to withdraw', 'Withdraw'],
+                                ['pending withdrawal', 'Pending'],
+                                ['pay to wallet', 'Pay'],
+                                ['transaction history', 'History'],
+                                ['payment method', 'Profile'],
+                                ['become partner investment', 'Partner'],
+                                ['loan help', 'Loan'],
+                                ['contact admin', 'Admin']
+                            ].map(([question, label]) => `<button data-revy-question="${question}" class="revy-option shrink-0 px-3 py-1.5 rounded-full bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-200 text-xs font-bold">${label}</button>`).join('')}
+                        </div>
                         <div class="shrink-0 flex items-center gap-2 p-3 border-t border-gray-100 dark:border-gray-700 bg-white dark:bg-gray-800">
-                            <input id="revy-message-input" type="text" placeholder="Ask about wallet, withdrawal, transaction..." class="flex-1 min-w-0 px-4 py-2.5 bg-gray-100 dark:bg-gray-700 rounded-full focus:outline-none focus:ring-2 focus:ring-blue-500">
+                            <input id="revy-message-input" type="text" placeholder="Or type your question" class="flex-1 min-w-0 px-4 py-2.5 bg-gray-100 dark:bg-gray-700 rounded-full focus:outline-none focus:ring-2 focus:ring-blue-500">
                             <button id="revy-send-btn" class="h-10 w-10 rounded-full bg-blue-600 text-white flex items-center justify-center">
                                 <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M2 21l21-9L2 3v7l15 2-15 2v7z"></path></svg>
                             </button>
@@ -3297,6 +3354,13 @@
                 }
             };
             document.getElementById('revy-send-btn').onclick = sendBotMessage;
+            document.querySelectorAll('.revy-option').forEach(btn => {
+                btn.onclick = () => {
+                    const input = document.getElementById('revy-message-input');
+                    input.value = btn.dataset.revyQuestion;
+                    sendBotMessage();
+                };
+            });
             document.getElementById('revy-message-input').addEventListener('keydown', (e) => {
                 resetRevyBotTimer();
                 if (e.key === 'Enter') sendBotMessage();
@@ -3725,6 +3789,11 @@
                     methodName = 'PayPal';
                     methodDetails = currentUserData.paymentDetails?.email || 'Not set';
                     break;
+            }
+
+            if (!isWithdrawMethodDetailsComplete(method)) {
+                showWithdrawDetailsMissingModal(method, methodName || getWithdrawalMethodName(method));
+                return;
             }
 
             const content = `
@@ -7281,7 +7350,6 @@
         document.getElementById('admin-gift-codes-btn').addEventListener('click', () => openAdminQuickAction(showAdminGiftCodesPage));
         document.getElementById('admin-withdrawal-history-btn').addEventListener('click', () => openAdminQuickAction(showWithdrawalHistoryPage));
         document.getElementById('admin-withdraw-settings-btn').addEventListener('click', () => openAdminQuickAction(showAdminWithdrawSettingsModal));
-        document.getElementById('admin-pro-users-btn').addEventListener('click', () => openAdminQuickAction(showAdminUsersPage));
         document.getElementById('admin-recharge-requests-btn').addEventListener('click', () => openAdminQuickAction(showAdminRechargeRequestsPage));
         document.getElementById('admin-loans-btn').addEventListener('click', () => openAdminQuickAction(showAdminLoanPage));
         document.getElementById('admin-investments-btn').addEventListener('click', () => openAdminQuickAction(showAdminInvestmentsPage));
