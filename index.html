@@ -1088,7 +1088,7 @@
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
         import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, onAuthStateChanged, sendPasswordResetEmail } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { getFirestore, doc, setDoc, getDoc, collection, addDoc, onSnapshot, query, orderBy, Timestamp, writeBatch, runTransaction, deleteDoc, getDocs, serverTimestamp, where, arrayUnion, updateDoc, deleteField, setLogLevel, limit as firestoreLimit } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        import { getFirestore, doc, setDoc, getDoc, collection, collectionGroup, addDoc, onSnapshot, query, orderBy, Timestamp, writeBatch, runTransaction, deleteDoc, getDocs, serverTimestamp, where, arrayUnion, updateDoc, deleteField, setLogLevel, limit as firestoreLimit } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
         // --- THEME LOGIC ---
         const applyTheme = (theme) => {
@@ -1198,6 +1198,9 @@
 
         // --- UI UTILS ---
         const formatCurrency = (amount) => new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR' }).format(amount || 0);
+        const numericAmount = (amount) => Number(amount || 0);
+        const absoluteAmount = (amount) => Math.abs(numericAmount(amount));
+        const formatCurrencyAbs = (amount) => formatCurrency(absoluteAmount(amount));
         const formatCompactBalance = (amount) => {
             const value = Number(amount || 0);
             if (Math.abs(value) < 10000) return formatCurrency(value);
@@ -1531,9 +1534,9 @@
             }
         };
 
-        const loadCloudFundRequests = async ({ status = 'pending', type = '', userId = '' } = {}) => {
+        const loadCloudFundRequests = async ({ status = 'pending', type = '', userId = '', limit = 300 } = {}) => {
             const token = await getBackendAuthToken();
-            const params = new URLSearchParams({ status, limit: '300' });
+            const params = new URLSearchParams({ status, limit: String(limit) });
             if (type) params.set('type', type);
             if (userId) params.set('userId', userId);
             const response = await fetch(`${BACKEND_BASE_URL}/api/fund-requests?${params.toString()}`, {
@@ -1932,7 +1935,7 @@
                             <p class="text-xs text-gray-500 dark:text-gray-400">${formatDateDDMMYY(item.timestamp || item.requestedAt)}</p>
                         </div>
                         <div class="text-right">
-                            <p class="font-bold text-red-500">-${formatCurrency(chargeAmount)}</p>
+                            <p class="font-bold text-red-500">-${formatCurrencyAbs(chargeAmount)}</p>
                             <p class="text-xs font-semibold ${statusColor}">${statusText}</p>
                         </div>
                     </div>`;
@@ -1946,7 +1949,7 @@
                             <p class="text-xs text-gray-500 dark:text-gray-400">${formatDate(item.timestamp)}</p>
                         </div>
                         <div class="text-right">
-                            <p class="font-bold text-yellow-600">${formatCurrency(item.amount)}</p>
+                            <p class="font-bold text-yellow-600">${formatCurrencyAbs(item.amount)}</p>
                             <p class="text-xs font-semibold text-yellow-600">Pending</p>
                         </div>
                     </div>`;
@@ -1974,10 +1977,10 @@
                         <div class="flex-1">
                             <p class="font-semibold">Withdrawal ${txnIdBadge}</p>
                             <p class="text-xs text-gray-500 dark:text-gray-400">${formatDateDDMMYY(item.timestamp)}</p>
-                            ${item.rejectionReason ? `<p class="text-xs text-red-400 mt-1">Reason: ${item.rejectionReason}</p>` : ''}
+                            ${item.rejectionReason ? `<p class="text-xs text-red-400 mt-1">Reason: ${escapeHtml(item.rejectionReason)}</p>` : ''}
                         </div>
                         <div class="text-right">
-                            <p class="font-bold ${statusColor}">-${formatCurrency(item.amount)}</p>
+                            <p class="font-bold ${statusColor}">-${formatCurrencyAbs(item.amount)}</p>
                             <p class="text-xs font-semibold ${statusColor}">${statusText}</p>
                         </div>
                     </div>`;
@@ -1994,7 +1997,7 @@
                 return `
                     <div class="flex justify-between items-center p-3 bg-gray-50 dark:bg-gray-700/50 rounded-lg text-sm ${clickableClass}" ${dataKey}>
                         <div class="flex-1">
-                            <p class="font-semibold">${actionText}${userName}</p>
+                            <p class="font-semibold">${actionText}${escapeHtml(userName)}</p>
                             <p class="text-xs text-gray-500 dark:text-gray-400">${formatDateDDMMYY(item.timestamp)}</p>
                             <p class="text-xs text-gray-500 dark:text-gray-400">Wallet Transfer</p>
                         </div>
@@ -2009,12 +2012,12 @@
                 return `
                     <div class="flex justify-between items-center p-3 bg-gray-50 dark:bg-gray-700/50 rounded-lg text-sm ${clickableClass}" ${dataKey}>
                         <div class="flex-1">
-                            <p class="font-semibold">To: ${item.recipientName || 'User'}</p>
+                            <p class="font-semibold">To: ${escapeHtml(item.recipientName || 'User')}</p>
                             <p class="text-xs text-gray-500 dark:text-gray-400">${formatDateDDMMYY(item.timestamp)}</p>
                             <p class="text-xs text-gray-500 dark:text-gray-400">Money Sent</p>
                         </div>
                         <p class="font-bold text-red-500">
-                            -${formatCurrency(item.amount)}
+                            -${formatCurrencyAbs(item.amount)}
                         </p>
                     </div>`;
             }
@@ -2033,11 +2036,11 @@
             return `
                 <div class="flex justify-between items-center p-3 bg-gray-50 dark:bg-gray-700/50 rounded-lg text-sm ${clickableClass}" ${dataKey}>
                     <div class="flex-1">
-                        <p class="font-semibold capitalize">${displayText}</p>
+                        <p class="font-semibold capitalize">${escapeHtml(displayText)}</p>
                         <p class="text-xs text-gray-500 dark:text-gray-400">${formatDateDDMMYY(item.timestamp)}</p>
                     </div>
                     <p class="font-bold ${colorClass}">
-                        ${sign}${formatCurrency(item.amount)}
+                        ${sign}${formatCurrencyAbs(item.amount)}
                     </p>
                 </div>`;
         };
@@ -2527,82 +2530,75 @@
                 });
         };
 
-        let initializeAdminListeners = () => {
-            console.log("Initializing admin listeners...");
-
+        const refreshAdminDashboardCaches = async () => {
             const usersQuery = query(collection(db, `artifacts/${appId}/public/data/users`));
-            unsubscribers.push(onSnapshot(usersQuery, (snap) => {
-                console.log(`Admin listener: ${snap.docs.length} users fetched.`);
-                allUsersCache = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+            const usersSnap = await getDocs(usersQuery);
+            allUsersCache = usersSnap.docs.map(d => ({ id: d.id, ...d.data() }));
 
-                let totalFunds = 0;
-                let newMembersCount = 0;
-                const fifteenDaysAgo = new Date();
-                fifteenDaysAgo.setDate(fifteenDaysAgo.getDate() - 15);
+            let totalFunds = 0;
+            let newMembersCount = 0;
+            const fifteenDaysAgo = new Date();
+            fifteenDaysAgo.setDate(fifteenDaysAgo.getDate() - 15);
 
-                allUsersCache.forEach(u => {
-                    if (u.id !== ADMIN_UID) {
-                        totalFunds += u.balance || 0;
+            allUsersCache.forEach(u => {
+                if (u.id !== ADMIN_UID) {
+                    totalFunds += u.balance || 0;
 
-                        // Check for new members (last 15 days)
-                        if (u.createdAt) {
-                            const createdDate = u.createdAt.toDate ? u.createdAt.toDate() : new Date(u.createdAt);
-                            if (createdDate >= fifteenDaysAgo) {
-                                newMembersCount++;
-                            }
+                    if (u.createdAt) {
+                        const createdDate = u.createdAt.toDate ? u.createdAt.toDate() : new Date(u.createdAt);
+                        if (createdDate >= fifteenDaysAgo) {
+                            newMembersCount++;
                         }
                     }
-                });
-
-                document.getElementById('analytics-total-users').textContent = allUsersCache.length > 0 ? allUsersCache.length - 1 : 0;
-                document.getElementById('analytics-total-funds').textContent = formatCurrency(totalFunds);
-                document.getElementById('analytics-new-members').textContent = newMembersCount;
-
-                if (document.getElementById('admin-users-list-page')) {
-                    updateAdminUserListView();
                 }
-            }, (error) => console.error("Admin: Error listening to users collection:", error)));
+            });
+
+            document.getElementById('analytics-total-users').textContent = allUsersCache.length > 0 ? allUsersCache.length - 1 : 0;
+            document.getElementById('analytics-total-funds').textContent = formatCompactBalance(totalFunds);
+            document.getElementById('analytics-new-members').textContent = newMembersCount;
+
+            if (document.getElementById('admin-users-list-page')) {
+                updateAdminUserListView();
+            }
 
             const codesQuery = query(collection(db, `artifacts/${appId}/public/data/gift_codes`));
-            unsubscribers.push(onSnapshot(codesQuery, (snap) => {
-                console.log(`Admin listener: ${snap.docs.length} gift codes fetched.`);
-                allGiftCodesCache = snap.docs;
-                const totalRedeemed = snap.docs.reduce((acc, doc) => acc + (doc.data().timesUsed || 0), 0);
-                document.getElementById('analytics-gift-cards').textContent = totalRedeemed;
+            const codesSnap = await getDocs(codesQuery);
+            allGiftCodesCache = codesSnap.docs;
+            const totalRedeemed = codesSnap.docs.reduce((acc, doc) => acc + (doc.data().timesUsed || 0), 0);
+            document.getElementById('analytics-gift-cards').textContent = totalRedeemed;
 
-                if (document.getElementById('gift-codes-list-page')) {
-                    renderAdminGiftCodesList(snap.docs);
-                }
-            }, (error) => console.error("Admin: Error listening to gift codes:", error)));
+            if (document.getElementById('gift-codes-list-page')) {
+                renderAdminGiftCodesList(codesSnap.docs);
+            }
 
-            refreshAdminFundRequestsFromCloud();
+            await refreshAdminFundRequestsFromCloud();
 
             const loanRequestsQuery = query(collection(db, `artifacts/${appId}/public/data/loan_requests`), orderBy("requestedAt", "desc"));
-            unsubscribers.push(onSnapshot(loanRequestsQuery, (snap) => {
-                allLoanRequestsCache = snap.docs
-                    .map(doc => ({ id: doc.id, ...doc.data() }));
-                if (document.getElementById('admin-loan-page')) {
-                    renderAdminLoanPage();
-                }
-            }, (error) => console.error("Admin: Error listening to loan requests:", error)));
+            const loanRequestsSnap = await getDocs(loanRequestsQuery);
+            allLoanRequestsCache = loanRequestsSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+            if (document.getElementById('admin-loan-page')) {
+                renderAdminLoanPage();
+            }
 
             const loansQuery = query(collection(db, `artifacts/${appId}/public/data/loans`), orderBy("createdAt", "desc"));
-            unsubscribers.push(onSnapshot(loansQuery, (snap) => {
-                allLoansCache = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-                if (document.getElementById('admin-loan-page')) {
-                    renderAdminLoanPage();
-                }
-            }, (error) => console.error("Admin: Error listening to loans:", error)));
+            const loansSnap = await getDocs(loansQuery);
+            allLoansCache = loansSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+            if (document.getElementById('admin-loan-page')) {
+                renderAdminLoanPage();
+            }
 
             const investmentsQuery = query(collection(db, `artifacts/${appId}/public/data/partner_investments`), orderBy("createdAt", "desc"));
-            unsubscribers.push(onSnapshot(investmentsQuery, (snap) => {
-                allInvestmentsCache = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-                processDuePartnerInvestmentsForAdmin();
-                if (document.getElementById('admin-investments-page')) {
-                    renderAdminInvestmentsPage();
-                }
-            }, (error) => console.error("Admin: Error listening to partner investments:", error)));
+            const investmentsSnap = await getDocs(investmentsQuery);
+            allInvestmentsCache = investmentsSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+            processDuePartnerInvestmentsForAdmin();
+            if (document.getElementById('admin-investments-page')) {
+                renderAdminInvestmentsPage();
+            }
+        };
 
+        let initializeAdminListeners = () => {
+            console.log("Initializing admin data...");
+            refreshAdminDashboardCaches().catch(error => console.error("Admin data refresh failed:", error));
             loadAdminChatsFromBackend().catch(error => console.error("Admin: Error loading Cloudflare support chats:", error));
         };
 
@@ -2922,7 +2918,7 @@
                 getIncomeTransactions().forEach(item => {
                     const date = getSafeDate(item.timestamp || item.createdAt);
                     if (!date || date.getFullYear() !== Number(year)) return;
-                    totals[date.getMonth()] += Number(item.amount || 0);
+                    totals[date.getMonth()] += absoluteAmount(item.amount || item.chargeAmount || 0);
                 });
                 const rows = totals.map((amount, monthIndex) => {
                     if (created && Number(year) === created.getFullYear() && monthIndex < created.getMonth()) return '';
@@ -2947,7 +2943,7 @@
                 const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
                 if (!groups[key]) groups[key] = { year: date.getFullYear(), month: date.getMonth(), items: [], total: 0 };
                 groups[key].items.push(item);
-                groups[key].total += Number(item.amount || 0);
+                groups[key].total += absoluteAmount(item.amount || 0);
             });
             return Object.entries(groups).map(([key, value]) => ({ key, ...value })).sort((a, b) => b.key.localeCompare(a.key));
         };
@@ -3030,7 +3026,7 @@
                             <tbody class="divide-y divide-slate-100 dark:divide-slate-700">
                                 ${group.items.map(item => `
                                     <tr class="bg-white dark:bg-gray-800 hover:bg-blue-50/60 dark:hover:bg-blue-900/10 transition">
-                                        <td class="px-4 py-4 font-black text-red-600 dark:text-red-300">${formatCurrency(item.amount || 0)}</td>
+                                        <td class="px-4 py-4 font-black text-red-600 dark:text-red-300">${formatCurrencyAbs(item.amount || 0)}</td>
                                         <td class="px-4 py-4 text-slate-600 dark:text-slate-300">${formatDateDDMMYY(item.timestamp || item.requestedAt)}</td>
                                         <td class="px-4 py-4 text-slate-600 dark:text-slate-300">${formatDateDDMMYY(item.processedAt || item.timestamp)}</td>
                                         <td class="px-4 py-4"><span class="rounded-full bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-200 px-3 py-1 text-xs font-bold">${escapeHtml(item.method || getWithdrawalMethodName(item.methodId || item.paymentMethod, 'N/A'))}</span></td>
@@ -3311,7 +3307,7 @@
 
         const writeSupportChatCache = (roomId, messages) => {
             try {
-                localStorage.setItem(getSupportChatCacheKey(roomId), JSON.stringify(messages.slice(-80)));
+                localStorage.setItem(getSupportChatCacheKey(roomId), JSON.stringify(messages.slice(-200)));
             } catch (error) {
                 console.warn('Support chat cache write failed:', error);
             }
@@ -3448,12 +3444,13 @@
                     let keyboardHeight = 0;
                     if (window.visualViewport) {
                         keyboardHeight = Math.max(0, window.innerHeight - window.visualViewport.height - window.visualViewport.offsetTop);
-                        const visibleHeight = Math.max(360, window.visualViewport.height + window.visualViewport.offsetTop);
+                        const visibleHeight = Math.max(360, window.visualViewport.height);
                         shell.style.height = `${visibleHeight}px`;
                         shell.style.maxHeight = `${visibleHeight}px`;
+                        shell.style.transform = window.visualViewport.offsetTop ? `translateY(${window.visualViewport.offsetTop}px)` : '';
                     }
-                    composer.style.transform = keyboardHeight > 40 ? `translateY(-${keyboardHeight}px)` : '';
-                    messages.style.paddingBottom = keyboardHeight > 40 ? `${keyboardHeight + 88}px` : '';
+                    composer.style.transform = '';
+                    messages.style.paddingBottom = keyboardHeight > 40 ? '6rem' : '';
                     setTimeout(() => {
                         input.scrollIntoView({ block: 'center', behavior: 'smooth' });
                         messages.scrollTop = messages.scrollHeight;
@@ -3464,6 +3461,7 @@
                     if (window.visualViewport) {
                         shell.style.height = '';
                         shell.style.maxHeight = '';
+                        shell.style.transform = '';
                     }
                     composer.style.transform = '';
                     messages.style.paddingBottom = '';
@@ -3490,7 +3488,7 @@
             activeSupportRoomId = getSupportRoomId(chatUserId);
             activeSupportMessages = readSupportChatCache(activeSupportRoomId);
             renderSupportMessages(activeSupportMessages, viewerRole);
-            fetchSupportChatHistory(activeSupportRoomId, 80)
+            fetchSupportChatHistory(activeSupportRoomId, 200)
                 .then((history) => {
                     if (!history.length && activeSupportMessages.length) return;
                     activeSupportMessages = mergeSupportMessages(activeSupportMessages, history);
@@ -3516,7 +3514,7 @@
             socket.off('new_message');
             socket.on('chat_history', handleHistory);
             socket.on('new_message', handleNewMessage);
-            socket.emit('join_room', { roomId: activeSupportRoomId, limit: 80 }, (response) => {
+            socket.emit('join_room', { roomId: activeSupportRoomId, limit: 200 }, (response) => {
                 if (!response?.ok) {
                     console.error('Join support room failed:', response?.error);
                     showNotification('Chat connection failed. Please reopen chat.', true);
@@ -4894,57 +4892,6 @@
             );
         };
 
-        const handleCleanupScamRequests = async () => {
-            const scamUsers = [
-                { name: 'Aryan', amount: 88 },
-                { name: 'Badal Soni', amount: 104 },
-                { name: 'SOYAB MANDHRA', amount: 220 },
-                { name: 'NISHANT KUMAR', amount: 2500 }
-            ];
-
-            const pendingRequests = allFundRequestsCache.filter(r => r.status === 'pending');
-            const requestsToClear = pendingRequests.filter(r => {
-                return scamUsers.some(scam =>
-                    r.userName.toLowerCase().includes(scam.name.toLowerCase()) &&
-                    Math.abs(r.amount - scam.amount) < 1
-                );
-            });
-
-            if (requestsToClear.length === 0) {
-                return showNotification('No scam requests found in the current pending list.', true);
-            }
-
-            renderModal('Confirm Scam Cleanup',
-                `<div class="space-y-4">
-                    <p class="text-red-600 font-bold underline">WARNING: FORCE APPROVAL</p>
-                    <p>Found ${requestsToClear.length} requests matching scam user profiles. These will be marked as "Completed" without any balance checks or refunds.</p>
-                    <ul class="text-xs list-disc pl-5 space-y-1">
-                        ${requestsToClear.map(r => `<li>${r.userName} - ₹${r.amount}</li>`).join('')}
-                    </ul>
-                </div>`,
-                `<button onclick="window.closeModal()" class="px-4 py-2 text-sm bg-gray-200 dark:bg-gray-600 rounded-lg">Cancel</button>
-                 <button id="confirm-cleanup-btn" class="px-4 py-2 text-sm bg-red-600 text-white rounded-lg">Force Approve All</button>`,
-                'max-w-md'
-            );
-
-            document.getElementById('confirm-cleanup-btn').onclick = async () => {
-                showNotification(`Cleaning up ${requestsToClear.length} requests...`);
-                window.closeModal();
-
-                let successCount = 0;
-                for (const req of requestsToClear) {
-                    try {
-                        await proceedWithRequestAction(req.userId, req.id, 'completed', 'SCAM_CLEANUP_OVERRIDE', req);
-                        successCount++;
-                    } catch (err) {
-                        console.error(`Failed to clear request for ${req.userName}:`, err);
-                    }
-                }
-
-                showNotification(`Successfully cleared ${successCount} requests.`);
-            };
-        };
-
         const showAdminUsersPageWithFilter = (filter) => {
             showAdminUsersPage();
             setTimeout(() => {
@@ -5087,21 +5034,84 @@
             });
         };
 
+        const normalizeWithdrawalHistoryRecord = (record = {}) => {
+            const sourceType = normalizeTransactionType(record);
+            const requestedAt = record.requestedAt || record.timestamp || record.createdAt || record.processedAt || Date.now();
+            const userProfile = allUsersCache.find(u =>
+                (record.userId && u.id === record.userId) ||
+                (record.userMobile && u.mobile === record.userMobile) ||
+                (record.userEmail && u.email === record.userEmail)
+            ) || {};
+            return {
+                ...record,
+                id: record.id || record.requestId || record.request_id || record.transactionId || record.transaction_id || `${sourceType}-${timestampToMillis(requestedAt)}-${record.amount || 0}`,
+                userId: record.userId || record.user_id || userProfile.id || '',
+                userName: record.userName || record.senderName || record.recipientName || userProfile.name || 'N/A',
+                userMobile: record.userMobile || record.mobile || userProfile.mobile || '',
+                userEmail: record.userEmail || record.emailAddress || userProfile.email || '',
+                type: 'withdrawal',
+                amount: absoluteAmount(record.amount || 0),
+                method: record.method || getWithdrawalMethodName(record.methodId || record.paymentMethod, record.paymentMethod || 'N/A'),
+                status: record.status || 'completed',
+                requestedAt,
+                processedAt: record.processedAt || record.timestamp || requestedAt
+            };
+        };
+
+        const mergeWithdrawalHistoryRecords = (...groups) => {
+            const merged = new Map();
+            groups.flat().forEach((record, index) => {
+                if (!record) return;
+                const normalized = normalizeWithdrawalHistoryRecord(record);
+                if (normalizeTransactionType(normalized) !== 'withdrawal') return;
+                const key = normalized.requestId || normalized.request_id || normalized.transactionId || normalized.transaction_id || normalized.id || `withdrawal-${timestampToMillis(normalized.requestedAt)}-${normalized.amount}-${index}`;
+                merged.set(String(key), { ...(merged.get(String(key)) || {}), ...normalized });
+            });
+            return Array.from(merged.values())
+                .sort((a, b) => timestampToMillis(b.requestedAt || b.timestamp || b.processedAt) - timestampToMillis(a.requestedAt || a.timestamp || a.processedAt));
+        };
+
+        const loadLegacyWithdrawalTransactionsForAdmin = async () => {
+            if (currentUser?.uid !== ADMIN_UID) return [];
+            const records = [];
+            try {
+                const snap = await getDocs(query(collectionGroup(db, 'transactions'), where('type', '==', 'withdrawal')));
+                snap.docs.forEach(docSnap => records.push({ id: docSnap.id, sourcePath: docSnap.ref.path, ...docSnap.data() }));
+            } catch (error) {
+                console.warn('Legacy withdrawal collection group load skipped:', error);
+            }
+
+            for (const rootPath of ['transactions', 'transaction_history', 'wallet_transactions']) {
+                try {
+                    const snap = await getDocs(query(collection(db, rootPath), where('type', '==', 'withdrawal')));
+                    snap.docs.forEach(docSnap => records.push({ id: docSnap.id, sourcePath: docSnap.ref.path, ...docSnap.data() }));
+                } catch (error) {
+                    console.warn('Legacy root withdrawal load skipped:', rootPath, error);
+                }
+            }
+            return records;
+        };
+
         // Load Withdrawal History function
         const loadWithdrawalHistory = async (filter = 'today', fromDate = null, toDate = null) => {
             activeWithdrawalHistoryFilter = { filter, fromDate, toDate };
             try {
-                // First, get all fund requests
+                // Merge current requests, Cloudflare archive, and old transaction-only withdrawal records.
                 const withdrawalQuery = query(
                     collection(db, `artifacts/${appId}/public/data/fund_requests`),
                     orderBy("requestedAt", "desc")
                 );
 
                 const snap = await getDocs(withdrawalQuery);
-                let withdrawals = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-
-                // Filter for withdrawal type only
-                withdrawals = withdrawals.filter(w => w.type === 'withdrawal');
+                const firebaseRequests = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                let cloudRequests = [];
+                try {
+                    cloudRequests = await loadCloudFundRequests({ status: 'all', type: 'withdrawal', limit: 500 });
+                } catch (error) {
+                    console.warn('Cloud withdrawal history load skipped:', error);
+                }
+                const legacyWithdrawals = await loadLegacyWithdrawalTransactionsForAdmin();
+                let withdrawals = mergeWithdrawalHistoryRecords(firebaseRequests, cloudRequests, legacyWithdrawals);
 
                 // Apply filters
                 const now = new Date();
@@ -5116,25 +5126,25 @@
                 if (filter === 'today') {
                     withdrawals = withdrawals.filter(w => {
                         if (!w.requestedAt) return false;
-                        const reqDate = w.requestedAt.toDate();
+                        const reqDate = getSafeDate(w.requestedAt);
                         return reqDate >= today;
                     });
                 } else if (filter === 'yesterday') {
                     withdrawals = withdrawals.filter(w => {
                         if (!w.requestedAt) return false;
-                        const reqDate = w.requestedAt.toDate();
+                        const reqDate = getSafeDate(w.requestedAt);
                         return reqDate >= yesterday && reqDate < today;
                     });
                 } else if (filter === 'week') {
                     withdrawals = withdrawals.filter(w => {
                         if (!w.requestedAt) return false;
-                        const reqDate = w.requestedAt.toDate();
+                        const reqDate = getSafeDate(w.requestedAt);
                         return reqDate >= weekAgo;
                     });
                 } else if (filter === 'month') {
                     withdrawals = withdrawals.filter(w => {
                         if (!w.requestedAt) return false;
-                        const reqDate = w.requestedAt.toDate();
+                        const reqDate = getSafeDate(w.requestedAt);
                         return reqDate >= monthAgo;
                     });
                 } else if (filter === 'custom' && fromDate && toDate) {
@@ -5144,7 +5154,7 @@
 
                     withdrawals = withdrawals.filter(w => {
                         if (!w.requestedAt) return false;
-                        const reqDate = w.requestedAt.toDate();
+                        const reqDate = getSafeDate(w.requestedAt);
                         return reqDate >= from && reqDate < to;
                     });
                 }
@@ -5189,9 +5199,9 @@
                         <div class="p-4 mb-3 bg-gray-50 dark:bg-gray-700/50 rounded-lg">
                             <div class="flex justify-between items-start mb-3">
                                 <div>
-                                    <p class="font-semibold text-gray-800 dark:text-gray-200">${w.userName || 'N/A'}</p>
-                                    <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">Mobile: ${maskMobile(w.userMobile || '')}</p>
-                                    <p class="text-xs text-gray-500 dark:text-gray-400">Email: ${(w.userEmail || 'N/A').split('@')[0]}***</p>
+                                    <p class="font-semibold text-gray-800 dark:text-gray-200">${escapeHtml(w.userName || 'N/A')}</p>
+                                    <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">Mobile: ${escapeHtml(maskMobile(w.userMobile || ''))}</p>
+                                    <p class="text-xs text-gray-500 dark:text-gray-400">Email: ${escapeHtml((w.userEmail || 'N/A').split('@')[0])}***</p>
                                 </div>
                                 <span class="px-2 py-1 text-xs ${statusBg} ${statusColor} rounded-full font-semibold">${statusText}</span>
                             </div>
@@ -5199,11 +5209,11 @@
                             <div class="grid grid-cols-2 gap-3 text-sm mb-3">
                                 <div class="bg-white dark:bg-gray-800 p-2 rounded">
                                     <p class="text-gray-500 dark:text-gray-400 text-xs">Amount</p>
-                                    <p class="font-semibold text-gray-800 dark:text-gray-200">${formatCurrency(w.amount)}</p>
+                                    <p class="font-semibold text-gray-800 dark:text-gray-200">${formatCurrencyAbs(w.amount)}</p>
                                 </div>
                                 <div class="bg-white dark:bg-gray-800 p-2 rounded">
                                     <p class="text-gray-500 dark:text-gray-400 text-xs">Method</p>
-                                    <p class="font-semibold text-gray-800 dark:text-gray-200">${w.method || 'N/A'}</p>
+                                    <p class="font-semibold text-gray-800 dark:text-gray-200">${escapeHtml(w.method || 'N/A')}</p>
                                 </div>
                                 <div class="bg-white dark:bg-gray-800 p-2 rounded">
                                     <p class="text-gray-500 dark:text-gray-400 text-xs">Payout Details</p>
@@ -5226,7 +5236,7 @@
                             ${w.rejectionReason ? `
                                 <div class="rejection-badge mt-3">
                                     <p class="font-semibold">Rejection Reason:</p>
-                                    <p class="text-sm">${w.rejectionReason}</p>
+                                    <p class="text-sm">${escapeHtml(w.rejectionReason)}</p>
                                 </div>
                             ` : ''}
                             
@@ -5267,13 +5277,13 @@
                 <div class="p-3 mb-2 ${u.isFlagged ? 'bg-red-50 dark:bg-red-900/20 border border-red-200' : 'bg-gray-50 dark:bg-gray-700/50'} rounded-lg flex justify-between items-center">
                     <div class="flex-grow">
                         <div class="flex items-center gap-2">
-                            <p class="font-semibold text-sm">${u.name || 'No Name'}</p>
+                            <p class="font-semibold text-sm">${escapeHtml(u.name || 'No Name')}</p>
                             ${u.isFlagged ? '<span class="px-1.5 py-0.5 text-[10px] bg-red-600 text-white rounded uppercase font-bold">Flagged</span>' : ''}
                             ${u.isProProfile ? '<span class="px-1.5 py-0.5 text-[10px] bg-blue-600 text-white rounded-full uppercase font-bold">Pro</span>' : ''}
                         </div>
-                        <p class="text-xs text-gray-500 dark:text-gray-400">${u.email}</p>
-                        <p class="text-xs text-gray-500 dark:text-gray-400">${u.mobile || 'No Mobile'}</p>
-                        <p class="text-xs font-bold text-blue-600 dark:text-blue-400 mt-1">Balance: ${formatCurrency(u.balance)}</p>
+                        <p class="text-xs text-gray-500 dark:text-gray-400">${escapeHtml(u.email || '')}</p>
+                        <p class="text-xs text-gray-500 dark:text-gray-400">${escapeHtml(u.mobile || 'No Mobile')}</p>
+                        <p class="text-xs font-bold text-blue-600 dark:text-blue-400 mt-1">Balance: ${formatCompactBalance(u.balance)}</p>
                     </div>
                     <div class="flex flex-col space-y-1 ml-4">
                         <div class="flex space-x-1">
@@ -5287,8 +5297,8 @@
                         <button data-action="toggle-pro-user" data-userid="${u.id}" data-pro="${u.isProProfile || false}" class="px-2 py-1 text-[10px] ${u.isProProfile ? 'bg-gray-600' : 'bg-blue-600'} text-white rounded hover:opacity-80 font-semibold">
                             ${u.isProProfile ? 'Remove Pro' : 'Make Pro'}
                         </button>
-                        <button data-action="delete-user" data-userid="${u.id}" data-username="${u.name || u.email}" class="px-2 py-1 text-[10px] bg-red-600 text-white rounded hover:bg-red-700 font-semibold">
-                            Delete
+                        <button data-action="delete-user" data-userid="${u.id}" data-username="${escapeHtml(u.name || u.email || 'User')}" class="px-2 py-1 text-[10px] bg-red-600 text-white rounded hover:bg-red-700 font-semibold">
+                            Disable
                         </button>
                     </div>
                 </div>`;
@@ -5317,7 +5327,7 @@
 
             let usersToRender = allUsersCache.filter(u => u.id !== ADMIN_UID && (
                 !searchTerm ||
-                u.email.toLowerCase().includes(searchTerm) ||
+                (u.email || '').toLowerCase().includes(searchTerm) ||
                 (u.name && u.name.toLowerCase().includes(searchTerm)) ||
                 (u.mobile && u.mobile.includes(searchTerm))
             ));
@@ -5602,17 +5612,6 @@
             }
             if (showToast) showNotification(processed ? `Processed ${processed} due investment(s).` : 'No investment has completed 30 days yet.', !processed);
         };
-
-        async function deleteRejectedLoanRequests(rejectedDocs) {
-            if (!rejectedDocs.length) return;
-
-            try {
-                await Promise.all(rejectedDocs.map(requestDoc => deleteDoc(requestDoc.ref)));
-                console.log(`Deleted ${rejectedDocs.length} rejected loan request(s).`);
-            } catch (e) {
-                console.error('Rejected loan cleanup failed:', e);
-            }
-        }
 
         const renderAdminGiftCodesList = (docs) => {
             const listEl = document.getElementById('gift-codes-list-page');
@@ -6809,6 +6808,7 @@
                     }
                 });
                 showNotification(`Loan request ${newStatus}.`);
+                refreshAdminDashboardCaches().catch(error => console.error('Admin cache refresh failed:', error));
             } catch (e) {
                 console.error('Loan action failed:', e);
                 showNotification(`Error: ${e.message}`, true);
@@ -7018,37 +7018,34 @@
             }
         };
 
-        // Handle Delete User
+        // Handle Disable User without deleting financial history.
         const handleDeleteUser = (userId, userName) => {
-            renderModal('Delete User',
+            renderModal('Disable User',
                 `<div class="space-y-4">
-                    <p class="text-red-600 font-semibold">Warning: This action cannot be undone!</p>
-                    <p>Are you sure you want to delete user <strong>${userName}</strong>?</p>
-                    <p class="text-sm text-gray-500 dark:text-gray-400">This will permanently delete all user data including their balance and transaction history.</p>
+                    <p class="text-red-600 font-semibold">This will block the user from using the wallet.</p>
+                    <p>Are you sure you want to disable <strong>${escapeHtml(userName)}</strong>?</p>
+                    <p class="text-sm text-gray-500 dark:text-gray-400">Financial records, transaction history, invoices, and wallet audit data will be preserved.</p>
                 </div>`,
                 `<button onclick="window.closeModal()" class="px-4 py-2 text-sm bg-gray-200 dark:bg-gray-600 rounded-lg">Cancel</button>
-                 <button id="confirm-action-btn" class="px-4 py-2 text-sm bg-red-600 text-white rounded-lg">Yes, Delete User</button>`,
+                 <button id="confirm-action-btn" class="px-4 py-2 text-sm bg-red-600 text-white rounded-lg">Disable User</button>`,
                 'max-w-md'
             );
             document.getElementById('confirm-action-btn').onclick = async () => {
                 try {
-                    // First, delete user's transactions subcollection
                     const userRef = doc(db, `artifacts/${appId}/public/data/users`, userId);
-                    const transactionsRef = collection(userRef, 'transactions');
-                    const transactionsSnap = await getDocs(transactionsRef);
-
-                    // Delete all transactions
-                    const deletePromises = transactionsSnap.docs.map(doc => deleteDoc(doc.ref));
-                    await Promise.all(deletePromises);
-
-                    // Delete user document
-                    await deleteDoc(userRef);
-
-                    showNotification('User deleted successfully!');
+                    await updateDoc(userRef, {
+                        isFlagged: true,
+                        isDisabled: true,
+                        disabledAt: serverTimestamp(),
+                        disabledBy: currentUser.uid,
+                        banReason: 'Account disabled by admin. Financial records retained for audit.'
+                    });
+                    showNotification('User disabled. Transaction history was preserved.');
+                    refreshAdminDashboardCaches().catch(error => console.error('Admin cache refresh failed:', error));
                     window.closeModal();
                 } catch (e) {
-                    console.error("Delete user failed:", e);
-                    showNotification(`Error deleting user: ${e.message}`, true);
+                    console.error("Disable user failed:", e);
+                    showNotification(`Error disabling user: ${e.message}`, true);
                 }
             };
         };
@@ -7842,6 +7839,7 @@
                 case 'process-investment-interest':
                     processPartnerInterest(target.dataset.investmentid)
                         .then(() => showNotification('Partner interest processed.'))
+                        .then(() => refreshAdminDashboardCaches())
                         .then(renderAdminInvestmentsPage)
                         .catch(e => showNotification(`Error: ${e.message}`, true));
                     break;
@@ -7852,9 +7850,16 @@
                     break;
                 }
 
+                case 'download-investment-invoice': {
+                    const inv = allInvestmentsCache.find(i => i.id === target.dataset.investmentid);
+                    if (inv) downloadInvestmentInvoice(inv);
+                    break;
+                }
+
                 case 'admin-loan-auto-debit':
                     processDueLoanRepayment(target.dataset.loanid)
                         .then(() => showNotification('Loan amount auto debited.'))
+                        .then(() => refreshAdminDashboardCaches())
                         .then(renderAdminLoanPage)
                         .catch(e => showNotification(`Error: ${e.message}`, true));
                     break;

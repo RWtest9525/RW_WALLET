@@ -510,11 +510,22 @@ async function listFundRequests(d1, { status = 'pending', type = null, userId = 
 }
 
 async function updateFundRequestStatus(d1, { requestId, status, processedAt = nowMs(), details = {} }) {
+  const existing = await d1.first(
+    `SELECT details_json FROM fund_requests WHERE request_id = ? LIMIT 1`,
+    [requestId]
+  );
+  let currentDetails = {};
+  try {
+    currentDetails = existing?.details_json ? JSON.parse(existing.details_json) : {};
+  } catch {
+    currentDetails = {};
+  }
+
   await d1.query(
     `UPDATE fund_requests
-     SET status = ?, processed_at = ?, details_json = json_patch(COALESCE(details_json, '{}'), ?)
+     SET status = ?, processed_at = ?, details_json = ?
      WHERE request_id = ?`,
-    [status, processedAt, JSON.stringify(details || {}), requestId]
+    [status, processedAt, JSON.stringify({ ...currentDetails, ...(details || {}) }), requestId]
   );
 }
 
@@ -669,8 +680,9 @@ function registerRoutes(app, { d1, r2 }) {
       return res.status(403).json({ ok: false, error: 'ADMIN_REQUIRED' });
     }
 
+    const requestedStatus = req.query.status ? String(req.query.status) : 'pending';
     const requests = await listFundRequests(d1, {
-      status: req.query.status ? String(req.query.status) : 'pending',
+      status: requestedStatus === 'all' ? null : requestedStatus,
       type: req.query.type ? String(req.query.type) : null,
       userId,
       limit: Math.min(Number(req.query.limit || 200), 500)
