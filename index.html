@@ -3111,15 +3111,30 @@
 
         const getRevyBotReply = async (question) => {
             const text = String(question || '').toLowerCase();
-            const hasAny = (...words) => words.some(word => text.includes(word));
+            const compactText = text.replace(/[^a-z0-9]+/g, ' ').trim();
+            const hasAny = (...words) => words.some(word => compactText.includes(String(word).toLowerCase()));
             const pendingWithdrawal = await getPendingWithdrawalForBot();
             const latestHistory = unifiedHistoryCache?.[0] || readHistoryItemsFromCache(currentUser?.uid || '')?.[0];
+            const activeLoan = allLoansCache.find(loan => loan.userId === currentUser?.uid && loan.status === 'active');
+            const activeInvestment = allInvestmentsCache.find(item => item.userId === currentUser?.uid && item.status === 'active');
+
+            if (hasAny('earn', 'earning', 'income', 'make money', 'track income', 'work', 'task', 'review work', 'reviews work')) {
+                return 'You can earn through REVIEWS WORLD work opportunities and wallet activities shared by admin. In the app, use Track Income to see your income records, Become Partner for partner investment income if available, Gift Codes when admin provides codes, and contact REVIEWS WORLD support for available review work or earning tasks.';
+            }
+
+            if (hasAny('add money', 'add fund', 'add funds', 'deposit', 'recharge wallet', 'top up', 'load wallet')) {
+                return 'To add wallet funds, use Add Fund from the wallet dashboard and submit the request with payment details. After admin verifies it, your wallet balance will update. If it is delayed, open admin support chat with your payment proof/details.';
+            }
+
+            if (hasAny('send money', 'pay to wallet', 'transfer money', 'wallet transfer', 'pay user', 'send fund')) {
+                return 'Use Pay to Wallet to send money to another RW Wallet user. Enter the recipient mobile number, amount, and details. The app will find the user, confirm the transfer, and then record it in both users transaction history.';
+            }
 
             if (hasAny('withdraw', 'withdrawal', 'payout', 'payment pending', 'pending')) {
                 if (pendingWithdrawal) {
                     return `Your withdrawal request of ${formatCurrency(pendingWithdrawal.amount || 0)} is currently pending. It has not been rejected. Due to processing delay it may take some time, and admin will process it soon.`;
                 }
-                return 'I do not see a pending withdrawal request right now. To withdraw, open Withdraw Fund, choose your payout method, enter the amount, and submit. Make sure your profile payment details are added correctly.';
+                return 'I do not see a pending withdrawal request right now. To withdraw, first add your payout details in Settings > My Profile, then open Withdraw Fund, choose UPI/Bank/Gift Card/PayPal, enter the amount, and submit. The amount is deducted immediately and stays pending until admin approves or rejects it.';
             }
             if (hasAny('balance', 'wallet', 'fund')) {
                 return `Your current wallet balance is ${formatCurrency(currentUserData?.balance || 0)}. If a withdrawal is submitted, the amount is deducted immediately and shown as pending until admin approves or rejects it.`;
@@ -3133,6 +3148,9 @@
             if (hasAny('payment method', 'upi', 'bank', 'ifsc', 'paypal', 'gift card', 'voucher', 'profile')) {
                 return 'To update payout details, open Settings, then My Profile. You can add UPI, bank account with IFSC, PayPal or gift-card email details. Withdrawals use the details saved in your profile at request time.';
             }
+            if (hasAny('setting', 'settings', 'change name', 'mobile number', 'whatsapp', 'website link', 'account details')) {
+                return 'Open Settings to manage your profile, payout method, WhatsApp number, website links, invoices, theme, and support options. Keep your mobile number and payment details correct before requesting withdrawal.';
+            }
             if (hasAny('password', 'login', 'reset', 'email')) {
                 return 'For password help, use Forgot Password on the login page. A reset link will be sent to your email, and you should also check the spam folder.';
             }
@@ -3140,20 +3158,40 @@
                 return 'For mobile recharge, open Mobile Recharge, enter the number, choose operator and circle, then submit. The request is processed through your wallet balance.';
             }
             if (hasAny('loan', 'borrow')) {
+                if (activeLoan) {
+                    return `You have an active loan record of ${formatCurrency(activeLoan.amount || activeLoan.principal || 0)}. Please check the Loan section for repayment status and due details.`;
+                }
                 return 'Loan options depend on your account eligibility. If your account is eligible, open the Loan section and submit the request from there.';
+            }
+            if (hasAny('partner', 'investment', 'invest', 'interest', 'monthly income')) {
+                if (activeInvestment) {
+                    return `Your partner investment of ${formatCurrency(activeInvestment.amount || 0)} is active. Monthly interest is processed after completed periods according to the app rules. Open Become Partner or Track Income for details.`;
+                }
+                return 'Become Partner lets eligible users create a partner investment. The app calculates monthly interest using the platform rule, shows expected income, and admin manages active investment records. Open Become Partner from the dashboard to check the options.';
             }
             if (hasAny('gift', 'code', 'redeem')) {
                 return 'Gift codes can be redeemed from the Gift Code section when you have a valid code. Gift card withdrawals use the email saved in your profile payout details.';
             }
-            if (hasAny('company', 'reviews world', 'rw wallet', 'app', 'developer', 'yash', 'about')) {
-                return 'RW Wallet is the digital wallet platform of REVIEWS WORLD. The app is developed by YASH VISHAL for wallet balance, withdrawals, transaction history, recharge, gift code, partner investment, loan tools, invoices, and support chat.';
+            if (hasAny('admin', 'support', 'contact', 'help from admin', 'human', 'whatsapp')) {
+                return 'For direct help, open REVIEWS WORLD chat from Help. You can also check the REVIEWS WORLD profile in chat for WhatsApp and website links added by admin.';
+            }
+            if (hasAny('delete chat', 'chat delete', 'disappear', '15 days', 'privacy')) {
+                return 'Support chat messages are kept until admin reads them. After admin reads a chat, those read messages automatically become eligible for deletion after 15 days to save storage.';
+            }
+            if (hasAny('company', 'reviews world', 'rw wallet', 'app', 'developer', 'yash', 'about', 'platform')) {
+                return 'RW Wallet is the digital wallet platform of REVIEWS WORLD, developed by YASH VISHAL. It includes wallet balance, add fund, pay to wallet, withdrawals, transaction history, mobile recharge, gift codes, partner investment, loan tools, withdrawal invoices, profile payout details, support chat, and REVY instant help.';
             }
             if (hasAny('hello', 'hi', 'hey', 'help', 'start')) {
-                return 'Hi, I am REVY, RW AI BOT. I can help with wallet balance, pending withdrawals, transaction history, payout details, password reset, recharge, gift codes, loans, invoices, and how to use the app.';
+                return 'Hi, I am REVY, RW AI BOT. I can help with earning, add fund, pay to wallet, wallet balance, pending withdrawals, transaction history, payout details, password reset, recharge, gift codes, loans, partner investment, invoices, and how to use the app.';
             }
+
+            if (hasAny('how to', 'where is', 'where to', 'can i', 'why', 'what is')) {
+                return 'I can help with RW Wallet features like earning, Add Fund, Withdraw Fund, Pay to Wallet, Mobile Recharge, Gift Codes, Loan, Become Partner, Track Income, Transaction History, Invoices, Profile, password reset, and admin support. Please ask using one of these app sections, for example “how to earn” or “where is transaction history”.';
+            }
+
             return {
                 unsupported: true,
-                text: 'Sorry, I can help only with RW Wallet, REVIEWS WORLD, account, transaction, withdrawal, recharge, profile, and app usage questions. Would you like me to transfer your problem to ADMIN?'
+                text: 'Sorry, I can help only with RW Wallet, REVIEWS WORLD, earning, account, wallet, transaction, withdrawal, add fund, pay to wallet, recharge, gift code, loan, partner investment, profile, and app usage questions. Would you like me to transfer your problem to ADMIN?'
             };
         };
 
