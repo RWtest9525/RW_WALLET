@@ -139,7 +139,7 @@ async function initSchema(d1) {
       id TEXT PRIMARY KEY,
       firebase_uid TEXT UNIQUE,
       email TEXT UNIQUE NOT NULL,
-      password_hash TEXT NOT NULL,
+      password_hash TEXT,
       created_at INTEGER NOT NULL,
       migrated_at INTEGER
     )
@@ -198,6 +198,31 @@ async function createUser(d1, { id, firebaseUid = null, email, passwordHash, mig
 
 async function findUserByEmail(d1, email) {
   return d1.first('SELECT * FROM users WHERE email = ? LIMIT 1', [normalizeEmail(email)]);
+}
+
+async function upsertFirebaseUser(d1, decodedToken) {
+  const firebaseUid = decodedToken.uid;
+  const email = normalizeEmail(decodedToken.email || `${firebaseUid}@firebase.local`);
+  const existing = await d1.first(
+    'SELECT * FROM users WHERE firebase_uid = ? OR email = ? LIMIT 1',
+    [firebaseUid, email]
+  );
+
+  if (existing) {
+    if (!existing.firebase_uid) {
+      await d1.query('UPDATE users SET firebase_uid = ? WHERE id = ?', [firebaseUid, existing.id]);
+      existing.firebase_uid = firebaseUid;
+    }
+    return existing;
+  }
+
+  return createUser(d1, {
+    id: firebaseUid,
+    firebaseUid,
+    email,
+    passwordHash: '',
+    migratedAt: nowMs()
+  });
 }
 
 async function recentChatHistory(d1, roomId, limit = 50) {
@@ -271,6 +296,25 @@ async function getR2Object(r2, key) {
 }
 
 function registerRoutes(app, { d1, r2 }) {
+  app.post('/api/session/firebase', async (req, res) => {
+    try {
+      const idToken = String(req.body.idToken || '');
+      if (!idToken) return res.status(400).json({ ok: false, error: 'FIREBASE_ID_TOKEN_REQUIRED' });
+
+      const decoded = await admin.auth().verifyIdToken(idToken);
+      const user = await upsertFirebaseUser(d1, decoded);
+
+      return res.json({
+        ok: true,
+        token: createAppToken(user),
+        user: { id: user.id, email: user.email, firebaseUid: user.firebase_uid }
+      });
+    } catch (error) {
+      console.error('Firebase session failed:', error);
+      return res.status(401).json({ ok: false, error: 'INVALID_FIREBASE_TOKEN' });
+    }
+  });
+
   app.post('/api/login', async (req, res) => {
     try {
       const email = normalizeEmail(req.body.email);
@@ -282,6 +326,7 @@ function registerRoutes(app, { d1, r2 }) {
 
       const existing = await findUserByEmail(d1, email);
       if (existing) {
+        if (!existing.password_hash) return res.status(401).json({ ok: false, error: 'USE_FIREBASE_SESSION' });
         const valid = await bcrypt.compare(password, existing.password_hash);
         if (!valid) return res.status(401).json({ ok: false, error: 'INVALID_LOGIN' });
 

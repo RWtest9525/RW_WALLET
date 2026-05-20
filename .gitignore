@@ -6,6 +6,10 @@
 temp.js
 *.tmp
 *.log
+.env
+.env.*
+!backend/.env.example
+backend/.env
 
 # OS files
 Thumbs.db
