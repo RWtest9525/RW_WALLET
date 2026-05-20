@@ -240,6 +240,7 @@
         }
 
         #bottom-nav {
+            background-color: #ffffff !important;
             padding-bottom: env(safe-area-inset-bottom);
         }
 
@@ -618,9 +619,8 @@
 
         .dark .page-header-fixed,
         .dark #bottom-nav {
-            background-color: rgba(15, 23, 42, 0.94) !important;
+            background-color: #0f172a !important;
             border-color: #2f3b52 !important;
-            backdrop-filter: blur(16px);
         }
 
         .dark .bottom-nav-icon {
@@ -1943,9 +1943,9 @@
         const renderModal = (title, content, actions, size = 'max-w-md', colorfulBorder = false) => {
             const borderClass = colorfulBorder ? 'colorful-border' : '';
             document.getElementById('modal-container').innerHTML = `
-                <div id="app-modal" class="fixed inset-0 z-40 flex items-center justify-center p-4">
+                <div id="app-modal" class="fixed inset-0 z-[80] flex items-center justify-center p-4">
                     <div class="fixed inset-0 modal-backdrop" onclick="window.closeModal()"></div>
-                    <div class="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl z-50 w-full ${size} max-h-[88dvh] overflow-hidden border border-gray-100 dark:border-gray-700 p-0 transform transition-all scale-95 opacity-0 animate-modal-in ${borderClass}">
+                    <div class="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl z-[90] w-full ${size} max-h-[88dvh] overflow-hidden border border-gray-100 dark:border-gray-700 p-0 transform transition-all scale-95 opacity-0 animate-modal-in ${borderClass}">
                         <div class="flex justify-between items-center mb-4">
                             <h3 class="text-lg font-semibold px-6 pt-6">${title}</h3>
                             <button onclick="window.closeModal()" class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 text-2xl px-6 pt-6">&times;</button>
