@@ -1471,14 +1471,14 @@
         const recordCloudTransaction = async (userId, item) => {
             try {
                 const token = await getBackendAuthToken();
-                await fetch(`${BACKEND_BASE_URL}/api/transactions`, {
+                await fetchWithTimeout(`${BACKEND_BASE_URL}/api/transactions`, {
                     method: 'POST',
                     headers: {
                         Authorization: `Bearer ${token}`,
                         'Content-Type': 'application/json'
                     },
                     body: JSON.stringify(serializeCloudTransaction(item, userId))
-                });
+                }, 5000);
             } catch (error) {
                 console.warn('Cloudflare transaction save failed:', error);
             }
@@ -1487,7 +1487,7 @@
         const recordCloudTransfer = async (senderItem, recipientItem, recipientUserId) => {
             try {
                 const token = await getBackendAuthToken();
-                await fetch(`${BACKEND_BASE_URL}/api/transactions/transfer`, {
+                await fetchWithTimeout(`${BACKEND_BASE_URL}/api/transactions/transfer`, {
                     method: 'POST',
                     headers: {
                         Authorization: `Bearer ${token}`,
@@ -1497,7 +1497,7 @@
                         sender: serializeCloudTransaction(senderItem, currentUser.uid),
                         recipient: serializeCloudTransaction(recipientItem, recipientUserId)
                     })
-                });
+                }, 5000);
             } catch (error) {
                 console.warn('Cloudflare transfer save failed:', error);
             }
@@ -6866,8 +6866,17 @@
                     });
                 });
 
-                await recordCloudTransfer(senderCloudTxn, recipientCloudTxn, recipientData.uid);
-                await syncRecentTransactionsToCloud(currentUser.uid);
+                currentUserData = {
+                    ...(currentUserData || {}),
+                    balance: Math.max(0, Number(currentUserData?.balance || 0) - amount)
+                };
+                document.getElementById('user-balance').textContent = formatCompactBalance(currentUserData.balance);
+                updateDollarBalanceDisplay(currentUserData.balance);
+                writeJsonCache(getUserCacheKey(currentUser.uid), sanitizeUserForCache(currentUserData, currentUser.uid));
+                Promise.allSettled([
+                    recordCloudTransfer(senderCloudTxn, recipientCloudTxn, recipientData.uid),
+                    syncRecentTransactionsToCloud(currentUser.uid)
+                ]).catch(error => console.warn('Pay to wallet background sync failed:', error));
                 showNotification(`Success! Sent ${formatCurrency(amount)} to ${recipientData.name || recipientData.mobile}`, false, true);
                 window.closeModal();
                 hidePage();
