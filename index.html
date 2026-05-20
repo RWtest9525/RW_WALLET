@@ -3027,8 +3027,11 @@
         const getSupportLogo = () => 'https://i.ibb.co/x8YBYwGG/6233389803554672153.jpg';
         const CHATBOT_ICON_URL = 'https://cdn-icons-png.flaticon.com/512/2040/2040946.png';
         const getVerifiedBadge = (extraClass = '') => `
-            <span class="inline-flex h-4 w-4 items-center justify-center bg-blue-500 text-white align-middle ${extraClass}" style="clip-path: polygon(50% 0%, 61% 11%, 76% 6%, 83% 20%, 98% 24%, 94% 39%, 100% 50%, 89% 61%, 94% 76%, 80% 83%, 76% 98%, 61% 94%, 50% 100%, 39% 89%, 24% 94%, 17% 80%, 2% 76%, 6% 61%, 0% 50%, 11% 39%, 6% 24%, 20% 17%, 24% 2%, 39% 6%);" title="Verified">
-                <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"></path></svg>
+            <span class="inline-flex h-5 w-5 shrink-0 items-center justify-center align-middle ${extraClass}" title="Verified">
+                <svg class="h-full w-full block" viewBox="0 0 24 24" aria-hidden="true">
+                    <path fill="#1683ff" d="M12 1.35 14.05 3.55l2.95-.72.88 2.9 2.89.88-.72 2.95L22.65 12l-2.6 2.44.72 2.95-2.89.88-.88 2.9-2.95-.72L12 22.65l-2.05-2.2-2.95.72-.88-2.9-2.89-.88.72-2.95L1.35 12l2.6-2.44-.72-2.95 2.89-.88.88-2.9 2.95.72L12 1.35Z"/>
+                    <path fill="none" stroke="#fff" stroke-width="2.55" stroke-linecap="round" stroke-linejoin="round" d="m7.25 12.15 3.05 3.05 6.55-6.65"/>
+                </svg>
             </span>`;
         const getPremiumLogoFrame = (innerHtml, sizeClass = 'h-14 w-14', extraClass = '') => `
             <div class="${sizeClass} ${extraClass} rounded-full bg-gradient-to-br from-indigo-600 via-blue-600 to-emerald-500 p-[2px] shadow-sm">
@@ -7267,13 +7270,7 @@
                 if (parts.length === 1) return parts[0].substring(0, 2).toUpperCase();
                 return (parts[0][0] + parts[1][0]).toUpperCase();
             };
-            const verifiedBadge = `
-                <span class="inline-flex h-5 w-5 shrink-0 items-center justify-center align-middle" title="Verified">
-                    <svg class="h-5 w-5" viewBox="0 0 24 24" aria-hidden="true">
-                        <path fill="#2f80ed" d="M12 1.5 14.1 3.7l3-.7.9 2.9 2.9.9-.7 3L22.5 12l-2.3 2.1.7 3-2.9.9-.9 2.9-3-.7L12 22.5l-2.1-2.3-3 .7-.9-2.9-2.9-.9.7-3L1.5 12l2.3-2.1-.7-3 2.9-.9.9-2.9 3 .7L12 1.5Z"/>
-                        <path fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" d="m7.3 12.2 3 3 6.4-6.5"/>
-                    </svg>
-                </span>`;
+            const verifiedBadge = getVerifiedBadge();
             const isVerifiedTransactionParty = (party = {}) =>
                 !!party.appLogo ||
                 isReviewsWorldName(party.name || '') ||
