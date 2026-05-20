@@ -1180,6 +1180,7 @@
         const recipientLookupCache = new Map();
         let lastAutoProcessCheckAt = 0;
         let activeWithdrawalHistoryFilter = { filter: 'today', fromDate: null, toDate: null };
+        let activeWithdrawMethod = '';
         let activeChatUnsubscribe = null;
         let backendAuthToken = '';
         let backendAuthPromise = null;
@@ -3312,6 +3313,7 @@
         // Show Withdraw Page with Professional Logos
         const showWithdrawPage = async () => {
             if (!currentUserData) return showNotification('User data not loaded. Please wait.', true);
+            await loadWithdrawalSettingsOnce();
 
             if (currentUserData.isFlagged) {
                 return showNotification('Your account is flagged. Please contact support.', true);
@@ -3401,9 +3403,12 @@
         };
 
 
-        const showWithdrawAmountPage = (method) => {
+        const showWithdrawAmountPage = async (method) => {
+            await loadWithdrawalSettingsOnce();
+            activeWithdrawMethod = method;
             let methodName = '';
             let methodDetails = '';
+            const minForMethod = getMinWithdrawalForMethod(method);
             const methodIconMap = {
                 upi: renderWithdrawMethodLogo('upi', 'UPI'),
                 bank: renderWithdrawMethodLogo('bank', 'Bank'),
@@ -3464,8 +3469,8 @@
                     <div class="space-y-4">
                         <div>
                             <label class="text-sm font-medium text-gray-500 dark:text-gray-400">Amount to Withdraw</label>
-                            <input type="number" id="withdraw-amount-input" placeholder="Enter amount (₹)" min="50" class="w-full mt-1 px-4 py-3 bg-gray-100 dark:bg-gray-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
-                            <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">Minimum withdrawal: ₹50</p>
+                            <input type="number" id="withdraw-amount-input" placeholder="Enter amount (₹)" min="${minForMethod}" class="w-full mt-1 px-4 py-3 bg-gray-100 dark:bg-gray-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+                            <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">Minimum withdrawal: ₹${minForMethod}</p>
                         </div>
                     </div>
                     
@@ -3481,8 +3486,9 @@
         };
 
         const handleWithdrawConfirmation = (amount, method, methodName) => {
-            if (isNaN(amount) || amount < 50) {
-                return showNotification('Minimum withdrawal amount is ₹50.', true);
+            const minForMethod = getMinWithdrawalForMethod(method);
+            if (isNaN(amount) || amount < minForMethod) {
+                return showNotification(`Minimum withdrawal for ${methodName} is ₹${minForMethod}.`, true);
             }
 
             if (!currentUserData || currentUserData.balance < amount) {
@@ -6106,7 +6112,8 @@
             };
         };
 
-        const showAdminWithdrawSettingsModal = () => {
+        const showAdminWithdrawSettingsModal = async () => {
+            await loadWithdrawalSettingsOnce(true);
             const content = `
                 <div class="space-y-4">
                     <p class="text-sm text-gray-500 dark:text-gray-400">Configure withdrawal limits and rules for all users.</p>
@@ -6159,17 +6166,21 @@
                     min_withdrawal_upi: minUpi,
                     min_withdrawal_bank: minBank,
                     min_withdrawal_redeem: minRedeem,
+                    min_withdrawal_amount: Math.min(minUpi, minBank, minRedeem),
                     max_withdrawal_per_day: maxDay,
                     max_pending_withdrawals: maxPending,
                     updatedAt: serverTimestamp()
                 }, { merge: true });
 
-                // Update local variables
-                minWithdrawalUpi = minUpi;
-                minWithdrawalBank = minBank;
-                minWithdrawalRedeem = minRedeem;
-                maxWithdrawalPerDay = maxDay;
-                maxPendingWithdrawalsPerUser = maxPending;
+                applyWithdrawalConfig({
+                    min_withdrawal_upi: minUpi,
+                    min_withdrawal_bank: minBank,
+                    min_withdrawal_redeem: minRedeem,
+                    min_withdrawal_amount: Math.min(minUpi, minBank, minRedeem),
+                    max_withdrawal_per_day: maxDay,
+                    max_pending_withdrawals: maxPending
+                });
+                withdrawalSettingsLoadedAt = Date.now();
 
                 showNotification('Withdrawal settings saved successfully!');
                 window.closeModal();
@@ -7092,6 +7103,59 @@
         let minWithdrawalRedeem = 100;
         let maxWithdrawalPerDay = 5000;
         let maxPendingWithdrawalsPerUser = 1;
+        let withdrawalSettingsLoadedAt = 0;
+        let withdrawalSettingsLoadPromise = null;
+
+        const setNumberSetting = (value, fallback) => {
+            const numberValue = Number(value);
+            return Number.isFinite(numberValue) && numberValue >= 0 ? numberValue : fallback;
+        };
+
+        const applyWithdrawalConfig = (config = {}) => {
+            minWithdrawalUpi = setNumberSetting(config.min_withdrawal_upi, minWithdrawalUpi);
+            minWithdrawalBank = setNumberSetting(config.min_withdrawal_bank, minWithdrawalBank);
+            minWithdrawalRedeem = setNumberSetting(config.min_withdrawal_redeem, minWithdrawalRedeem);
+            maxWithdrawalPerDay = setNumberSetting(config.max_withdrawal_per_day, maxWithdrawalPerDay);
+            maxPendingWithdrawalsPerUser = Math.max(1, setNumberSetting(config.max_pending_withdrawals, maxPendingWithdrawalsPerUser));
+            minWithdrawalAmount = setNumberSetting(
+                config.min_withdrawal_amount,
+                Math.min(minWithdrawalUpi, minWithdrawalBank, minWithdrawalRedeem)
+            );
+            updateMinWithdrawalInfo();
+            const amountInput = document.getElementById('withdraw-amount-input');
+            if (amountInput && activeWithdrawMethod) {
+                const minForMethod = getMinWithdrawalForMethod(activeWithdrawMethod);
+                amountInput.min = String(minForMethod);
+                const helper = amountInput.parentElement?.querySelector('p');
+                if (helper) helper.textContent = `Minimum withdrawal: ₹${minForMethod}`;
+            }
+        };
+
+        const loadWithdrawalSettingsOnce = async (force = false) => {
+            const now = Date.now();
+            if (!force && withdrawalSettingsLoadedAt && now - withdrawalSettingsLoadedAt < 30000) return;
+            if (withdrawalSettingsLoadPromise && !force) return withdrawalSettingsLoadPromise;
+
+            withdrawalSettingsLoadPromise = getDoc(doc(db, `artifacts/${appId}/settings`, 'app_config'))
+                .then(snapshot => {
+                    if (snapshot.exists()) applyWithdrawalConfig(snapshot.data());
+                    withdrawalSettingsLoadedAt = Date.now();
+                })
+                .catch(error => {
+                    console.error('Withdrawal settings load failed:', error);
+                })
+                .finally(() => {
+                    withdrawalSettingsLoadPromise = null;
+                });
+
+            return withdrawalSettingsLoadPromise;
+        };
+
+        const getMinWithdrawalForMethod = (method) => {
+            if (method === 'upi') return minWithdrawalUpi;
+            if (method === 'bank') return minWithdrawalBank;
+            return minWithdrawalRedeem;
+        };
 
         // --- DUPLICATE PAYMENT PREVENTION ---
         const preventDuplicateRequest = (requestType, timeout = 3000) => {
@@ -7179,9 +7243,11 @@
             }
 
             try {
+                await loadWithdrawalSettingsOnce();
                 // Check minimum withdrawal
-                if (amount < minWithdrawalAmount) {
-                    showNotification(`Minimum withdrawal amount is ₹${minWithdrawalAmount}`, true);
+                const minForMethod = getMinWithdrawalForMethod(method);
+                if (amount < minForMethod) {
+                    showNotification(`Minimum withdrawal for ${methodName} is ₹${minForMethod}`, true);
                     return;
                 }
 
@@ -7199,16 +7265,8 @@
                 if (versionDoc.exists()) {
                     const config = versionDoc.data();
 
-                    // Set min withdrawal amount
-                    if (config.min_withdrawal_amount) {
-                        minWithdrawalAmount = config.min_withdrawal_amount;
-                        updateMinWithdrawalInfo();
-                    }
-                    if (config.min_withdrawal_upi) minWithdrawalUpi = config.min_withdrawal_upi;
-                    if (config.min_withdrawal_bank) minWithdrawalBank = config.min_withdrawal_bank;
-                    if (config.min_withdrawal_redeem) minWithdrawalRedeem = config.min_withdrawal_redeem;
-                    if (config.max_withdrawal_per_day) maxWithdrawalPerDay = config.max_withdrawal_per_day;
-                    if (config.max_pending_withdrawals) maxPendingWithdrawalsPerUser = config.max_pending_withdrawals;
+                    applyWithdrawalConfig(config);
+                    withdrawalSettingsLoadedAt = Date.now();
 
                     // Check for updates (optional)
                     if (config.latest_version && config.latest_version !== APP_VERSION) {
@@ -7220,8 +7278,17 @@
             }
         };
 
+        const startWithdrawalSettingsListener = () => {
+            onSnapshot(doc(db, `artifacts/${appId}/settings`, 'app_config'), (snapshot) => {
+                if (!snapshot.exists()) return;
+                applyWithdrawalConfig(snapshot.data());
+                withdrawalSettingsLoadedAt = Date.now();
+            }, (error) => console.error('Withdrawal settings listener failed:', error));
+        };
+
         // Check version on load
         checkAppVersion();
+        startWithdrawalSettingsListener();
     </script>
 </body>
 
