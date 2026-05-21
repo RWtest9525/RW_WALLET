@@ -60,7 +60,7 @@
         }
 
         #main-content {
-            padding-bottom: calc(5.25rem + env(safe-area-inset-bottom));
+            padding-bottom: calc(7.75rem + env(safe-area-inset-bottom));
         }
 
         #dashboard-content {
@@ -274,10 +274,17 @@
         }
 
         #bottom-nav {
+            left: max(0.75rem, env(safe-area-inset-left));
+            right: max(0.75rem, env(safe-area-inset-right));
+            bottom: calc(0.85rem + env(safe-area-inset-bottom));
+            width: auto !important;
+            max-width: 36rem;
+            margin: 0 auto;
+            border-radius: 1.75rem;
             background: linear-gradient(180deg, rgba(255, 255, 255, 0.94), #ffffff) !important;
-            padding-bottom: env(safe-area-inset-bottom);
-            border-top: 1px solid rgba(226, 232, 240, 0.95);
-            box-shadow: 0 -18px 42px rgba(15, 23, 42, 0.14);
+            padding-bottom: 0.18rem;
+            border: 1px solid rgba(226, 232, 240, 0.95);
+            box-shadow: 0 22px 60px rgba(15, 23, 42, 0.2), 0 8px 22px rgba(37, 99, 235, 0.1);
             backdrop-filter: blur(18px);
             overflow: hidden;
         }
@@ -301,9 +308,10 @@
         }
 
         #bottom-nav-grid {
-            min-height: 5.35rem;
+            min-height: 5.1rem;
             position: relative;
             z-index: 1;
+            padding-bottom: 0.22rem;
         }
 
         .bottom-nav-btn>span:last-child {
