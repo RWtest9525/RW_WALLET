@@ -1412,16 +1412,24 @@
             const timestamp = timestampToMillis(item.timestamp || item.requestedAt || item.createdAt || item.processedAt) || Date.now();
             const existingKey = String(item.key || '');
             if (existingKey.startsWith('req-')) return existingKey;
+            const requestId = item.requestId || item.request_id;
+            const type = normalizeTransactionType(item);
+            if (requestId && (type === 'withdrawal' || type === 'mobile_recharge')) return `req-${requestId}`;
             return String(item.transactionId || item.adminTransactionId || item.requestId || item.id || existingKey || `${item.type || 'tx'}-${timestamp}-${item.amount || 0}-${index}`);
         };
 
         const mergeTransactionsByKey = (...groups) => {
             const merged = new Map();
+            const statusRank = (item = {}) => ['completed', 'rejected', 'failed'].includes(String(item.status || '').toLowerCase()) ? 2 : 1;
             groups.flat().forEach((item, index) => {
                 if (!item) return;
                 const normalized = normalizeTransactionForHistory(item, index);
                 const key = getTransactionKey(normalized, index);
-                merged.set(key, { ...(merged.get(key) || {}), ...normalized, key });
+                const existing = merged.get(key) || {};
+                const next = statusRank(normalized) >= statusRank(existing)
+                    ? { ...existing, ...normalized, key }
+                    : { ...normalized, ...existing, key };
+                merged.set(key, next);
             });
             return Array.from(merged.values())
                 .sort((a, b) => timestampToMillis(b.timestamp || b.requestedAt) - timestampToMillis(a.timestamp || a.requestedAt));
@@ -8081,7 +8089,7 @@
                 const transactionPayload = {
                     type: 'withdrawal',
                     amount,
-                    timestamp: serverTimestamp(),
+                    timestamp: requestData.requestedAt || requestData.requested_at || serverTimestamp(),
                     status: newStatus === 'completed' ? 'completed' : 'rejected',
                     requestId,
                     transactionId: txnId || generateTransactionId(),
@@ -8116,7 +8124,7 @@
                         await updateDoc(userRef, { balance: increment(amount) });
                     }
                 }
-                await addDoc(collection(userRef, 'transactions'), transactionPayload);
+                await setDoc(doc(collection(userRef, 'transactions'), getSafeTransactionDocId(`withdrawal-${requestId}`)), transactionPayload, { merge: true });
 
                 await updateCloudFundRequestStatus(requestId, newStatus, {
                     ...(requestData || {}),
