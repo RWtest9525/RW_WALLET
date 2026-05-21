@@ -4286,49 +4286,73 @@
         };
 
         const getLatestTransactionsForBot = async (limit = 5) => {
-            const cachedHistory = unifiedHistoryCache?.length
-                ? unifiedHistoryCache
-                : readHistoryItemsFromCache(currentUser?.uid || '');
+            if (!currentUser?.uid) return [];
+            const cachedHistory = mergeTransactionsByKey(
+                unifiedHistoryCache || [],
+                readHistoryItemsFromCache(currentUser.uid)
+            );
+
             try {
-                if (currentUser?.uid) {
-                    const firebaseHistory = await loadFirebaseTransactions(currentUser.uid, Math.max(limit, 25));
-                    if (firebaseHistory.length) return firebaseHistory.slice(0, limit);
-                }
+                const mergedHistory = await prefetchTransactionHistory(currentUser.uid, { force: !cachedHistory.length });
+                const combinedHistory = mergeTransactionsByKey(mergedHistory || [], cachedHistory);
+                return combinedHistory.slice(0, limit);
             } catch (error) {
-                console.warn('Bot Firebase transaction lookup failed:', error);
+                console.warn('Bot merged transaction lookup failed:', error);
+                return cachedHistory.slice(0, limit);
             }
-            return (cachedHistory || []).slice(0, limit);
         };
 
         const getBotTransactionSummary = (item = {}) => {
             const type = normalizeTransactionType(item);
-            const amount = formatCurrencyAbs(item.amount || item.chargeAmount || 0);
-            const status = item.status || 'completed';
-            const senderName = item.senderName || item.fromName || item.payerName || '';
-            const recipientName = item.recipientName || item.toName || item.payeeName || '';
+            const amountValue = Number(item.chargeAmount ?? item.amount ?? 0);
+            const amountText = formatCurrencyAbs(amountValue);
+            const status = String(item.status || 'completed').toLowerCase();
+            const statusText = status.charAt(0).toUpperCase() + status.slice(1);
+            const senderName = item.senderName || item.fromName || item.payerName || item.senderMobile || '';
+            const recipientName = item.recipientName || item.toName || item.payeeName || item.recipientMobile || '';
             const methodName = item.method || getWithdrawalMethodName(item.methodId || item.paymentMethod, '');
             const adminName = 'REVIEWS WORLD';
+            const dateText = formatDateDDMMYY(item.timestamp || item.requestedAt || item.processedAt);
 
             let title = 'Wallet transaction';
-            if (type === 'debit') {
-                title = `Paid to ${recipientName || item.recipientMobile || 'user'}`;
-            } else if (type === 'wallet_transfer') {
-                title = Number(item.amount || 0) < 0
-                    ? `Paid to ${recipientName || item.recipientMobile || 'user'}`
-                    : `Received from ${senderName || item.senderMobile || 'user'}`;
-            } else if (type === 'credit') {
-                title = `Received from ${item.isAdminTransaction ? adminName : (senderName || adminName)}`;
+            let sign = amountValue < 0 ? '-' : '+';
+
+            if (type === 'wallet_transfer') {
+                const isOutgoing = amountValue < 0 || item.direction === 'sent' || item.isSender;
+                sign = isOutgoing ? '-' : '+';
+                title = isOutgoing
+                    ? `Payment to ${recipientName || 'user'}`
+                    : `Received from ${senderName || 'user'}`;
+            } else if (type === 'debit') {
+                sign = '-';
+                title = recipientName
+                    ? `Debit to ${recipientName}`
+                    : (item.comment || item.remarks || 'Admin debit');
             } else if (type === 'withdrawal') {
-                title = methodName ? `Withdrawal to ${methodName}` : 'Withdrawal request';
+                sign = '-';
+                title = methodName ? `Withdrawal (${methodName})` : 'Withdrawal request';
             } else if (type === 'mobile_recharge') {
-                title = `Mobile recharge for ${item.mobileNumber || 'saved number'}`;
+                sign = '-';
+                title = `Mobile recharge${item.mobileNumber ? ` for ${item.mobileNumber}` : ''}`;
             } else if (type === 'gift_card') {
+                sign = '+';
                 title = `Gift code redeemed${item.giftCode ? ` (${item.giftCode})` : ''}`;
+            } else if (type === 'credit') {
+                sign = '+';
+                title = senderName && senderName !== adminName
+                    ? `Received from ${senderName}`
+                    : (item.comment || item.remarks || `Received from ${adminName}`);
+            } else if (amountValue < 0) {
+                sign = '-';
+                title = item.comment || item.remarks || String(item.type || 'Debit').replace(/_/g, ' ');
             } else if (item.type) {
-                title = String(item.type).replace(/_/g, ' ');
+                title = item.comment || item.remarks || String(item.type).replace(/_/g, ' ');
             }
 
-            return `${title} - ${amount} - ${status}`;
+            const balanceAfter = getExplicitBalanceAfter(item);
+            const balanceText = balanceAfter !== null ? `, balance ${formatCurrency(balanceAfter)}` : '';
+            const reasonText = item.rejectionReason ? `, reason: ${item.rejectionReason}` : '';
+            return `${title} - ${sign}${amountText} - ${statusText} - ${dateText}${balanceText}${reasonText}`;
         };
 
         const getRevyBotReply = async (question) => {
