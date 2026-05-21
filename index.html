@@ -2360,14 +2360,13 @@
                     const userDoc = await getDoc(doc(db, `artifacts/${appId}/public/data/users`, cred.user.uid));
                     if (userDoc.exists() && userDoc.data().isFlagged) {
                         const data = userDoc.data();
-                        let banMsg = `Your account has been suspended.\nReason: ${data.banReason || 'No reason specified.'}`;
+                        let banMsg = getBanMessage(data);
 
                         if (data.banExpiry) {
-                            const expiry = data.banExpiry.toDate();
+                            const expiry = getBanExpiryDate(data.banExpiry);
                             // Check if ban has expired
-                            if (new Date() < expiry) {
-                                banMsg += `\nSuspension ends on: ${expiry.toLocaleString()}`;
-                                await auth.signOut();
+                            if (expiry && new Date() < expiry) {
+                                await signOut(auth);
                                 throw new Error(banMsg);
                             } else {
                                 // Ban expired, auto-unflag
@@ -2378,8 +2377,7 @@
                                 });
                             }
                         } else {
-                            banMsg += `\nThis is a permanent suspension.`;
-                            await auth.signOut();
+                            await signOut(auth);
                             throw new Error(banMsg);
                         }
                     }
@@ -2453,6 +2451,44 @@
                 console.error("Error checking pending withdrawal:", e);
                 return false;
             }
+        };
+
+        const getBanExpiryDate = (banExpiry) => {
+            if (!banExpiry) return null;
+            if (banExpiry.toDate) return banExpiry.toDate();
+            const date = new Date(banExpiry);
+            return Number.isNaN(date.getTime()) ? null : date;
+        };
+
+        const getBanMessage = (data = {}) => {
+            const reason = data.banReason || 'No reason specified.';
+            const expiry = getBanExpiryDate(data.banExpiry);
+            let message = `Your account has been suspended.\nReason: ${reason}`;
+            message += expiry ? `\nSuspension ends on: ${expiry.toLocaleString('en-IN')}` : '\nThis is a permanent suspension.';
+            return message;
+        };
+
+        const enforceCurrentUserBan = async (userId, userRef, data = {}) => {
+            if (userId === ADMIN_UID || !data.isFlagged) return false;
+            const expiry = getBanExpiryDate(data.banExpiry);
+            if (expiry && new Date() >= expiry) {
+                await updateDoc(userRef, {
+                    isFlagged: false,
+                    banReason: deleteField(),
+                    banExpiry: deleteField()
+                });
+                return false;
+            }
+            const message = getBanMessage(data);
+            sessionStorage.setItem('lastBanMessage', message);
+            localStorage.removeItem('lastLoggedInUser');
+            document.getElementById('auth-screen').classList.remove('hidden');
+            document.getElementById('main-content').classList.add('hidden');
+            setMainChrome(false);
+            const authError = document.getElementById('auth-error');
+            if (authError) authError.textContent = message;
+            await signOut(auth);
+            return true;
         };
 
         // FIXED: Improved auth state change handler without freezing
@@ -2550,6 +2586,12 @@
                 document.getElementById('main-content').classList.add('hidden');
                 setMainChrome(false);
                 document.getElementById('app-footer')?.classList.add('app-footer-hidden');
+                const banMessage = sessionStorage.getItem('lastBanMessage');
+                if (banMessage) {
+                    const authError = document.getElementById('auth-error');
+                    if (authError) authError.textContent = banMessage;
+                    sessionStorage.removeItem('lastBanMessage');
+                }
 
                 closeSlideMenu();
             }
@@ -2560,10 +2602,15 @@
             console.log(`Initializing user listeners for ${userId}`);
 
             const userDocRef = doc(db, `artifacts/${appId}/public/data/users`, userId);
-            unsubscribers.push(onSnapshot(userDocRef, (doc) => {
+            unsubscribers.push(onSnapshot(userDocRef, async (doc) => {
                 if (doc.exists()) {
                     console.log("User data snapshot received:", doc.data());
                     const data = doc.data();
+                    const isBanned = await enforceCurrentUserBan(userId, userDocRef, data).catch(e => {
+                        console.error('Ban enforcement failed:', e);
+                        return false;
+                    });
+                    if (isBanned) return;
                     document.getElementById('user-balance').textContent = formatCompactBalance(data.balance);
                     updateDollarBalanceDisplay(data.balance);
                     currentUserData = data;
@@ -8355,6 +8402,29 @@
         };
 
         const handleFlagUser = async (userId, currentlyFlagged) => {
+            const userRef = doc(db, `artifacts/${appId}/public/data/users`, userId);
+            if (currentlyFlagged) {
+                try {
+                    await updateDoc(userRef, {
+                        isFlagged: false,
+                        banReason: deleteField(),
+                        banExpiry: deleteField()
+                    });
+                    allUsersCache = allUsersCache.map(u => u.id === userId ? {
+                        ...u,
+                        isFlagged: false,
+                        banReason: undefined,
+                        banExpiry: undefined
+                    } : u);
+                    updateAdminUserListView();
+                    showNotification('User unflagged successfully!');
+                } catch (e) {
+                    console.error("Unflag user failed:", e);
+                    showNotification(`Error: ${e.message}`, true);
+                }
+                return;
+            }
+
             const action = currentlyFlagged ? 'Unban' : 'Ban/Suspend';
             const content = `
                 <div class="space-y-4">
@@ -8381,7 +8451,6 @@
 
             document.getElementById('confirm-flag-btn').onclick = async () => {
                 try {
-                    const userRef = doc(db, `artifacts/${appId}/public/data/users`, userId);
                     let updateData = { isFlagged: !currentlyFlagged };
 
                     if (!currentlyFlagged) {
@@ -8413,6 +8482,13 @@
                     }
 
                     await updateDoc(userRef, updateData);
+                    allUsersCache = allUsersCache.map(u => u.id === userId ? {
+                        ...u,
+                        isFlagged: true,
+                        banReason: updateData.banReason,
+                        banExpiry: updateData.banExpiry || null
+                    } : u);
+                    updateAdminUserListView();
                     showNotification(`User ${currentlyFlagged ? 'unbanned' : 'banned'} successfully!`);
                     window.closeModal();
                 } catch (e) {
