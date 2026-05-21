@@ -5178,15 +5178,76 @@
                             <button data-delete-notification="${item.id}" class="shrink-0 rounded-xl bg-red-50 dark:bg-red-900/20 px-3 py-2 text-xs font-black text-red-600 dark:text-red-300">Delete</button>
                         </div>
                         <div class="mt-4 grid grid-cols-3 gap-2 text-center">
-                            <div class="rounded-xl bg-blue-50 dark:bg-blue-900/20 p-3"><p class="text-[10px] font-black uppercase text-blue-600 dark:text-blue-300">Delivered</p><p class="text-lg font-black">${item.deliveredCount}</p></div>
-                            <div class="rounded-xl bg-emerald-50 dark:bg-emerald-900/20 p-3"><p class="text-[10px] font-black uppercase text-emerald-600 dark:text-emerald-300">Read</p><p class="text-lg font-black">${item.readCount}</p></div>
-                            <div class="rounded-xl bg-red-50 dark:bg-red-900/20 p-3"><p class="text-[10px] font-black uppercase text-red-600 dark:text-red-300">Unread</p><p class="text-lg font-black">${item.unreadCount}</p></div>
+                            <button data-notification-recipients="${item.id}" data-recipient-filter="all" class="rounded-xl bg-blue-50 dark:bg-blue-900/20 p-3 hover:ring-2 hover:ring-blue-300 transition"><p class="text-[10px] font-black uppercase text-blue-600 dark:text-blue-300">Delivered</p><p class="text-lg font-black">${item.deliveredCount}</p></button>
+                            <button data-notification-recipients="${item.id}" data-recipient-filter="read" class="rounded-xl bg-emerald-50 dark:bg-emerald-900/20 p-3 hover:ring-2 hover:ring-emerald-300 transition"><p class="text-[10px] font-black uppercase text-emerald-600 dark:text-emerald-300">Read</p><p class="text-lg font-black">${item.readCount}</p></button>
+                            <button data-notification-recipients="${item.id}" data-recipient-filter="unread" class="rounded-xl bg-red-50 dark:bg-red-900/20 p-3 hover:ring-2 hover:ring-red-300 transition"><p class="text-[10px] font-black uppercase text-red-600 dark:text-red-300">Unread</p><p class="text-lg font-black">${item.unreadCount}</p></button>
                         </div>
                     </article>`).join('')
                 : '<div class="rounded-2xl bg-white dark:bg-gray-800 border border-gray-100 dark:border-gray-700 p-8 text-center text-sm text-gray-500 dark:text-gray-400 shadow-sm">No notifications sent yet.</div>';
+            list.querySelectorAll('[data-notification-recipients]').forEach(button => {
+                button.onclick = () => showNotificationRecipientsModal(button.dataset.notificationRecipients, button.dataset.recipientFilter || 'all');
+            });
             list.querySelectorAll('[data-delete-notification]').forEach(button => {
                 button.onclick = () => deleteAdminNotification(button.dataset.deleteNotification);
             });
+        };
+
+        const fetchNotificationRecipients = async (notificationId) => {
+            const token = await getBackendAuthToken();
+            const response = await fetchWithTimeout(`${BACKEND_BASE_URL}/api/admin/notifications/${encodeURIComponent(notificationId)}/recipients?limit=3000`, {
+                headers: { Authorization: `Bearer ${token}` }
+            }, 8000);
+            const data = await response.json().catch(() => ({}));
+            if (!response.ok || !data.ok) throw new Error(data.error || 'Recipient list load failed');
+            return data.recipients || [];
+        };
+
+        const showNotificationRecipientsModal = async (notificationId, filter = 'all') => {
+            const notification = adminNotificationsCache.find(item => item.id === notificationId);
+            renderModal('Notification Readers',
+                `<div class="space-y-3">
+                    <div class="rounded-xl bg-gray-50 dark:bg-gray-700/60 p-3">
+                        <p class="text-xs font-black uppercase text-gray-400">Message</p>
+                        <p class="mt-1 text-sm font-bold text-gray-900 dark:text-white">${escapeHtml(notification?.title || 'REVIEWS WORLD')}</p>
+                    </div>
+                    <div id="notification-reader-list" class="space-y-2">
+                        <p class="text-center text-sm text-gray-500 dark:text-gray-400 py-6">Loading readers...</p>
+                    </div>
+                </div>`,
+                `<button onclick="window.closeModal()" class="px-4 py-2 text-sm bg-blue-600 text-white rounded-lg">Close</button>`,
+                'max-w-lg'
+            );
+            try {
+                await ensureAdminChatUsersLoaded();
+                const recipients = await fetchNotificationRecipients(notificationId);
+                const filtered = recipients.filter(row => {
+                    if (filter === 'read') return !!row.readAt;
+                    if (filter === 'unread') return !row.readAt;
+                    return true;
+                });
+                const userMap = new Map(allUsersCache.map(user => [String(user.id || user.uid || ''), user]));
+                const list = document.getElementById('notification-reader-list');
+                if (!list) return;
+                list.innerHTML = filtered.length
+                    ? filtered.map(row => {
+                        const user = userMap.get(String(row.userId)) || {};
+                        return `
+                            <div class="flex items-center gap-3 rounded-xl border border-gray-100 dark:border-gray-700 bg-white dark:bg-gray-800 p-3">
+                                <div class="h-10 w-10 shrink-0 rounded-full bg-blue-50 dark:bg-blue-900/30 flex items-center justify-center text-xs font-black text-blue-700 dark:text-blue-200">${escapeHtml((user.name || user.email || 'U').slice(0, 2).toUpperCase())}</div>
+                                <div class="min-w-0 flex-1">
+                                    <p class="font-bold text-sm text-gray-900 dark:text-white truncate">${escapeHtml(user.name || 'User')}</p>
+                                    <p class="text-xs text-gray-500 dark:text-gray-400 truncate">${escapeHtml(user.mobile || user.phoneNumber || user.email || row.userId)}</p>
+                                    <p class="text-[10px] text-gray-400 dark:text-gray-500">${row.readAt ? `Read: ${formatDateDDMMYY(row.readAt)}` : `Delivered: ${formatDateDDMMYY(row.deliveredAt)}`}</p>
+                                </div>
+                                <span class="rounded-full px-2 py-1 text-[10px] font-black ${row.readAt ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300' : 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300'}">${row.readAt ? 'READ' : 'UNREAD'}</span>
+                            </div>`;
+                    }).join('')
+                    : `<p class="text-center text-sm text-gray-500 dark:text-gray-400 py-6">No ${filter === 'all' ? 'delivered users' : filter + ' users'} found.</p>`;
+            } catch (error) {
+                console.error('Notification readers load failed:', error);
+                const list = document.getElementById('notification-reader-list');
+                if (list) list.innerHTML = '<p class="text-center text-sm text-red-500 py-6">Could not load reader list.</p>';
+            }
         };
 
         const updateAdminNotificationTargetPreview = async () => {

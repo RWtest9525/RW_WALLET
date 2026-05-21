@@ -668,6 +668,25 @@ async function listAdminNotifications(d1, limit = 80) {
   return rows.map(normalizeNotificationRow);
 }
 
+async function listNotificationRecipients(d1, notificationId, limit = 1000) {
+  const rows = await d1.all(
+    `SELECT notification_id, user_id, delivered_at, read_at
+     FROM notification_recipients
+     WHERE notification_id = ?
+     ORDER BY
+       CASE WHEN read_at IS NOT NULL THEN 0 ELSE 1 END,
+       COALESCE(read_at, delivered_at) DESC
+     LIMIT ?`,
+    [notificationId, limit]
+  );
+  return rows.map((row) => ({
+    notificationId: row.notification_id,
+    userId: row.user_id,
+    deliveredAt: row.delivered_at || 0,
+    readAt: row.read_at || null
+  }));
+}
+
 async function markNotificationRead(d1, notificationId, userId, readAt = nowMs()) {
   await d1.query(
     `UPDATE notification_recipients
@@ -924,6 +943,14 @@ function registerRoutes(app, { d1, r2 }) {
     }
     const notifications = await listAdminNotifications(d1, Math.min(Number(req.query.limit || 80), 200));
     res.json({ ok: true, notifications });
+  });
+
+  app.get('/api/admin/notifications/:notificationId/recipients', requireHttpAuth, async (req, res) => {
+    if (!req.auth.isAdmin) {
+      return res.status(403).json({ ok: false, error: 'ADMIN_REQUIRED' });
+    }
+    const recipients = await listNotificationRecipients(d1, req.params.notificationId, Math.min(Number(req.query.limit || 1000), 3000));
+    res.json({ ok: true, recipients });
   });
 
   app.post('/api/admin/notifications', requireHttpAuth, async (req, res) => {
