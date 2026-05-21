@@ -617,11 +617,15 @@ async function createNotification(d1, { title = '', message = '', audience = 'se
     [id, String(title || '').trim().slice(0, 160), cleanMessage, senderId, String(audience || 'selected').slice(0, 40), createdAt, expiresAt]
   );
 
-  for (const userId of uniqueRecipients) {
+  const chunkSize = 100;
+  for (let index = 0; index < uniqueRecipients.length; index += chunkSize) {
+    const chunk = uniqueRecipients.slice(index, index + chunkSize);
+    const valuesSql = chunk.map(() => '(?, ?, ?, NULL)').join(', ');
+    const params = chunk.flatMap((userId) => [id, userId, createdAt]);
     await d1.query(
       `INSERT OR IGNORE INTO notification_recipients (notification_id, user_id, delivered_at, read_at)
-       VALUES (?, ?, ?, NULL)`,
-      [id, userId, createdAt]
+       VALUES ${valuesSql}`,
+      params
     );
   }
 
