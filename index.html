@@ -1788,7 +1788,7 @@
                 amount: Number(request.amount || details.amount || 0),
                 status: request.status || details.status || 'pending',
                 type: request.type || details.type || 'withdrawal',
-                method: details.method || request.method || getWithdrawalMethodName(details.methodId || request.methodId, 'N/A'),
+                method: getWithdrawalDisplayMethodName({ ...details, ...request }, 'N/A'),
                 methodId: details.methodId || request.methodId || details.paymentMethod || request.paymentMethod || '',
                 userName: details.userName || request.userName || request.user_name || 'No Name',
                 userEmail: details.userEmail || request.userEmail || request.user_email || '',
@@ -3716,7 +3716,7 @@
                                         <td class="px-4 py-4 font-black text-red-600 dark:text-red-300">${formatCurrencyAbs(item.amount || 0)}</td>
                                         <td class="px-4 py-4 text-slate-600 dark:text-slate-300">${formatDateDDMMYY(item.timestamp || item.requestedAt)}</td>
                                         <td class="px-4 py-4 text-slate-600 dark:text-slate-300">${formatDateDDMMYY(item.processedAt || item.timestamp)}</td>
-                                        <td class="px-4 py-4"><span class="rounded-full bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-200 px-3 py-1 text-xs font-bold">${escapeHtml(item.method || getWithdrawalMethodName(item.methodId || item.paymentMethod, 'N/A'))}</span></td>
+                                        <td class="px-4 py-4"><span class="rounded-full bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-200 px-3 py-1 text-xs font-bold">${escapeHtml(getWithdrawalDisplayMethodName(item, 'N/A'))}</span></td>
                                         <td class="px-4 py-4 text-slate-600 dark:text-slate-300 max-w-[220px] break-words">${escapeHtml(getWithdrawalDetailText(item))}</td>
                                         <td class="px-4 py-4 font-mono text-xs text-slate-500 dark:text-slate-400">${escapeHtml(item.adminTransactionId || item.transactionId || 'N/A')}</td>
                                     </tr>`).join('')}
@@ -3794,7 +3794,7 @@
                 text(formatPdfCurrency(item.amount || 0), 50, y, 8, 'F2', '0.78 0.12 0.12');
                 text(truncatePdfText(formatDateDDMMYY(item.timestamp || item.requestedAt), 16), 125, y, 8, 'F1', '0.18 0.24 0.33');
                 text(truncatePdfText(formatDateDDMMYY(item.processedAt || item.timestamp), 16), 225, y, 8, 'F1', '0.18 0.24 0.33');
-                text(truncatePdfText(item.method || getWithdrawalMethodName(item.methodId || item.paymentMethod, 'N/A'), 10), 325, y, 8, 'F2', '0.05 0.35 0.75');
+                text(truncatePdfText(getWithdrawalDisplayMethodName(item, 'N/A'), 10), 325, y, 8, 'F2', '0.05 0.35 0.75');
                 text(truncatePdfText(getWithdrawalDetailText(item), 18), 395, y, 8, 'F1', '0.18 0.24 0.33');
                 text(truncatePdfText(item.adminTransactionId || item.transactionId || 'N/A', 10), 505, y, 8, 'F1', '0.18 0.24 0.33');
                 y -= 30;
@@ -4484,7 +4484,7 @@
             const statusText = status.charAt(0).toUpperCase() + status.slice(1);
             const senderName = item.senderName || item.fromName || item.payerName || item.senderMobile || '';
             const recipientName = item.recipientName || item.toName || item.payeeName || item.recipientMobile || '';
-            const methodName = item.method || getWithdrawalMethodName(item.methodId || item.paymentMethod, '');
+            const methodName = getWithdrawalDisplayMethodName(item, '');
             const adminName = 'REVIEWS WORLD';
             const dateText = formatDateDDMMYY(item.timestamp || item.requestedAt || item.processedAt);
 
@@ -4551,7 +4551,7 @@
             if (hasAny('withdraw', 'withdrawal', 'payout', 'payment pending', 'pending')) {
                 const pendingWithdrawal = await getPendingWithdrawalForBot();
                 if (pendingWithdrawal) {
-                    return `Your withdrawal request of ${formatCurrency(pendingWithdrawal.amount || 0)} is pending. Method: ${pendingWithdrawal.method || getWithdrawalMethodName(pendingWithdrawal.methodId) || 'saved payout method'}. It is not rejected. Admin will process it soon if details are correct.`;
+                    return `Your withdrawal request of ${formatCurrency(pendingWithdrawal.amount || 0)} is pending. Method: ${getWithdrawalDisplayMethodName(pendingWithdrawal, 'saved payout method')}. It is not rejected. Admin will process it soon if details are correct.`;
                 }
                 return 'I do not see a pending withdrawal request right now. To withdraw, first add your payout details in Settings > My Profile, then open Withdraw Fund, choose UPI/Bank/Gift Card/PayPal, enter the amount, and submit. The amount is deducted immediately and stays pending until admin approves or rejects it.';
             }
@@ -5099,17 +5099,41 @@
             return names[methodId] || fallback || 'Withdrawal Method';
         };
         const normalizeWithdrawalMethodId = (item = {}) => {
-            const raw = String(item.methodId || item.paymentMethod || item.withdrawMethod || item.method || '').toLowerCase().trim().replace(/[\s-]+/g, '_');
-            if (raw.includes('upi')) return 'upi';
-            if (raw.includes('bank') || raw.includes('account')) return 'bank';
-            if (raw.includes('play') || raw.includes('google')) return 'play_store';
-            if (raw.includes('amazon')) return 'amazon_gift';
-            if (raw.includes('flipkart')) return 'flipkart_gift';
-            if (raw.includes('paypal')) return 'paypal';
+            const candidates = [
+                item.methodId,
+                item.paymentMethod,
+                item.withdrawMethod,
+                item.withdraw_method,
+                item.method,
+                item.paymentDetails,
+                item.comment
+            ].map(value => String(value || '').toLowerCase().trim().replace(/[\s-]+/g, '_'));
+            for (const raw of candidates) {
+                if (!raw || raw === 'gift_card' || raw === 'gift') continue;
+                if (raw.includes('upi')) return 'upi';
+                if (raw.includes('bank') || raw.includes('account')) return 'bank';
+                if (raw.includes('play') || raw.includes('google')) return 'play_store';
+                if (raw.includes('amazon')) return 'amazon_gift';
+                if (raw.includes('flipkart')) return 'flipkart_gift';
+                if (raw.includes('paypal')) return 'paypal';
+            }
             if (item.upiId) return 'upi';
             if (item.accountNumber || item.ifsc) return 'bank';
             if (item.email || item.paymentEmail) return 'paypal';
-            return raw;
+            return candidates.find(Boolean) || '';
+        };
+        const getWithdrawalDisplayMethodName = (item = {}, fallback = 'N/A') => {
+            const methodId = normalizeWithdrawalMethodId(item);
+            const knownMethodIds = ['upi', 'bank', 'play_store', 'amazon_gift', 'flipkart_gift', 'paypal', 'crypto'];
+            const specificName = knownMethodIds.includes(methodId) ? getWithdrawalMethodName(methodId, '') : '';
+            const rawName = String(item.method || item.paymentMethod || fallback || '').trim();
+            if (specificName && !['gift card', 'gift_card', 'withdrawal method'].includes(rawName.toLowerCase())) {
+                return specificName;
+            }
+            if (!specificName && ['gift card', 'gift_card'].includes(rawName.toLowerCase())) {
+                return 'Gift Card (type not saved)';
+            }
+            return specificName || rawName || fallback;
         };
         const getWithdrawalDetailText = (item = {}) => {
             const methodId = normalizeWithdrawalMethodId(item);
@@ -5130,7 +5154,7 @@
             return detailText || item.upiId || item.accountNumber || item.email || item.paymentEmail || 'N/A';
         };
         const getWithdrawalSnapshot = (data = {}) => ({
-            method: data.method || getWithdrawalMethodName(data.methodId),
+            method: getWithdrawalDisplayMethodName(data, getWithdrawalMethodName(data.methodId)),
             methodId: data.methodId || data.paymentMethod || '',
             upiId: data.upiId || '',
             accountNumber: data.accountNumber || '',
@@ -5256,15 +5280,15 @@
                     methodDetails = `${bankDetails.accountNumber || 'Not set'} - ${bankDetails.bankName || 'Not set'}`;
                     break;
                 case 'play_store':
-                    methodName = 'Redeem Code';
+                    methodName = 'Google Play Gift Card';
                     methodDetails = getProfilePaymentDetails(method).email || 'Not set';
                     break;
                 case 'amazon_gift':
-                    methodName = 'Gift Card';
+                    methodName = 'Amazon Gift Card';
                     methodDetails = getProfilePaymentDetails(method).email || 'Not set';
                     break;
                 case 'flipkart_gift':
-                    methodName = 'Gift Card';
+                    methodName = 'Flipkart Gift Card';
                     methodDetails = getProfilePaymentDetails(method).email || 'Not set';
                     break;
                 case 'paypal':
@@ -6075,7 +6099,7 @@
                 userEmail: record.userEmail || record.emailAddress || userProfile.email || '',
                 type: 'withdrawal',
                 amount: absoluteAmount(record.amount || 0),
-                method: record.method || getWithdrawalMethodName(record.methodId || record.paymentMethod, record.paymentMethod || 'N/A'),
+                method: getWithdrawalDisplayMethodName(record, record.paymentMethod || 'N/A'),
                 status: record.status || 'completed',
                 requestedAt,
                 processedAt: ['completed', 'rejected'].includes(record.status) ? (record.processedAt || null) : null
@@ -6561,7 +6585,7 @@
                             <div class="flex justify-between gap-3">
                                 <div>
                                     <p class="font-bold text-gray-900 dark:text-white">${formatCurrency(req.amount || 0)}</p>
-                                    <p class="text-xs text-gray-500 dark:text-gray-400">${escapeHtml(req.method || getWithdrawalMethodName(req.methodId, 'Withdrawal'))}</p>
+                                    <p class="text-xs text-gray-500 dark:text-gray-400">${escapeHtml(getWithdrawalDisplayMethodName(req, 'Withdrawal'))}</p>
                                     <p class="text-xs text-gray-500 dark:text-gray-400">${formatDateDDMMYY(req.requestedAt || req.requested_at)}</p>
                                 </div>
                                 <div class="flex flex-col items-end gap-1 shrink-0">
@@ -6678,10 +6702,11 @@
             }, new Map());
             const renderRequestCard = (r) => {
                 const methodId = normalizeWithdrawalMethodId(r);
-                const methodName = r.method || getWithdrawalMethodName(methodId, 'N/A');
+                const methodName = getWithdrawalDisplayMethodName(r, 'N/A');
                 const detailText = getWithdrawalDetailText({ ...r, methodId });
                 const isGiftOrEmailMethod = ['play_store', 'amazon_gift', 'flipkart_gift', 'paypal'].includes(methodId);
-                const payoutDetailLabel = methodId === 'upi' ? 'UPI' : methodId === 'bank' ? 'Bank Details' : isGiftOrEmailMethod ? 'Email / Gift Card Details' : 'Payment Details';
+                const isGenericGiftCard = String(r.method || r.paymentMethod || '').toLowerCase().replace(/[\s-]+/g, '_') === 'gift_card';
+                const payoutDetailLabel = methodId === 'upi' ? 'UPI' : methodId === 'bank' ? 'Bank Details' : (isGiftOrEmailMethod || isGenericGiftCard) ? 'Email / Gift Card Details' : 'Payment Details';
                 const escapedDetail = escapeHtml(detailText);
                 return `
                 <div class="p-3 mb-2 bg-gray-50 dark:bg-gray-700/50 rounded-lg border border-gray-100 dark:border-gray-700">
@@ -6807,7 +6832,7 @@
                 timestamp: Date.now(),
                 transactionId: cutTransactionId,
                 requestId,
-                method: requestData.method || getWithdrawalMethodName(requestData.methodId, 'Withdrawal'),
+                method: getWithdrawalDisplayMethodName(requestData, 'Withdrawal'),
                 status: 'completed',
                 balanceBefore: currentBalance,
                 balanceAfter,
@@ -9120,7 +9145,7 @@
             const giftCodeFromComment = (remarks.match(/redeemed code\s+([A-Z0-9-]+)/i) || [])[1] || '';
             const txnDisplayId = isGiftCard ? (item.giftCode || giftCodeFromComment || item.transactionId) : (item.adminTransactionId || item.transactionId);
             const methodId = item.methodId || (item.upiId ? 'upi' : item.accountNumber ? 'bank' : remarks.toLowerCase().includes('amazon') ? 'amazon_gift' : remarks.toLowerCase().includes('flipkart') ? 'flipkart_gift' : remarks.toLowerCase().includes('play') ? 'play_store' : remarks.toLowerCase().includes('paypal') ? 'paypal' : '');
-            const methodName = item.method || getWithdrawalMethodName(methodId);
+            const methodName = getWithdrawalDisplayMethodName({ ...item, methodId });
             const methodDetail = getWithdrawalDetailText({ ...item, methodId });
             const detailBalanceAfter = getExplicitBalanceAfter(item) ?? item.balanceAfter;
 
