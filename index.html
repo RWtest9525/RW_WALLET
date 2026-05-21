@@ -2714,9 +2714,15 @@
                 }
             };
 
-            loadFirebaseTransactions(userId, 2000)
-                .then(firebaseTransactions => {
-                    transactions = mergeTransactionsByKey(cachedHistoryItems.filter(item => !String(item.key || '').startsWith('req-')), firebaseTransactions);
+            Promise.all([
+                loadFirebaseTransactions(userId, 2000),
+                fetchCloudTransactionHistory(userId, 2000).catch(error => {
+                    console.warn('Cloud transaction history preload skipped:', error);
+                    return [];
+                })
+            ])
+                .then(([firebaseTransactions, cloudTransactions]) => {
+                    transactions = mergeTransactionsByKey(cachedHistoryItems.filter(item => !String(item.key || '').startsWith('req-')), firebaseTransactions, cloudTransactions);
                     renderUnifiedHistory(5);
                     return importFirestoreTransactionsToCloud(userId, firebaseTransactions);
                 })
@@ -4617,9 +4623,15 @@
 
         const refreshTransactionHistoryFromFirebase = async (userId = currentUser?.uid) => {
             if (!userId) return [];
-            const firebaseTransactions = await loadFirebaseTransactions(userId, 5000);
+            const [firebaseTransactions, cloudTransactions] = await Promise.all([
+                loadFirebaseTransactions(userId, 5000),
+                fetchCloudTransactionHistory(userId, 5000).catch(error => {
+                    console.warn('Cloud transaction history refresh skipped:', error);
+                    return [];
+                })
+            ]);
             const cachedPending = (unifiedHistoryCache || []).filter(item => String(item.key || '').startsWith('req-') || item.status === 'pending');
-            unifiedHistoryCache = mergeTransactionsByKey(firebaseTransactions, cachedPending);
+            unifiedHistoryCache = mergeTransactionsByKey(firebaseTransactions, cloudTransactions, cachedPending);
             writeHistoryItemsToCache(userId, unifiedHistoryCache);
             importFirestoreTransactionsToCloud(userId, firebaseTransactions);
             return unifiedHistoryCache;
