@@ -932,37 +932,37 @@
                             class="relative mt-4 w-full sm:w-auto px-6 py-3 bg-white/15 text-white font-semibold rounded-xl hover:bg-white/25 transition border border-white/20">Add/Remove
                             My Funds</button>
                     </div>
-                    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-4">
-                        <div class="bg-white dark:bg-gray-800 p-5 rounded-2xl shadow-md border border-gray-100 dark:border-gray-700">
-                            <h4 class="text-sm text-gray-500 dark:text-gray-400 font-medium">Total Users</h4>
-                            <p id="analytics-total-users" class="text-3xl font-bold mt-2">0</p>
-                        </div>
-                        <div class="bg-white dark:bg-gray-800 p-5 rounded-2xl shadow-md cursor-pointer hover:bg-blue-50 dark:hover:bg-blue-900/20 transition border border-gray-100 dark:border-gray-700"
-                            onclick="showAdminUsersPageWithFilter('new')">
-                            <h4 class="text-sm text-gray-500 dark:text-gray-400 font-medium">New Members (15 Days)</h4>
-                            <p id="analytics-new-members" class="text-3xl font-bold mt-2 text-blue-500">0</p>
-                        </div>
-                        <div class="bg-white dark:bg-gray-800 p-5 rounded-2xl shadow-md border border-gray-100 dark:border-gray-700">
-                            <h4 class="text-sm text-gray-500 dark:text-gray-400 font-medium">Pending Withdrawals</h4>
-                            <p id="analytics-pending-reqs" class="text-3xl font-bold mt-2">0</p>
-                        </div>
-                        <div class="bg-white dark:bg-gray-800 p-5 rounded-2xl shadow-md cursor-pointer hover:bg-red-50 dark:hover:bg-red-900/20 transition border border-gray-100 dark:border-gray-700"
-                            onclick="showAdminUsersPageWithFilter('minus_balance')">
-                            <h4 class="text-sm text-gray-500 dark:text-gray-400 font-medium">Minus Balance Users</h4>
-                            <p id="analytics-minus-balance-users" class="text-3xl font-bold mt-2 text-red-500">0</p>
-                            <p id="analytics-minus-balance-total" class="text-xs font-bold text-red-400 mt-1">₹0.00</p>
-                        </div>
-                    </div>
-                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-                        <div class="bg-white dark:bg-gray-800 p-5 rounded-2xl shadow-md border border-gray-100 dark:border-gray-700">
-                            <h4 class="text-sm text-gray-500 dark:text-gray-400 font-medium">Total Funds in Other
-                                Wallets</h4>
-                            <p id="analytics-total-funds" class="text-3xl font-bold mt-2">₹0.00</p>
-                        </div>
-                        <div class="bg-white dark:bg-gray-800 p-5 rounded-2xl shadow-md border border-gray-100 dark:border-gray-700">
-                            <h4 class="text-sm text-gray-500 dark:text-gray-400 font-medium">Gift Cards Redeemed</h4>
-                            <p id="analytics-gift-cards" class="text-3xl font-bold mt-2">0</p>
-                        </div>
+                    <div class="grid grid-cols-2 sm:grid-cols-3 gap-3 mb-6">
+                        <button id="analytics-total-users-card" class="text-left bg-white dark:bg-gray-800 p-4 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 hover:-translate-y-0.5 hover:shadow-md hover:bg-gray-50 dark:hover:bg-gray-700/70 transition">
+                            <h4 class="text-xs sm:text-sm text-gray-500 dark:text-gray-400 font-semibold">Total Users</h4>
+                            <p id="analytics-total-users" class="text-2xl sm:text-3xl font-black mt-1">0</p>
+                            <p class="mt-1 text-[10px] font-bold uppercase text-gray-400">View all</p>
+                        </button>
+                        <button id="analytics-new-members-card" class="text-left bg-white dark:bg-gray-800 p-4 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 hover:-translate-y-0.5 hover:shadow-md hover:bg-blue-50 dark:hover:bg-blue-900/20 transition">
+                            <h4 class="text-xs sm:text-sm text-gray-500 dark:text-gray-400 font-semibold">New Members</h4>
+                            <p id="analytics-new-members" class="text-2xl sm:text-3xl font-black mt-1 text-blue-500">0</p>
+                            <p class="mt-1 text-[10px] font-bold uppercase text-blue-400">15 days</p>
+                        </button>
+                        <button id="analytics-pending-withdrawals-card" class="text-left bg-white dark:bg-gray-800 p-4 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 hover:-translate-y-0.5 hover:shadow-md hover:bg-amber-50 dark:hover:bg-amber-900/20 transition">
+                            <h4 class="text-xs sm:text-sm text-gray-500 dark:text-gray-400 font-semibold">Pending Withdrawals</h4>
+                            <p id="analytics-pending-reqs" class="text-2xl sm:text-3xl font-black mt-1">0</p>
+                            <p id="analytics-pending-amount" class="mt-1 text-xs font-bold text-gray-600 dark:text-gray-300">&#8377;0.00</p>
+                        </button>
+                        <button id="analytics-minus-balance-card" class="text-left bg-white dark:bg-gray-800 p-4 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 hover:-translate-y-0.5 hover:shadow-md hover:bg-red-50 dark:hover:bg-red-900/20 transition">
+                            <h4 class="text-xs sm:text-sm text-gray-500 dark:text-gray-400 font-semibold">Minus Balance</h4>
+                            <p id="analytics-minus-balance-users" class="text-2xl sm:text-3xl font-black mt-1 text-red-500">0</p>
+                            <p id="analytics-minus-balance-total" class="mt-1 text-xs font-bold text-red-400">&#8377;0.00</p>
+                        </button>
+                        <button id="analytics-total-funds-card" class="text-left bg-white dark:bg-gray-800 p-4 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 hover:-translate-y-0.5 hover:shadow-md hover:bg-emerald-50 dark:hover:bg-emerald-900/20 transition">
+                            <h4 class="text-xs sm:text-sm text-gray-500 dark:text-gray-400 font-semibold">Other Wallet Funds</h4>
+                            <p id="analytics-total-funds" class="text-2xl sm:text-3xl font-black mt-1">&#8377;0.00</p>
+                            <p class="mt-1 text-[10px] font-bold uppercase text-emerald-500">View users</p>
+                        </button>
+                        <button id="analytics-gift-cards-card" class="text-left bg-white dark:bg-gray-800 p-4 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 hover:-translate-y-0.5 hover:shadow-md hover:bg-purple-50 dark:hover:bg-purple-900/20 transition">
+                            <h4 class="text-xs sm:text-sm text-gray-500 dark:text-gray-400 font-semibold">Gift Cards Redeemed</h4>
+                            <p id="analytics-gift-cards" class="text-2xl sm:text-3xl font-black mt-1">0</p>
+                            <p class="mt-1 text-[10px] font-bold uppercase text-purple-400">Open gift codes</p>
+                        </button>
                     </div>
 
                     <!-- Fixed Quick Actions Bar -->
@@ -1750,7 +1750,11 @@
             }
             const analyticsPendingElement = document.getElementById('analytics-pending-reqs');
             if (analyticsPendingElement) {
-                analyticsPendingElement.innerHTML = `${allFundRequestsCache.length}<br><span class="text-sm font-normal">${formatCurrency(totalPendingAmount)}</span>`;
+                analyticsPendingElement.textContent = allFundRequestsCache.length;
+            }
+            const analyticsPendingAmountElement = document.getElementById('analytics-pending-amount');
+            if (analyticsPendingAmountElement) {
+                analyticsPendingAmountElement.textContent = formatCurrency(totalPendingAmount);
             }
         };
 
@@ -8948,6 +8952,13 @@
             setBottomNavActive('bottom-home-btn');
             handler();
         };
+
+        document.getElementById('analytics-total-users-card').addEventListener('click', () => openAdminQuickAction(() => showAdminUsersPageWithFilter('all')));
+        document.getElementById('analytics-new-members-card').addEventListener('click', () => openAdminQuickAction(() => showAdminUsersPageWithFilter('new')));
+        document.getElementById('analytics-pending-withdrawals-card').addEventListener('click', () => openAdminQuickAction(showAdminWithdrawalsPage));
+        document.getElementById('analytics-minus-balance-card').addEventListener('click', () => openAdminQuickAction(() => showAdminUsersPageWithFilter('minus_balance')));
+        document.getElementById('analytics-total-funds-card').addEventListener('click', () => openAdminQuickAction(() => showAdminUsersPageWithFilter('all')));
+        document.getElementById('analytics-gift-cards-card').addEventListener('click', () => openAdminQuickAction(showAdminGiftCodesPage));
 
         // Admin panel quick action buttons
         document.getElementById('admin-withdrawals-btn').addEventListener('click', () => openAdminQuickAction(showAdminWithdrawalsPage));
