@@ -1201,6 +1201,7 @@
         let transactionListState = { filter: 'all', visibleCount: TRANSACTION_PAGE_SIZE, items: [] };
         let withdrawalHistoryCache = [];
         let adminViewedUserTransactions = [];
+        let adminPendingWithdrawalSearch = '';
         const recipientLookupCache = new Map();
         let lastAutoProcessCheckAt = 0;
         let activeWithdrawalHistoryFilter = { filter: 'today', fromDate: null, toDate: null };
@@ -4978,10 +4979,33 @@
             const content = `
                 ${getPageHeader('Pending Withdrawal Requests')}
                 <div class="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-md space-y-4">
+                    <div class="flex flex-col sm:flex-row gap-2">
+                        <input type="search" id="pending-withdrawal-search" value="${escapeHtml(adminPendingWithdrawalSearch)}" placeholder="Search name, mobile, email, amount, method" class="w-full px-3 py-2 bg-gray-100 dark:bg-gray-700 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-yellow-500">
+                        <button id="pending-withdrawal-search-btn" class="px-4 py-2 rounded-lg bg-yellow-500 text-white text-sm font-bold hover:bg-yellow-600">Search</button>
+                        <button id="pending-withdrawal-clear-search-btn" class="px-4 py-2 rounded-lg bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-200 text-sm font-bold hover:bg-gray-300 dark:hover:bg-gray-600">Clear</button>
+                    </div>
                     <div id="admin-fund-requests-list-page" class="max-h-[75vh] overflow-y-auto"></div>
                 </div>
                 ${getPageFooter()}`;
             showPage(content);
+            const searchInput = document.getElementById('pending-withdrawal-search');
+            const applySearch = () => {
+                adminPendingWithdrawalSearch = (searchInput?.value || '').trim().toLowerCase();
+                renderAdminFundRequests(allFundRequestsCache);
+            };
+            searchInput?.addEventListener('keydown', (event) => {
+                if (event.key === 'Enter') applySearch();
+            });
+            searchInput?.addEventListener('input', () => {
+                adminPendingWithdrawalSearch = (searchInput.value || '').trim().toLowerCase();
+                renderAdminFundRequests(allFundRequestsCache);
+            });
+            document.getElementById('pending-withdrawal-search-btn')?.addEventListener('click', applySearch);
+            document.getElementById('pending-withdrawal-clear-search-btn')?.addEventListener('click', () => {
+                adminPendingWithdrawalSearch = '';
+                if (searchInput) searchInput.value = '';
+                renderAdminFundRequests(allFundRequestsCache);
+            });
             if (allFundRequestsCache.length) {
                 renderAdminFundRequests(allFundRequestsCache);
             } else {
@@ -5957,7 +5981,25 @@
             const listEl = document.getElementById('admin-fund-requests-list-page');
             if (!listEl) return;
 
-            const pendingRequests = [...requests];
+            const search = adminPendingWithdrawalSearch;
+            const pendingRequests = [...requests].filter(r => {
+                if (!search) return true;
+                return [
+                    r.userName,
+                    r.userEmail,
+                    r.userMobile,
+                    r.mobile,
+                    r.amount,
+                    r.method,
+                    getWithdrawalMethodName(r.methodId, ''),
+                    r.upiId,
+                    r.email,
+                    r.accountNumber,
+                    r.ifsc,
+                    r.accountName,
+                    r.bankName
+                ].some(value => String(value || '').toLowerCase().includes(search));
+            });
             pendingRequests.sort((a, b) => timestampToMillis(a.requestedAt || a.requested_at) - timestampToMillis(b.requestedAt || b.requested_at));
 
             const formatWithdrawalDateOnly = (value) => {
@@ -6033,7 +6075,7 @@
                 </div>`;
 
             listEl.innerHTML = pendingRequests.length === 0
-                ? '<p class="text-gray-500 dark:text-gray-400 text-sm p-4 text-center">No pending requests.</p>'
+                ? `<p class="text-gray-500 dark:text-gray-400 text-sm p-4 text-center">${search ? 'No pending requests match your search.' : 'No pending requests.'}</p>`
                 : Array.from(groupedByDate.entries()).map(([date, dateRequests]) => `
                     <section class="mb-5">
                         <div class="mb-2 flex items-center gap-3">
@@ -7613,7 +7655,7 @@
                 }
                 await addDoc(collection(userRef, 'transactions'), transactionPayload);
 
-                updateCloudFundRequestStatus(requestId, newStatus, {
+                await updateCloudFundRequestStatus(requestId, newStatus, {
                     ...(reqData || {}),
                     status: newStatus,
                     adminTransactionId: txnId || '',
@@ -7851,39 +7893,41 @@
             }
 
             const userRef = doc(db, `artifacts/${appId}/public/data/users`, userId);
-            let oldBalance = 0;
+            const user = allUsersCache.find(u => u.id === userId) || {};
+            const oldBalance = Number(user.balance || 0);
+            const changeAmount = newBalance - oldBalance;
+
+            if (changeAmount === 0) {
+                return showNotification("New balance is the same as the old balance.", true);
+            }
 
             try {
-                await runTransaction(db, async (tx) => {
-                    const userDoc = await tx.get(userRef);
-                    if (!userDoc.exists()) throw new Error("User not found!");
+                await updateDoc(userRef, { balance: newBalance });
 
-                    oldBalance = userDoc.data().balance || 0;
-                    const changeAmount = newBalance - oldBalance; // This can be positive or negative
-
-                    if (changeAmount === 0) {
-                        throw new Error("New balance is the same as the old balance.");
-                    }
-
-                    const commentType = changeAmount > 0 ? 'Admin Credit' : 'Admin Debit';
-
-                    // 1. Update the user's balance
-                    tx.update(userRef, { balance: newBalance });
-
-                    // 2. Add a transaction log
-                    tx.set(doc(collection(userRef, 'transactions')), {
-                        type: changeAmount > 0 ? 'credit' : 'debit',
-                        amount: Math.abs(changeAmount),
-                        comment: commentType, // A clear comment
-                        timestamp: serverTimestamp(),
-                        adminComment: "Manual balance adjustment", // Extra field for clarity
-                        transactionId: generateTransactionId(),
-                        status: 'completed'
-                    });
+                const transactionPayload = {
+                    type: changeAmount > 0 ? 'credit' : 'debit',
+                    amount: Math.abs(changeAmount),
+                    comment: changeAmount > 0 ? 'Admin Credit' : 'Admin Debit',
+                    timestamp: Date.now(),
+                    adminComment: "Manual balance adjustment",
+                    transactionId: generateTransactionId(),
+                    status: 'completed'
+                };
+                recordCloudTransaction(userId, transactionPayload).catch(error => {
+                    console.warn('Admin balance adjustment cloud history skipped:', error);
                 });
+
+                allUsersCache = allUsersCache.map(u => u.id === userId ? { ...u, balance: newBalance } : u);
+                if (currentUserData?.uid === userId) {
+                    currentUserData.balance = newBalance;
+                    document.getElementById('user-balance').textContent = formatCompactBalance(newBalance);
+                    updateDollarBalanceDisplay(newBalance);
+                    writeUserCache(userId, currentUserData);
+                }
 
                 showNotification('User balance updated successfully!', false, true);
                 window.closeModal();
+                if (document.getElementById('admin-users-list-page')) updateAdminUserListView();
             } catch (e) {
                 console.error("Edit balance failed:", e);
                 showNotification(`Error: ${e.message}`, true);
