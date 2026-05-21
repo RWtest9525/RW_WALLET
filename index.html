@@ -1201,6 +1201,7 @@
         let transactionListState = { filter: 'all', visibleCount: TRANSACTION_PAGE_SIZE, items: [] };
         let withdrawalHistoryCache = [];
         let adminViewedUserTransactions = [];
+        let adminViewedUserProfile = null;
         let adminPendingWithdrawalSearch = '';
         const recipientLookupCache = new Map();
         let lastAutoProcessCheckAt = 0;
@@ -1346,6 +1347,41 @@
                 status: item.status || 'completed',
                 comment: item.comment || item.remarks || item.description || (type === 'credit' ? 'Money Received' : type === 'withdrawal' ? 'Withdrawal' : 'Wallet Transaction')
             };
+        };
+
+        const getTransactionBalanceEffect = (item = {}) => {
+            const type = normalizeTransactionType(item);
+            const amount = Number(item.chargeAmount || item.amount || 0);
+            const status = String(item.status || '').toLowerCase();
+            if (!Number.isFinite(amount) || amount === 0) return 0;
+            if (status === 'rejected' || status === 'failed') {
+                if (type === 'withdrawal' || type === 'mobile_recharge') return amount;
+                return 0;
+            }
+            if (type === 'credit' || type === 'wallet_transfer' || type === 'add_fund' || type === 'gift_card') return amount;
+            if (type === 'debit' || type === 'withdrawal' || type === 'mobile_recharge') return -amount;
+            return amount > 0 ? amount : 0;
+        };
+
+        const getExplicitBalanceAfter = (item = {}) => {
+            const raw = item.balanceAfter ?? item.remainingBalance ?? item.remainingFund ?? item.walletBalanceAfter ?? item.balance_after;
+            const value = Number(raw);
+            return Number.isFinite(value) ? value : null;
+        };
+
+        const annotateTransactionsWithRemainingBalance = (items = [], currentBalance = 0) => {
+            let runningBalance = Number(currentBalance || 0);
+            return items.map(item => {
+                const explicitBalanceAfter = getExplicitBalanceAfter(item);
+                const balanceAfter = explicitBalanceAfter !== null ? explicitBalanceAfter : runningBalance;
+                const effect = getTransactionBalanceEffect(item);
+                runningBalance = Number((balanceAfter - effect).toFixed(2));
+                return {
+                    ...item,
+                    balanceAfter,
+                    balanceBefore: item.balanceBefore ?? item.balance_before ?? Number((balanceAfter - effect).toFixed(2))
+                };
+            });
         };
 
         const normalizeCloudTransaction = (item = {}) => normalizeTransactionForHistory(item);
@@ -5820,6 +5856,7 @@
 
         const showAdminUserDashboardPage = async (userId) => {
             const user = allUsersCache.find(u => u.id === userId) || {};
+            adminViewedUserProfile = user;
             const content = `
                 ${getPageHeader('User Dashboard')}
                 <div class="max-w-3xl mx-auto space-y-4">
@@ -5880,7 +5917,10 @@
                         return [];
                     })
                 ]);
-                adminViewedUserTransactions = mergeTransactionsByKey(firebaseItems, cloudItems);
+                adminViewedUserTransactions = annotateTransactionsWithRemainingBalance(
+                    mergeTransactionsByKey(firebaseItems, cloudItems),
+                    user.balance || 0
+                );
                 renderAdminUserTransactions();
             } catch (error) {
                 console.error('Admin user transaction load failed:', error);
@@ -5960,6 +6000,9 @@
                 const isCredit = ['credit', 'wallet_transfer', 'add_fund'].includes(type);
                 const amountClass = isCredit ? 'text-green-600' : 'text-red-600';
                 const sign = isCredit ? '+' : '-';
+                const balanceAfter = getExplicitBalanceAfter(item) ?? item.balanceAfter;
+                const balanceBefore = item.balanceBefore ?? item.balance_before;
+                const showRemaining = Number.isFinite(Number(balanceAfter));
                 return `
                     <div class="p-3 rounded-xl bg-gray-50 dark:bg-gray-700/50 border border-gray-100 dark:border-gray-700">
                         <div class="flex justify-between gap-3">
@@ -5967,6 +6010,8 @@
                                 <p class="font-bold text-sm truncate">${escapeHtml(item.comment || type || 'Transaction')}</p>
                                 <p class="text-xs text-gray-500">${escapeHtml(item.senderName || item.recipientName || item.method || '')}</p>
                                 <p class="text-xs text-gray-400">${formatDateDDMMYY(item.timestamp || item.requestedAt || item.processedAt)}</p>
+                                ${showRemaining ? `<p class="mt-1 text-[11px] font-semibold text-gray-600 dark:text-gray-300">Remaining Balance: <span class="text-blue-600 dark:text-blue-300">${formatCurrency(balanceAfter)}</span></p>` : ''}
+                                ${Number.isFinite(Number(balanceBefore)) ? `<p class="text-[10px] text-gray-400">Before: ${formatCurrency(balanceBefore)}</p>` : ''}
                             </div>
                             <div class="text-right shrink-0">
                                 <p class="font-black ${amountClass}">${sign}${formatCurrencyAbs(item.amount || 0)}</p>
@@ -6332,7 +6377,10 @@
                     const currentBalance = userDoc.data().balance || 0;
                     if (currentBalance < chargeAmount) throw new Error("Insufficient wallet balance for this recharge.");
 
-                    tx.update(userRef, { balance: currentBalance - chargeAmount });
+                    const balanceAfter = currentBalance - chargeAmount;
+                    requestPayload.balanceBefore = currentBalance;
+                    requestPayload.balanceAfter = balanceAfter;
+                    tx.update(userRef, { balance: balanceAfter });
 
                     const { id, ...firebaseRequestPayload } = requestPayload;
                     tx.set(reqRef, {
@@ -6353,6 +6401,8 @@
                         timestamp: serverTimestamp(),
                         status: 'pending',
                         requestId: reqRef.id,
+                        balanceBefore: currentBalance,
+                        balanceAfter,
                         transactionId: generateTransactionId()
                     });
                 });
@@ -6894,7 +6944,10 @@
                     if (currentBalance < amount) throw new Error("Insufficient balance for withdrawal.");
 
                     // 1. Deduct balance immediately
-                    tx.update(userRef, { balance: currentBalance - amount });
+                    const balanceAfter = currentBalance - amount;
+                    requestPayload.balanceBefore = currentBalance;
+                    requestPayload.balanceAfter = balanceAfter;
+                    tx.update(userRef, { balance: balanceAfter });
 
                     // 2. Add fund request (with snapshot of payment details)
                     const { id, ...firebaseRequestPayload } = requestPayload;
@@ -6917,6 +6970,8 @@
                         methodId: method,
                         // Save a snapshot of details here too
                         paymentDetails: paymentDetails,
+                        balanceBefore: currentBalance,
+                        balanceAfter,
                         ...methodSpecificDetails
                     });
                 });
@@ -7097,6 +7152,8 @@
                         senderMobile: currentUserData.mobile,
                         senderIsProProfile: !!currentUserData.isProProfile,
                         transactionId: senderTxnId,
+                        balanceBefore: senderBalance,
+                        balanceAfter: senderBalance - amount,
                         status: 'completed'
                     };
                     recipientCloudTxn = {
@@ -7111,6 +7168,8 @@
                         recipientMobile: recipientData.mobile,
                         recipientIsProProfile: !!recipientData.isProProfile,
                         transactionId: recipientTxnId,
+                        balanceBefore: recipientBalance,
+                        balanceAfter: recipientBalance + amount,
                         status: 'completed'
                     };
 
@@ -7127,6 +7186,8 @@
                         senderMobile: currentUserData.mobile,
                         senderIsProProfile: !!currentUserData.isProProfile,
                         transactionId: senderTxnId,
+                        balanceBefore: senderBalance,
+                        balanceAfter: senderBalance - amount,
                         status: 'completed'
                     });
 
@@ -7143,6 +7204,8 @@
                         recipientMobile: recipientData.mobile,
                         recipientIsProProfile: !!recipientData.isProProfile,
                         transactionId: recipientTxnId,
+                        balanceBefore: recipientBalance,
+                        balanceAfter: recipientBalance + amount,
                         status: 'completed'
                     });
                 });
@@ -7196,7 +7259,9 @@
                     const amount = giftCodeData.amount;
                     redeemedAmount = amount;
 
-                    tx.update(userRef, { balance: (userDoc.data().balance || 0) + amount });
+                    const currentBalance = userDoc.data().balance || 0;
+                    const balanceAfter = currentBalance + amount;
+                    tx.update(userRef, { balance: balanceAfter });
                     tx.update(giftCodeRef, { timesUsed: (giftCodeData.timesUsed || 0) + 1, redeemedBy: arrayUnion(currentUser.uid) });
                     tx.set(doc(collection(userRef, 'transactions')), {
                         type: 'gift_card',
@@ -7209,6 +7274,8 @@
                         recipientName: currentUserData.name || 'User',
                         recipientMobile: currentUserData.mobile || '',
                         recipientIsProProfile: !!currentUserData.isProProfile,
+                        balanceBefore: currentBalance,
+                        balanceAfter,
                         status: 'completed'
                     });
                 });
@@ -7625,6 +7692,12 @@
                 processedAmount = amount;
                 const withdrawalSnapshot = getWithdrawalSnapshot(requestData);
                 const userRef = doc(db, `artifacts/${appId}/public/data/users`, userId);
+                const requestBalanceBefore = Number(requestData.balanceBefore ?? requestData.balance_before);
+                const requestBalanceAfter = Number(requestData.balanceAfter ?? requestData.balance_after);
+                const transactionBalanceBefore = Number.isFinite(requestBalanceBefore) ? requestBalanceBefore : null;
+                const transactionBalanceAfter = newStatus === 'rejected'
+                    ? (Number.isFinite(requestBalanceBefore) ? requestBalanceBefore : null)
+                    : (Number.isFinite(requestBalanceAfter) ? requestBalanceAfter : null);
                 const transactionPayload = {
                     type: 'withdrawal',
                     amount,
@@ -7636,7 +7709,9 @@
                     rejectionReason: rejectionReason || '',
                     comment: newStatus === 'completed' ? 'Payment by Reviews World' : `Withdrawal Rejected: ${rejectionReason}`,
                     processedAt: serverTimestamp(),
-                    ...withdrawalSnapshot
+                    ...withdrawalSnapshot,
+                    ...(transactionBalanceBefore !== null ? { balanceBefore: transactionBalanceBefore } : {}),
+                    ...(transactionBalanceAfter !== null ? { balanceAfter: transactionBalanceAfter } : {})
                 };
 
                 if (newStatus === 'completed') {
@@ -7825,7 +7900,8 @@
                 await runTransaction(db, async (tx) => {
                     const userDoc = await tx.get(userRef);
                     if (!userDoc.exists()) throw new Error("User not found!");
-                    const newBalance = (userDoc.data().balance || 0) + amount;
+                    const oldBalance = userDoc.data().balance || 0;
+                    const newBalance = oldBalance + amount;
                     tx.update(userRef, { balance: newBalance });
                     tx.set(doc(collection(userRef, 'transactions')), {
                         type: 'credit',
@@ -7837,11 +7913,16 @@
                         recipientName: userDoc.data().name || 'User',
                         recipientMobile: userDoc.data().mobile || '',
                         recipientIsProProfile: !!userDoc.data().isProProfile,
+                        balanceBefore: oldBalance,
+                        balanceAfter: newBalance,
                         isAdminTransaction: true
                     });
                 });
+                allUsersCache = allUsersCache.map(u => u.id === userId ? { ...u, balance: (Number(u.balance || 0) + amount) } : u);
+                syncRecentTransactionsToCloud(userId).catch(error => console.warn('Admin add funds cloud sync skipped:', error));
                 showNotification('Funds added successfully!');
                 window.closeModal();
+                if (document.getElementById('admin-users-list-page')) updateAdminUserListView();
             } catch (e) {
                 console.error("Admin add funds failed:", e);
                 showNotification(`Error: ${e.message}`, true);
@@ -7911,6 +7992,8 @@
                     timestamp: Date.now(),
                     adminComment: "Manual balance adjustment",
                     transactionId: generateTransactionId(),
+                    balanceBefore: oldBalance,
+                    balanceAfter: newBalance,
                     status: 'completed'
                 };
                 recordCloudTransaction(userId, transactionPayload).catch(error => {
@@ -8261,6 +8344,7 @@
             const methodId = item.methodId || (item.upiId ? 'upi' : item.accountNumber ? 'bank' : remarks.toLowerCase().includes('amazon') ? 'amazon_gift' : remarks.toLowerCase().includes('flipkart') ? 'flipkart_gift' : remarks.toLowerCase().includes('play') ? 'play_store' : remarks.toLowerCase().includes('paypal') ? 'paypal' : '');
             const methodName = item.method || getWithdrawalMethodName(methodId);
             const methodDetail = getWithdrawalDetailText({ ...item, methodId });
+            const detailBalanceAfter = getExplicitBalanceAfter(item) ?? item.balanceAfter;
 
             let statusTitle = isCredit ? 'Money Received' : 'Money Sent';
             let statusLabel = isCredit ? 'Money Received' : 'Money Sent';
@@ -8412,6 +8496,12 @@
                                     <span class="text-gray-500 dark:text-gray-400">Status</span>
                                     <span class="font-semibold text-right">${statusLabel}</span>
                                 </div>
+                                ${Number.isFinite(Number(detailBalanceAfter)) ? `
+                                    <div class="flex justify-between gap-3 px-3 py-2">
+                                        <span class="text-gray-500 dark:text-gray-400">Remaining Balance</span>
+                                        <span class="font-semibold text-right">${formatCurrency(detailBalanceAfter)}</span>
+                                    </div>
+                                ` : ''}
                                 ${item.adminTransactionId ? `
                                     <div class="flex justify-between gap-3 px-3 py-2">
                                         <span class="text-gray-500 dark:text-gray-400">Processed By</span>
