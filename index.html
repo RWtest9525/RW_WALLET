@@ -1341,12 +1341,13 @@
         const normalizeTransactionType = (item = {}) => {
             const rawType = String(item.type || '').toLowerCase().replace(/\s+/g, '_');
             const comment = String(item.comment || item.remarks || '').toLowerCase();
+            if (rawType === 'debit' || rawType.includes('debit') || rawType.includes('deduct') || rawType.includes('cut') || comment.includes('admin debit') || comment.includes('balance cut') || comment.includes('deduct')) return 'debit';
             if (rawType.includes('withdraw') || comment.includes('withdraw')) return 'withdrawal';
             if (rawType.includes('recharge') || comment.includes('recharge')) return 'mobile_recharge';
             if (rawType.includes('gift')) return 'gift_card';
             if (rawType.includes('wallet_transfer') || rawType === 'transfer') return 'wallet_transfer';
-            if (rawType === 'debit' || rawType.includes('sent') || comment.includes('money sent')) return 'debit';
-            if (rawType === 'credit' || rawType.includes('received') || rawType.includes('deposit') || rawType.includes('add_fund') || rawType.includes('admin')) return 'credit';
+            if (rawType.includes('sent') || comment.includes('money sent')) return 'debit';
+            if (rawType === 'credit' || rawType.includes('received') || rawType.includes('deposit') || rawType.includes('add_fund') || comment.includes('admin credit')) return 'credit';
             if (Number(item.amount || 0) > 0) return 'credit';
             if (Number(item.amount || 0) < 0) return 'debit';
             return rawType || 'transaction';
@@ -2182,7 +2183,8 @@
             }
 
             // Handle other transaction types
-            const isCredit = ['credit', 'gift_card'].includes(normalizeTransactionType(item)) || Number(item.amount || 0) > 0;
+            const normalizedType = normalizeTransactionType(item);
+            const isCredit = ['credit', 'gift_card'].includes(normalizedType) || (Number(item.amount || 0) > 0 && !['debit', 'withdrawal', 'mobile_recharge'].includes(normalizedType));
             const sign = isCredit ? '+' : '-';
             const colorClass = isCredit ? 'text-green-500' : 'text-red-500';
 
@@ -4578,6 +4580,10 @@
                 });
             }
 
+            if (filter === 'debit') {
+                return unifiedHistoryCache.filter(item => normalizeTransactionType(item) === 'debit');
+            }
+
             return unifiedHistoryCache;
         };
 
@@ -4631,6 +4637,7 @@
                     <div id="filter-bar" class="flex space-x-2 overflow-x-auto pb-2 mb-4">
                         <button data-filter="all" class="filter-btn active-filter">All</button>
                         <button data-filter="withdrawal" class="filter-btn">Withdrawal</button>
+                        <button data-filter="debit" class="filter-btn">Debit</button>
                         <button data-filter="received" class="filter-btn">Received</button>
                         <button data-filter="sent" class="filter-btn">Sent</button>
                     </div>
