@@ -237,9 +237,26 @@
             transition: color 0.2s ease, transform 0.2s ease;
         }
 
+        .bottom-nav-btn::before {
+            content: "";
+            position: absolute;
+            inset: 0.1rem 0.18rem 0.15rem;
+            z-index: -1;
+            border-radius: 1.35rem;
+            background: linear-gradient(135deg, rgba(37, 99, 235, 0.12), rgba(34, 197, 94, 0.09), rgba(255, 255, 255, 0));
+            opacity: 0;
+            transform: scale(0.86);
+            transition: opacity 0.24s ease, transform 0.24s ease;
+        }
+
         .bottom-nav-btn.active {
             color: #1d4ed8;
             transform: translateY(-3px);
+        }
+
+        .bottom-nav-btn.active::before {
+            opacity: 1;
+            transform: scale(1);
         }
 
         .bottom-nav-btn.active .bottom-nav-icon {
@@ -247,7 +264,8 @@
             color: white;
             box-shadow: 0 12px 26px rgba(37, 99, 235, 0.28), inset 0 1px 0 rgba(255, 255, 255, 0.95);
             border-color: rgba(37, 99, 235, 0.32);
-            transform: translateY(-2px) scale(1.06);
+            transform: translateY(-3px) scale(1.08);
+            animation: navIconPulse 2.6s ease-in-out infinite;
         }
 
         .bottom-nav-btn.active .bottom-nav-icon::after {
@@ -261,10 +279,31 @@
             border-top: 1px solid rgba(226, 232, 240, 0.95);
             box-shadow: 0 -18px 42px rgba(15, 23, 42, 0.14);
             backdrop-filter: blur(18px);
+            overflow: hidden;
+        }
+
+        #bottom-nav::before {
+            content: "";
+            position: absolute;
+            inset: 0 0 auto;
+            height: 2px;
+            background: linear-gradient(90deg, #2563eb, #22c55e, #f59e0b, #2563eb);
+            background-size: 220% 100%;
+            animation: navBorderFlow 5s linear infinite;
+        }
+
+        #bottom-nav::after {
+            content: "";
+            position: absolute;
+            inset: 0;
+            pointer-events: none;
+            background: radial-gradient(circle at var(--nav-shine-x, 50%) -20%, rgba(37, 99, 235, 0.14), transparent 35%);
         }
 
         #bottom-nav-grid {
-            min-height: 5.05rem;
+            min-height: 5.35rem;
+            position: relative;
+            z-index: 1;
         }
 
         .bottom-nav-btn>span:last-child {
@@ -272,6 +311,16 @@
             overflow: hidden;
             text-overflow: ellipsis;
             white-space: nowrap;
+            margin-top: 0.15rem;
+            padding: 0.22rem 0.45rem;
+            border-radius: 999px;
+            transition: background 0.22s ease, color 0.22s ease, transform 0.22s ease;
+        }
+
+        .bottom-nav-btn.active>span:last-child {
+            background: rgba(37, 99, 235, 0.1);
+            color: #1d4ed8;
+            transform: translateY(1px);
         }
 
         .bottom-nav-icon {
@@ -307,6 +356,26 @@
         .bottom-nav-btn.active .bottom-nav-img {
             transform: scale(1.1);
             filter: drop-shadow(0 5px 7px rgba(37, 99, 235, 0.24));
+        }
+
+        @keyframes navBorderFlow {
+            from {
+                background-position: 0% 50%;
+            }
+
+            to {
+                background-position: 220% 50%;
+            }
+        }
+
+        @keyframes navIconPulse {
+            0%, 100% {
+                box-shadow: 0 12px 26px rgba(37, 99, 235, 0.28), inset 0 1px 0 rgba(255, 255, 255, 0.95);
+            }
+
+            50% {
+                box-shadow: 0 16px 34px rgba(37, 99, 235, 0.36), 0 0 0 5px rgba(37, 99, 235, 0.07), inset 0 1px 0 rgba(255, 255, 255, 0.95);
+            }
         }
 
         .chat-bubble-user {
@@ -684,6 +753,15 @@
             background: linear-gradient(145deg, #1e3a8a, #2563eb 55%, #22c55e) !important;
             color: #ffffff !important;
             border-color: rgba(147, 197, 253, 0.46);
+        }
+
+        .dark .bottom-nav-btn::before {
+            background: linear-gradient(135deg, rgba(59, 130, 246, 0.18), rgba(34, 197, 94, 0.12), rgba(15, 23, 42, 0));
+        }
+
+        .dark .bottom-nav-btn.active>span:last-child {
+            background: rgba(59, 130, 246, 0.18);
+            color: #bfdbfe;
         }
 
         .dark .filter-btn {
