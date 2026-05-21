@@ -6197,66 +6197,27 @@
 
             const userRef = doc(db, `artifacts/${appId}/public/data/users`, userId);
             const reqRef = doc(db, `artifacts/${appId}/public/data/fund_requests`, requestId);
-            let updatedRequest = { ...requestData };
-
-            await runTransaction(db, async (tx) => {
-                const userDoc = await tx.get(userRef);
-                const reqDoc = await tx.get(reqRef);
-                if (!userDoc.exists()) throw new Error('User not found for legacy withdrawal correction.');
-                if (reqDoc.exists()) {
-                    const liveRequest = { id: reqDoc.id, ...reqDoc.data() };
-                    if ((liveRequest.status || 'pending') !== 'pending') throw new Error('Withdrawal request is already processed.');
-                    if (!shouldDeductLegacyWithdrawal(liveRequest)) {
-                        updatedRequest = { ...requestData, ...liveRequest };
-                        return;
-                    }
-                    updatedRequest = { ...requestData, ...liveRequest };
-                }
-
-                const currentBalance = Number(userDoc.data().balance || 0);
-                const balanceAfter = Number((currentBalance - amount).toFixed(2));
-                const adjustment = {
-                    balanceBefore: currentBalance,
-                    balanceAfter,
-                    balanceDeducted: true,
-                    legacyBalanceAdjusted: true,
-                    legacyBalanceAdjustedAt: serverTimestamp(),
-                    legacyBalanceAdjustedBy: currentUser?.uid || ADMIN_UID
-                };
-                tx.update(userRef, { balance: balanceAfter });
-                if (reqDoc.exists()) tx.update(reqRef, adjustment);
-
-                updatedRequest = { ...updatedRequest, balanceBefore: currentBalance, balanceAfter, balanceDeducted: true, legacyBalanceAdjusted: true };
-            });
-
-            const txQuery = query(collection(userRef, 'transactions'), where('requestId', '==', requestId));
-            const txSnap = await getDocs(txQuery);
-            const transactionAdjustment = {
-                balanceBefore: updatedRequest.balanceBefore,
-                balanceAfter: updatedRequest.balanceAfter,
+            const cachedUser = allUsersCache.find(u => u.id === userId || u.uid === userId) || {};
+            const currentBalance = Number.isFinite(Number(requestData.balanceBefore ?? requestData.balance_before))
+                ? Number(requestData.balanceBefore ?? requestData.balance_before)
+                : (Number.isFinite(Number(cachedUser.balance)) ? Number(cachedUser.balance) : null);
+            const balanceAfter = currentBalance !== null ? Number((currentBalance - amount).toFixed(2)) : null;
+            const adjustment = {
+                ...(currentBalance !== null ? { balanceBefore: currentBalance } : {}),
+                ...(balanceAfter !== null ? { balanceAfter } : {}),
                 balanceDeducted: true,
                 legacyBalanceAdjusted: true,
                 legacyBalanceAdjustedAt: serverTimestamp(),
                 legacyBalanceAdjustedBy: currentUser?.uid || ADMIN_UID
             };
-            if (!txSnap.empty) {
-                await updateDoc(txSnap.docs[0].ref, transactionAdjustment);
-            } else {
-                await setDoc(doc(collection(userRef, 'transactions')), {
-                    type: 'withdrawal',
-                    amount,
-                    comment: `Withdrawal Request (${updatedRequest.method || getWithdrawalMethodName(updatedRequest.methodId, 'Withdrawal')})`,
-                    timestamp: updatedRequest.requestedAt || updatedRequest.requested_at || serverTimestamp(),
-                    status: 'pending',
-                    requestId,
-                    transactionId: updatedRequest.transactionId || generateTransactionId(),
-                    method: updatedRequest.method || getWithdrawalMethodName(updatedRequest.methodId, 'Withdrawal'),
-                    methodId: updatedRequest.methodId || '',
-                    paymentDetails: updatedRequest.paymentDetails || '',
-                    ...getWithdrawalSnapshot(updatedRequest),
-                    ...transactionAdjustment
-                });
-            }
+            const updatedRequest = { ...requestData, ...adjustment, legacyBalanceAdjustedAt: Date.now() };
+
+            await Promise.all([
+                updateDoc(userRef, { balance: increment(-amount) }),
+                updateDoc(reqRef, adjustment).catch(error => {
+                    console.warn('Legacy withdrawal request marker skipped:', error);
+                })
+            ]);
 
             await updateCloudFundRequestStatus(requestId, 'pending', {
                 ...updatedRequest,
@@ -6267,6 +6228,7 @@
                 legacyBalanceAdjustedAt: Date.now()
             });
             allFundRequestsCache = allFundRequestsCache.map(req => req.id === requestId ? { ...req, ...updatedRequest } : req);
+            allUsersCache = allUsersCache.map(u => (u.id === userId || u.uid === userId) ? { ...u, balance: Number(u.balance || 0) - amount } : u);
             return updatedRequest;
         };
 
