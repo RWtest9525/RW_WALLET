@@ -1160,6 +1160,7 @@
         };
         const appId = typeof __app_id !== 'undefined' ? __app_id : 'digital-wallet-prod';
         const ADMIN_UID = "mOs5Fmp4RoRzeBDH4pZLMOpQx7Q2";
+        const LEGACY_WITHDRAWAL_DEDUCTION_CUTOFF = new Date(2026, 4, 20).getTime();
         const RECHARGE_DISCOUNT_RATE = 0.01;
         const PARTNER_INTEREST_RATE = 0.01;
         const PARTNER_ICON_URL = 'https://cdn-icons-png.flaticon.com/512/3135/3135706.png';
@@ -5031,6 +5032,10 @@
                         <button id="pending-withdrawal-search-btn" class="px-4 py-2 rounded-lg bg-yellow-500 text-white text-sm font-bold hover:bg-yellow-600">Search</button>
                         <button id="pending-withdrawal-clear-search-btn" class="px-4 py-2 rounded-lg bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-200 text-sm font-bold hover:bg-gray-300 dark:hover:bg-gray-600">Clear</button>
                     </div>
+                    <div class="rounded-xl bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 p-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                        <p class="text-xs text-yellow-800 dark:text-yellow-100">Old pending withdrawals before 20/05/2026 can be deducted once here so approval will not fail or double-cut.</p>
+                        <button id="fix-legacy-pending-withdrawals-btn" class="px-3 py-2 rounded-lg bg-yellow-600 text-white text-xs font-black hover:bg-yellow-700">Fix Old Pending</button>
+                    </div>
                     <div id="admin-fund-requests-list-page" class="max-h-[75vh] overflow-y-auto"></div>
                 </div>
                 ${getPageFooter()}`;
@@ -5053,6 +5058,7 @@
                 if (searchInput) searchInput.value = '';
                 renderAdminFundRequests(allFundRequestsCache);
             });
+            document.getElementById('fix-legacy-pending-withdrawals-btn')?.addEventListener('click', handleFixLegacyPendingWithdrawals);
             if (allFundRequestsCache.length) {
                 renderAdminFundRequests(allFundRequestsCache);
             } else {
@@ -6142,6 +6148,142 @@
                         ${dateRequests.map(renderRequestCard).join('')}
                     </section>
                 `).join('');
+        };
+
+        const isLegacyWithdrawalRequest = (request = {}) => {
+            const requestedAt = timestampToMillis(request.requestedAt || request.requested_at || request.timestamp || request.createdAt);
+            return (request.type || 'withdrawal') === 'withdrawal' && requestedAt > 0 && requestedAt < LEGACY_WITHDRAWAL_DEDUCTION_CUTOFF;
+        };
+
+        const isWithdrawalBalanceDeducted = (request = {}) => {
+            if (request.balanceDeducted === true || request.balance_deducted === true || request.legacyBalanceAdjusted === true || request.legacy_balance_adjusted === true) return true;
+            const balanceAfter = Number(request.balanceAfter ?? request.balance_after);
+            if (Number.isFinite(balanceAfter)) return true;
+            return !isLegacyWithdrawalRequest(request);
+        };
+
+        const shouldDeductLegacyWithdrawal = (request = {}) =>
+            isLegacyWithdrawalRequest(request) && !isWithdrawalBalanceDeducted(request);
+
+        const applyLegacyWithdrawalDeduction = async (userId, requestId, requestData = {}) => {
+            if (!shouldDeductLegacyWithdrawal(requestData)) return requestData;
+            const amount = Number(requestData.amount || 0);
+            if (!amount || amount <= 0) return requestData;
+
+            const userRef = doc(db, `artifacts/${appId}/public/data/users`, userId);
+            const reqRef = doc(db, `artifacts/${appId}/public/data/fund_requests`, requestId);
+            let updatedRequest = { ...requestData };
+
+            await runTransaction(db, async (tx) => {
+                const userDoc = await tx.get(userRef);
+                const reqDoc = await tx.get(reqRef);
+                if (!userDoc.exists()) throw new Error('User not found for legacy withdrawal correction.');
+                if (reqDoc.exists()) {
+                    const liveRequest = { id: reqDoc.id, ...reqDoc.data() };
+                    if ((liveRequest.status || 'pending') !== 'pending') throw new Error('Withdrawal request is already processed.');
+                    if (!shouldDeductLegacyWithdrawal(liveRequest)) {
+                        updatedRequest = { ...requestData, ...liveRequest };
+                        return;
+                    }
+                    updatedRequest = { ...requestData, ...liveRequest };
+                }
+
+                const currentBalance = Number(userDoc.data().balance || 0);
+                const balanceAfter = Number((currentBalance - amount).toFixed(2));
+                const adjustment = {
+                    balanceBefore: currentBalance,
+                    balanceAfter,
+                    balanceDeducted: true,
+                    legacyBalanceAdjusted: true,
+                    legacyBalanceAdjustedAt: serverTimestamp(),
+                    legacyBalanceAdjustedBy: currentUser?.uid || ADMIN_UID
+                };
+                tx.update(userRef, { balance: balanceAfter });
+                if (reqDoc.exists()) tx.update(reqRef, adjustment);
+
+                updatedRequest = { ...updatedRequest, balanceBefore: currentBalance, balanceAfter, balanceDeducted: true, legacyBalanceAdjusted: true };
+            });
+
+            const txQuery = query(collection(userRef, 'transactions'), where('requestId', '==', requestId));
+            const txSnap = await getDocs(txQuery);
+            const transactionAdjustment = {
+                balanceBefore: updatedRequest.balanceBefore,
+                balanceAfter: updatedRequest.balanceAfter,
+                balanceDeducted: true,
+                legacyBalanceAdjusted: true,
+                legacyBalanceAdjustedAt: serverTimestamp(),
+                legacyBalanceAdjustedBy: currentUser?.uid || ADMIN_UID
+            };
+            if (!txSnap.empty) {
+                await updateDoc(txSnap.docs[0].ref, transactionAdjustment);
+            } else {
+                await setDoc(doc(collection(userRef, 'transactions')), {
+                    type: 'withdrawal',
+                    amount,
+                    comment: `Withdrawal Request (${updatedRequest.method || getWithdrawalMethodName(updatedRequest.methodId, 'Withdrawal')})`,
+                    timestamp: updatedRequest.requestedAt || updatedRequest.requested_at || serverTimestamp(),
+                    status: 'pending',
+                    requestId,
+                    transactionId: updatedRequest.transactionId || generateTransactionId(),
+                    method: updatedRequest.method || getWithdrawalMethodName(updatedRequest.methodId, 'Withdrawal'),
+                    methodId: updatedRequest.methodId || '',
+                    paymentDetails: updatedRequest.paymentDetails || '',
+                    ...getWithdrawalSnapshot(updatedRequest),
+                    ...transactionAdjustment
+                });
+            }
+
+            await updateCloudFundRequestStatus(requestId, 'pending', {
+                ...updatedRequest,
+                balanceBefore: updatedRequest.balanceBefore,
+                balanceAfter: updatedRequest.balanceAfter,
+                balanceDeducted: true,
+                legacyBalanceAdjusted: true,
+                legacyBalanceAdjustedAt: Date.now()
+            });
+            allFundRequestsCache = allFundRequestsCache.map(req => req.id === requestId ? { ...req, ...updatedRequest } : req);
+            return updatedRequest;
+        };
+
+        const handleFixLegacyPendingWithdrawals = async () => {
+            if (currentUser?.uid !== ADMIN_UID) return showNotification('Admin access only.', true);
+            const targets = allFundRequestsCache.filter(req => (req.status || 'pending') === 'pending' && shouldDeductLegacyWithdrawal(req));
+            if (!targets.length) return showNotification('No old pending withdrawals need balance correction.');
+            const total = targets.reduce((sum, req) => sum + Number(req.amount || 0), 0);
+            renderModal('Fix Old Pending Withdrawals',
+                `<div class="space-y-3 text-sm">
+                    <p>This will deduct old pending withdrawal amounts requested before 20/05/2026 one time only.</p>
+                    <div class="rounded-xl bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 p-3">
+                        <p class="font-bold">${targets.length} request(s)</p>
+                        <p class="text-yellow-700 dark:text-yellow-200">Total to deduct: ${formatCurrency(total)}</p>
+                    </div>
+                    <p class="text-xs text-gray-500 dark:text-gray-400">No separate admin debit entry will be shown to users. Their existing pending withdrawal transaction will be updated with remaining balance details.</p>
+                </div>`,
+                `<button onclick="window.closeModal()" class="px-4 py-2 text-sm bg-gray-200 dark:bg-gray-600 rounded-lg">Cancel</button>
+                 <button id="confirm-legacy-withdrawal-fix-btn" class="px-4 py-2 text-sm bg-yellow-600 text-white rounded-lg">Deduct Old Pending</button>`,
+                'max-w-md'
+            );
+            document.getElementById('confirm-legacy-withdrawal-fix-btn').onclick = async () => {
+                const btn = document.getElementById('confirm-legacy-withdrawal-fix-btn');
+                btn.disabled = true;
+                btn.textContent = 'Fixing...';
+                let fixed = 0;
+                try {
+                    for (const req of targets) {
+                        await applyLegacyWithdrawalDeduction(req.userId, req.id, req);
+                        fixed++;
+                    }
+                    renderAdminFundRequests(allFundRequestsCache);
+                    refreshAdminDashboardCaches().catch(error => console.warn('Admin cache refresh after legacy fix skipped:', error));
+                    showNotification(`Fixed ${fixed} old pending withdrawal(s).`);
+                    window.closeModal();
+                } catch (error) {
+                    console.error('Legacy withdrawal fix failed:', error);
+                    showNotification(`Error: ${error.message}`, true);
+                    btn.disabled = false;
+                    btn.textContent = 'Deduct Old Pending';
+                }
+            };
         };
 
         const renderAdminRechargeRequests = (requests) => {
@@ -7698,16 +7840,20 @@
             let processedAmount = reqData?.amount || 0;
             try {
                 const reqRef = doc(db, `artifacts/${appId}/public/data/fund_requests`, requestId);
-                const requestData = reqData || allFundRequestsCache.find(r => r.id === requestId) || {};
+                let requestData = reqData || allFundRequestsCache.find(r => r.id === requestId) || {};
                 const amount = Number(requestData.amount || 0);
                 processedAmount = amount;
+                if (newStatus === 'completed' && shouldDeductLegacyWithdrawal(requestData)) {
+                    requestData = await applyLegacyWithdrawalDeduction(userId, requestId, requestData);
+                }
                 const withdrawalSnapshot = getWithdrawalSnapshot(requestData);
                 const userRef = doc(db, `artifacts/${appId}/public/data/users`, userId);
                 const requestBalanceBefore = Number(requestData.balanceBefore ?? requestData.balance_before);
                 const requestBalanceAfter = Number(requestData.balanceAfter ?? requestData.balance_after);
+                const balanceWasDeducted = isWithdrawalBalanceDeducted(requestData);
                 const transactionBalanceBefore = Number.isFinite(requestBalanceBefore) ? requestBalanceBefore : null;
                 const transactionBalanceAfter = newStatus === 'rejected'
-                    ? (Number.isFinite(requestBalanceBefore) ? requestBalanceBefore : null)
+                    ? (balanceWasDeducted && Number.isFinite(requestBalanceBefore) ? requestBalanceBefore : null)
                     : (Number.isFinite(requestBalanceAfter) ? requestBalanceAfter : null);
                 const transactionPayload = {
                     type: 'withdrawal',
@@ -7729,25 +7875,36 @@
                     await updateDoc(reqRef, {
                         status: newStatus,
                         processedAt: serverTimestamp(),
-                        adminTransactionId: txnId
+                        adminTransactionId: txnId,
+                        ...(transactionBalanceBefore !== null ? { balanceBefore: transactionBalanceBefore } : {}),
+                        ...(transactionBalanceAfter !== null ? { balanceAfter: transactionBalanceAfter } : {}),
+                        balanceDeducted: balanceWasDeducted
                     });
                 } else {
                     await updateDoc(reqRef, {
                         status: newStatus,
                         processedAt: serverTimestamp(),
-                        rejectionReason: rejectionReason
+                        rejectionReason: rejectionReason,
+                        ...(transactionBalanceBefore !== null ? { balanceBefore: transactionBalanceBefore } : {}),
+                        ...(transactionBalanceAfter !== null ? { balanceAfter: transactionBalanceAfter } : {}),
+                        balanceDeducted: balanceWasDeducted
                     });
-                    await updateDoc(userRef, { balance: increment(amount) });
+                    if (balanceWasDeducted) {
+                        await updateDoc(userRef, { balance: increment(amount) });
+                    }
                 }
                 await addDoc(collection(userRef, 'transactions'), transactionPayload);
 
                 await updateCloudFundRequestStatus(requestId, newStatus, {
-                    ...(reqData || {}),
+                    ...(requestData || {}),
                     status: newStatus,
                     adminTransactionId: txnId || '',
                     rejectionReason,
                     processedAt: Date.now(),
-                    amount: processedAmount
+                    amount: processedAmount,
+                    ...(transactionBalanceBefore !== null ? { balanceBefore: transactionBalanceBefore } : {}),
+                    ...(transactionBalanceAfter !== null ? { balanceAfter: transactionBalanceAfter } : {}),
+                    balanceDeducted: balanceWasDeducted
                 });
                 syncRecentTransactionsToCloud(userId).catch(error => console.warn('Withdraw transaction background sync skipped:', error));
                 allFundRequestsCache = allFundRequestsCache.filter(req => req.id !== requestId);
