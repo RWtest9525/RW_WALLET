@@ -323,9 +323,8 @@ async function upsertFirebaseUser(d1, decodedToken, profile = {}) {
 }
 
 async function recentChatHistory(d1, roomId, limit = 50) {
-  await cleanupExpiredReadChats(d1);
   const rows = await d1.all(
-    `SELECT room_id, sender_id, message, timestamp, read_by_admin_at
+    `SELECT id, room_id, sender_id, message, timestamp, read_by_admin_at
      FROM chats
      WHERE room_id = ?
      ORDER BY timestamp DESC

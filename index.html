@@ -3951,20 +3951,23 @@
 
         const preloadSupportChatForUser = async (userId = currentUser?.uid) => {
             if (!userId || userId === ADMIN_UID) return;
-            if (supportChatPreloadUserId === userId && supportSocket?.connected) return;
-            supportChatPreloadUserId = userId;
             const roomId = getSupportRoomId(userId);
             const cached = readSupportChatCache(roomId);
+            if (supportChatPreloadUserId === userId && supportSocket?.connected && cached.length) return;
+            supportChatPreloadUserId = userId;
             if (cached.length) refreshSupportUnreadFromCache(roomId);
 
-            try {
-                const history = await fetchSupportChatHistory(roomId, 200);
+            const historyPromise = fetchSupportChatHistory(roomId, 200)
+                .then((history) => {
                 const merged = mergeSupportMessages(cached, history);
                 writeSupportChatCache(roomId, merged);
                 refreshSupportUnreadFromCache(roomId);
-            } catch (error) {
-                console.warn('Support chat preload failed:', error);
-            }
+                    return merged;
+                })
+                .catch((error) => {
+                    console.warn('Support chat preload failed:', error);
+                    return cached;
+                });
 
             try {
                 const socket = await getSupportSocket();
@@ -4006,6 +4009,23 @@
             } catch (error) {
                 console.warn('Support chat background join failed:', error);
             }
+            await historyPromise;
+        };
+
+        const preloadAdminChatRooms = (chats = allSupportChatsCache) => {
+            if (currentUser?.uid !== ADMIN_UID) return;
+            chats.slice(0, 25).forEach(chat => {
+                const roomId = chat.roomId || getSupportRoomId(chat.userId || chat.id);
+                if (!roomId) return;
+                const cached = readSupportChatCache(roomId);
+                fetchSupportChatHistory(roomId, 120)
+                    .then(history => {
+                        const merged = mergeSupportMessages(cached, history);
+                        writeSupportChatCache(roomId, merged);
+                        refreshAdminChatUnreadCount();
+                    })
+                    .catch(error => console.warn('Admin chat room preload skipped:', error));
+            });
         };
 
         const openSupportChatPage = async (chatUserId, viewerRole = 'user', chatMeta = {}) => {
@@ -4637,6 +4657,7 @@
                 }));
                 refreshAdminChatUnreadCount();
                 renderAdminChatsList();
+                preloadAdminChatRooms(allSupportChatsCache);
             } catch (error) {
                 console.error('Cloudflare admin chat list failed:', error);
                 showNotification('Could not load chat list from backend.', true);
@@ -4925,21 +4946,36 @@
             };
             return names[methodId] || fallback || 'Withdrawal Method';
         };
+        const normalizeWithdrawalMethodId = (item = {}) => {
+            const raw = String(item.methodId || item.paymentMethod || item.withdrawMethod || item.method || '').toLowerCase().trim().replace(/[\s-]+/g, '_');
+            if (raw.includes('upi')) return 'upi';
+            if (raw.includes('bank') || raw.includes('account')) return 'bank';
+            if (raw.includes('play') || raw.includes('google')) return 'play_store';
+            if (raw.includes('amazon')) return 'amazon_gift';
+            if (raw.includes('flipkart')) return 'flipkart_gift';
+            if (raw.includes('paypal')) return 'paypal';
+            if (item.upiId) return 'upi';
+            if (item.accountNumber || item.ifsc) return 'bank';
+            if (item.email || item.paymentEmail) return 'paypal';
+            return raw;
+        };
         const getWithdrawalDetailText = (item = {}) => {
-            const methodId = item.methodId || item.paymentMethod || (item.upiId ? 'upi' : item.accountNumber ? 'bank' : '');
+            const methodId = normalizeWithdrawalMethodId(item);
+            const details = item.paymentDetails && typeof item.paymentDetails === 'object' ? item.paymentDetails : {};
+            const detailText = typeof item.paymentDetails === 'string' ? item.paymentDetails : '';
             if (methodId === 'upi') return item.upiId || item.paymentDetails || 'N/A';
             if (methodId === 'bank') {
                 return [
-                    item.accountNumber ? `A/C: ${item.accountNumber}` : '',
-                    item.ifsc ? `IFSC: ${item.ifsc}` : '',
-                    item.bankName || '',
-                    item.accountName ? `Name: ${item.accountName}` : ''
-                ].filter(Boolean).join(' | ') || item.paymentDetails || 'N/A';
+                    (item.accountNumber || details.accountNumber) ? `A/C: ${item.accountNumber || details.accountNumber}` : '',
+                    (item.ifsc || details.ifsc) ? `IFSC: ${item.ifsc || details.ifsc}` : '',
+                    item.bankName || details.bankName || '',
+                    (item.accountName || details.accountName) ? `Name: ${item.accountName || details.accountName}` : ''
+                ].filter(Boolean).join(' | ') || detailText || 'N/A';
             }
             if (['play_store', 'amazon_gift', 'flipkart_gift', 'paypal'].includes(methodId)) {
-                return item.email || item.paymentEmail || item.paymentDetails || 'N/A';
+                return item.email || item.paymentEmail || details.email || detailText || 'N/A';
             }
-            return item.paymentDetails || item.upiId || item.accountNumber || item.email || 'N/A';
+            return detailText || item.upiId || item.accountNumber || item.email || item.paymentEmail || 'N/A';
         };
         const getWithdrawalSnapshot = (data = {}) => ({
             method: data.method || getWithdrawalMethodName(data.methodId),
@@ -6451,6 +6487,10 @@
                     r.amount,
                     r.method,
                     getWithdrawalMethodName(r.methodId, ''),
+                    getWithdrawalMethodName(normalizeWithdrawalMethodId(r), ''),
+                    getWithdrawalDetailText(r),
+                    r.paymentDetails,
+                    r.paymentEmail,
                     r.upiId,
                     r.email,
                     r.accountNumber,
@@ -6474,8 +6514,15 @@
                 groups.get(dateKey).push(request);
                 return groups;
             }, new Map());
-            const renderRequestCard = (r) => `
-                <div class="p-3 mb-2 bg-gray-50 dark:bg-gray-700/50 rounded-lg">
+            const renderRequestCard = (r) => {
+                const methodId = normalizeWithdrawalMethodId(r);
+                const methodName = r.method || getWithdrawalMethodName(methodId, 'N/A');
+                const detailText = getWithdrawalDetailText({ ...r, methodId });
+                const isGiftOrEmailMethod = ['play_store', 'amazon_gift', 'flipkart_gift', 'paypal'].includes(methodId);
+                const payoutDetailLabel = methodId === 'upi' ? 'UPI' : methodId === 'bank' ? 'Bank Details' : isGiftOrEmailMethod ? 'Email / Gift Card Details' : 'Payment Details';
+                const escapedDetail = escapeHtml(detailText);
+                return `
+                <div class="p-3 mb-2 bg-gray-50 dark:bg-gray-700/50 rounded-lg border border-gray-100 dark:border-gray-700">
                     <div class="flex flex-col sm:flex-row justify-between sm:items-start">
                         <div class="text-sm flex-grow mb-3 sm:mb-0">
                             <div class="flex flex-wrap items-center gap-2">
@@ -6486,7 +6533,13 @@
                             <p class="text-xs text-gray-500 dark:text-gray-400">${r.userEmail || 'No Email'}</p>
                             <p class="text-xs text-gray-500 dark:text-gray-400">${r.userMobile || 'No Mobile'}</p>
                             <div class="flex flex-col mt-2 gap-2">
-                                <p class="text-xs font-mono bg-gray-200 dark:bg-gray-600 px-2 py-1 rounded w-fit">Method: ${escapeHtml(r.method || getWithdrawalMethodName(r.methodId, 'N/A'))}</p>
+                                <div class="flex flex-wrap items-center gap-2">
+                                    <p class="text-xs font-mono bg-gray-200 dark:bg-gray-600 px-2 py-1 rounded w-fit">Method: ${escapeHtml(methodName)}</p>
+                                    <p class="text-xs font-mono bg-indigo-100 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-200 px-2 py-1 rounded w-fit">${escapeHtml(payoutDetailLabel)}: ${escapedDetail}</p>
+                                    ${detailText && detailText !== 'N/A' ? `
+                                        <button data-action="copy-text" data-text="${escapedDetail}" class="px-2 py-1 text-[10px] font-bold rounded bg-indigo-600 text-white hover:bg-indigo-700">Copy Detail</button>
+                                    ` : ''}
+                                </div>
                                 
                                 ${r.upiId ? `
                                     <div class="flex items-center">
@@ -6517,10 +6570,10 @@
                                     </div>
                                 ` : ''}
 
-                                ${(r.methodId === 'play_store' || r.methodId === 'amazon_gift' || r.methodId === 'flipkart_gift') ? `
+                                ${isGiftOrEmailMethod ? `
                                     <div class="flex items-center">
-                                        <p class="text-xs font-mono bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 px-2 py-1 rounded">Email: ${r.email}</p>
-                                        <button data-action="copy-text" data-text="${r.email}" class="ml-2 p-1 text-gray-500 hover:text-purple-600 transition-colors" title="Copy Email">
+                                        <p class="text-xs font-mono bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 px-2 py-1 rounded">${escapeHtml(getWithdrawalMethodName(methodId, methodName))}: ${escapedDetail}</p>
+                                        <button data-action="copy-text" data-text="${escapedDetail}" class="ml-2 p-1 text-gray-500 hover:text-purple-600 transition-colors" title="Copy Payment Detail">
                                             <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
                                             </svg>
@@ -6535,6 +6588,7 @@
                         </div>
                     </div>
                 </div>`;
+            };
 
             listEl.innerHTML = pendingRequests.length === 0
                 ? `<p class="text-gray-500 dark:text-gray-400 text-sm p-4 text-center">${search ? 'No pending requests match your search.' : 'No pending requests.'}</p>`
