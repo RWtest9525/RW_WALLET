@@ -5033,8 +5033,8 @@
                         <button id="pending-withdrawal-clear-search-btn" class="px-4 py-2 rounded-lg bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-200 text-sm font-bold hover:bg-gray-300 dark:hover:bg-gray-600">Clear</button>
                     </div>
                     <div class="rounded-xl bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 p-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-                        <p class="text-xs text-yellow-800 dark:text-yellow-100">Old pending withdrawals before 20/05/2026 can be deducted once here so approval will not fail or double-cut.</p>
-                        <button id="fix-legacy-pending-withdrawals-btn" class="px-3 py-2 rounded-lg bg-yellow-600 text-white text-xs font-black hover:bg-yellow-700">Fix Old Pending</button>
+                        <p id="legacy-pending-withdrawal-summary" class="text-xs text-yellow-800 dark:text-yellow-100">Checking old pending withdrawals before 20/05/2026...</p>
+                        <button id="fix-legacy-pending-withdrawals-btn" class="px-3 py-2 rounded-lg bg-yellow-600 text-white text-xs font-black hover:bg-yellow-700 disabled:opacity-50 disabled:cursor-not-allowed">Fix Old Pending</button>
                     </div>
                     <div id="admin-fund-requests-list-page" class="max-h-[75vh] overflow-y-auto"></div>
                 </div>
@@ -5061,6 +5061,7 @@
             document.getElementById('fix-legacy-pending-withdrawals-btn')?.addEventListener('click', handleFixLegacyPendingWithdrawals);
             if (allFundRequestsCache.length) {
                 renderAdminFundRequests(allFundRequestsCache);
+                updateLegacyWithdrawalFixSummary();
             } else {
                 document.getElementById('admin-fund-requests-list-page').innerHTML = '<p class="text-gray-500 dark:text-gray-400 text-sm p-4 text-center">Loading pending withdrawal requests...</p>';
             }
@@ -6081,7 +6082,10 @@
                 <div class="p-3 mb-2 bg-gray-50 dark:bg-gray-700/50 rounded-lg">
                     <div class="flex flex-col sm:flex-row justify-between sm:items-start">
                         <div class="text-sm flex-grow mb-3 sm:mb-0">
-                            <p class="font-semibold capitalize text-yellow-600">Withdrawal of ${formatCurrency(r.amount)}</p>
+                            <div class="flex flex-wrap items-center gap-2">
+                                <p class="font-semibold capitalize text-yellow-600">Withdrawal of ${formatCurrency(r.amount)}</p>
+                                ${shouldDeductLegacyWithdrawal(r) ? '<span class="rounded-full bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-200 px-2 py-0.5 text-[10px] font-black uppercase">Needs old balance cut</span>' : (isLegacyWithdrawalRequest(r) ? '<span class="rounded-full bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-200 px-2 py-0.5 text-[10px] font-black uppercase">Old balance cut done</span>' : '')}
+                            </div>
                             <p class="font-semibold text-gray-700 dark:text-gray-200">${r.userName || 'No Name'}</p>
                             <p class="text-xs text-gray-500 dark:text-gray-400">${r.userEmail || 'No Email'}</p>
                             <p class="text-xs text-gray-500 dark:text-gray-400">${r.userMobile || 'No Mobile'}</p>
@@ -6148,6 +6152,7 @@
                         ${dateRequests.map(renderRequestCard).join('')}
                     </section>
                 `).join('');
+            updateLegacyWithdrawalFixSummary();
         };
 
         const isLegacyWithdrawalRequest = (request = {}) => {
@@ -6164,6 +6169,26 @@
 
         const shouldDeductLegacyWithdrawal = (request = {}) =>
             isLegacyWithdrawalRequest(request) && !isWithdrawalBalanceDeducted(request);
+
+        const getLegacyWithdrawalTargets = () =>
+            allFundRequestsCache.filter(req => (req.status || 'pending') === 'pending' && shouldDeductLegacyWithdrawal(req));
+
+        const updateLegacyWithdrawalFixSummary = () => {
+            const summaryEl = document.getElementById('legacy-pending-withdrawal-summary');
+            const fixBtn = document.getElementById('fix-legacy-pending-withdrawals-btn');
+            if (!summaryEl || !fixBtn) return;
+            const targets = getLegacyWithdrawalTargets();
+            const total = targets.reduce((sum, req) => sum + Number(req.amount || 0), 0);
+            if (!targets.length) {
+                summaryEl.textContent = 'No old pending withdrawal needs balance cut. Before 20/05/2026 requests are already adjusted or not present.';
+                fixBtn.textContent = 'Nothing To Fix';
+                fixBtn.disabled = true;
+                return;
+            }
+            summaryEl.textContent = `${targets.length} old pending withdrawal(s) before 20/05/2026 still need one-time balance cut. Total: ${formatCurrency(total)}.`;
+            fixBtn.textContent = `Cut ${targets.length} Old Pending`;
+            fixBtn.disabled = false;
+        };
 
         const applyLegacyWithdrawalDeduction = async (userId, requestId, requestData = {}) => {
             if (!shouldDeductLegacyWithdrawal(requestData)) return requestData;
@@ -6247,7 +6272,7 @@
 
         const handleFixLegacyPendingWithdrawals = async () => {
             if (currentUser?.uid !== ADMIN_UID) return showNotification('Admin access only.', true);
-            const targets = allFundRequestsCache.filter(req => (req.status || 'pending') === 'pending' && shouldDeductLegacyWithdrawal(req));
+            const targets = getLegacyWithdrawalTargets();
             if (!targets.length) return showNotification('No old pending withdrawals need balance correction.');
             const total = targets.reduce((sum, req) => sum + Number(req.amount || 0), 0);
             renderModal('Fix Old Pending Withdrawals',
@@ -6274,6 +6299,7 @@
                         fixed++;
                     }
                     renderAdminFundRequests(allFundRequestsCache);
+                    updateLegacyWithdrawalFixSummary();
                     refreshAdminDashboardCaches().catch(error => console.warn('Admin cache refresh after legacy fix skipped:', error));
                     showNotification(`Fixed ${fixed} old pending withdrawal(s).`);
                     window.closeModal();
