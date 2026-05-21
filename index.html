@@ -331,6 +331,10 @@
             transform: translateY(1px);
         }
 
+        .bottom-nav-btn:hover .bottom-nav-icon {
+            transform: translateY(-2px) scale(1.04);
+        }
+
         .bottom-nav-icon {
             position: relative;
             overflow: visible;
@@ -366,6 +370,10 @@
             filter: drop-shadow(0 5px 7px rgba(37, 99, 235, 0.24));
         }
 
+        #bottom-nav {
+            animation: navFloat 4.8s ease-in-out infinite;
+        }
+
         @keyframes navBorderFlow {
             from {
                 background-position: 0% 50%;
@@ -386,6 +394,16 @@
             }
         }
 
+        @keyframes navFloat {
+            0%, 100% {
+                transform: translateY(0);
+            }
+
+            50% {
+                transform: translateY(-2px);
+            }
+        }
+
         .chat-bubble-user {
             border-radius: 18px 18px 4px 18px;
         }
@@ -395,6 +413,10 @@
         }
 
         .app-footer-hidden {
+            display: none;
+        }
+
+        .admin-user-actions summary::-webkit-details-marker {
             display: none;
         }
 
@@ -2802,13 +2824,24 @@
                 // Hide loading overlay if shown
                 hideLoading();
 
-                // Show main content immediately
-                document.getElementById('auth-screen').classList.add('hidden');
-                document.getElementById('main-content').classList.remove('hidden');
-                hidePage();
-
                 const isAdmin = user.uid === ADMIN_UID;
                 hydrateUserFromCache(user.uid);
+                document.getElementById('admin-tab-button').classList.toggle('hidden', !isAdmin);
+                document.getElementById('bottom-admin-btn').classList.toggle('hidden', !isAdmin);
+                document.getElementById('bottom-nav-grid').className = `mx-auto grid max-w-xl ${isAdmin ? 'grid-cols-5' : 'grid-cols-4'} items-center px-2 pt-2 text-[10px] sm:text-xs font-semibold text-gray-500 dark:text-gray-400`;
+                currentMainSection = 'home';
+                switchTab('user-panel');
+                setBottomNavActive('bottom-home-btn');
+                setMainChrome(true);
+
+                // Show main content after admin/user chrome is already ready.
+                document.getElementById('auth-screen').classList.add('hidden');
+                document.getElementById('main-content').classList.remove('hidden');
+                document.getElementById('dashboard-content').classList.remove('hidden');
+                document.getElementById('page-container').classList.add('hidden');
+                document.getElementById('page-container').innerHTML = '';
+                document.getElementById('page-container').style.overflowY = 'auto';
+                document.getElementById('app-footer')?.classList.add('app-footer-hidden');
 
                 // Initialize user listeners (non-blocking)
                 setTimeout(() => {
@@ -2819,10 +2852,6 @@
                     }
                 }, 100);
 
-                document.getElementById('admin-tab-button').classList.toggle('hidden', !isAdmin);
-                document.getElementById('bottom-admin-btn').classList.toggle('hidden', !isAdmin);
-                document.getElementById('bottom-nav-grid').className = `mx-auto grid max-w-xl ${isAdmin ? 'grid-cols-5' : 'grid-cols-4'} items-center px-2 pt-2 text-[10px] sm:text-xs font-semibold text-gray-500 dark:text-gray-400`;
-
                 if (isAdmin) {
                     console.log("User is Admin, initializing admin listeners...");
                     // Initialize admin listeners immediately
@@ -2832,10 +2861,6 @@
                         console.error("Error initializing admin listeners:", err);
                     }
                 }
-                currentMainSection = 'home';
-                switchTab('user-panel');
-                setMainChrome(true);
-                setBottomNavActive('bottom-home-btn');
 
             } else {
                 currentUser = null;
@@ -5954,7 +5979,6 @@
             const content = `
                 ${getPageHeader('User Management')}
                 <div class="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-md">
-                    <button id="admin-add-funds-btn-page" class="w-full sm:w-auto bg-indigo-600 text-white font-semibold py-2 px-4 rounded-lg hover:bg-indigo-700 transition mb-4">Add Funds to a User</button>
                     <div class="flex flex-col sm:flex-row gap-3 mb-4">
                         <input type="text" id="user-search-input-page" placeholder="Search by name, email, or mobile..." class="flex-grow px-4 py-2 bg-gray-100 dark:bg-gray-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
                         <select id="user-filter-select-page" class="px-4 py-2 bg-gray-100 dark:bg-gray-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm">
@@ -5964,8 +5988,8 @@
                             <option value="inactive">Inactive Users</option>
                             <option value="flagged">Flagged Users</option>
                             <option value="pro">Pro Verified Users</option>
-                            <option value="updated_web">Updated Web App</option>
-                            <option value="not_updated_web">Not Updated / Old App</option>
+                            <option value="updated_web">New Version</option>
+                            <option value="not_updated_web">Old Version</option>
                             <option value="minus_balance">Minus Balance Users</option>
                             <option value="zero_balance">0 Balance Users</option>
                         </select>
@@ -5978,7 +6002,6 @@
                 .filter(u => !isAdminUserRecord(u))
                 .sort((a, b) => (a.name || '').localeCompare(b.name || ''));
             renderAdminUsersList(usersToRender);
-            document.getElementById('admin-add-funds-btn-page').onclick = showAdminAddFundsModal;
             document.getElementById('user-search-input-page').oninput = updateAdminUserListView;
             document.getElementById('user-filter-select-page').onchange = updateAdminUserListView;
         };
@@ -6354,40 +6377,33 @@
                 const updatedWeb = isUserOnUpdatedWebApp(u);
                 const webSeenAt = getUserWebSeenMillis(u);
                 return `
-                <div class="p-3 mb-2 ${u.isFlagged || isMinusBalance ? 'bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800' : 'bg-gray-50 dark:bg-gray-700/50'} rounded-lg flex justify-between items-center">
-                    <div class="flex-grow">
-                        <div class="flex items-center gap-2">
-                            <p class="font-semibold text-sm">${escapeHtml(u.name || 'No Name')}</p>
+                <div class="relative p-3 mb-2 ${u.isFlagged || isMinusBalance ? 'bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800' : 'bg-gray-50 dark:bg-gray-700/50 border border-gray-100 dark:border-gray-700'} rounded-xl flex items-start gap-3 overflow-visible">
+                    <div class="min-w-0 flex-grow">
+                        <div class="flex flex-wrap items-center gap-1.5 pr-1">
+                            <p class="font-semibold text-sm truncate max-w-full">${escapeHtml(u.name || 'No Name')}</p>
                             ${u.isFlagged ? '<span class="px-1.5 py-0.5 text-[10px] bg-red-600 text-white rounded uppercase font-bold">Flagged</span>' : ''}
                             ${isMinusBalance ? '<span class="px-1.5 py-0.5 text-[10px] bg-red-600 text-white rounded uppercase font-bold">Minus</span>' : ''}
                             ${u.isProProfile ? '<span class="px-1.5 py-0.5 text-[10px] bg-blue-600 text-white rounded-full uppercase font-bold">Pro</span>' : ''}
-                            ${updatedWeb ? '<span class="px-1.5 py-0.5 text-[10px] bg-emerald-600 text-white rounded uppercase font-bold">Updated Web</span>' : '<span class="px-1.5 py-0.5 text-[10px] bg-amber-500 text-white rounded uppercase font-bold">Old/Not Updated</span>'}
+                            ${updatedWeb ? '<span class="px-1.5 py-0.5 text-[10px] bg-emerald-600 text-white rounded uppercase font-bold">New Version</span>' : '<span class="px-1.5 py-0.5 text-[10px] bg-amber-500 text-white rounded uppercase font-bold">Old Version</span>'}
                         </div>
-                        <p class="text-xs text-gray-500 dark:text-gray-400">${escapeHtml(u.email || '')}</p>
-                        <p class="text-xs text-gray-500 dark:text-gray-400">${escapeHtml(u.mobile || 'No Mobile')}</p>
-                        <p class="text-[10px] font-semibold ${updatedWeb ? 'text-emerald-600 dark:text-emerald-300' : 'text-amber-600 dark:text-amber-300'} mt-1">${updatedWeb ? `Updated app seen: ${webSeenAt ? formatDateDDMMYY(webSeenAt) : 'Yes'}` : 'No updated web app marker found'}</p>
+                        <p class="text-xs text-gray-500 dark:text-gray-400 truncate">${escapeHtml(u.email || '')}</p>
+                        <p class="text-xs text-gray-500 dark:text-gray-400 truncate">${escapeHtml(u.mobile || 'No Mobile')}</p>
+                        <p class="text-[10px] font-semibold ${updatedWeb ? 'text-emerald-600 dark:text-emerald-300' : 'text-amber-600 dark:text-amber-300'} mt-1">${updatedWeb ? `New version seen: ${webSeenAt ? formatDateDDMMYY(webSeenAt) : 'Yes'}` : 'Old version'}</p>
                         <p class="text-xs font-bold ${isMinusBalance ? 'text-red-600 dark:text-red-300' : 'text-blue-600 dark:text-blue-400'} mt-1">Balance: ${formatCompactBalance(balance)}</p>
                         ${isMinusBalance ? '<p class="text-[10px] font-semibold text-red-500 dark:text-red-300 mt-0.5">Check pending withdrawals before approving more payouts.</p>' : ''}
                     </div>
-                    <div class="flex flex-col space-y-1 ml-4">
-                        <div class="flex space-x-1">
-                            <button data-action="edit-user-balance" data-userid="${u.id}" class="px-2 py-1 text-[10px] bg-blue-500 text-white rounded hover:bg-blue-600 font-semibold">
-                                Edit
-                            </button>
-                            <button data-action="view-user-dashboard" data-userid="${u.id}" class="px-2 py-1 text-[10px] bg-emerald-600 text-white rounded hover:bg-emerald-700 font-semibold">
-                                View
-                            </button>
-                            <button data-action="flag-user" data-userid="${u.id}" data-flagged="${u.isFlagged || false}" class="px-2 py-1 text-[10px] ${u.isFlagged ? 'bg-gray-500' : 'bg-orange-500'} text-white rounded hover:opacity-80 font-semibold">
-                                ${u.isFlagged ? 'Unflag' : 'Flag'}
-                            </button>
+                    <details class="admin-user-actions relative shrink-0">
+                        <summary class="list-none h-9 w-9 rounded-full bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 shadow-sm flex items-center justify-center cursor-pointer text-gray-600 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700">
+                            <span class="text-xl leading-none -mt-1">...</span>
+                        </summary>
+                        <div class="absolute right-0 top-10 z-30 w-36 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 shadow-xl p-1.5 text-xs font-bold">
+                            <button data-action="view-user-dashboard" data-userid="${u.id}" class="w-full text-left px-3 py-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-emerald-700 dark:text-emerald-300">View</button>
+                            <button data-action="edit-user-balance" data-userid="${u.id}" class="w-full text-left px-3 py-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-blue-700 dark:text-blue-300">Edit</button>
+                            <button data-action="flag-user" data-userid="${u.id}" data-flagged="${u.isFlagged || false}" class="w-full text-left px-3 py-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-orange-600 dark:text-orange-300">${u.isFlagged ? 'Unflag' : 'Flag'}</button>
+                            <button data-action="toggle-pro-user" data-userid="${u.id}" data-pro="${u.isProProfile || false}" class="w-full text-left px-3 py-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-indigo-700 dark:text-indigo-300">${u.isProProfile ? 'Remove Pro' : 'Make Pro'}</button>
+                            <button data-action="delete-user" data-userid="${u.id}" data-username="${escapeHtml(u.name || u.email || 'User')}" class="w-full text-left px-3 py-2 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/30 text-red-600 dark:text-red-300">Delete</button>
                         </div>
-                        <button data-action="toggle-pro-user" data-userid="${u.id}" data-pro="${u.isProProfile || false}" class="px-2 py-1 text-[10px] ${u.isProProfile ? 'bg-gray-600' : 'bg-blue-600'} text-white rounded hover:opacity-80 font-semibold">
-                            ${u.isProProfile ? 'Remove Pro' : 'Make Pro'}
-                        </button>
-                        <button data-action="delete-user" data-userid="${u.id}" data-username="${escapeHtml(u.name || u.email || 'User')}" class="px-2 py-1 text-[10px] bg-red-600 text-white rounded hover:bg-red-700 font-semibold">
-                            Disable
-                        </button>
-                    </div>
+                    </details>
                 </div>`;
             };
 
