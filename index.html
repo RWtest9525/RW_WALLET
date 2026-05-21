@@ -946,6 +946,12 @@
                             <h4 class="text-sm text-gray-500 dark:text-gray-400 font-medium">Pending Withdrawals</h4>
                             <p id="analytics-pending-reqs" class="text-3xl font-bold mt-2">0</p>
                         </div>
+                        <div class="bg-white dark:bg-gray-800 p-5 rounded-2xl shadow-md cursor-pointer hover:bg-red-50 dark:hover:bg-red-900/20 transition border border-gray-100 dark:border-gray-700"
+                            onclick="showAdminUsersPageWithFilter('minus_balance')">
+                            <h4 class="text-sm text-gray-500 dark:text-gray-400 font-medium">Minus Balance Users</h4>
+                            <p id="analytics-minus-balance-users" class="text-3xl font-bold mt-2 text-red-500">0</p>
+                            <p id="analytics-minus-balance-total" class="text-xs font-bold text-red-400 mt-1">₹0.00</p>
+                        </div>
                     </div>
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
                         <div class="bg-white dark:bg-gray-800 p-5 rounded-2xl shadow-md border border-gray-100 dark:border-gray-700">
@@ -2648,12 +2654,19 @@
 
             let totalFunds = 0;
             let newMembersCount = 0;
+            let minusBalanceCount = 0;
+            let minusBalanceTotal = 0;
             const fifteenDaysAgo = new Date();
             fifteenDaysAgo.setDate(fifteenDaysAgo.getDate() - 15);
 
             const otherUsers = allUsersCache.filter(u => !isAdminUserRecord(u));
             otherUsers.forEach(u => {
-                    totalFunds += getUserAvailableBalance(u);
+                    const balance = getUserAvailableBalance(u);
+                    totalFunds += balance;
+                    if (balance < 0) {
+                        minusBalanceCount++;
+                        minusBalanceTotal += Math.abs(balance);
+                    }
 
                     if (u.createdAt) {
                         const createdDate = u.createdAt.toDate ? u.createdAt.toDate() : new Date(u.createdAt);
@@ -2666,6 +2679,10 @@
             document.getElementById('analytics-total-users').textContent = otherUsers.length;
             document.getElementById('analytics-total-funds').textContent = formatCompactBalance(totalFunds);
             document.getElementById('analytics-new-members').textContent = newMembersCount;
+            const minusCountEl = document.getElementById('analytics-minus-balance-users');
+            const minusTotalEl = document.getElementById('analytics-minus-balance-total');
+            if (minusCountEl) minusCountEl.textContent = minusBalanceCount;
+            if (minusTotalEl) minusTotalEl.textContent = `Total minus: ${formatCurrency(minusBalanceTotal)}`;
 
             if (document.getElementById('admin-users-list-page')) {
                 updateAdminUserListView();
@@ -5415,6 +5432,7 @@
                             <option value="active">Active Users</option>
                             <option value="inactive">Inactive Users</option>
                             <option value="pro">Pro Verified Users</option>
+                            <option value="minus_balance">Minus Balance Users</option>
                             <option value="zero_balance">0 Balance Users</option>
                         </select>
                     </div>
@@ -5786,17 +5804,22 @@
             const activeUsers = users.filter(u => !u.isFlagged && (getUserAvailableBalance(u) > 0 || u.hasRecentActivity));
             const inactiveUsers = users.filter(u => !activeUsers.includes(u));
 
-            const renderUser = (u) => `
-                <div class="p-3 mb-2 ${u.isFlagged ? 'bg-red-50 dark:bg-red-900/20 border border-red-200' : 'bg-gray-50 dark:bg-gray-700/50'} rounded-lg flex justify-between items-center">
+            const renderUser = (u) => {
+                const balance = getUserAvailableBalance(u);
+                const isMinusBalance = balance < 0;
+                return `
+                <div class="p-3 mb-2 ${u.isFlagged || isMinusBalance ? 'bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800' : 'bg-gray-50 dark:bg-gray-700/50'} rounded-lg flex justify-between items-center">
                     <div class="flex-grow">
                         <div class="flex items-center gap-2">
                             <p class="font-semibold text-sm">${escapeHtml(u.name || 'No Name')}</p>
                             ${u.isFlagged ? '<span class="px-1.5 py-0.5 text-[10px] bg-red-600 text-white rounded uppercase font-bold">Flagged</span>' : ''}
+                            ${isMinusBalance ? '<span class="px-1.5 py-0.5 text-[10px] bg-red-600 text-white rounded uppercase font-bold">Minus</span>' : ''}
                             ${u.isProProfile ? '<span class="px-1.5 py-0.5 text-[10px] bg-blue-600 text-white rounded-full uppercase font-bold">Pro</span>' : ''}
                         </div>
                         <p class="text-xs text-gray-500 dark:text-gray-400">${escapeHtml(u.email || '')}</p>
                         <p class="text-xs text-gray-500 dark:text-gray-400">${escapeHtml(u.mobile || 'No Mobile')}</p>
-                        <p class="text-xs font-bold text-blue-600 dark:text-blue-400 mt-1">Balance: ${formatCompactBalance(getUserAvailableBalance(u))}</p>
+                        <p class="text-xs font-bold ${isMinusBalance ? 'text-red-600 dark:text-red-300' : 'text-blue-600 dark:text-blue-400'} mt-1">Balance: ${formatCompactBalance(balance)}</p>
+                        ${isMinusBalance ? '<p class="text-[10px] font-semibold text-red-500 dark:text-red-300 mt-0.5">Check pending withdrawals before approving more payouts.</p>' : ''}
                     </div>
                     <div class="flex flex-col space-y-1 ml-4">
                         <div class="flex space-x-1">
@@ -5818,6 +5841,7 @@
                         </button>
                     </div>
                 </div>`;
+            };
 
             listEl.innerHTML = users.length === 0
                 ? '<p class="text-gray-500 dark:text-gray-400 text-center py-4">No users found.</p>'
@@ -5855,6 +5879,8 @@
                 usersToRender = usersToRender.filter(u => u.isFlagged || (getUserAvailableBalance(u) <= 0 && !u.hasRecentActivity));
             } else if (filterValue === 'zero_balance') {
                 usersToRender = usersToRender.filter(u => getUserAvailableBalance(u) === 0);
+            } else if (filterValue === 'minus_balance') {
+                usersToRender = usersToRender.filter(u => getUserAvailableBalance(u) < 0);
             } else if (filterValue === 'pro') {
                 usersToRender = usersToRender.filter(u => !!u.isProProfile);
             } else if (filterValue === 'new') {
@@ -5868,7 +5894,9 @@
             }
 
             // Sort by balance (highest first)
-            usersToRender.sort((a, b) => getUserAvailableBalance(b) - getUserAvailableBalance(a));
+            usersToRender.sort((a, b) => filterValue === 'minus_balance'
+                ? getUserAvailableBalance(a) - getUserAvailableBalance(b)
+                : getUserAvailableBalance(b) - getUserAvailableBalance(a));
             renderAdminUsersList(usersToRender);
         };
 
