@@ -1399,6 +1399,7 @@
         let notificationsCache = [];
         let notificationUnreadCount = 0;
         let adminNotificationsCache = [];
+        let notificationRefreshTimer = null;
         let revyBotMessages = [];
         let revyBotLastQuestion = '';
         let revyBotTimer = null;
@@ -2820,6 +2821,10 @@
             notificationsCache = [];
             notificationUnreadCount = 0;
             adminNotificationsCache = [];
+            if (notificationRefreshTimer) {
+                clearInterval(notificationRefreshTimer);
+                notificationRefreshTimer = null;
+            }
             if (supportSocket) {
                 supportSocket.off('chat_history');
                 supportSocket.off('new_message');
@@ -2837,6 +2842,10 @@
 
                 const isAdmin = user.uid === ADMIN_UID;
                 hydrateUserFromCache(user.uid);
+                notificationsCache = readNotificationsCache(user.uid);
+                refreshNotificationUnreadCount(notificationsCache);
+                preloadNotificationsForUser(user.uid).catch(e => console.warn('Initial notification preload skipped:', e));
+                startNotificationAutoRefresh(user.uid);
                 document.getElementById('admin-tab-button').classList.toggle('hidden', !isAdmin);
                 document.getElementById('bottom-admin-btn').classList.toggle('hidden', !isAdmin);
                 document.getElementById('bottom-nav-grid').className = `mx-auto grid max-w-xl ${isAdmin ? 'grid-cols-5' : 'grid-cols-4'} items-center px-2 pt-2 text-[10px] sm:text-xs font-semibold text-gray-500 dark:text-gray-400`;
@@ -5039,7 +5048,7 @@
 
         const fetchUserNotifications = async () => {
             const token = await getBackendAuthToken();
-            const response = await fetchWithTimeout(`${BACKEND_BASE_URL}/api/notifications?limit=100`, {
+            const response = await fetchWithTimeout(`${BACKEND_BASE_URL}/api/notifications?limit=200`, {
                 headers: { Authorization: `Bearer ${token}` }
             }, 6000);
             const data = await response.json().catch(() => ({}));
@@ -5059,6 +5068,15 @@
             writeNotificationsCache(userId, notificationsCache);
             refreshNotificationUnreadCount(notificationsCache);
             renderUserNotificationsList();
+        };
+
+        const startNotificationAutoRefresh = (userId = currentUser?.uid) => {
+            if (!userId) return;
+            if (notificationRefreshTimer) clearInterval(notificationRefreshTimer);
+            notificationRefreshTimer = setInterval(() => {
+                if (!currentUser || currentUser.uid !== userId) return;
+                preloadNotificationsForUser(userId).catch(error => console.warn('Notification background refresh skipped:', error));
+            }, 45000);
         };
 
         const markNotificationRead = async (notificationId) => {
