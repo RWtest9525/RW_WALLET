@@ -1028,7 +1028,8 @@
                                 <span class="text-sm font-medium text-emerald-700 dark:text-emerald-300">Manage Partner</span>
                             </button>
                             <button id="admin-chats-btn"
-                                class="flex flex-col items-center justify-center p-3 min-h-28 bg-rose-50 dark:bg-rose-900/20 rounded-2xl hover:bg-rose-100 dark:hover:bg-rose-900/30 transition border border-rose-200 dark:border-rose-800 shadow-sm">
+                                class="relative flex flex-col items-center justify-center p-3 min-h-28 bg-rose-50 dark:bg-rose-900/20 rounded-2xl hover:bg-rose-100 dark:hover:bg-rose-900/30 transition border border-rose-200 dark:border-rose-800 shadow-sm">
+                                <span id="admin-chat-unread-badge" class="hidden absolute right-2 top-2 min-w-6 h-6 rounded-full bg-red-600 px-2 text-center text-xs font-black leading-6 text-white shadow"></span>
                                 <span class="flex h-12 w-12 items-center justify-center rounded-2xl bg-white dark:bg-gray-800 shadow-sm mb-2">
                                     <img src="https://cdn-icons-png.flaticon.com/512/5962/5962463.png" class="h-8 w-8 object-contain" alt="Manage Chat">
                                 </span>
@@ -1224,6 +1225,7 @@
         let activeSupportRoomId = '';
         let activeSupportMessages = [];
         let supportChatUnreadCount = 0;
+        let adminChatUnreadCount = 0;
         let supportChatPreloadUserId = '';
         let supportChatBackgroundHandlers = null;
         let revyBotMessages = [];
@@ -2623,6 +2625,7 @@
             activeSupportRoomId = '';
             activeSupportMessages = [];
             supportChatUnreadCount = 0;
+            adminChatUnreadCount = 0;
             supportChatPreloadUserId = '';
             supportChatBackgroundHandlers = null;
             if (supportSocket) {
@@ -2630,6 +2633,7 @@
                 supportSocket.off('new_message');
             }
             updateSupportChatUnreadBadges();
+            updateAdminChatUnreadBadges();
 
             if (user) {
                 currentUser = user;
@@ -3827,6 +3831,7 @@
         const getSupportRoomId = (chatUserId) => `support_${chatUserId}`;
         const getSupportChatCacheKey = (roomId) => `rw_support_chat_${roomId}`;
         const getSupportChatSeenKey = (roomId) => `rw_support_seen_${roomId}`;
+        const getAdminSupportChatSeenKey = (roomId) => `rw_admin_support_seen_${roomId}`;
 
         const readSupportChatCache = (roomId) => {
             try {
@@ -3898,6 +3903,26 @@
             });
         };
 
+        const updateAdminChatUnreadBadges = () => {
+            const badge = document.getElementById('admin-chat-unread-badge');
+            if (!badge) return;
+            badge.textContent = adminChatUnreadCount > 99 ? '99+' : String(adminChatUnreadCount || '');
+            badge.classList.toggle('hidden', adminChatUnreadCount <= 0);
+        };
+
+        const calculateAdminChatUnreadCount = (chats = allSupportChatsCache) => chats.filter(chat => {
+            const roomId = chat.roomId || chat.room_id || getSupportRoomId(chat.userId || chat.id);
+            const lastSenderId = chat.lastSenderId || chat.last_sender_id || '';
+            const updatedAt = timestampToMillis(chat.updatedAt || chat.updated_at);
+            const seenAt = Number(localStorage.getItem(getAdminSupportChatSeenKey(roomId)) || 0);
+            return lastSenderId && lastSenderId !== ADMIN_UID && updatedAt > seenAt;
+        }).length;
+
+        const refreshAdminChatUnreadCount = () => {
+            adminChatUnreadCount = calculateAdminChatUnreadCount();
+            updateAdminChatUnreadBadges();
+        };
+
         const markSupportChatSeen = (roomId, messages = readSupportChatCache(roomId)) => {
             const latestAdminTime = getLatestAdminMessageTime(messages);
             if (latestAdminTime) {
@@ -3907,13 +3932,26 @@
             updateSupportChatUnreadBadges();
         };
 
+        const markAdminSupportChatSeen = (roomId, messages = readSupportChatCache(roomId)) => {
+            const latestUserTime = Math.max(0, ...messages
+                .map(normalizeBackendMessage)
+                .filter(message => message.senderRole !== 'admin')
+                .map(message => timestampToMillis(message.createdAt)));
+            const room = allSupportChatsCache.find(chat => (chat.roomId || getSupportRoomId(chat.userId || chat.id)) === roomId);
+            const fallbackTime = room && (room.lastSenderId || room.last_sender_id) !== ADMIN_UID ? timestampToMillis(room.updatedAt || room.updated_at) : 0;
+            const seenAt = Math.max(latestUserTime, fallbackTime);
+            if (seenAt) localStorage.setItem(getAdminSupportChatSeenKey(roomId), String(seenAt));
+            refreshAdminChatUnreadCount();
+        };
+
         const refreshSupportUnreadFromCache = (roomId) => {
             supportChatUnreadCount = calculateSupportUnreadCount(roomId);
             updateSupportChatUnreadBadges();
         };
 
         const preloadSupportChatForUser = async (userId = currentUser?.uid) => {
-            if (!userId || userId === ADMIN_UID || supportChatPreloadUserId === userId) return;
+            if (!userId || userId === ADMIN_UID) return;
+            if (supportChatPreloadUserId === userId && supportSocket?.connected) return;
             supportChatPreloadUserId = userId;
             const roomId = getSupportRoomId(userId);
             const cached = readSupportChatCache(roomId);
@@ -4117,6 +4155,7 @@
             activeSupportMessages = readSupportChatCache(activeSupportRoomId);
             renderSupportMessages(activeSupportMessages, viewerRole);
             if (!isAdminView) markSupportChatSeen(activeSupportRoomId, activeSupportMessages);
+            if (isAdminView) markAdminSupportChatSeen(activeSupportRoomId, activeSupportMessages);
             fetchSupportChatHistory(activeSupportRoomId, 200)
                 .then((history) => {
                     if (!history.length && activeSupportMessages.length) return;
@@ -4124,6 +4163,7 @@
                     writeSupportChatCache(activeSupportRoomId, activeSupportMessages);
                     renderSupportMessages(activeSupportMessages, viewerRole);
                     if (!isAdminView) markSupportChatSeen(activeSupportRoomId, activeSupportMessages);
+                    if (isAdminView) markAdminSupportChatSeen(activeSupportRoomId, activeSupportMessages);
                 })
                 .catch((error) => console.warn('Fast chat history fetch failed:', error));
             const socket = await getSupportSocket();
@@ -4134,6 +4174,7 @@
                 writeSupportChatCache(activeSupportRoomId, activeSupportMessages);
                 renderSupportMessages(activeSupportMessages, viewerRole);
                 if (!isAdminView) markSupportChatSeen(activeSupportRoomId, activeSupportMessages);
+                if (isAdminView) markAdminSupportChatSeen(activeSupportRoomId, activeSupportMessages);
             };
             const handleNewMessage = (message) => {
                 if (message.roomId !== activeSupportRoomId) return;
@@ -4141,6 +4182,7 @@
                 writeSupportChatCache(activeSupportRoomId, activeSupportMessages);
                 renderSupportMessages(activeSupportMessages, viewerRole);
                 if (!isAdminView) markSupportChatSeen(activeSupportRoomId, activeSupportMessages);
+                if (isAdminView) markAdminSupportChatSeen(activeSupportRoomId, activeSupportMessages);
             };
             socket.on('chat_history', handleHistory);
             socket.on('new_message', handleNewMessage);
@@ -4559,6 +4601,7 @@
                 allSupportChatsCache = (data.chats || []).map(chat => ({
                     id: chat.user_id || chat.room_id?.replace(/^support_/, ''),
                     userId: chat.user_id || chat.room_id?.replace(/^support_/, ''),
+                    roomId: chat.room_id || getSupportRoomId(chat.user_id || ''),
                     userName: chat.user_name || 'User',
                     userEmail: chat.user_email || '',
                     userMobile: chat.user_mobile || '',
@@ -4566,6 +4609,7 @@
                     lastSenderId: chat.last_sender_id || '',
                     updatedAt: chat.updated_at || Date.now()
                 }));
+                refreshAdminChatUnreadCount();
                 renderAdminChatsList();
             } catch (error) {
                 console.error('Cloudflare admin chat list failed:', error);
@@ -4588,21 +4632,29 @@
 
             list.innerHTML = chatsToRender.length === 0
                 ? '<p class="text-center text-gray-500 dark:text-gray-400 py-8">No chats received yet.</p>'
-                : chatsToRender.map(chat => `
+                : chatsToRender.map(chat => {
+                    const roomId = chat.roomId || getSupportRoomId(chat.userId || chat.id);
+                    const isUnread = (chat.lastSenderId || '') !== ADMIN_UID && timestampToMillis(chat.updatedAt) > Number(localStorage.getItem(getAdminSupportChatSeenKey(roomId)) || 0);
+                    return `
                     <button data-chat-userid="${chat.userId || chat.id}" class="admin-chat-row w-full flex items-center gap-3 p-4 bg-white dark:bg-gray-800 border border-gray-100 dark:border-gray-700 rounded-2xl shadow-sm text-left hover:bg-gray-50 dark:hover:bg-gray-700/50 transition">
                         <img src="https://cdn-icons-png.flaticon.com/512/3135/3135715.png" alt="${escapeHtml(chat.userName || 'User')}" class="h-12 w-12 rounded-full object-contain bg-blue-50 p-2">
                         <div class="flex-1 min-w-0">
                             <div class="flex items-center justify-between gap-2">
                                 <h3 class="font-bold truncate">${escapeHtml(chat.userName || 'User')}</h3>
-                                <span class="text-[10px] text-gray-400">${formatChatTime(chat.updatedAt)}</span>
+                                <div class="flex items-center gap-2">
+                                    ${isUnread ? '<span class="min-w-5 h-5 rounded-full bg-red-600 px-1.5 text-center text-[10px] font-black leading-5 text-white shadow">1</span>' : ''}
+                                    <span class="text-[10px] text-gray-400">${formatChatTime(chat.updatedAt)}</span>
+                                </div>
                             </div>
                             <p class="text-xs text-gray-400 dark:text-gray-500 truncate">${escapeHtml(chat.userMobile || chat.userEmail || '')}</p>
-                            <p class="text-sm text-gray-500 dark:text-gray-400 truncate">${escapeHtml(chat.lastMessage || 'No message')}</p>
+                            <p class="text-sm ${isUnread ? 'font-bold text-gray-900 dark:text-white' : 'text-gray-500 dark:text-gray-400'} truncate">${escapeHtml(chat.lastMessage || 'No message')}</p>
                         </div>
-                    </button>`).join('');
+                    </button>`;
+                }).join('');
             document.querySelectorAll('.admin-chat-row').forEach(row => {
                 row.onclick = () => {
                     const chat = allSupportChatsCache.find(item => (item.userId || item.id) === row.dataset.chatUserid);
+                    markAdminSupportChatSeen(chat?.roomId || getSupportRoomId(row.dataset.chatUserid), readSupportChatCache(chat?.roomId || getSupportRoomId(row.dataset.chatUserid)));
                     openSupportChatPage(row.dataset.chatUserid, 'admin', chat || {});
                 };
             });
