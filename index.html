@@ -5806,6 +5806,18 @@
                         <p class="text-sm text-gray-500 dark:text-gray-400">${escapeHtml(user.mobile || '')}</p>
                         <p class="mt-3 text-2xl font-black text-blue-600 dark:text-blue-300">${formatCurrency(user.balance || 0)}</p>
                     </div>
+                    <div class="bg-yellow-50 dark:bg-yellow-900/20 p-4 rounded-2xl shadow-md border border-yellow-100 dark:border-yellow-800">
+                        <div class="flex items-center justify-between gap-3 mb-3">
+                            <div>
+                                <p class="text-xs uppercase font-bold text-yellow-600 dark:text-yellow-300">Pending Withdrawals</p>
+                                <p class="text-xs text-yellow-700 dark:text-yellow-200">Check this before approving duplicate requests.</p>
+                            </div>
+                            <span id="admin-user-pending-withdraw-count" class="rounded-full bg-yellow-200 dark:bg-yellow-800 px-3 py-1 text-xs font-black text-yellow-800 dark:text-yellow-100">0</span>
+                        </div>
+                        <div id="admin-user-pending-withdrawals" class="space-y-2">
+                            <p class="text-sm text-yellow-700 dark:text-yellow-200">Loading pending withdrawals...</p>
+                        </div>
+                    </div>
                     <div class="bg-white dark:bg-gray-800 p-4 rounded-2xl shadow-md border border-gray-100 dark:border-gray-700">
                         <input id="admin-user-tx-search" placeholder="Search transaction text..." class="w-full px-4 py-3 bg-gray-100 dark:bg-gray-700 rounded-xl mb-3">
                         <div id="admin-user-tx-filters" class="flex flex-wrap gap-2 mb-4">
@@ -5832,6 +5844,7 @@
                 renderAdminUserTransactions();
             });
             document.getElementById('admin-user-tx-search').addEventListener('input', renderAdminUserTransactions);
+            loadAdminUserPendingWithdrawals(userId);
             try {
                 const [firebaseItems, cloudItems] = await Promise.all([
                     loadFirebaseTransactions(userId, 5000).catch(error => {
@@ -5848,6 +5861,53 @@
             } catch (error) {
                 console.error('Admin user transaction load failed:', error);
                 document.getElementById('admin-user-transactions-list').innerHTML = '<p class="text-center text-red-500 py-6">Could not load transactions.</p>';
+            }
+        };
+
+        const loadAdminUserPendingWithdrawals = async (userId) => {
+            const listEl = document.getElementById('admin-user-pending-withdrawals');
+            const countEl = document.getElementById('admin-user-pending-withdraw-count');
+            if (!listEl) return;
+            try {
+                const cached = allFundRequestsCache.filter(req => req.userId === userId && (req.status || 'pending') === 'pending');
+                const [cloudRequests, firebaseRequests] = await Promise.all([
+                    loadCloudFundRequests({ status: 'pending', type: 'withdrawal', userId, limit: 50 }).catch(error => {
+                        console.warn('Admin user cloud pending withdrawals skipped:', error);
+                        return [];
+                    }),
+                    loadFirebasePendingFundRequests(userId).catch(error => {
+                        console.warn('Admin user Firebase pending withdrawals skipped:', error);
+                        return [];
+                    })
+                ]);
+                const pending = mergeFundRequestsById(cached, cloudRequests, firebaseRequests)
+                    .filter(req => (req.type || 'withdrawal') === 'withdrawal' && (req.status || 'pending') === 'pending');
+                if (countEl) countEl.textContent = String(pending.length);
+                if (!pending.length) {
+                    listEl.innerHTML = '<p class="text-sm text-yellow-700 dark:text-yellow-200">No pending withdrawal for this user.</p>';
+                    return;
+                }
+                const total = pending.reduce((sum, req) => sum + Number(req.amount || 0), 0);
+                listEl.innerHTML = `
+                    <div class="rounded-xl bg-white/70 dark:bg-gray-800/70 border border-yellow-200 dark:border-yellow-700 p-3">
+                        <p class="text-sm font-black text-yellow-800 dark:text-yellow-100">Total Pending: ${formatCurrency(total)}</p>
+                    </div>
+                    ${pending.map(req => `
+                        <div class="rounded-xl bg-white dark:bg-gray-800 border border-yellow-100 dark:border-yellow-800 p-3 text-sm">
+                            <div class="flex justify-between gap-3">
+                                <div>
+                                    <p class="font-bold text-gray-900 dark:text-white">${formatCurrency(req.amount || 0)}</p>
+                                    <p class="text-xs text-gray-500 dark:text-gray-400">${escapeHtml(req.method || getWithdrawalMethodName(req.methodId, 'Withdrawal'))}</p>
+                                    <p class="text-xs text-gray-500 dark:text-gray-400">${formatDateDDMMYY(req.requestedAt || req.requested_at)}</p>
+                                </div>
+                                <span class="h-fit rounded-full bg-yellow-100 dark:bg-yellow-900/40 px-2 py-1 text-[10px] font-black uppercase text-yellow-700 dark:text-yellow-200">Pending</span>
+                            </div>
+                            <p class="mt-2 text-xs break-words text-gray-600 dark:text-gray-300">${escapeHtml(getWithdrawalDetailText(req))}</p>
+                        </div>
+                    `).join('')}`;
+            } catch (error) {
+                console.error('Admin user pending withdrawal load failed:', error);
+                listEl.innerHTML = '<p class="text-sm text-red-600 dark:text-red-300">Could not load pending withdrawals.</p>';
             }
         };
 
