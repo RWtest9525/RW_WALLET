@@ -229,28 +229,42 @@
             background-color: rgba(128, 128, 128, 0.1);
         }
 
-        .bottom-nav-btn.active {
-            color: #2563eb;
-        }
-
-        .bottom-nav-btn.active .bottom-nav-icon {
-            background: #2563eb;
-            color: white;
-            box-shadow: 0 10px 22px rgba(37, 99, 235, 0.28);
-        }
-
-        #bottom-nav {
-            background-color: #ffffff !important;
-            padding-bottom: env(safe-area-inset-bottom);
-        }
-
-        #bottom-nav-grid {
-            min-height: 4.75rem;
-        }
-
         .bottom-nav-btn {
             min-width: 0;
             line-height: 1;
+            position: relative;
+            isolation: isolate;
+            transition: color 0.2s ease, transform 0.2s ease;
+        }
+
+        .bottom-nav-btn.active {
+            color: #1d4ed8;
+            transform: translateY(-3px);
+        }
+
+        .bottom-nav-btn.active .bottom-nav-icon {
+            background: linear-gradient(145deg, #ffffff, #dbeafe 45%, #bfdbfe);
+            color: white;
+            box-shadow: 0 12px 26px rgba(37, 99, 235, 0.28), inset 0 1px 0 rgba(255, 255, 255, 0.95);
+            border-color: rgba(37, 99, 235, 0.32);
+            transform: translateY(-2px) scale(1.06);
+        }
+
+        .bottom-nav-btn.active .bottom-nav-icon::after {
+            opacity: 1;
+            transform: translateX(-50%) scaleX(1);
+        }
+
+        #bottom-nav {
+            background: linear-gradient(180deg, rgba(255, 255, 255, 0.94), #ffffff) !important;
+            padding-bottom: env(safe-area-inset-bottom);
+            border-top: 1px solid rgba(226, 232, 240, 0.95);
+            box-shadow: 0 -18px 42px rgba(15, 23, 42, 0.14);
+            backdrop-filter: blur(18px);
+        }
+
+        #bottom-nav-grid {
+            min-height: 5.05rem;
         }
 
         .bottom-nav-btn>span:last-child {
@@ -258,6 +272,41 @@
             overflow: hidden;
             text-overflow: ellipsis;
             white-space: nowrap;
+        }
+
+        .bottom-nav-icon {
+            position: relative;
+            overflow: visible;
+            border: 1px solid rgba(226, 232, 240, 0.92);
+            box-shadow: 0 8px 18px rgba(15, 23, 42, 0.08);
+            transition: transform 0.22s ease, box-shadow 0.22s ease, background 0.22s ease, border-color 0.22s ease;
+        }
+
+        .bottom-nav-icon::after {
+            content: "";
+            position: absolute;
+            left: 50%;
+            bottom: -9px;
+            width: 22px;
+            height: 3px;
+            border-radius: 999px;
+            background: linear-gradient(90deg, #2563eb, #22c55e);
+            opacity: 0;
+            transform: translateX(-50%) scaleX(0.35);
+            transition: opacity 0.2s ease, transform 0.22s ease;
+        }
+
+        .bottom-nav-img {
+            width: 1.28rem;
+            height: 1.28rem;
+            object-fit: contain;
+            filter: drop-shadow(0 4px 6px rgba(15, 23, 42, 0.16));
+            transition: transform 0.22s ease, filter 0.22s ease;
+        }
+
+        .bottom-nav-btn.active .bottom-nav-img {
+            transform: scale(1.1);
+            filter: drop-shadow(0 5px 7px rgba(37, 99, 235, 0.24));
         }
 
         .chat-bubble-user {
@@ -619,18 +668,22 @@
 
         .dark .page-header-fixed,
         .dark #bottom-nav {
-            background-color: #0f172a !important;
+            background: linear-gradient(180deg, rgba(15, 23, 42, 0.96), #0b1120) !important;
             border-color: #2f3b52 !important;
+            box-shadow: 0 -18px 42px rgba(0, 0, 0, 0.38);
         }
 
         .dark .bottom-nav-icon {
-            background-color: #20293a !important;
+            background: linear-gradient(145deg, #1f2937, #111827) !important;
             color: #cbd5e1;
+            border-color: rgba(71, 85, 105, 0.9);
+            box-shadow: 0 8px 18px rgba(0, 0, 0, 0.26);
         }
 
         .dark .bottom-nav-btn.active .bottom-nav-icon {
-            background: linear-gradient(135deg, #2563eb, #06b6d4) !important;
+            background: linear-gradient(145deg, #1e3a8a, #2563eb 55%, #22c55e) !important;
             color: #ffffff !important;
+            border-color: rgba(147, 197, 253, 0.46);
         }
 
         .dark .filter-btn {
@@ -1047,32 +1100,32 @@
                 <div id="bottom-nav-grid" class="mx-auto grid max-w-xl grid-cols-4 items-center px-2 pt-2 text-[10px] sm:text-xs font-semibold text-gray-500 dark:text-gray-400">
                     <button id="bottom-transactions-btn" class="bottom-nav-btn flex flex-col items-center gap-1 py-1">
                         <span class="bottom-nav-icon flex h-9 w-9 items-center justify-center rounded-xl bg-gray-100 dark:bg-gray-700 transition">
-                            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16"></path><path d="M4 12h16"></path><path d="M4 17h10"></path></svg>
+                            <img src="https://cdn-icons-png.flaticon.com/512/3652/3652191.png" alt="History" class="bottom-nav-img" loading="eager" fetchpriority="high" decoding="async">
                         </span>
                         <span>History</span>
                     </button>
                     <button id="bottom-home-btn" class="bottom-nav-btn active flex flex-col items-center gap-1 py-1">
                         <span class="bottom-nav-icon flex h-10 w-10 items-center justify-center rounded-xl bg-gray-100 dark:bg-gray-700 transition">
-                            <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m3 10 9-7 9 7"></path><path d="M5 10v10h14V10"></path><path d="M9 20v-6h6v6"></path></svg>
+                            <img src="https://cdn-icons-png.flaticon.com/512/1946/1946436.png" alt="Home" class="bottom-nav-img" loading="eager" fetchpriority="high" decoding="async">
                         </span>
                         <span>Home</span>
                     </button>
                     <button id="bottom-admin-btn" class="bottom-nav-btn hidden flex flex-col items-center gap-1 py-1">
                         <span class="bottom-nav-icon flex h-9 w-9 items-center justify-center rounded-xl bg-gray-100 dark:bg-gray-700 transition">
-                            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2"></rect><path d="M8 12h8"></path><path d="M12 8v8"></path></svg>
+                            <img src="https://cdn-icons-png.flaticon.com/512/3135/3135715.png" alt="Admin" class="bottom-nav-img" loading="eager" fetchpriority="high" decoding="async">
                         </span>
                         <span>Admin</span>
                     </button>
                     <button id="bottom-help-btn" class="bottom-nav-btn flex flex-col items-center gap-1 py-1">
                         <span class="bottom-nav-icon relative flex h-9 w-9 items-center justify-center rounded-xl bg-gray-100 dark:bg-gray-700 transition">
-                            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a4 4 0 0 1-4 4H8l-5 3V7a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4z"></path></svg>
+                            <img src="https://cdn-icons-png.flaticon.com/512/5962/5962463.png" alt="Help" class="bottom-nav-img" loading="eager" fetchpriority="high" decoding="async">
                             <span id="bottom-help-unread-badge" class="hidden absolute -right-1 -top-1 min-w-5 h-5 rounded-full bg-red-600 px-1 text-[10px] font-black leading-5 text-white shadow"></span>
                         </span>
                         <span>Help</span>
                     </button>
                     <button id="bottom-settings-btn" class="bottom-nav-btn flex flex-col items-center gap-1 py-1">
                         <span class="bottom-nav-icon flex h-9 w-9 items-center justify-center rounded-xl bg-gray-100 dark:bg-gray-700 transition">
-                            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06A1.65 1.65 0 0 0 15 19.4a1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.6 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06A2 2 0 0 1 7.1 4.29l.06.06A1.65 1.65 0 0 0 9 4.6a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
+                            <img src="https://cdn-icons-png.flaticon.com/512/3524/3524659.png" alt="Settings" class="bottom-nav-img" loading="eager" fetchpriority="high" decoding="async">
                         </span>
                         <span>Settings</span>
                     </button>
