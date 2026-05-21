@@ -1167,6 +1167,7 @@
         const appId = typeof __app_id !== 'undefined' ? __app_id : 'digital-wallet-prod';
         const ADMIN_UID = "mOs5Fmp4RoRzeBDH4pZLMOpQx7Q2";
         const WEB_APP_BUILD = "rw-web-2026-05-21-tracker";
+        const WEB_APP_UPDATE_DATE = "2026-05-21";
         const LEGACY_WITHDRAWAL_DEDUCTION_CUTOFF = new Date(2026, 4, 20).getTime();
         const RECHARGE_DISCOUNT_RATE = 0.01;
         const PARTNER_INTEREST_RATE = 0.01;
@@ -2508,20 +2509,20 @@
 
         const getUserWebSeenMillis = (user = {}) => timestampToMillis(user.webAppLastSeenAt || user.web_app_last_seen_at || user.lastWebAppSeenAt || user.last_web_app_seen_at);
         const isUserOnUpdatedWebApp = (user = {}) => {
+            if (user.webAppUpdatedOn === WEB_APP_UPDATE_DATE || user.web_app_updated_on === WEB_APP_UPDATE_DATE) return true;
             const build = user.webAppBuild || user.web_app_build || user.lastWebAppBuild || '';
             return !!build || !!getUserWebSeenMillis(user);
         };
 
         const markUpdatedWebAppSeen = async (userId, userRef, data = {}) => {
             if (!userId || userId === ADMIN_UID) return;
-            const todayKey = new Date().toISOString().slice(0, 10);
-            const cacheKey = `rw_web_seen_${userId}_${todayKey}`;
-            const lastSeen = getUserWebSeenMillis(data);
-            if (localStorage.getItem(cacheKey) && data.webAppBuild === WEB_APP_BUILD) return;
-            if (data.webAppBuild === WEB_APP_BUILD && lastSeen && Date.now() - lastSeen < 12 * 60 * 60 * 1000) return;
+            if (isUserOnUpdatedWebApp(data)) return;
+            const cacheKey = `rw_web_updated_${userId}_${WEB_APP_UPDATE_DATE}`;
+            if (localStorage.getItem(cacheKey)) return;
             localStorage.setItem(cacheKey, '1');
             await updateDoc(userRef, {
                 webAppBuild: WEB_APP_BUILD,
+                webAppUpdatedOn: WEB_APP_UPDATE_DATE,
                 webAppLastSeenAt: serverTimestamp(),
                 webAppLastSeenUserAgent: navigator.userAgent.slice(0, 180)
             });
