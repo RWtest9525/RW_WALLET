@@ -61,7 +61,15 @@ async function main() {
     });
   };
 
-  app.get('/ping', sendHealth);
+  app.get('/ping', (req, res) => {
+    res.set('Cache-Control', 'no-store');
+    res.type('text/plain').status(200).send('ok');
+  });
+
+  app.head('/ping', (req, res) => {
+    res.set('Cache-Control', 'no-store');
+    res.status(200).end();
+  });
 
   app.get('/health', (req, res) => {
     sendHealth(req, res);
