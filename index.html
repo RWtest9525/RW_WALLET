@@ -1703,6 +1703,22 @@
             return snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
         };
 
+        const loadUserPendingWithdrawalsMerged = async (userId) => {
+            if (!userId) return [];
+            const [cloudRequests, firebaseRequests] = await Promise.all([
+                loadCloudFundRequests({ status: 'pending', type: 'withdrawal', userId, limit: 200 }).catch(error => {
+                    console.warn('User cloud pending withdrawals skipped:', error);
+                    return [];
+                }),
+                loadFirebasePendingFundRequests(userId).catch(error => {
+                    console.warn('User Firebase pending withdrawals skipped:', error);
+                    return [];
+                })
+            ]);
+            return mergeFundRequestsById(cloudRequests, firebaseRequests)
+                .filter(req => (req.type || 'withdrawal') === 'withdrawal' && (req.status || 'pending') === 'pending');
+        };
+
         const mergeFundRequestsById = (...groups) => {
             const merged = new Map();
             const signatureToKey = new Map();
@@ -4167,10 +4183,8 @@
         const getPendingWithdrawalForBot = async () => {
             if (!currentUser) return null;
             try {
-                const cloudPending = await loadCloudFundRequests({ status: 'pending', userId: currentUser.uid });
-                const pending = cloudPending.length ? cloudPending : await loadFirebasePendingFundRequests(currentUser.uid);
-                return pending
-                    .find(item => (item.type || 'withdrawal') === 'withdrawal') || null;
+                const pending = await loadUserPendingWithdrawalsMerged(currentUser.uid);
+                return pending[0] || null;
             } catch (error) {
                 console.error('Bot pending withdrawal check failed:', error);
                 return null;
@@ -4781,13 +4795,8 @@
                 return showNotification('Your account is flagged. Please contact support.', true);
             }
 
-            const q = query(
-                collection(db, `artifacts/${appId}/public/data/fund_requests`),
-                where("userId", "==", currentUser.uid),
-                where("status", "==", "pending")
-            );
-            const snap = await getDocs(q);
-            const pendingWithdrawalCount = snap.docs.filter(d => (d.data().type || 'withdrawal') === 'withdrawal').length;
+            const pendingWithdrawals = await loadUserPendingWithdrawalsMerged(currentUser.uid);
+            const pendingWithdrawalCount = pendingWithdrawals.length;
             if (pendingWithdrawalCount >= maxPendingWithdrawalsPerUser) {
                 showNotification(`You already have ${pendingWithdrawalCount} pending withdrawal request(s).`, true);
                 return;
@@ -7245,20 +7254,7 @@
                 return showNotification('Your user data is still loading. Please try again.', true);
             }
 
-            let pendingWithdrawalCount = 0;
-            try {
-                const pendingRequests = await loadCloudFundRequests({ status: 'pending', userId: currentUser.uid });
-                pendingWithdrawalCount = pendingRequests.filter(d => (d.type || 'withdrawal') === 'withdrawal').length;
-            } catch (error) {
-                console.warn('Cloud pending withdrawal check failed, using Firebase fallback:', error);
-                const q = query(
-                    collection(db, `artifacts/${appId}/public/data/fund_requests`),
-                    where("userId", "==", currentUser.uid),
-                    where("status", "==", "pending")
-                );
-                const snap = await getDocs(q);
-                pendingWithdrawalCount = snap.docs.filter(d => (d.data().type || 'withdrawal') === 'withdrawal').length;
-            }
+            const pendingWithdrawalCount = (await loadUserPendingWithdrawalsMerged(currentUser.uid)).length;
             if (pendingWithdrawalCount >= maxPendingWithdrawalsPerUser) {
                 return showNotification(`You already have ${pendingWithdrawalCount} pending withdrawal request(s). Please wait for them to be processed.`, true);
             }
