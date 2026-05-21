@@ -1558,14 +1558,32 @@
         const mergeTransactionsByKey = (...groups) => {
             const merged = new Map();
             const statusRank = (item = {}) => ['completed', 'rejected', 'failed'].includes(String(item.status || '').toLowerCase()) ? 2 : 1;
+            const getOriginalRequestTime = (...items) => {
+                const times = items
+                    .flat()
+                    .map(item => timestampToMillis(item?.requestedAt || item?.requested_at || item?.createdAt || item?.timestamp))
+                    .filter(time => Number.isFinite(time) && time > 0);
+                return times.length ? Math.min(...times) : null;
+            };
             groups.flat().forEach((item, index) => {
                 if (!item) return;
                 const normalized = normalizeTransactionForHistory(item, index);
                 const key = getTransactionKey(normalized, index);
                 const existing = merged.get(key) || {};
-                const next = statusRank(normalized) >= statusRank(existing)
+                let next = statusRank(normalized) >= statusRank(existing)
                     ? { ...existing, ...normalized, key }
                     : { ...normalized, ...existing, key };
+                const type = normalizeTransactionType(next);
+                if ((next.requestId || next.request_id) && (type === 'withdrawal' || type === 'mobile_recharge')) {
+                    const requestedAt = getOriginalRequestTime(existing, normalized, item);
+                    if (requestedAt) {
+                        next = {
+                            ...next,
+                            requestedAt,
+                            timestamp: requestedAt
+                        };
+                    }
+                }
                 merged.set(key, next);
             });
             return Array.from(merged.values())
@@ -6071,7 +6089,17 @@
                 const normalized = normalizeWithdrawalHistoryRecord(record);
                 if (normalizeTransactionType(normalized) !== 'withdrawal') return;
                 const key = normalized.requestId || normalized.request_id || normalized.transactionId || normalized.transaction_id || normalized.id || `withdrawal-${timestampToMillis(normalized.requestedAt)}-${normalized.amount}-${index}`;
-                merged.set(String(key), { ...(merged.get(String(key)) || {}), ...normalized });
+                const existing = merged.get(String(key)) || {};
+                const requestedAtCandidates = [existing.requestedAt, existing.requested_at, existing.timestamp, normalized.requestedAt, normalized.requested_at, normalized.timestamp]
+                    .map(timestampToMillis)
+                    .filter(time => Number.isFinite(time) && time > 0);
+                const requestedAt = requestedAtCandidates.length ? Math.min(...requestedAtCandidates) : normalized.requestedAt;
+                merged.set(String(key), {
+                    ...existing,
+                    ...normalized,
+                    requestedAt,
+                    timestamp: requestedAt
+                });
             });
             return Array.from(merged.values())
                 .sort((a, b) => timestampToMillis(b.requestedAt || b.timestamp || b.processedAt) - timestampToMillis(a.requestedAt || a.timestamp || a.processedAt));
@@ -8433,17 +8461,20 @@
                 const transactionBalanceAfter = newStatus === 'rejected'
                     ? (balanceWasDeducted && Number.isFinite(requestBalanceBefore) ? requestBalanceBefore : null)
                     : (Number.isFinite(requestBalanceAfter) ? requestBalanceAfter : null);
+                const requestedAt = requestData.requestedAt || requestData.requested_at || requestData.timestamp || requestData.createdAt || Date.now();
+                const processedAt = Date.now();
                 const transactionPayload = {
                     type: 'withdrawal',
                     amount,
-                    timestamp: requestData.requestedAt || requestData.requested_at || serverTimestamp(),
+                    timestamp: requestedAt,
+                    requestedAt,
                     status: newStatus === 'completed' ? 'completed' : 'rejected',
                     requestId,
                     transactionId: txnId || generateTransactionId(),
                     adminTransactionId: txnId || '',
                     rejectionReason: rejectionReason || '',
                     comment: newStatus === 'completed' ? 'Payment by Reviews World' : `Withdrawal Rejected: ${rejectionReason}`,
-                    processedAt: serverTimestamp(),
+                    processedAt,
                     ...withdrawalSnapshot,
                     ...(transactionBalanceBefore !== null ? { balanceBefore: transactionBalanceBefore } : {}),
                     ...(transactionBalanceAfter !== null ? { balanceAfter: transactionBalanceAfter } : {})
@@ -8453,6 +8484,7 @@
                     await updateDoc(reqRef, {
                         status: newStatus,
                         processedAt: serverTimestamp(),
+                        requestedAt,
                         adminTransactionId: txnId,
                         ...(transactionBalanceBefore !== null ? { balanceBefore: transactionBalanceBefore } : {}),
                         ...(transactionBalanceAfter !== null ? { balanceAfter: transactionBalanceAfter } : {}),
@@ -8462,6 +8494,7 @@
                     await updateDoc(reqRef, {
                         status: newStatus,
                         processedAt: serverTimestamp(),
+                        requestedAt,
                         rejectionReason: rejectionReason,
                         ...(transactionBalanceBefore !== null ? { balanceBefore: transactionBalanceBefore } : {}),
                         ...(transactionBalanceAfter !== null ? { balanceAfter: transactionBalanceAfter } : {}),
@@ -8478,7 +8511,8 @@
                     status: newStatus,
                     adminTransactionId: txnId || '',
                     rejectionReason,
-                    processedAt: Date.now(),
+                    requestedAt,
+                    processedAt,
                     amount: processedAmount,
                     ...(transactionBalanceBefore !== null ? { balanceBefore: transactionBalanceBefore } : {}),
                     ...(transactionBalanceAfter !== null ? { balanceAfter: transactionBalanceAfter } : {}),
