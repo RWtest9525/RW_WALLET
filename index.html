@@ -1688,10 +1688,25 @@
 
         const mergeFundRequestsById = (...groups) => {
             const merged = new Map();
+            const signatureToKey = new Map();
+            const getRequestSignature = (request = {}) => {
+                const timestamp = timestampToMillis(request.requestedAt || request.requested_at || request.timestamp || request.createdAt);
+                const minuteBucket = timestamp ? Math.floor(timestamp / 60000) : 'no-time';
+                const userId = request.userId || request.uid || request.user_id || '';
+                const type = request.type || 'withdrawal';
+                const amount = Number(request.amount || 0).toFixed(2);
+                const method = String(request.method || request.methodId || request.paymentMethod || request.payment_method || '').toLowerCase().trim();
+                const detail = String(getWithdrawalDetailText(request) || '').toLowerCase().trim();
+                return `${userId}|${type}|${amount}|${method}|${detail}|${minuteBucket}`;
+            };
             groups.flat().forEach((request) => {
                 const id = request.id || request.requestId || request.request_id;
-                if (!id) return;
-                merged.set(id, { ...(merged.get(id) || {}), ...request, id });
+                const signature = getRequestSignature(request);
+                const existingKey = signatureToKey.get(signature);
+                const key = existingKey || id || signature;
+                if (!key) return;
+                signatureToKey.set(signature, key);
+                merged.set(key, { ...(merged.get(key) || {}), ...request, id: id || key });
             });
             return Array.from(merged.values())
                 .filter(req => (req.status || 'pending') === 'pending')
@@ -6096,6 +6111,11 @@
                 const balanceAfter = getExplicitBalanceAfter(item) ?? item.balanceAfter;
                 const balanceBefore = item.balanceBefore ?? item.balance_before;
                 const showRemaining = Number.isFinite(Number(balanceAfter));
+                const amount = Math.abs(Number(item.amount || 0));
+                const hasBalanceRisk = type === 'withdrawal'
+                    && Number.isFinite(Number(balanceBefore))
+                    && amount > Number(balanceBefore)
+                    && !['rejected', 'failed'].includes(String(item.status || '').toLowerCase());
                 return `
                     <div class="tx-item-clickable p-3 rounded-xl bg-gray-50 dark:bg-gray-700/50 border border-gray-100 dark:border-gray-700" data-key="${item.key}">
                         <div class="flex justify-between gap-3">
@@ -6105,6 +6125,7 @@
                                 <p class="text-xs text-gray-400">${formatDateDDMMYY(item.timestamp || item.requestedAt || item.processedAt)}</p>
                                 ${showRemaining ? `<p class="mt-1 text-[11px] font-semibold text-gray-600 dark:text-gray-300">Remaining Balance: <span class="text-blue-600 dark:text-blue-300">${formatCurrency(balanceAfter)}</span></p>` : ''}
                                 ${Number.isFinite(Number(balanceBefore)) ? `<p class="text-[10px] text-gray-400">Before: ${formatCurrency(balanceBefore)}</p>` : ''}
+                                ${hasBalanceRisk ? `<p class="mt-1 inline-flex rounded-full bg-red-100 dark:bg-red-900/30 px-2 py-0.5 text-[10px] font-black uppercase text-red-700 dark:text-red-200">Risk: requested more than available balance</p>` : ''}
                             </div>
                             <div class="text-right shrink-0">
                                 <p class="font-black ${amountClass}">${sign}${formatCurrencyAbs(item.amount || 0)}</p>
