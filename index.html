@@ -5960,7 +5960,20 @@
             const pendingRequests = [...requests];
             pendingRequests.sort((a, b) => timestampToMillis(a.requestedAt || a.requested_at) - timestampToMillis(b.requestedAt || b.requested_at));
 
-            listEl.innerHTML = pendingRequests.length === 0 ? '<p class="text-gray-500 dark:text-gray-400 text-sm p-4 text-center">No pending requests.</p>' : pendingRequests.map(r => `
+            const formatWithdrawalDateOnly = (value) => {
+                const date = getSafeDate(value) || new Date();
+                const dd = String(date.getDate()).padStart(2, '0');
+                const mm = String(date.getMonth() + 1).padStart(2, '0');
+                const yyyy = date.getFullYear();
+                return `${dd}/${mm}/${yyyy}`;
+            };
+            const groupedByDate = pendingRequests.reduce((groups, request) => {
+                const dateKey = formatWithdrawalDateOnly(request.requestedAt || request.requested_at);
+                if (!groups.has(dateKey)) groups.set(dateKey, []);
+                groups.get(dateKey).push(request);
+                return groups;
+            }, new Map());
+            const renderRequestCard = (r) => `
                 <div class="p-3 mb-2 bg-gray-50 dark:bg-gray-700/50 rounded-lg">
                     <div class="flex flex-col sm:flex-row justify-between sm:items-start">
                         <div class="text-sm flex-grow mb-3 sm:mb-0">
@@ -6017,7 +6030,20 @@
                             <button data-action="reject-request" data-userid="${r.userId}" data-requestid="${r.id}" class="px-3 py-1 text-xs bg-red-500 text-white rounded hover:bg-red-600 font-semibold">Reject</button>
                         </div>
                     </div>
-                </div>`).join('');
+                </div>`;
+
+            listEl.innerHTML = pendingRequests.length === 0
+                ? '<p class="text-gray-500 dark:text-gray-400 text-sm p-4 text-center">No pending requests.</p>'
+                : Array.from(groupedByDate.entries()).map(([date, dateRequests]) => `
+                    <section class="mb-5">
+                        <div class="mb-2 flex items-center gap-3">
+                            <span class="shrink-0 rounded-full bg-yellow-100 dark:bg-yellow-900/40 border border-yellow-200 dark:border-yellow-800 px-3 py-1 text-xs font-black text-yellow-700 dark:text-yellow-200">Withdrawal Date: ${date}</span>
+                            <span class="h-px flex-1 bg-yellow-100 dark:bg-yellow-900/50"></span>
+                            <span class="shrink-0 text-[10px] font-bold uppercase text-gray-400">${dateRequests.length} pending</span>
+                        </div>
+                        ${dateRequests.map(renderRequestCard).join('')}
+                    </section>
+                `).join('');
         };
 
         const renderAdminRechargeRequests = (requests) => {
