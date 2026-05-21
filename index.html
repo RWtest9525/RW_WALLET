@@ -5923,6 +5923,10 @@
                 renderAdminUserTransactions();
             });
             document.getElementById('admin-user-tx-search').addEventListener('input', renderAdminUserTransactions);
+            document.getElementById('admin-user-transactions-list').addEventListener('click', (event) => {
+                const itemEl = event.target.closest('.tx-item-clickable');
+                if (itemEl?.dataset.key) showTransactionDetails(itemEl.dataset.key, 'admin-user');
+            });
             loadAdminUserPendingWithdrawals(userId);
             try {
                 const [firebaseItems, cloudItems] = await Promise.all([
@@ -6022,7 +6026,7 @@
                 const balanceBefore = item.balanceBefore ?? item.balance_before;
                 const showRemaining = Number.isFinite(Number(balanceAfter));
                 return `
-                    <div class="p-3 rounded-xl bg-gray-50 dark:bg-gray-700/50 border border-gray-100 dark:border-gray-700">
+                    <div class="tx-item-clickable p-3 rounded-xl bg-gray-50 dark:bg-gray-700/50 border border-gray-100 dark:border-gray-700" data-key="${item.key}">
                         <div class="flex justify-between gap-3">
                             <div class="min-w-0">
                                 <p class="font-bold text-sm truncate">${escapeHtml(item.comment || type || 'Transaction')}</p>
@@ -8428,12 +8432,15 @@
 
         // IMPROVED: Transaction Details Popup with From/To information
         // IMPROVED: Transaction Details Popup with PhonePe Style Receipt
-        const showTransactionDetails = (key) => {
-            const item = unifiedHistoryCache.find(i => i.key === key);
+        const showTransactionDetails = (key, source = 'user') => {
+            const item = source === 'admin-user'
+                ? (adminViewedUserTransactions.find(i => i.key === key) || unifiedHistoryCache.find(i => i.key === key))
+                : (unifiedHistoryCache.find(i => i.key === key) || adminViewedUserTransactions.find(i => i.key === key));
             if (!item) {
                 console.error("Could not find transaction with key:", key);
                 return;
             }
+            const viewedUser = source === 'admin-user' ? (adminViewedUserProfile || {}) : (currentUserData || {});
 
             const rwLogoUrl = 'https://i.ibb.co/x8YBYwGG/6233389803554672153.jpg';
             const isReviewsWorldName = (name = '') => name.toLowerCase().includes('reviews world');
@@ -8460,6 +8467,7 @@
                 </div>`;
             const findUserProfile = ({ name = '', mobile = '' } = {}) => {
                 const candidates = [
+                    ...(viewedUser ? [viewedUser] : []),
                     ...(currentUserData ? [currentUserData] : []),
                     ...allUsersCache
                 ];
@@ -8479,8 +8487,8 @@
             // Format amount in words
             const amountInWords = numberToWords(displayAmount) + " Only";
 
-            const senderName = item.senderName || (isCredit ? (item.isAdminTransaction ? 'Reviews World' : 'User') : currentUserData.name);
-            const recipientName = item.recipientName || (isCredit ? currentUserData.name : 'User');
+            const senderName = item.senderName || (isCredit ? (item.isAdminTransaction ? 'Reviews World' : 'User') : viewedUser.name);
+            const recipientName = item.recipientName || (isCredit ? viewedUser.name : 'User');
             const senderMobile = item.senderMobile || '';
             const recipientMobile = item.recipientMobile || '';
             const senderProfile = findUserProfile({ name: senderName, mobile: senderMobile });
@@ -8507,14 +8515,14 @@
                 ? 'bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-400 border-green-100 dark:border-green-900/30'
                 : 'bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-400 border-blue-100 dark:border-blue-900/30';
             let statusIconClass = isCredit ? 'text-green-500' : 'text-blue-500';
-            let fromParty = { label: 'From', name: isCredit ? senderName : currentUserData.name, detail: isCredit ? senderMobile : (currentUserData.mobile || ''), appLogo: isCredit ? senderIsPro : !!currentUserData?.isProProfile };
+            let fromParty = { label: 'From', name: isCredit ? senderName : viewedUser.name, detail: isCredit ? senderMobile : (viewedUser.mobile || ''), appLogo: isCredit ? senderIsPro : !!viewedUser?.isProProfile };
             let toParty = { label: 'To', name: isCredit ? recipientName : recipientName, detail: isCredit ? 'RW Wallet Balance' : recipientMobile, appLogo: isCredit ? recipientIsPro : recipientIsPro };
             let modeLabel = item.type === 'wallet_transfer' || item.type === 'debit' ? 'Wallet Transfer' : isAdminCredit ? 'Wallet Credit' : 'Wallet Transaction';
             let extraDetail = '';
 
             if (isAdminCredit) {
                 fromParty = { label: 'From', name: 'REVIEWS WORLD', detail: 'Admin Wallet', appLogo: true };
-                toParty = { label: 'To', name: recipientName || currentUserData.name || 'User', detail: 'RW Wallet Balance', appLogo: recipientIsPro || !!currentUserData?.isProProfile };
+                toParty = { label: 'To', name: recipientName || viewedUser.name || 'User', detail: 'RW Wallet Balance', appLogo: recipientIsPro || !!viewedUser?.isProProfile };
                 modeLabel = 'Admin Credit';
             }
 
@@ -8522,7 +8530,7 @@
                 statusTitle = 'Money Received';
                 statusLabel = 'Money Received';
                 fromParty = { label: 'From', name: 'REVIEWS WORLD', detail: 'Gift Card', appLogo: true };
-                toParty = { label: 'To', name: recipientName || currentUserData.name || 'User', detail: 'RW Wallet Balance', appLogo: recipientIsPro || !!currentUserData?.isProProfile };
+                toParty = { label: 'To', name: recipientName || viewedUser.name || 'User', detail: 'RW Wallet Balance', appLogo: recipientIsPro || !!viewedUser?.isProProfile };
                 modeLabel = 'Gift Card';
             }
 
