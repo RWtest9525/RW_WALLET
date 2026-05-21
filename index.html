@@ -999,6 +999,10 @@
                         <p class="text-xs text-gray-500 dark:text-gray-400 mt-0.5">REVIEWS WORLD</p>
                     </div>
                 </div>
+                <button id="notification-header-btn" class="relative h-12 w-12 rounded-2xl bg-blue-50 dark:bg-blue-900/30 border border-blue-100 dark:border-blue-800 p-2 shadow-sm hover:scale-105 transition" title="Notifications">
+                    <img src="https://cdn-icons-png.flaticon.com/512/1827/1827370.png" alt="Notifications" class="h-full w-full object-contain" loading="eager" fetchpriority="high" decoding="async">
+                    <span id="notification-unread-badge" class="hidden absolute -right-1 -top-1 min-w-5 h-5 rounded-full bg-red-600 px-1.5 text-center text-[10px] font-black leading-5 text-white shadow">0</span>
+                </button>
             </header>
             <!-- Main Dashboard Area (Tabs) -->
             <div id="dashboard-content">
@@ -1392,6 +1396,9 @@
         let adminChatUnreadCount = 0;
         let supportChatPreloadUserId = '';
         let supportChatBackgroundHandlers = null;
+        let notificationsCache = [];
+        let notificationUnreadCount = 0;
+        let adminNotificationsCache = [];
         let revyBotMessages = [];
         let revyBotLastQuestion = '';
         let revyBotTimer = null;
@@ -2810,12 +2817,16 @@
             adminChatUnreadCount = 0;
             supportChatPreloadUserId = '';
             supportChatBackgroundHandlers = null;
+            notificationsCache = [];
+            notificationUnreadCount = 0;
+            adminNotificationsCache = [];
             if (supportSocket) {
                 supportSocket.off('chat_history');
                 supportSocket.off('new_message');
             }
             updateSupportChatUnreadBadges();
             updateAdminChatUnreadBadges();
+            updateNotificationUnreadBadge();
 
             if (user) {
                 currentUser = user;
@@ -2913,6 +2924,7 @@
                     writeJsonCache(getUserCacheKey(userId), sanitizeUserForCache(data, userId));
                     getBackendAuthToken().catch(e => console.error('Backend session warmup failed:', e));
                     preloadSupportChatForUser(userId).catch(e => console.warn('Support chat preload skipped:', e));
+                    preloadNotificationsForUser(userId).catch(e => console.warn('Notification preload skipped:', e));
                     const now = Date.now();
                     if (now - lastAutoProcessCheckAt > 60000) {
                         lastAutoProcessCheckAt = now;
@@ -4967,6 +4979,352 @@
             renderAdminChatsList();
             loadAdminChatsFromBackend();
             ensureAdminChatUsersLoaded().then(renderAdminChatsList);
+        };
+
+        const getNotificationCacheKey = (userId) => `rw_notifications_cache_${userId}`;
+        const normalizeNotification = (notification = {}) => ({
+            id: notification.id || '',
+            title: notification.title || 'REVIEWS WORLD',
+            message: notification.message || '',
+            senderId: notification.senderId || notification.sender_id || '',
+            audience: notification.audience || '',
+            createdAt: timestampToMillis(notification.createdAt || notification.created_at) || Date.now(),
+            expiresAt: timestampToMillis(notification.expiresAt || notification.expires_at) || (Date.now() + 7 * 24 * 60 * 60 * 1000),
+            deliveredAt: timestampToMillis(notification.deliveredAt || notification.delivered_at) || 0,
+            readAt: timestampToMillis(notification.readAt || notification.read_at) || null,
+            deliveredCount: Number(notification.deliveredCount || notification.delivered_count || 0),
+            readCount: Number(notification.readCount || notification.read_count || 0),
+            unreadCount: Number(notification.unreadCount || notification.unread_count || 0)
+        });
+
+        const readNotificationsCache = (userId = currentUser?.uid) => {
+            if (!userId) return [];
+            const cached = readJsonCache(getNotificationCacheKey(userId));
+            const now = Date.now();
+            return Array.isArray(cached)
+                ? cached.map(normalizeNotification).filter(item => item.id && item.expiresAt > now)
+                : [];
+        };
+
+        const writeNotificationsCache = (userId = currentUser?.uid, notifications = []) => {
+            if (!userId) return;
+            const now = Date.now();
+            writeJsonCache(getNotificationCacheKey(userId), notifications
+                .map(normalizeNotification)
+                .filter(item => item.id && item.expiresAt > now)
+                .slice(0, 120));
+        };
+
+        const mergeNotifications = (...groups) => {
+            const merged = new Map();
+            groups.flat().forEach(item => {
+                const normalized = normalizeNotification(item);
+                if (!normalized.id) return;
+                merged.set(normalized.id, { ...(merged.get(normalized.id) || {}), ...normalized });
+            });
+            return Array.from(merged.values()).sort((a, b) => b.createdAt - a.createdAt);
+        };
+
+        const updateNotificationUnreadBadge = () => {
+            const badge = document.getElementById('notification-unread-badge');
+            if (!badge) return;
+            badge.textContent = notificationUnreadCount > 99 ? '99+' : String(notificationUnreadCount || 0);
+            badge.classList.toggle('hidden', notificationUnreadCount <= 0);
+        };
+
+        const refreshNotificationUnreadCount = (notifications = notificationsCache) => {
+            notificationUnreadCount = notifications.filter(item => !item.readAt && item.expiresAt > Date.now()).length;
+            updateNotificationUnreadBadge();
+        };
+
+        const fetchUserNotifications = async () => {
+            const token = await getBackendAuthToken();
+            const response = await fetchWithTimeout(`${BACKEND_BASE_URL}/api/notifications?limit=100`, {
+                headers: { Authorization: `Bearer ${token}` }
+            }, 6000);
+            const data = await response.json().catch(() => ({}));
+            if (!response.ok || !data.ok) throw new Error(data.error || 'Notification load failed');
+            return (data.notifications || []).map(normalizeNotification);
+        };
+
+        const preloadNotificationsForUser = async (userId = currentUser?.uid) => {
+            if (!userId) return;
+            const cached = readNotificationsCache(userId);
+            if (cached.length) {
+                notificationsCache = cached;
+                refreshNotificationUnreadCount(cached);
+            }
+            const fresh = await fetchUserNotifications();
+            notificationsCache = mergeNotifications(fresh, cached);
+            writeNotificationsCache(userId, notificationsCache);
+            refreshNotificationUnreadCount(notificationsCache);
+            renderUserNotificationsList();
+        };
+
+        const markNotificationRead = async (notificationId) => {
+            if (!notificationId) return;
+            notificationsCache = notificationsCache.map(item => item.id === notificationId ? { ...item, readAt: item.readAt || Date.now() } : item);
+            writeNotificationsCache(currentUser?.uid, notificationsCache);
+            refreshNotificationUnreadCount(notificationsCache);
+            renderUserNotificationsList();
+            try {
+                const token = await getBackendAuthToken();
+                await fetchWithTimeout(`${BACKEND_BASE_URL}/api/notifications/${encodeURIComponent(notificationId)}/read`, {
+                    method: 'POST',
+                    headers: { Authorization: `Bearer ${token}` }
+                }, 5000);
+            } catch (error) {
+                console.warn('Notification read sync failed:', error);
+            }
+        };
+
+        const renderUserNotificationsList = () => {
+            const list = document.getElementById('user-notifications-list');
+            if (!list) return;
+            const notifications = notificationsCache.filter(item => item.expiresAt > Date.now());
+            list.innerHTML = notifications.length
+                ? notifications.map(item => `
+                    <article class="rounded-2xl border ${item.readAt ? 'border-gray-100 dark:border-gray-700 bg-white dark:bg-gray-800' : 'border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-900/20'} p-4 shadow-sm">
+                        <div class="flex items-start gap-3">
+                            <div class="h-12 w-12 shrink-0 rounded-2xl bg-white dark:bg-gray-900 border border-blue-100 dark:border-blue-800 p-2 shadow-sm">
+                                <img src="https://cdn-icons-png.flaticon.com/512/1827/1827370.png" alt="Notification" class="h-full w-full object-contain">
+                            </div>
+                            <div class="min-w-0 flex-1">
+                                <div class="flex items-center justify-between gap-2">
+                                    <h3 class="font-black text-gray-900 dark:text-white truncate">${escapeHtml(item.title || 'REVIEWS WORLD')}</h3>
+                                    ${item.readAt ? '<span class="rounded-full bg-emerald-100 dark:bg-emerald-900/30 px-2 py-1 text-[10px] font-black text-emerald-700 dark:text-emerald-300">READ</span>' : '<span class="rounded-full bg-red-600 px-2 py-1 text-[10px] font-black text-white">NEW</span>'}
+                                </div>
+                                <p class="mt-1 text-xs text-gray-400 dark:text-gray-500">${formatDateDDMMYY(item.createdAt)}</p>
+                                <p class="mt-3 whitespace-pre-line break-words text-sm leading-6 text-gray-700 dark:text-gray-200">${escapeHtml(item.message)}</p>
+                                <p class="mt-3 text-[10px] font-semibold uppercase text-gray-400 dark:text-gray-500">Auto deletes after 7 days</p>
+                            </div>
+                        </div>
+                    </article>`).join('')
+                : '<div class="rounded-2xl bg-white dark:bg-gray-800 border border-gray-100 dark:border-gray-700 p-8 text-center text-sm text-gray-500 dark:text-gray-400 shadow-sm">No notifications yet.</div>';
+        };
+
+        const showNotificationsPage = async () => {
+            if (!currentUser) return;
+            if (currentUser.uid === ADMIN_UID) return showAdminNotificationsPage();
+            notificationsCache = readNotificationsCache(currentUser.uid);
+            refreshNotificationUnreadCount(notificationsCache);
+            const content = `
+                ${getPageHeader('Notifications')}
+                <div class="max-w-2xl mx-auto space-y-3">
+                    <div class="rounded-2xl bg-gradient-to-r from-blue-600 to-emerald-500 p-4 text-white shadow-lg">
+                        <div class="flex items-center gap-3">
+                            <div class="h-14 w-14 rounded-2xl bg-white/95 p-2 shadow-sm">
+                                <img src="https://cdn-icons-png.flaticon.com/512/1827/1827370.png" alt="Notifications" class="h-full w-full object-contain">
+                            </div>
+                            <div>
+                                <h3 class="text-lg font-black">REVIEWS WORLD Updates</h3>
+                                <p class="text-sm text-white/80">Read-only messages from admin</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div id="user-notifications-list" class="space-y-3"></div>
+                </div>
+                ${getPageFooter()}`;
+            showPage(content, { keepBottomNav: true, returnTo: currentMainSection });
+            renderUserNotificationsList();
+            preloadNotificationsForUser(currentUser.uid)
+                .then(() => {
+                    const unread = notificationsCache.filter(item => !item.readAt).map(item => item.id);
+                    unread.forEach(id => markNotificationRead(id));
+                })
+                .catch(error => {
+                    console.warn('Notification page refresh failed:', error);
+                    showNotification('Could not refresh notifications right now.', true);
+                });
+        };
+
+        const fetchAdminNotifications = async () => {
+            const token = await getBackendAuthToken();
+            const response = await fetchWithTimeout(`${BACKEND_BASE_URL}/api/admin/notifications?limit=100`, {
+                headers: { Authorization: `Bearer ${token}` }
+            }, 6000);
+            const data = await response.json().catch(() => ({}));
+            if (!response.ok || !data.ok) throw new Error(data.error || 'Admin notifications load failed');
+            adminNotificationsCache = (data.notifications || []).map(normalizeNotification);
+            renderAdminNotificationsList();
+        };
+
+        const getNotificationRecipients = async () => {
+            await ensureAdminChatUsersLoaded();
+            return allUsersCache.filter(user => !isAdminUserRecord(user) && isUserOnUpdatedWebApp(user));
+        };
+
+        const getSelectedNotificationUser = () => {
+            const search = (document.getElementById('admin-notification-user-search')?.value || '').trim().toLowerCase();
+            if (!search) return null;
+            return allUsersCache
+                .filter(user => !isAdminUserRecord(user))
+                .find(user => [user.name, user.email, user.mobile, user.phoneNumber, user.id]
+                    .some(value => String(value || '').toLowerCase().includes(search))) || null;
+        };
+
+        const renderAdminNotificationsList = () => {
+            const list = document.getElementById('admin-notifications-list');
+            if (!list) return;
+            list.innerHTML = adminNotificationsCache.length
+                ? adminNotificationsCache.map(item => `
+                    <article class="rounded-2xl bg-white dark:bg-gray-800 border border-gray-100 dark:border-gray-700 p-4 shadow-sm">
+                        <div class="flex items-start justify-between gap-3">
+                            <div class="min-w-0">
+                                <h3 class="font-black text-gray-900 dark:text-white truncate">${escapeHtml(item.title || 'REVIEWS WORLD')}</h3>
+                                <p class="mt-1 text-xs text-gray-400 dark:text-gray-500">${formatDateDDMMYY(item.createdAt)} · Deletes ${formatDateDDMMYY(item.expiresAt)}</p>
+                                <p class="mt-3 text-sm leading-6 text-gray-700 dark:text-gray-200 whitespace-pre-line break-words">${escapeHtml(item.message)}</p>
+                            </div>
+                            <button data-delete-notification="${item.id}" class="shrink-0 rounded-xl bg-red-50 dark:bg-red-900/20 px-3 py-2 text-xs font-black text-red-600 dark:text-red-300">Delete</button>
+                        </div>
+                        <div class="mt-4 grid grid-cols-3 gap-2 text-center">
+                            <div class="rounded-xl bg-blue-50 dark:bg-blue-900/20 p-3"><p class="text-[10px] font-black uppercase text-blue-600 dark:text-blue-300">Delivered</p><p class="text-lg font-black">${item.deliveredCount}</p></div>
+                            <div class="rounded-xl bg-emerald-50 dark:bg-emerald-900/20 p-3"><p class="text-[10px] font-black uppercase text-emerald-600 dark:text-emerald-300">Read</p><p class="text-lg font-black">${item.readCount}</p></div>
+                            <div class="rounded-xl bg-red-50 dark:bg-red-900/20 p-3"><p class="text-[10px] font-black uppercase text-red-600 dark:text-red-300">Unread</p><p class="text-lg font-black">${item.unreadCount}</p></div>
+                        </div>
+                    </article>`).join('')
+                : '<div class="rounded-2xl bg-white dark:bg-gray-800 border border-gray-100 dark:border-gray-700 p-8 text-center text-sm text-gray-500 dark:text-gray-400 shadow-sm">No notifications sent yet.</div>';
+            list.querySelectorAll('[data-delete-notification]').forEach(button => {
+                button.onclick = () => deleteAdminNotification(button.dataset.deleteNotification);
+            });
+        };
+
+        const updateAdminNotificationTargetPreview = async () => {
+            const mode = document.getElementById('admin-notification-target')?.value || 'all_new_version';
+            const searchWrap = document.getElementById('admin-notification-user-wrap');
+            const preview = document.getElementById('admin-notification-target-preview');
+            if (searchWrap) searchWrap.classList.toggle('hidden', mode !== 'single');
+            if (!preview) return;
+            if (mode === 'all_new_version') {
+                const recipients = await getNotificationRecipients();
+                preview.textContent = `Will deliver to ${recipients.length} new version members.`;
+            } else {
+                const user = getSelectedNotificationUser();
+                preview.textContent = user ? `Selected: ${user.name || user.email || user.mobile || 'User'}` : 'Search name, mobile, or email to select one user.';
+            }
+        };
+
+        const sendAdminNotification = async () => {
+            const title = (document.getElementById('admin-notification-title')?.value || '').trim() || 'REVIEWS WORLD';
+            const message = (document.getElementById('admin-notification-message')?.value || '').trim();
+            const mode = document.getElementById('admin-notification-target')?.value || 'all_new_version';
+            if (!message) return showNotification('Please write notification message.', true);
+            await ensureAdminChatUsersLoaded();
+            const recipients = mode === 'all_new_version'
+                ? (await getNotificationRecipients()).map(user => user.id)
+                : [getSelectedNotificationUser()?.id].filter(Boolean);
+            if (!recipients.length) return showNotification('No matching receiver found.', true);
+
+            const button = document.getElementById('admin-send-notification-btn');
+            if (button) {
+                button.disabled = true;
+                button.textContent = 'Sending...';
+            }
+            try {
+                const token = await getBackendAuthToken();
+                const response = await fetchWithTimeout(`${BACKEND_BASE_URL}/api/admin/notifications`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        Authorization: `Bearer ${token}`
+                    },
+                    body: JSON.stringify({ title, message, audience: mode, recipients })
+                }, 10000);
+                const data = await response.json().catch(() => ({}));
+                if (!response.ok || !data.ok) throw new Error(data.error || 'Send failed');
+                document.getElementById('admin-notification-message').value = '';
+                showNotification(`Notification sent to ${recipients.length} member${recipients.length > 1 ? 's' : ''}.`);
+                await fetchAdminNotifications();
+                updateAdminNotificationTargetPreview();
+            } catch (error) {
+                console.error('Notification send failed:', error);
+                showNotification('Could not send notification.', true);
+            } finally {
+                if (button) {
+                    button.disabled = false;
+                    button.textContent = 'Send Notification';
+                }
+            }
+        };
+
+        const deleteAdminNotification = async (notificationId) => {
+            if (!notificationId || !confirm('Delete this notification from every user?')) return;
+            try {
+                const token = await getBackendAuthToken();
+                const response = await fetchWithTimeout(`${BACKEND_BASE_URL}/api/admin/notifications/${encodeURIComponent(notificationId)}`, {
+                    method: 'DELETE',
+                    headers: { Authorization: `Bearer ${token}` }
+                }, 6000);
+                const data = await response.json().catch(() => ({}));
+                if (!response.ok || !data.ok) throw new Error(data.error || 'Delete failed');
+                adminNotificationsCache = adminNotificationsCache.filter(item => item.id !== notificationId);
+                renderAdminNotificationsList();
+                showNotification('Notification deleted.');
+            } catch (error) {
+                console.error('Notification delete failed:', error);
+                showNotification('Could not delete notification.', true);
+            }
+        };
+
+        const showAdminNotificationsPage = async () => {
+            if (currentUser?.uid !== ADMIN_UID) return showNotification('Admin access only.', true);
+            const content = `
+                ${getPageHeader('Notifications')}
+                <div class="max-w-3xl mx-auto space-y-4">
+                    <section class="rounded-3xl bg-white dark:bg-gray-800 border border-gray-100 dark:border-gray-700 p-4 shadow-sm">
+                        <div class="flex items-center gap-3 mb-4">
+                            <div class="h-14 w-14 rounded-2xl bg-blue-50 dark:bg-blue-900/30 border border-blue-100 dark:border-blue-800 p-2">
+                                <img src="https://cdn-icons-png.flaticon.com/512/1827/1827370.png" alt="Notification" class="h-full w-full object-contain">
+                            </div>
+                            <div>
+                                <h3 class="text-lg font-black">Send Notification</h3>
+                                <p class="text-xs text-gray-500 dark:text-gray-400">Users can only read. Messages auto delete after 7 days.</p>
+                            </div>
+                        </div>
+                        <div class="grid grid-cols-1 gap-3">
+                            <select id="admin-notification-target" class="w-full rounded-xl bg-gray-100 dark:bg-gray-700 px-4 py-3 font-semibold focus:outline-none focus:ring-2 focus:ring-blue-500">
+                                <option value="all_new_version">All new version members</option>
+                                <option value="single">One selected user</option>
+                            </select>
+                            <div id="admin-notification-user-wrap" class="hidden">
+                                <input id="admin-notification-user-search" list="admin-notification-users-list" type="search" placeholder="Search name, mobile, email" class="w-full rounded-xl bg-gray-100 dark:bg-gray-700 px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500">
+                                <datalist id="admin-notification-users-list">
+                                    ${allUsersCache.filter(user => !isAdminUserRecord(user)).map(user => `<option value="${escapeHtml(user.name || user.email || user.mobile || user.id)}">${escapeHtml(user.email || user.mobile || user.id)}</option>`).join('')}
+                                </datalist>
+                            </div>
+                            <p id="admin-notification-target-preview" class="text-xs font-bold text-blue-600 dark:text-blue-300">Loading members...</p>
+                            <input id="admin-notification-title" type="text" maxlength="120" value="REVIEWS WORLD" placeholder="Title" class="w-full rounded-xl bg-gray-100 dark:bg-gray-700 px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500">
+                            <textarea id="admin-notification-message" rows="4" placeholder="Write notification message..." class="w-full rounded-xl bg-gray-100 dark:bg-gray-700 px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500"></textarea>
+                            <button id="admin-send-notification-btn" class="rounded-xl bg-blue-600 px-4 py-3 font-black text-white shadow-sm hover:bg-blue-700 transition">Send Notification</button>
+                        </div>
+                    </section>
+                    <section>
+                        <div class="flex items-center justify-between mb-3">
+                            <h3 class="font-black text-gray-900 dark:text-white">Sent Notifications</h3>
+                            <button id="admin-refresh-notifications-btn" class="rounded-xl bg-gray-100 dark:bg-gray-700 px-3 py-2 text-xs font-black">Refresh</button>
+                        </div>
+                        <div id="admin-notifications-list" class="space-y-3"></div>
+                    </section>
+                </div>
+                ${getPageFooter()}`;
+            showPage(content, { keepBottomNav: true, returnTo: 'admin' });
+            setBottomNavActive('bottom-admin-btn');
+            document.getElementById('admin-notification-target').addEventListener('change', updateAdminNotificationTargetPreview);
+            document.getElementById('admin-notification-user-search').addEventListener('input', updateAdminNotificationTargetPreview);
+            document.getElementById('admin-send-notification-btn').onclick = sendAdminNotification;
+            document.getElementById('admin-refresh-notifications-btn').onclick = fetchAdminNotifications;
+            ensureAdminChatUsersLoaded().then(() => {
+                const datalist = document.getElementById('admin-notification-users-list');
+                if (datalist) {
+                    datalist.innerHTML = allUsersCache.filter(user => !isAdminUserRecord(user)).map(user => `<option value="${escapeHtml(user.name || user.email || user.mobile || user.id)}">${escapeHtml(user.email || user.mobile || user.id)}</option>`).join('');
+                }
+                updateAdminNotificationTargetPreview();
+            });
+            renderAdminNotificationsList();
+            fetchAdminNotifications().catch(error => {
+                console.error('Admin notifications load failed:', error);
+                showNotification('Could not load sent notifications.', true);
+            });
         };
 
         const getFilteredTransactions = (filter) => {
@@ -9534,6 +9892,7 @@
         });
         document.getElementById('bottom-help-btn').addEventListener('click', showHelpSupportPage);
         document.getElementById('bottom-settings-btn').addEventListener('click', showSettingsPage);
+        document.getElementById('notification-header-btn').addEventListener('click', showNotificationsPage);
 
         document.getElementById('manage-admin-wallet-btn').addEventListener('click', showManageAdminWalletModal);
 
@@ -9599,7 +9958,8 @@
                 'https://cdn-icons-png.flaticon.com/512/2611/2611152.png',
                 'https://cdn-icons-png.flaticon.com/512/3652/3652191.png',
                 'https://cdn-icons-png.flaticon.com/512/5962/5962463.png',
-                'https://cdn-icons-png.flaticon.com/512/3135/3135715.png'
+                'https://cdn-icons-png.flaticon.com/512/3135/3135715.png',
+                'https://cdn-icons-png.flaticon.com/512/1827/1827370.png'
             ];
 
             logoUrls.forEach((logoUrl) => {

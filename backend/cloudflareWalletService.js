@@ -100,6 +100,7 @@ function nowMs() {
 
 const ADMIN_UID = process.env.ADMIN_UID || 'mOs5Fmp4RoRzeBDH4pZLMOpQx7Q2';
 const CHAT_RETENTION_AFTER_ADMIN_READ_MS = 15 * 24 * 60 * 60 * 1000;
+const NOTIFICATION_RETENTION_MS = 7 * 24 * 60 * 60 * 1000;
 
 function createAppToken(user) {
   return jwt.sign(
@@ -236,6 +237,47 @@ async function initSchema(d1) {
   await d1.query(`
     CREATE INDEX IF NOT EXISTS idx_fund_requests_user_status
     ON fund_requests (user_id, status)
+  `);
+
+  await d1.query(`
+    CREATE TABLE IF NOT EXISTS notifications (
+      id TEXT PRIMARY KEY,
+      title TEXT,
+      message TEXT NOT NULL,
+      sender_id TEXT NOT NULL,
+      audience TEXT NOT NULL,
+      created_at INTEGER NOT NULL,
+      expires_at INTEGER NOT NULL,
+      deleted_at INTEGER
+    )
+  `);
+
+  await ensureColumn(d1, 'notifications', 'title', 'TEXT');
+  await ensureColumn(d1, 'notifications', 'deleted_at', 'INTEGER');
+
+  await d1.query(`
+    CREATE TABLE IF NOT EXISTS notification_recipients (
+      notification_id TEXT NOT NULL,
+      user_id TEXT NOT NULL,
+      delivered_at INTEGER NOT NULL,
+      read_at INTEGER,
+      PRIMARY KEY (notification_id, user_id)
+    )
+  `);
+
+  await d1.query(`
+    CREATE INDEX IF NOT EXISTS idx_notifications_created
+    ON notifications (created_at DESC)
+  `);
+
+  await d1.query(`
+    CREATE INDEX IF NOT EXISTS idx_notifications_expiry
+    ON notifications (expires_at, deleted_at)
+  `);
+
+  await d1.query(`
+    CREATE INDEX IF NOT EXISTS idx_notification_recipients_user
+    ON notification_recipients (user_id, read_at)
   `);
 }
 
@@ -528,6 +570,119 @@ async function updateFundRequestStatus(d1, { requestId, status, processedAt = no
   );
 }
 
+async function cleanupExpiredNotifications(d1, now = nowMs()) {
+  await d1.query(
+    `DELETE FROM notification_recipients
+     WHERE notification_id IN (
+       SELECT id FROM notifications
+       WHERE expires_at <= ?
+     )`,
+    [now]
+  );
+  await d1.query('DELETE FROM notifications WHERE expires_at <= ?', [now]);
+}
+
+function normalizeNotificationRow(row = {}) {
+  return {
+    id: row.id,
+    title: row.title || '',
+    message: row.message || '',
+    senderId: row.sender_id || row.senderId || '',
+    audience: row.audience || '',
+    createdAt: row.created_at || row.createdAt || 0,
+    expiresAt: row.expires_at || row.expiresAt || 0,
+    deliveredAt: row.delivered_at || row.deliveredAt || 0,
+    readAt: row.read_at || row.readAt || null,
+    deliveredCount: row.delivered_count || row.deliveredCount || 0,
+    readCount: row.read_count || row.readCount || 0,
+    unreadCount: row.unread_count || row.unreadCount || 0
+  };
+}
+
+async function createNotification(d1, { title = '', message = '', audience = 'selected', recipients = [], senderId = ADMIN_UID }) {
+  const cleanMessage = String(message || '').trim().slice(0, 4000);
+  if (!cleanMessage) throw new Error('MESSAGE_REQUIRED');
+
+  const uniqueRecipients = Array.from(new Set((Array.isArray(recipients) ? recipients : [])
+    .map((recipient) => String(recipient || '').trim())
+    .filter(Boolean)));
+  if (!uniqueRecipients.length) throw new Error('RECIPIENTS_REQUIRED');
+
+  const createdAt = nowMs();
+  const id = `notif_${createdAt}_${Math.random().toString(36).slice(2, 10)}`;
+  const expiresAt = createdAt + NOTIFICATION_RETENTION_MS;
+  await d1.query(
+    `INSERT INTO notifications (id, title, message, sender_id, audience, created_at, expires_at, deleted_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, NULL)`,
+    [id, String(title || '').trim().slice(0, 160), cleanMessage, senderId, String(audience || 'selected').slice(0, 40), createdAt, expiresAt]
+  );
+
+  for (const userId of uniqueRecipients) {
+    await d1.query(
+      `INSERT OR IGNORE INTO notification_recipients (notification_id, user_id, delivered_at, read_at)
+       VALUES (?, ?, ?, NULL)`,
+      [id, userId, createdAt]
+    );
+  }
+
+  return { id, title: String(title || '').trim().slice(0, 160), message: cleanMessage, audience, createdAt, expiresAt, deliveredCount: uniqueRecipients.length };
+}
+
+async function listUserNotifications(d1, userId, limit = 80) {
+  await cleanupExpiredNotifications(d1).catch((error) => console.error('Notification cleanup failed:', error));
+  const rows = await d1.all(
+    `SELECT n.id, n.title, n.message, n.sender_id, n.audience, n.created_at, n.expires_at,
+            r.delivered_at, r.read_at
+     FROM notifications n
+     INNER JOIN notification_recipients r ON r.notification_id = n.id
+     WHERE r.user_id = ?
+       AND n.deleted_at IS NULL
+       AND n.expires_at > ?
+     ORDER BY n.created_at DESC
+     LIMIT ?`,
+    [userId, nowMs(), limit]
+  );
+  return rows.map(normalizeNotificationRow);
+}
+
+async function listAdminNotifications(d1, limit = 80) {
+  await cleanupExpiredNotifications(d1).catch((error) => console.error('Notification cleanup failed:', error));
+  const rows = await d1.all(
+    `SELECT n.id, n.title, n.message, n.sender_id, n.audience, n.created_at, n.expires_at,
+            COUNT(r.user_id) AS delivered_count,
+            SUM(CASE WHEN r.read_at IS NOT NULL THEN 1 ELSE 0 END) AS read_count,
+            SUM(CASE WHEN r.read_at IS NULL THEN 1 ELSE 0 END) AS unread_count
+     FROM notifications n
+     LEFT JOIN notification_recipients r ON r.notification_id = n.id
+     WHERE n.deleted_at IS NULL
+       AND n.expires_at > ?
+     GROUP BY n.id
+     ORDER BY n.created_at DESC
+     LIMIT ?`,
+    [nowMs(), limit]
+  );
+  return rows.map(normalizeNotificationRow);
+}
+
+async function markNotificationRead(d1, notificationId, userId, readAt = nowMs()) {
+  await d1.query(
+    `UPDATE notification_recipients
+     SET read_at = COALESCE(read_at, ?)
+     WHERE notification_id = ?
+       AND user_id = ?`,
+    [readAt, notificationId, userId]
+  );
+}
+
+async function deleteNotification(d1, notificationId, deletedAt = nowMs()) {
+  await d1.query(
+    `UPDATE notifications
+     SET deleted_at = ?
+     WHERE id = ?`,
+    [deletedAt, notificationId]
+  );
+}
+
 async function putR2Object(r2, key, body, contentType = 'application/json') {
   if (!r2) throw new Error('R2 is not configured');
 
@@ -748,6 +903,46 @@ function registerRoutes(app, { d1, r2 }) {
     const history = await recentChatHistory(d1, roomId, Math.min(Number(req.query.limit || 80), 200));
     res.json({ ok: true, history });
   });
+
+  app.get('/api/notifications', requireHttpAuth, async (req, res) => {
+    const notifications = await listUserNotifications(d1, req.auth.sub, Math.min(Number(req.query.limit || 80), 200));
+    res.json({ ok: true, notifications });
+  });
+
+  app.post('/api/notifications/:notificationId/read', requireHttpAuth, async (req, res) => {
+    await markNotificationRead(d1, req.params.notificationId, req.auth.sub);
+    res.json({ ok: true });
+  });
+
+  app.get('/api/admin/notifications', requireHttpAuth, async (req, res) => {
+    if (!req.auth.isAdmin) {
+      return res.status(403).json({ ok: false, error: 'ADMIN_REQUIRED' });
+    }
+    const notifications = await listAdminNotifications(d1, Math.min(Number(req.query.limit || 80), 200));
+    res.json({ ok: true, notifications });
+  });
+
+  app.post('/api/admin/notifications', requireHttpAuth, async (req, res) => {
+    if (!req.auth.isAdmin) {
+      return res.status(403).json({ ok: false, error: 'ADMIN_REQUIRED' });
+    }
+    const notification = await createNotification(d1, {
+      title: req.body.title,
+      message: req.body.message,
+      audience: req.body.audience,
+      recipients: req.body.recipients,
+      senderId: req.auth.sub
+    });
+    res.json({ ok: true, notification });
+  });
+
+  app.delete('/api/admin/notifications/:notificationId', requireHttpAuth, async (req, res) => {
+    if (!req.auth.isAdmin) {
+      return res.status(403).json({ ok: false, error: 'ADMIN_REQUIRED' });
+    }
+    await deleteNotification(d1, req.params.notificationId);
+    res.json({ ok: true });
+  });
 }
 
 function requireHttpAuth(req, res, next) {
@@ -869,8 +1064,10 @@ async function createCloudflareWalletService() {
 
   await initSchema(d1);
   cleanupExpiredReadChats(d1).catch((error) => console.error('Initial chat cleanup failed:', error));
+  cleanupExpiredNotifications(d1).catch((error) => console.error('Initial notification cleanup failed:', error));
   const cleanupTimer = setInterval(() => {
     cleanupExpiredReadChats(d1).catch((error) => console.error('Scheduled chat cleanup failed:', error));
+    cleanupExpiredNotifications(d1).catch((error) => console.error('Scheduled notification cleanup failed:', error));
   }, 60 * 60 * 1000);
   cleanupTimer.unref?.();
 
