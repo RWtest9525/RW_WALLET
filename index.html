@@ -3960,9 +3960,12 @@
             return `${dd}/${mm}/${yyyy}`;
         };
 
-        const renderMessageTicks = (message, isMine) => {
+        const renderMessageTicks = (message, isMine, viewerRole) => {
             if (!isMine) return '';
-            const tickClass = message.readAt ? 'text-blue-500' : 'text-gray-400';
+            const isReadByOppositeSide = viewerRole === 'user'
+                ? (message.senderRole === 'user' && !!message.readAt)
+                : false;
+            const tickClass = isReadByOppositeSide ? 'text-blue-500' : 'text-gray-400';
             return `<span class="${tickClass} font-bold tracking-[-3px] ml-1">✓✓</span>`;
         };
 
@@ -4003,7 +4006,7 @@
                                 <span class="text-sm leading-5 break-words align-baseline">${escapeHtml(message.text || '')}</span>
                                 <span class="inline-flex items-center text-[10px] ml-2 text-gray-400 align-baseline">
                                     <span>${formatChatTime(message.createdAt)}</span>
-                                    ${renderMessageTicks(message, isMine)}
+                                    ${renderMessageTicks(message, isMine, viewerRole)}
                                 </span>
                             </div>
                         </div>`;

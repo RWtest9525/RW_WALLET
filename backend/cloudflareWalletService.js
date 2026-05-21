@@ -823,7 +823,7 @@ function registerSocketHandlers(io, { d1 }) {
         if (!roomId || !String(message || '').trim()) throw new Error('ROOM_AND_MESSAGE_REQUIRED');
 
         const timestamp = nowMs();
-        const readByAdminAt = (socket.user.isAdmin || adminRooms.has(roomId)) ? timestamp : null;
+        const readByAdminAt = (!socket.user.isAdmin && adminRooms.has(roomId)) ? timestamp : null;
         const chatMessage = {
           roomId,
           senderId: socket.user.sub,
