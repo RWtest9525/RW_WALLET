@@ -1559,6 +1559,20 @@
             }
         };
 
+        const getSafeTransactionDocId = (id = '') => String(id || generateTransactionId()).replace(/[\/\\#?[\]]/g, '-').slice(0, 120);
+
+        const recordUserFirestoreTransaction = async (userId, item = {}) => {
+            const userRef = doc(db, `artifacts/${appId}/public/data/users`, userId);
+            const transactionId = item.transactionId || generateTransactionId();
+            const txRef = doc(collection(userRef, 'transactions'), getSafeTransactionDocId(transactionId));
+            await setDoc(txRef, {
+                ...item,
+                transactionId,
+                timestamp: item.timestamp || serverTimestamp()
+            }, { merge: true });
+            return { ...item, transactionId };
+        };
+
         const recordCloudTransfer = async (senderItem, recipientItem, recipientUserId) => {
             try {
                 const token = await getBackendAuthToken();
@@ -6378,6 +6392,7 @@
                 ? Number(requestData.balanceBefore ?? requestData.balance_before)
                 : (Number.isFinite(Number(cachedUser.balance)) ? Number(cachedUser.balance) : null);
             const balanceAfter = currentBalance !== null ? Number((currentBalance - amount).toFixed(2)) : null;
+            const cutTransactionId = `ADMIN-CUT-${requestId}`;
             const adjustment = {
                 ...(currentBalance !== null ? { balanceBefore: currentBalance } : {}),
                 ...(balanceAfter !== null ? { balanceAfter } : {}),
@@ -6403,6 +6418,25 @@
                 legacyBalanceAdjusted: true,
                 legacyBalanceAdjustedAt: Date.now()
             });
+            const debitHistory = {
+                type: 'debit',
+                amount,
+                comment: 'Admin Debit - Pending Withdrawal Balance Cut',
+                adminComment: 'Balance deducted for pending withdrawal request',
+                timestamp: Date.now(),
+                transactionId: cutTransactionId,
+                requestId,
+                method: requestData.method || getWithdrawalMethodName(requestData.methodId, 'Withdrawal'),
+                status: 'completed',
+                balanceBefore: currentBalance,
+                balanceAfter,
+                isAdminTransaction: true,
+                isWithdrawalBalanceCut: true
+            };
+            await recordUserFirestoreTransaction(userId, debitHistory);
+            recordCloudTransaction(userId, debitHistory).catch(error => {
+                console.warn('Legacy withdrawal debit cloud history skipped:', error);
+            });
             allFundRequestsCache = allFundRequestsCache.map(req => req.id === requestId ? { ...req, ...updatedRequest } : req);
             allUsersCache = allUsersCache.map(u => (u.id === userId || u.uid === userId) ? { ...u, balance: Number(u.balance || 0) - amount } : u);
             return updatedRequest;
@@ -6420,7 +6454,7 @@
                         <p class="font-bold">${targets.length} request(s)</p>
                         <p class="text-yellow-700 dark:text-yellow-200">Total to deduct: ${formatCurrency(total)}</p>
                     </div>
-                    <p class="text-xs text-gray-500 dark:text-gray-400">No separate admin debit entry will be shown to users. Their existing pending withdrawal transaction will be updated with remaining balance details.</p>
+                    <p class="text-xs text-gray-500 dark:text-gray-400">A completed admin debit entry will be added to each user's transaction history with before/after balance.</p>
                 </div>`,
                 `<button onclick="window.closeModal()" class="px-4 py-2 text-sm bg-gray-200 dark:bg-gray-600 rounded-lg">Cancel</button>
                  <button id="confirm-legacy-withdrawal-fix-btn" class="px-4 py-2 text-sm bg-yellow-600 text-white rounded-lg">Deduct Uncut Pending</button>`,
@@ -8315,20 +8349,25 @@
             }
 
             try {
-                await updateDoc(userRef, { balance: newBalance });
-
                 const transactionPayload = {
                     type: changeAmount > 0 ? 'credit' : 'debit',
                     amount: Math.abs(changeAmount),
                     comment: changeAmount > 0 ? 'Admin Credit' : 'Admin Debit',
-                    timestamp: Date.now(),
+                    timestamp: serverTimestamp(),
                     adminComment: "Manual balance adjustment",
                     transactionId: generateTransactionId(),
                     balanceBefore: oldBalance,
                     balanceAfter: newBalance,
-                    status: 'completed'
+                    status: 'completed',
+                    isAdminTransaction: true
                 };
-                recordCloudTransaction(userId, transactionPayload).catch(error => {
+                await runTransaction(db, async (tx) => {
+                    const freshUserDoc = await tx.get(userRef);
+                    if (!freshUserDoc.exists()) throw new Error('User not found!');
+                    tx.update(userRef, { balance: newBalance });
+                    tx.set(doc(collection(userRef, 'transactions'), getSafeTransactionDocId(transactionPayload.transactionId)), transactionPayload, { merge: true });
+                });
+                recordCloudTransaction(userId, { ...transactionPayload, timestamp: Date.now() }).catch(error => {
                     console.warn('Admin balance adjustment cloud history skipped:', error);
                 });
 
