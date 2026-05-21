@@ -5541,6 +5541,7 @@
                             <option value="new">New Members (15 Days)</option>
                             <option value="active">Active Users</option>
                             <option value="inactive">Inactive Users</option>
+                            <option value="flagged">Flagged Users</option>
                             <option value="pro">Pro Verified Users</option>
                             <option value="updated_web">Updated Web App</option>
                             <option value="not_updated_web">Not Updated / Old App</option>
@@ -5993,6 +5994,8 @@
                 usersToRender = usersToRender.filter(u => !u.isFlagged && (getUserAvailableBalance(u) > 0 || u.hasRecentActivity));
             } else if (filterValue === 'inactive') {
                 usersToRender = usersToRender.filter(u => u.isFlagged || (getUserAvailableBalance(u) <= 0 && !u.hasRecentActivity));
+            } else if (filterValue === 'flagged') {
+                usersToRender = usersToRender.filter(u => !!u.isFlagged);
             } else if (filterValue === 'zero_balance') {
                 usersToRender = usersToRender.filter(u => getUserAvailableBalance(u) === 0);
             } else if (filterValue === 'minus_balance') {
