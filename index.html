@@ -4221,10 +4221,12 @@
                 });
                 const updatedChat = {
                     userId: chatUserId,
+                    roomId: activeSupportRoomId,
                     userName: userMeta.userName,
                     userEmail: userMeta.userEmail,
                     userMobile: userMeta.userMobile,
                     lastMessage: text,
+                    lastSenderId: currentUser?.uid || '',
                     lastSenderRole: viewerRole,
                     updatedAt: Date.now()
                 };
@@ -4641,6 +4643,24 @@
             }
         };
 
+        const getAdminChatUserMeta = (user = {}) => ({
+            id: user.id || user.uid || '',
+            userId: user.id || user.uid || '',
+            userName: user.name || user.fullName || user.displayName || user.email || 'User',
+            userEmail: user.email || '',
+            userMobile: user.mobile || user.phoneNumber || user.phone || ''
+        });
+
+        const ensureAdminChatUsersLoaded = async () => {
+            if (currentUser?.uid !== ADMIN_UID || allUsersCache.length) return;
+            try {
+                const usersSnap = await getDocs(query(collection(db, `artifacts/${appId}/public/data/users`)));
+                allUsersCache = usersSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+            } catch (error) {
+                console.warn('Admin chat user search load failed:', error);
+            }
+        };
+
         const renderAdminChatsList = () => {
             const list = document.getElementById('admin-chats-list');
             if (!list) return;
@@ -4653,10 +4673,21 @@
                     chat.lastMessage
                 ].some(value => String(value || '').toLowerCase().includes(searchTerm)))
                 : allSupportChatsCache;
+            const existingChatUserIds = new Set(allSupportChatsCache.map(chat => String(chat.userId || chat.id || '')));
+            const usersToStartChat = searchTerm
+                ? allUsersCache
+                    .filter(user => !isAdminUserRecord(user))
+                    .map(getAdminChatUserMeta)
+                    .filter(user => user.userId && !existingChatUserIds.has(String(user.userId)))
+                    .filter(user => [
+                        user.userName,
+                        user.userEmail,
+                        user.userMobile
+                    ].some(value => String(value || '').toLowerCase().includes(searchTerm)))
+                    .slice(0, 20)
+                : [];
 
-            list.innerHTML = chatsToRender.length === 0
-                ? '<p class="text-center text-gray-500 dark:text-gray-400 py-8">No chats received yet.</p>'
-                : chatsToRender.map(chat => {
+            const chatRows = chatsToRender.map(chat => {
                     const roomId = chat.roomId || getSupportRoomId(chat.userId || chat.id);
                     const isUnread = (chat.lastSenderId || '') !== ADMIN_UID && timestampToMillis(chat.updatedAt) > Number(localStorage.getItem(getAdminSupportChatSeenKey(roomId)) || 0);
                     return `
@@ -4675,11 +4706,38 @@
                         </div>
                     </button>`;
                 }).join('');
+            const userRows = usersToStartChat.map(user => `
+                    <button data-chat-userid="${user.userId}" data-chat-source="user-search" class="admin-chat-row w-full flex items-center gap-3 p-4 bg-blue-50 dark:bg-blue-900/20 border border-blue-100 dark:border-blue-800 rounded-2xl shadow-sm text-left hover:bg-blue-100 dark:hover:bg-blue-900/40 transition">
+                        <img src="https://cdn-icons-png.flaticon.com/512/3135/3135715.png" alt="${escapeHtml(user.userName || 'User')}" class="h-12 w-12 rounded-full object-contain bg-white dark:bg-gray-800 p-2">
+                        <div class="flex-1 min-w-0">
+                            <div class="flex items-center justify-between gap-2">
+                                <h3 class="font-bold truncate">${escapeHtml(user.userName || 'User')}</h3>
+                                <span class="rounded-full bg-blue-600 px-2 py-1 text-[10px] font-black uppercase text-white">Start chat</span>
+                            </div>
+                            <p class="text-xs text-gray-500 dark:text-gray-400 truncate">${escapeHtml(user.userMobile || user.userEmail || '')}</p>
+                            <p class="text-sm text-blue-700 dark:text-blue-300 truncate">Send a new message to this user</p>
+                        </div>
+                    </button>`).join('');
+
+            if (!chatRows && !userRows) {
+                list.innerHTML = searchTerm
+                    ? '<p class="text-center text-gray-500 dark:text-gray-400 py-8">No user or chat found.</p>'
+                    : '<p class="text-center text-gray-500 dark:text-gray-400 py-8">No chats received yet.</p>';
+            } else {
+                list.innerHTML = `
+                    ${chatRows ? `<div class="space-y-3">${chatRows}</div>` : ''}
+                    ${userRows ? `<div class="pt-2">
+                        <p class="px-1 pb-2 text-xs font-black uppercase tracking-wide text-gray-400 dark:text-gray-500">Users</p>
+                        <div class="space-y-3">${userRows}</div>
+                    </div>` : ''}`;
+            }
             document.querySelectorAll('.admin-chat-row').forEach(row => {
                 row.onclick = () => {
                     const chat = allSupportChatsCache.find(item => (item.userId || item.id) === row.dataset.chatUserid);
-                    markAdminSupportChatSeen(chat?.roomId || getSupportRoomId(row.dataset.chatUserid), readSupportChatCache(chat?.roomId || getSupportRoomId(row.dataset.chatUserid)));
-                    openSupportChatPage(row.dataset.chatUserid, 'admin', chat || {});
+                    const searchedUser = allUsersCache.map(getAdminChatUserMeta).find(item => item.userId === row.dataset.chatUserid);
+                    const chatMeta = chat || searchedUser || {};
+                    markAdminSupportChatSeen(chatMeta.roomId || getSupportRoomId(row.dataset.chatUserid), readSupportChatCache(chatMeta.roomId || getSupportRoomId(row.dataset.chatUserid)));
+                    openSupportChatPage(row.dataset.chatUserid, 'admin', chatMeta);
                 };
             });
         };
@@ -4689,7 +4747,7 @@
                 ${getPageHeader('Manage Chat')}
                 <div class="max-w-2xl mx-auto space-y-3">
                     <div class="bg-white dark:bg-gray-800 border border-gray-100 dark:border-gray-700 rounded-2xl shadow-sm p-3">
-                        <input id="admin-chat-search" type="search" placeholder="Search by name, email, or phone" class="w-full px-4 py-3 bg-gray-100 dark:bg-gray-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500">
+                        <input id="admin-chat-search" type="search" placeholder="Search chat or any user by name, email, phone" class="w-full px-4 py-3 bg-gray-100 dark:bg-gray-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500">
                     </div>
                     <div id="admin-chats-list" class="space-y-3"></div>
                 </div>
@@ -4699,6 +4757,7 @@
             document.getElementById('admin-chat-search').addEventListener('input', renderAdminChatsList);
             renderAdminChatsList();
             loadAdminChatsFromBackend();
+            ensureAdminChatUsersLoaded().then(renderAdminChatsList);
         };
 
         const getFilteredTransactions = (filter) => {
