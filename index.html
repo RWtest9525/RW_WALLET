@@ -6292,13 +6292,11 @@
             const content = `
                 ${getPageHeader('Pending Withdrawal Requests')}
                 <div class="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-md space-y-4">
-                    <div>
-                        <input type="search" id="pending-withdrawal-search" value="${escapeHtml(adminPendingWithdrawalSearch)}" placeholder="Search name, mobile, email, amount, method" class="w-full px-3 py-2 bg-gray-100 dark:bg-gray-700 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-yellow-500">
-                    </div>
-                    <div class="relative rounded-xl bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 p-3 flex items-center justify-between gap-3">
-                        <p id="legacy-pending-withdrawal-summary" class="text-xs text-yellow-800 dark:text-yellow-100">Checking pending withdrawals without balance cut...</p>
-                        <button id="pending-withdrawal-actions-btn" class="h-9 w-9 shrink-0 rounded-full bg-white dark:bg-gray-800 border border-yellow-200 dark:border-yellow-800 text-lg font-black text-yellow-700 dark:text-yellow-200 shadow-sm hover:bg-yellow-100 dark:hover:bg-yellow-900/40" title="More actions">⋮</button>
-                        <div id="pending-withdrawal-actions-menu" class="hidden absolute right-3 top-12 z-20 w-48 rounded-xl border border-gray-100 dark:border-gray-700 bg-white dark:bg-gray-800 p-2 shadow-xl">
+                    <div class="relative flex items-center gap-2">
+                        <input type="search" id="pending-withdrawal-search" value="${escapeHtml(adminPendingWithdrawalSearch)}" placeholder="Search name, mobile, email, amount, method" class="min-w-0 flex-1 px-3 py-2 bg-gray-100 dark:bg-gray-700 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-yellow-500">
+                        <button id="pending-withdrawal-actions-btn" class="h-10 w-10 shrink-0 rounded-full bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 text-xl font-black text-yellow-700 dark:text-yellow-200 shadow-sm hover:bg-yellow-100 dark:hover:bg-yellow-900/40" title="More actions">&#8942;</button>
+                        <div id="pending-withdrawal-actions-menu" class="hidden absolute right-0 top-12 z-20 w-64 rounded-xl border border-gray-100 dark:border-gray-700 bg-white dark:bg-gray-800 p-2 shadow-xl">
+                            <p id="legacy-pending-withdrawal-summary" class="mb-2 rounded-lg bg-yellow-50 dark:bg-yellow-900/20 px-3 py-2 text-[11px] leading-4 text-yellow-800 dark:text-yellow-100">Checking pending withdrawals without balance cut...</p>
                             <button id="fix-legacy-pending-withdrawals-btn" class="w-full rounded-lg px-3 py-2 text-left text-xs font-black text-yellow-700 dark:text-yellow-200 hover:bg-yellow-50 dark:hover:bg-yellow-900/30 disabled:opacity-50 disabled:cursor-not-allowed">Deduct Uncut Pending</button>
                             <button id="refresh-pending-withdrawals-btn" class="w-full rounded-lg px-3 py-2 text-left text-xs font-black text-blue-700 dark:text-blue-200 hover:bg-blue-50 dark:hover:bg-blue-900/30">Refresh List</button>
                         </div>
