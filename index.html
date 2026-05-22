@@ -4026,6 +4026,10 @@
             ${getPremiumLogoFrame(`<img src="${CHATBOT_ICON_URL}" alt="REVY AI" class="max-h-full max-w-full rounded-full object-contain">`, sizeClass)}`;
         const getSupportLogoFrame = (sizeClass = 'h-14 w-14', extraClass = '') => `
             ${getPremiumLogoFrame(`<img src="${getSupportLogo()}" alt="REVIEWS WORLD" class="h-full w-full rounded-full object-cover">`, sizeClass, extraClass)}`;
+        const getSupportAdminEmail = () => {
+            const adminProfile = allUsersCache.find(u => u.id === ADMIN_UID) || {};
+            return adminProfile.email || 'reviewsworld01@gmail.com';
+        };
 
         const showSupportProfileModal = async () => {
             let supportProfile = allUsersCache.find(u => u.id === ADMIN_UID) || {};
@@ -4369,7 +4373,7 @@
             const displayName = isAdminView ? (chatMeta.userName || 'User') : 'REVIEWS WORLD';
             const displayEmail = isAdminView
                 ? (chatMeta.userEmail || '')
-                : (currentUserData?.email || currentUser?.email || '');
+                : getSupportAdminEmail();
             const logo = isAdminView ? 'https://cdn-icons-png.flaticon.com/512/3135/3135715.png' : getSupportLogo();
             const initialMessage = chatMeta.initialMessage || '';
             const content = `
