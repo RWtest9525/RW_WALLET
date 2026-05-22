@@ -1358,7 +1358,7 @@
         });
 
         try {
-            setLogLevel('Debug');
+            setLogLevel('error');
         } catch (e) {
             console.warn("Could not set Firebase log level:", e);
         }
@@ -1400,6 +1400,8 @@
         let notificationUnreadCount = 0;
         let adminNotificationsCache = [];
         let notificationRefreshTimer = null;
+        let adminNotificationSelectedUsers = [];
+        let adminUsersRealtimeStarted = false;
         let revyBotMessages = [];
         let revyBotLastQuestion = '';
         let revyBotTimer = null;
@@ -1451,6 +1453,7 @@
         const getUserCacheKey = (userId) => `rw_wallet_user_cache_${userId}`;
         const getHistoryCacheKey = (userId) => `rw_wallet_history_cache_${userId}`;
         const getHistoryDataCacheKey = (userId) => `rw_wallet_history_data_cache_${userId}`;
+        const ADMIN_USERS_CACHE_KEY = 'rw_admin_users_cache_v2';
 
         const readJsonCache = (key) => {
             try {
@@ -2821,6 +2824,8 @@
             notificationsCache = [];
             notificationUnreadCount = 0;
             adminNotificationsCache = [];
+            adminNotificationSelectedUsers = [];
+            adminUsersRealtimeStarted = false;
             if (notificationRefreshTimer) {
                 clearInterval(notificationRefreshTimer);
                 notificationRefreshTimer = null;
@@ -2919,7 +2924,7 @@
             const userDocRef = doc(db, `artifacts/${appId}/public/data/users`, userId);
             unsubscribers.push(onSnapshot(userDocRef, async (doc) => {
                 if (doc.exists()) {
-                    console.log("User data snapshot received:", doc.data());
+                    console.log("User data snapshot received");
                     const data = doc.data();
                     const isBanned = await enforceCurrentUserBan(userId, userDocRef, data).catch(e => {
                         console.error('Ban enforcement failed:', e);
@@ -3049,8 +3054,18 @@
         const refreshAdminDashboardCaches = async () => {
             const usersQuery = query(collection(db, `artifacts/${appId}/public/data/users`));
             const usersSnap = await getDocs(usersQuery);
-            allUsersCache = usersSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+            applyAdminUsersCache(usersSnap.docs.map(d => ({ id: d.id, ...d.data() })));
+            await refreshAdminSecondaryCaches();
+        };
 
+        const applyAdminUsersCache = (users = []) => {
+            if (!Array.isArray(users)) return;
+            allUsersCache = users;
+            writeJsonCache(ADMIN_USERS_CACHE_KEY, users.map(user => ({
+                ...user,
+                createdAt: timestampToMillis(user.createdAt),
+                webAppLastSeenAt: timestampToMillis(user.webAppLastSeenAt)
+            })));
             let totalFunds = 0;
             let newMembersCount = 0;
             let minusBalanceCount = 0;
@@ -3075,9 +3090,12 @@
                     }
             });
 
-            document.getElementById('analytics-total-users').textContent = otherUsers.length;
-            document.getElementById('analytics-total-funds').textContent = formatCompactBalance(totalFunds);
-            document.getElementById('analytics-new-members').textContent = newMembersCount;
+            const totalUsersEl = document.getElementById('analytics-total-users');
+            const totalFundsEl = document.getElementById('analytics-total-funds');
+            const newMembersEl = document.getElementById('analytics-new-members');
+            if (totalUsersEl) totalUsersEl.textContent = otherUsers.length;
+            if (totalFundsEl) totalFundsEl.textContent = formatCompactBalance(totalFunds);
+            if (newMembersEl) newMembersEl.textContent = newMembersCount;
             const minusCountEl = document.getElementById('analytics-minus-balance-users');
             const minusTotalEl = document.getElementById('analytics-minus-balance-total');
             if (minusCountEl) minusCountEl.textContent = minusBalanceCount;
@@ -3086,12 +3104,45 @@
             if (document.getElementById('admin-users-list-page')) {
                 updateAdminUserListView();
             }
+            if (document.getElementById('admin-chats-list')) {
+                renderAdminChatsList();
+            }
+            if (document.getElementById('admin-notification-target-preview')) {
+                updateAdminNotificationTargetPreview();
+                renderAdminNotificationSelectedUsers();
+                renderAdminNotificationSearchResults();
+            }
+        };
 
+        const hydrateAdminUsersFromCache = () => {
+            const cached = readJsonCache(ADMIN_USERS_CACHE_KEY);
+            if (!Array.isArray(cached) || !cached.length) return;
+            applyAdminUsersCache(cached.map(user => ({
+                ...user,
+                createdAt: reviveCachedTimestamp(user.createdAt),
+                webAppLastSeenAt: reviveCachedTimestamp(user.webAppLastSeenAt)
+            })));
+        };
+
+        const initializeAdminUsersRealtime = () => {
+            if (currentUser?.uid !== ADMIN_UID || adminUsersRealtimeStarted) return;
+            adminUsersRealtimeStarted = true;
+            const usersQuery = query(collection(db, `artifacts/${appId}/public/data/users`));
+            unsubscribers.push(onSnapshot(usersQuery, (snapshot) => {
+                applyAdminUsersCache(snapshot.docs.map(d => ({ id: d.id, ...d.data() })));
+            }, (error) => {
+                console.error('Admin realtime users failed:', error);
+                hydrateAdminUsersFromCache();
+            }));
+        };
+
+        const refreshAdminSecondaryCaches = async () => {
             const codesQuery = query(collection(db, `artifacts/${appId}/public/data/gift_codes`));
             const codesSnap = await getDocs(codesQuery);
             allGiftCodesCache = codesSnap.docs;
             const totalRedeemed = codesSnap.docs.reduce((acc, doc) => acc + (doc.data().timesUsed || 0), 0);
-            document.getElementById('analytics-gift-cards').textContent = totalRedeemed;
+            const giftCardsEl = document.getElementById('analytics-gift-cards');
+            if (giftCardsEl) giftCardsEl.textContent = totalRedeemed;
 
             if (document.getElementById('gift-codes-list-page')) {
                 renderAdminGiftCodesList(codesSnap.docs);
@@ -3124,6 +3175,8 @@
 
         let initializeAdminListeners = () => {
             console.log("Initializing admin data...");
+            hydrateAdminUsersFromCache();
+            initializeAdminUsersRealtime();
             refreshAdminDashboardCaches().catch(error => console.error("Admin data refresh failed:", error));
             loadAdminChatsFromBackend().catch(error => console.error("Admin: Error loading Cloudflare support chats:", error));
         };
@@ -4064,7 +4117,7 @@
             groups.flat().forEach((message) => {
                 if (!message) return;
                 const normalized = normalizeBackendMessage(message);
-                const key = normalized.id || `${normalized.senderId}-${normalized.createdAt}-${normalized.text}`;
+                const key = `${normalized.roomId || activeSupportRoomId}-${normalized.senderId}-${timestampToMillis(normalized.createdAt)}-${normalized.text}`;
                 merged.set(key, { ...(merged.get(key) || {}), ...normalized });
             });
             return Array.from(merged.values()).sort((a, b) => timestampToMillis(a.createdAt) - timestampToMillis(b.createdAt));
@@ -4072,6 +4125,7 @@
 
         const normalizeBackendMessage = (message) => ({
             id: message.id || `${message.roomId || message.room_id || activeSupportRoomId}-${message.timestamp || message.createdAt || Date.now()}-${message.senderId || message.sender_id || ''}`,
+            roomId: message.roomId || message.room_id || activeSupportRoomId,
             text: message.message || message.text || '',
             senderId: message.senderId || message.sender_id || '',
             senderRole: (message.senderId || message.sender_id) === ADMIN_UID ? 'admin' : 'user',
@@ -5172,13 +5226,69 @@
             return allUsersCache.filter(user => !isAdminUserRecord(user) && isUserOnUpdatedWebApp(user));
         };
 
-        const getSelectedNotificationUser = () => {
+        const getNotificationSearchMatches = () => {
             const search = (document.getElementById('admin-notification-user-search')?.value || '').trim().toLowerCase();
-            if (!search) return null;
+            if (search.length < 2) return [];
+            const selectedIds = new Set(adminNotificationSelectedUsers.map(user => String(user.id || user.uid || '')));
             return allUsersCache
-                .filter(user => !isAdminUserRecord(user))
-                .find(user => [user.name, user.email, user.mobile, user.phoneNumber, user.id]
-                    .some(value => String(value || '').toLowerCase().includes(search))) || null;
+                .filter(user => !isAdminUserRecord(user) && !selectedIds.has(String(user.id || user.uid || '')))
+                .filter(user => [user.name, user.email, user.mobile, user.phoneNumber, user.id]
+                    .some(value => String(value || '').toLowerCase().includes(search)))
+                .slice(0, 10);
+        };
+
+        const renderAdminNotificationSelectedUsers = () => {
+            const list = document.getElementById('admin-notification-selected-users');
+            if (!list) return;
+            list.innerHTML = adminNotificationSelectedUsers.length
+                ? adminNotificationSelectedUsers.map(user => `
+                    <span class="inline-flex items-center gap-2 rounded-full bg-blue-50 dark:bg-blue-900/30 border border-blue-100 dark:border-blue-800 px-3 py-1 text-xs font-bold text-blue-700 dark:text-blue-200">
+                        ${escapeHtml(user.name || user.email || user.mobile || 'User')}
+                        <button data-remove-notification-user="${escapeHtml(user.id || user.uid || '')}" class="text-blue-400 hover:text-red-500" type="button">&times;</button>
+                    </span>`).join('')
+                : '<span class="text-xs text-gray-400 dark:text-gray-500">No selected users yet.</span>';
+            list.querySelectorAll('[data-remove-notification-user]').forEach(button => {
+                button.onclick = () => {
+                    adminNotificationSelectedUsers = adminNotificationSelectedUsers.filter(user => String(user.id || user.uid || '') !== button.dataset.removeNotificationUser);
+                    renderAdminNotificationSelectedUsers();
+                    renderAdminNotificationSearchResults();
+                    updateAdminNotificationTargetPreview();
+                };
+            });
+        };
+
+        const renderAdminNotificationSearchResults = () => {
+            const list = document.getElementById('admin-notification-search-results');
+            if (!list) return;
+            const matches = getNotificationSearchMatches();
+            const search = (document.getElementById('admin-notification-user-search')?.value || '').trim();
+            if (!search) {
+                list.innerHTML = '';
+                return;
+            }
+            if (search.length < 2) {
+                list.innerHTML = '<p class="rounded-xl bg-gray-50 dark:bg-gray-700/60 px-3 py-2 text-xs text-gray-500 dark:text-gray-400">Type at least 2 letters or digits.</p>';
+                return;
+            }
+            list.innerHTML = matches.length
+                ? matches.map(user => `
+                    <button data-add-notification-user="${escapeHtml(user.id || user.uid || '')}" type="button" class="w-full rounded-xl bg-white dark:bg-gray-800 border border-gray-100 dark:border-gray-700 p-3 text-left hover:bg-blue-50 dark:hover:bg-blue-900/20 transition">
+                        <p class="font-bold text-sm text-gray-900 dark:text-white">${escapeHtml(user.name || 'User')}</p>
+                        <p class="text-xs text-gray-500 dark:text-gray-400">${escapeHtml(user.mobile || user.phoneNumber || user.email || user.id || '')}</p>
+                    </button>`).join('')
+                : '<p class="rounded-xl bg-gray-50 dark:bg-gray-700/60 px-3 py-2 text-xs text-gray-500 dark:text-gray-400">No matching user found.</p>';
+            list.querySelectorAll('[data-add-notification-user]').forEach(button => {
+                button.onclick = () => {
+                    const user = allUsersCache.find(item => String(item.id || item.uid || '') === button.dataset.addNotificationUser);
+                    if (!user) return;
+                    adminNotificationSelectedUsers = [...adminNotificationSelectedUsers, user];
+                    const input = document.getElementById('admin-notification-user-search');
+                    if (input) input.value = '';
+                    renderAdminNotificationSelectedUsers();
+                    renderAdminNotificationSearchResults();
+                    updateAdminNotificationTargetPreview();
+                };
+            });
         };
 
         const renderAdminNotificationsList = () => {
@@ -5278,8 +5388,9 @@
                 const recipients = await getNotificationRecipients();
                 preview.textContent = `Will deliver to ${recipients.length} new version members.`;
             } else {
-                const user = getSelectedNotificationUser();
-                preview.textContent = user ? `Selected: ${user.name || user.email || user.mobile || 'User'}` : 'Search name, mobile, or email to select one user.';
+                preview.textContent = adminNotificationSelectedUsers.length
+                    ? `Will deliver to ${adminNotificationSelectedUsers.length} selected user${adminNotificationSelectedUsers.length > 1 ? 's' : ''}.`
+                    : 'Search and select one or more users.';
             }
         };
 
@@ -5291,7 +5402,7 @@
             await ensureAdminChatUsersLoaded();
             const recipients = mode === 'all_new_version'
                 ? (await getNotificationRecipients()).map(user => user.id)
-                : [getSelectedNotificationUser()?.id].filter(Boolean);
+                : adminNotificationSelectedUsers.map(user => user.id || user.uid).filter(Boolean);
             if (!recipients.length) return showNotification('No matching receiver found.', true);
 
             const button = document.getElementById('admin-send-notification-btn');
@@ -5312,6 +5423,9 @@
                 const data = await response.json().catch(() => ({}));
                 if (!response.ok || !data.ok) throw new Error(data.error || 'Send failed');
                 document.getElementById('admin-notification-message').value = '';
+                adminNotificationSelectedUsers = [];
+                renderAdminNotificationSelectedUsers();
+                renderAdminNotificationSearchResults();
                 showNotification(`Notification sent to ${recipients.length} member${recipients.length > 1 ? 's' : ''}.`);
                 await fetchAdminNotifications();
                 updateAdminNotificationTargetPreview();
@@ -5363,13 +5477,12 @@
                         <div class="grid grid-cols-1 gap-3">
                             <select id="admin-notification-target" class="w-full rounded-xl bg-gray-100 dark:bg-gray-700 px-4 py-3 font-semibold focus:outline-none focus:ring-2 focus:ring-blue-500">
                                 <option value="all_new_version">All new version members</option>
-                                <option value="single">One selected user</option>
+                                <option value="single">Selected users</option>
                             </select>
-                            <div id="admin-notification-user-wrap" class="hidden">
-                                <input id="admin-notification-user-search" list="admin-notification-users-list" type="search" placeholder="Search name, mobile, email" class="w-full rounded-xl bg-gray-100 dark:bg-gray-700 px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500">
-                                <datalist id="admin-notification-users-list">
-                                    ${allUsersCache.filter(user => !isAdminUserRecord(user)).map(user => `<option value="${escapeHtml(user.name || user.email || user.mobile || user.id)}">${escapeHtml(user.email || user.mobile || user.id)}</option>`).join('')}
-                                </datalist>
+                            <div id="admin-notification-user-wrap" class="hidden space-y-2">
+                                <input id="admin-notification-user-search" type="search" autocomplete="off" placeholder="Search name, mobile, email, then select user" class="w-full rounded-xl bg-gray-100 dark:bg-gray-700 px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500">
+                                <div id="admin-notification-search-results" class="grid grid-cols-1 gap-2"></div>
+                                <div id="admin-notification-selected-users" class="flex flex-wrap gap-2"></div>
                             </div>
                             <p id="admin-notification-target-preview" class="text-xs font-bold text-blue-600 dark:text-blue-300">Loading members...</p>
                             <input id="admin-notification-title" type="text" maxlength="120" value="REVIEWS WORLD" placeholder="Title" class="w-full rounded-xl bg-gray-100 dark:bg-gray-700 px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500">
@@ -5389,14 +5502,15 @@
             showPage(content, { keepBottomNav: true, returnTo: 'admin' });
             setBottomNavActive('bottom-admin-btn');
             document.getElementById('admin-notification-target').addEventListener('change', updateAdminNotificationTargetPreview);
-            document.getElementById('admin-notification-user-search').addEventListener('input', updateAdminNotificationTargetPreview);
+            document.getElementById('admin-notification-user-search').addEventListener('input', () => {
+                renderAdminNotificationSearchResults();
+                updateAdminNotificationTargetPreview();
+            });
             document.getElementById('admin-send-notification-btn').onclick = sendAdminNotification;
             document.getElementById('admin-refresh-notifications-btn').onclick = fetchAdminNotifications;
             ensureAdminChatUsersLoaded().then(() => {
-                const datalist = document.getElementById('admin-notification-users-list');
-                if (datalist) {
-                    datalist.innerHTML = allUsersCache.filter(user => !isAdminUserRecord(user)).map(user => `<option value="${escapeHtml(user.name || user.email || user.mobile || user.id)}">${escapeHtml(user.email || user.mobile || user.id)}</option>`).join('');
-                }
+                renderAdminNotificationSelectedUsers();
+                renderAdminNotificationSearchResults();
                 updateAdminNotificationTargetPreview();
             });
             renderAdminNotificationsList();
