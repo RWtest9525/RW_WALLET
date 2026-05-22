@@ -2233,9 +2233,35 @@
         };
 
         // Function to mask mobile number
+        const normalizePhoneDigits = (value = '') => String(value || '').replace(/\D/g, '').slice(-10);
+        const getUserMobileValue = (user = {}) =>
+            user.mobile || user.phoneNumber || user.phone || user.userMobile || user.contactNumber || '';
+        const userMatchesSearch = (user = {}, searchTerm = '') => {
+            const rawSearch = String(searchTerm || '').trim().toLowerCase();
+            if (!rawSearch) return true;
+            const digitSearch = normalizePhoneDigits(rawSearch);
+            const userDigits = normalizePhoneDigits(getUserMobileValue(user));
+            return [
+                user.email,
+                user.name,
+                user.fullName,
+                user.displayName,
+                user.mobile,
+                user.phoneNumber,
+                user.phone,
+                user.userMobile,
+                user.contactNumber,
+                user.id,
+                user.uid
+            ].some(value => String(value || '').toLowerCase().includes(rawSearch))
+                || (!!digitSearch && userDigits.includes(digitSearch));
+        };
+
         const maskMobile = (mobile) => {
             if (!mobile || mobile.length < 10) return '******';
-            return mobile.substring(0, 3) + '****' + mobile.substring(7);
+            const digits = normalizePhoneDigits(mobile);
+            if (digits.length < 10) return '******';
+            return digits.substring(0, 3) + '****' + digits.substring(7);
         };
 
         // Function to mask UPI ID
@@ -2942,6 +2968,13 @@
                         return false;
                     });
                     if (isBanned) return;
+                    if (!data.isFlagged && data.isDisabled) {
+                        updateDoc(userDocRef, {
+                            isDisabled: false,
+                            disabledAt: deleteField(),
+                            disabledBy: deleteField()
+                        }).catch(e => console.warn('Stale disabled flag cleanup skipped:', e));
+                    }
                     markUpdatedWebAppSeen(userId, userDocRef, data).catch(e => console.warn('Web app usage marker skipped:', e));
                     document.getElementById('user-balance').textContent = formatCompactBalance(data.balance);
                     updateDollarBalanceDisplay(data.balance);
@@ -3071,8 +3104,13 @@
 
         const applyAdminUsersCache = (users = []) => {
             if (!Array.isArray(users)) return;
-            allUsersCache = users;
-            writeJsonCache(ADMIN_USERS_CACHE_KEY, users.map(user => ({
+            const normalizedUsers = users.map(user => ({
+                ...user,
+                mobile: getUserMobileValue(user),
+                phoneNumber: user.phoneNumber || getUserMobileValue(user)
+            }));
+            allUsersCache = normalizedUsers;
+            writeJsonCache(ADMIN_USERS_CACHE_KEY, normalizedUsers.map(user => ({
                 ...user,
                 createdAt: timestampToMillis(user.createdAt),
                 webAppLastSeenAt: timestampToMillis(user.webAppLastSeenAt)
@@ -5286,8 +5324,7 @@
             const selectedIds = new Set(adminNotificationSelectedUsers.map(user => String(user.id || user.uid || '')));
             return allUsersCache
                 .filter(user => !isAdminUserRecord(user) && !selectedIds.has(String(user.id || user.uid || '')))
-                .filter(user => [user.name, user.email, user.mobile, user.phoneNumber, user.id]
-                    .some(value => String(value || '').toLowerCase().includes(search)))
+                .filter(user => userMatchesSearch(user, search))
                 .slice(0, 10);
         };
 
@@ -6735,7 +6772,7 @@
             const requestedAt = record.requestedAt || record.timestamp || record.createdAt || record.processedAt || Date.now();
             const userProfile = allUsersCache.find(u =>
                 (record.userId && u.id === record.userId) ||
-                (record.userMobile && u.mobile === record.userMobile) ||
+                (record.userMobile && normalizePhoneDigits(getUserMobileValue(u)) === normalizePhoneDigits(record.userMobile)) ||
                 (record.userEmail && u.email === record.userEmail)
             ) || {};
             return {
@@ -6743,7 +6780,7 @@
                 id: record.id || record.requestId || record.request_id || record.transactionId || record.transaction_id || `${sourceType}-${timestampToMillis(requestedAt)}-${record.amount || 0}`,
                 userId: record.userId || record.user_id || userProfile.id || '',
                 userName: record.userName || record.senderName || record.recipientName || userProfile.name || 'N/A',
-                userMobile: record.userMobile || record.mobile || userProfile.mobile || '',
+                userMobile: record.userMobile || record.mobile || getUserMobileValue(userProfile) || '',
                 userEmail: record.userEmail || record.emailAddress || userProfile.email || '',
                 type: 'withdrawal',
                 amount: absoluteAmount(record.amount || 0),
@@ -7047,10 +7084,7 @@
             const filterValue = document.getElementById('user-filter-select-page').value;
 
             let usersToRender = allUsersCache.filter(u => !isAdminUserRecord(u) && (
-                !searchTerm ||
-                (u.email || '').toLowerCase().includes(searchTerm) ||
-                (u.name && u.name.toLowerCase().includes(searchTerm)) ||
-                (u.mobile && u.mobile.includes(searchTerm))
+                !searchTerm || userMatchesSearch(u, searchTerm)
             ));
 
             // Apply filter
