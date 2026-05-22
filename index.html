@@ -2075,6 +2075,7 @@
             websiteLinks: Array.isArray(data.websiteLinks) ? data.websiteLinks.slice(0, 3) : [],
             isProProfile: !!data.isProProfile,
             isFlagged: !!data.isFlagged,
+            isDisabled: !!data.isDisabled,
             loanEligible: !!data.loanEligible,
             maxLoanAmount: data.maxLoanAmount || data.loanMaxAmount || 0,
             loanMaxAmount: data.loanMaxAmount || data.maxLoanAmount || 0
@@ -2083,6 +2084,10 @@
         const hydrateUserFromCache = (userId) => {
             const cached = readJsonCache(getUserCacheKey(userId));
             if (!cached) return false;
+            if (cached.isFlagged || cached.isDisabled) {
+                localStorage.removeItem(getUserCacheKey(userId));
+                return false;
+            }
 
             currentUserData = cached;
             document.getElementById('user-balance').textContent = formatCompactBalance(cached.balance || 0);
@@ -2651,8 +2656,11 @@
                                 // Ban expired, auto-unflag
                                 await updateDoc(userDoc.ref, {
                                     isFlagged: false,
+                                    isDisabled: false,
                                     banReason: deleteField(),
-                                    banExpiry: deleteField()
+                                    banExpiry: deleteField(),
+                                    disabledAt: deleteField(),
+                                    disabledBy: deleteField()
                                 });
                             }
                         } else {
@@ -2753,8 +2761,11 @@
             if (expiry && new Date() >= expiry) {
                 await updateDoc(userRef, {
                     isFlagged: false,
+                    isDisabled: false,
                     banReason: deleteField(),
-                    banExpiry: deleteField()
+                    banExpiry: deleteField(),
+                    disabledAt: deleteField(),
+                    disabledBy: deleteField()
                 });
                 return false;
             }
@@ -9518,15 +9529,22 @@
                 try {
                     await updateDoc(userRef, {
                         isFlagged: false,
+                        isDisabled: false,
                         banReason: deleteField(),
-                        banExpiry: deleteField()
+                        banExpiry: deleteField(),
+                        disabledAt: deleteField(),
+                        disabledBy: deleteField()
                     });
                     allUsersCache = allUsersCache.map(u => u.id === userId ? {
                         ...u,
                         isFlagged: false,
+                        isDisabled: false,
                         banReason: undefined,
-                        banExpiry: undefined
+                        banExpiry: undefined,
+                        disabledAt: undefined,
+                        disabledBy: undefined
                     } : u);
+                    applyAdminUsersCache(allUsersCache);
                     updateAdminUserListView();
                     showNotification('User unflagged successfully!');
                 } catch (e) {
@@ -9569,6 +9587,9 @@
                         const duration = parseInt(document.getElementById('ban-duration-input').value);
 
                         updateData.banReason = reason;
+                        updateData.isDisabled = true;
+                        updateData.disabledAt = serverTimestamp();
+                        updateData.disabledBy = currentUser.uid;
                         if (!isNaN(duration) && duration > 0) {
                             const expiryDate = new Date();
                             expiryDate.setDate(expiryDate.getDate() + duration);
@@ -9590,15 +9611,22 @@
                     } else {
                         updateData.banReason = deleteField();
                         updateData.banExpiry = deleteField();
+                        updateData.isDisabled = false;
+                        updateData.disabledAt = deleteField();
+                        updateData.disabledBy = deleteField();
                     }
 
                     await updateDoc(userRef, updateData);
                     allUsersCache = allUsersCache.map(u => u.id === userId ? {
                         ...u,
-                        isFlagged: true,
+                        isFlagged: !currentlyFlagged,
+                        isDisabled: !currentlyFlagged ? true : false,
                         banReason: updateData.banReason,
-                        banExpiry: updateData.banExpiry || null
+                        banExpiry: updateData.banExpiry || null,
+                        disabledAt: !currentlyFlagged ? Date.now() : undefined,
+                        disabledBy: !currentlyFlagged ? currentUser.uid : undefined
                     } : u);
+                    applyAdminUsersCache(allUsersCache);
                     updateAdminUserListView();
                     showNotification(`User ${currentlyFlagged ? 'unbanned' : 'banned'} successfully!`);
                     window.closeModal();
