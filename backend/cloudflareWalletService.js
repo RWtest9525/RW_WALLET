@@ -571,6 +571,13 @@ async function updateFundRequestStatus(d1, { requestId, status, processedAt = no
 }
 
 async function cleanupExpiredNotifications(d1, now = nowMs()) {
+  const readCutoff = now - NOTIFICATION_RETENTION_MS;
+  await d1.query(
+    `DELETE FROM notification_recipients
+     WHERE read_at IS NOT NULL
+       AND read_at <= ?`,
+    [readCutoff]
+  );
   await d1.query(
     `DELETE FROM notification_recipients
      WHERE notification_id IN (
@@ -580,6 +587,13 @@ async function cleanupExpiredNotifications(d1, now = nowMs()) {
     [now]
   );
   await d1.query('DELETE FROM notifications WHERE expires_at <= ?', [now]);
+  await d1.query(
+    `DELETE FROM notifications
+     WHERE NOT EXISTS (
+       SELECT 1 FROM notification_recipients
+       WHERE notification_recipients.notification_id = notifications.id
+     )`
+  );
 }
 
 function normalizeNotificationRow(row = {}) {
