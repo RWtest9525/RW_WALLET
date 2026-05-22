@@ -1396,6 +1396,8 @@
         let adminChatUnreadCount = 0;
         let supportChatPreloadUserId = '';
         let supportChatBackgroundHandlers = null;
+        let adminChatBackgroundHandlers = null;
+        let adminChatSubscribedRooms = new Set();
         let supportSendingMessage = false;
         let supportLastSendSignature = '';
         let supportLastSendAt = 0;
@@ -2938,6 +2940,8 @@
             adminChatUnreadCount = 0;
             supportChatPreloadUserId = '';
             supportChatBackgroundHandlers = null;
+            adminChatBackgroundHandlers = null;
+            adminChatSubscribedRooms = new Set();
             supportSendingMessage = false;
             supportLastSendSignature = '';
             supportLastSendAt = 0;
@@ -4470,6 +4474,68 @@
             });
         };
 
+        const subscribeAdminChatRooms = async (chats = allSupportChatsCache) => {
+            if (currentUser?.uid !== ADMIN_UID) return;
+            const socket = await getSupportSocket();
+            if (adminChatBackgroundHandlers) {
+                socket.off('new_message', adminChatBackgroundHandlers.message);
+                socket.off('chat_read', adminChatBackgroundHandlers.read);
+            }
+
+            const updateRoomFromMessage = (message) => {
+                const normalized = normalizeBackendMessage(message);
+                if (!normalized.roomId) return;
+                const userId = normalized.roomId.replace(/^support_/, '');
+                const isActiveRoomOpen = activeSupportRoomId === normalized.roomId && document.getElementById('support-chat-messages');
+                const cachedMessages = mergeSupportMessages(readSupportChatCache(normalized.roomId), [normalized]);
+                writeSupportChatCache(normalized.roomId, cachedMessages);
+
+                const existingIndex = allSupportChatsCache.findIndex(chat => (chat.roomId || getSupportRoomId(chat.userId || chat.id)) === normalized.roomId);
+                const existing = existingIndex >= 0 ? allSupportChatsCache[existingIndex] : {};
+                const userProfile = allUsersCache.find(user => (user.id || user.uid) === userId) || {};
+                const updatedChat = {
+                    ...existing,
+                    id: existing.id || userId,
+                    userId: existing.userId || userId,
+                    roomId: normalized.roomId,
+                    userName: existing.userName || userProfile.name || 'User',
+                    userEmail: existing.userEmail || userProfile.email || '',
+                    userMobile: existing.userMobile || getUserMobileValue(userProfile) || '',
+                    lastMessage: normalized.text,
+                    lastSenderId: normalized.senderId,
+                    updatedAt: timestampToMillis(normalized.createdAt) || Date.now()
+                };
+
+                if (existingIndex >= 0) {
+                    allSupportChatsCache[existingIndex] = updatedChat;
+                } else {
+                    allSupportChatsCache.unshift(updatedChat);
+                }
+                allSupportChatsCache.sort((a, b) => timestampToMillis(b.updatedAt || b.updated_at) - timestampToMillis(a.updatedAt || a.updated_at));
+                if (!isActiveRoomOpen) refreshAdminChatUnreadCount();
+                renderAdminChatsList();
+            };
+
+            const handleAdminBackgroundRead = ({ roomId, readerRole, readAt }) => {
+                applySupportReadReceipt(roomId, readerRole, readAt);
+                renderAdminChatsList();
+            };
+
+            adminChatBackgroundHandlers = {
+                message: updateRoomFromMessage,
+                read: handleAdminBackgroundRead
+            };
+            socket.on('new_message', updateRoomFromMessage);
+            socket.on('chat_read', handleAdminBackgroundRead);
+
+            chats.slice(0, 200).forEach(chat => {
+                const roomId = chat.roomId || getSupportRoomId(chat.userId || chat.id);
+                if (!roomId || adminChatSubscribedRooms.has(roomId)) return;
+                adminChatSubscribedRooms.add(roomId);
+                socket.emit('join_room', { roomId, limit: 1, markRead: false });
+            });
+        };
+
         const openSupportChatPage = async (chatUserId, viewerRole = 'user', chatMeta = {}) => {
             if (activeChatUnsubscribe) {
                 activeChatUnsubscribe();
@@ -5131,6 +5197,7 @@
                 refreshAdminChatUnreadCount();
                 renderAdminChatsList();
                 preloadAdminChatRooms(allSupportChatsCache);
+                subscribeAdminChatRooms(allSupportChatsCache).catch(error => console.warn('Admin chat socket subscribe skipped:', error));
             } catch (error) {
                 console.error('Cloudflare admin chat list failed:', error);
                 if (retry) {

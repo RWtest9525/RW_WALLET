@@ -1034,6 +1034,7 @@ function requireHttpAuth(req, res, next) {
 function registerSocketHandlers(io, { d1 }) {
   const adminRooms = new Map();
   const userRooms = new Map();
+  const adminSockets = new Set();
   const recentlyHandledClientMessages = new Map();
   const recentlyHandledMessageSignatures = new Map();
 
@@ -1100,6 +1101,7 @@ function registerSocketHandlers(io, { d1 }) {
   io.on('connection', (socket) => {
     socket.adminJoinedRooms = new Set();
     socket.userJoinedRooms = new Set();
+    if (socket.user.isAdmin) adminSockets.add(socket.id);
 
     socket.on('join_room', async ({ roomId, limit = 50, markRead = true }, ack) => {
       try {
@@ -1171,6 +1173,11 @@ function registerSocketHandlers(io, { d1 }) {
           return;
         }
         io.to(roomId).emit('new_message', chatMessage);
+        if (!socket.user.isAdmin) {
+          adminSockets.forEach((socketId) => {
+            io.to(socketId).emit('new_message', chatMessage);
+          });
+        }
         upsertChatRoom(d1, {
             roomId,
             userId: userMeta.userId || roomId.replace(/^support_/, ''),
@@ -1189,6 +1196,7 @@ function registerSocketHandlers(io, { d1 }) {
     });
 
     socket.on('disconnect', () => {
+      adminSockets.delete(socket.id);
       socket.adminJoinedRooms.forEach((roomId) => removeAdminRoomPresence(roomId, socket.id));
       socket.userJoinedRooms.forEach((roomId) => removeUserRoomPresence(roomId, socket.id));
       socket.adminJoinedRooms.clear();
