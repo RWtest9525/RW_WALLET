@@ -2066,6 +2066,30 @@
             return transactionHistoryPrefetch.promise;
         };
 
+        const addInstantTransactionToHistory = (userId, item = {}) => {
+            if (!userId || !item) return null;
+            const normalized = normalizeTransactionForHistory({
+                ...item,
+                timestamp: item.timestamp || Date.now()
+            });
+            unifiedHistoryCache = mergeTransactionsByKey([normalized], unifiedHistoryCache, readHistoryItemsFromCache(userId));
+            writeHistoryItemsToCache(userId, unifiedHistoryCache);
+            transactionHistoryPrefetch = { userId, promise: null, loadedAt: 0 };
+            if (document.getElementById('transactions-list')) {
+                document.getElementById('transactions-list').innerHTML = unifiedHistoryCache.slice(0, 5).map(tx => renderTransactionItem(tx)).join('');
+                try {
+                    localStorage.setItem(getHistoryCacheKey(userId), document.getElementById('transactions-list').innerHTML);
+                } catch (error) {
+                    console.warn('Instant history html cache skipped:', error);
+                }
+            }
+            if (document.getElementById('all-transactions-list')) {
+                const activeFilter = document.querySelector('#filter-bar .active-filter')?.dataset.filter || 'all';
+                renderFilteredTransactions(activeFilter, { reset: false });
+            }
+            return unifiedHistoryCache.find(tx => tx.transactionId === normalized.transactionId) || normalized;
+        };
+
         const sanitizeUserForCache = (data = {}, uid = '') => ({
             uid,
             email: data.email || '',
@@ -2365,6 +2389,7 @@
                     @keyframes animate-modal-in { to { scale: 1; opacity: 1; } } 
                     .animate-modal-in { animation: animate-modal-in 0.2s ease-out forwards; } 
                 </style>`;
+            setTimeout(keepFocusedInputVisible, 80);
         };
         window.closeModal = () => {
             document.getElementById('modal-container').innerHTML = '';
@@ -2513,6 +2538,56 @@
             document.getElementById('bottom-nav')?.classList.toggle('hidden', !show);
         };
 
+        let activeKeyboardInput = null;
+        const isKeyboardLiftTarget = (element) =>
+            element?.matches?.('input:not([type="checkbox"]):not([type="radio"]):not([type="hidden"]), textarea, select');
+
+        const keepFocusedInputVisible = () => {
+            const target = isKeyboardLiftTarget(activeKeyboardInput) ? activeKeyboardInput : null;
+            if (!target) return;
+            const keyboardHeight = window.visualViewport
+                ? Math.max(0, window.innerHeight - window.visualViewport.height - window.visualViewport.offsetTop)
+                : 0;
+            const pageContainer = document.getElementById('page-container');
+            if (pageContainer && !pageContainer.classList.contains('hidden')) {
+                pageContainer.style.scrollPaddingBottom = keyboardHeight > 40 ? `${keyboardHeight + 96}px` : '7rem';
+            }
+            const modalScroller = target.closest('#app-modal [class*="overflow-y-auto"]');
+            if (modalScroller) {
+                modalScroller.style.scrollPaddingBottom = keyboardHeight > 40 ? `${keyboardHeight + 80}px` : '5rem';
+            }
+            setTimeout(() => {
+                target.scrollIntoView({ block: 'center', inline: 'nearest', behavior: 'smooth' });
+            }, 80);
+        };
+
+        const installGlobalKeyboardLift = () => {
+            document.addEventListener('focusin', (event) => {
+                if (!isKeyboardLiftTarget(event.target)) return;
+                activeKeyboardInput = event.target;
+                keepFocusedInputVisible();
+                setTimeout(keepFocusedInputVisible, 250);
+            });
+            document.addEventListener('input', (event) => {
+                if (event.target === activeKeyboardInput) keepFocusedInputVisible();
+            });
+            document.addEventListener('focusout', (event) => {
+                if (event.target !== activeKeyboardInput) return;
+                setTimeout(() => {
+                    if (document.activeElement === activeKeyboardInput) return;
+                    activeKeyboardInput = null;
+                    const pageContainer = document.getElementById('page-container');
+                    if (pageContainer) pageContainer.style.scrollPaddingBottom = '';
+                    document.querySelectorAll('#app-modal [class*="overflow-y-auto"]').forEach(el => {
+                        el.style.scrollPaddingBottom = '';
+                    });
+                }, 180);
+            });
+            window.visualViewport?.addEventListener('resize', keepFocusedInputVisible);
+            window.visualViewport?.addEventListener('scroll', keepFocusedInputVisible);
+        };
+        installGlobalKeyboardLift();
+
         const showPage = (content, options = {}) => {
             document.getElementById('dashboard-content').classList.add('hidden');
             const pageContainer = document.getElementById('page-container');
@@ -2521,6 +2596,7 @@
             pageContainer.classList.remove('hidden');
             pageContainer.style.paddingBottom = options.fullHeight ? '0' : (options.keepBottomNav ? '6.5rem' : '1.5rem');
             pageContainer.style.overflowY = options.fullHeight ? 'hidden' : 'auto';
+            pageContainer.style.scrollPaddingBottom = '7rem';
             setMainChrome(!!options.keepBottomNav);
             document.getElementById('app-footer')?.classList.add('app-footer-hidden');
             const backButton = pageContainer.querySelector('.page-back-btn');
@@ -2550,6 +2626,7 @@
             document.getElementById('page-container').classList.add('hidden');
             document.getElementById('page-container').innerHTML = '';
             document.getElementById('page-container').style.overflowY = 'auto';
+            document.getElementById('page-container').style.scrollPaddingBottom = '';
             updateDollarBalanceDisplay(currentUserData?.balance || 0);
             setMainChrome(true);
             document.getElementById('app-footer')?.classList.add('app-footer-hidden');
@@ -8534,7 +8611,7 @@
                         return showNotification('Recipient mobile number not found in our system.', true);
                     }
 
-                    recipientData = recipientSnap.docs[0].data();
+                    recipientData = { uid: recipientSnap.docs[0].id, ...recipientSnap.docs[0].data() };
                     recipientLookupCache.set(recipientMobile, recipientData);
                 }
 
@@ -8723,13 +8800,14 @@
                 document.getElementById('user-balance').textContent = formatCompactBalance(currentUserData.balance);
                 updateDollarBalanceDisplay(currentUserData.balance);
                 writeJsonCache(getUserCacheKey(currentUser.uid), sanitizeUserForCache(currentUserData, currentUser.uid));
+                const instantTransaction = addInstantTransactionToHistory(currentUser.uid, senderCloudTxn);
                 Promise.allSettled([
                     recordCloudTransfer(senderCloudTxn, recipientCloudTxn, recipientData.uid),
                     syncRecentTransactionsToCloud(currentUser.uid)
                 ]).catch(error => console.warn('Pay to wallet background sync failed:', error));
                 showNotification(`Success! Sent ${formatCurrency(amount)} to ${recipientData.name || recipientData.mobile}`, false, true);
                 window.closeModal();
-                hidePage();
+                showTransactionDetails(instantTransaction?.key || senderTxnId);
             } catch (e) {
                 console.error("Pay to wallet failed:", e);
                 showNotification(`Transaction failed: ${e.message}`, true);
