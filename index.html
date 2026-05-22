@@ -1396,6 +1396,9 @@
         let adminChatUnreadCount = 0;
         let supportChatPreloadUserId = '';
         let supportChatBackgroundHandlers = null;
+        let supportSendingMessage = false;
+        let supportLastSendSignature = '';
+        let supportLastSendAt = 0;
         let notificationsCache = [];
         let notificationUnreadCount = 0;
         let adminNotificationsCache = [];
@@ -2858,6 +2861,9 @@
             adminChatUnreadCount = 0;
             supportChatPreloadUserId = '';
             supportChatBackgroundHandlers = null;
+            supportSendingMessage = false;
+            supportLastSendSignature = '';
+            supportLastSendAt = 0;
             notificationsCache = [];
             notificationUnreadCount = 0;
             adminNotificationsCache = [];
@@ -4161,17 +4167,6 @@
             }
         };
 
-        const mergeSupportMessages = (...groups) => {
-            const merged = new Map();
-            groups.flat().forEach((message) => {
-                if (!message) return;
-                const normalized = normalizeBackendMessage(message);
-                const key = `${normalized.roomId || activeSupportRoomId}-${normalized.senderId}-${timestampToMillis(normalized.createdAt)}-${normalized.text}`;
-                merged.set(key, { ...(merged.get(key) || {}), ...normalized });
-            });
-            return Array.from(merged.values()).sort((a, b) => timestampToMillis(a.createdAt) - timestampToMillis(b.createdAt));
-        };
-
         const normalizeBackendMessage = (message) => ({
             id: message.id || `${message.roomId || message.room_id || activeSupportRoomId}-${message.timestamp || message.createdAt || Date.now()}-${message.senderId || message.sender_id || ''}`,
             roomId: message.roomId || message.room_id || activeSupportRoomId,
@@ -4181,6 +4176,39 @@
             createdAt: message.timestamp || message.createdAt || Date.now(),
             readAt: message.readAt || message.readByAdminAt || message.read_by_admin_at || null
         });
+
+        const getSupportMessageDedupeKey = (message) => {
+            const normalized = normalizeBackendMessage(message);
+            const text = String(normalized.text || '').replace(/\s+/g, ' ').trim().toLowerCase();
+            const timestamp = timestampToMillis(normalized.createdAt) || Date.now();
+            const closeTimeBucket = Math.floor(timestamp / 5000);
+            return `${normalized.roomId || activeSupportRoomId}|${normalized.senderId}|${closeTimeBucket}|${text}`;
+        };
+
+        const mergeSupportMessages = (...groups) => {
+            const merged = new Map();
+            groups.flat().forEach((message) => {
+                if (!message) return;
+                const normalized = normalizeBackendMessage(message);
+                if (!String(normalized.text || '').trim()) return;
+                const key = getSupportMessageDedupeKey(normalized);
+                const existing = merged.get(key);
+                if (!existing) {
+                    merged.set(key, normalized);
+                    return;
+                }
+                const existingTime = timestampToMillis(existing.createdAt);
+                const normalizedTime = timestampToMillis(normalized.createdAt);
+                merged.set(key, {
+                    ...existing,
+                    ...normalized,
+                    id: existing.id || normalized.id,
+                    createdAt: existingTime && normalizedTime ? Math.min(existingTime, normalizedTime) : (existing.createdAt || normalized.createdAt),
+                    readAt: existing.readAt || normalized.readAt
+                });
+            });
+            return Array.from(merged.values()).sort((a, b) => timestampToMillis(a.createdAt) - timestampToMillis(b.createdAt));
+        };
 
         const fetchSupportChatHistory = async (roomId, limit = 80) => {
             const token = await getBackendAuthToken();
@@ -4289,27 +4317,19 @@
                 }
                 const handleBackgroundHistory = ({ roomId: incomingRoomId, history = [] }) => {
                     if (incomingRoomId !== roomId) return;
+                    const isActiveRoomOpen = activeSupportRoomId === roomId && document.getElementById('support-chat-messages');
+                    if (isActiveRoomOpen) return;
                     const merged = mergeSupportMessages(readSupportChatCache(roomId), history);
                     writeSupportChatCache(roomId, merged);
-                    if (activeSupportRoomId === roomId && document.getElementById('support-chat-messages')) {
-                        activeSupportMessages = mergeSupportMessages(activeSupportMessages, merged);
-                        renderSupportMessages(activeSupportMessages, 'user');
-                        markSupportChatSeen(roomId, activeSupportMessages);
-                    } else {
-                        refreshSupportUnreadFromCache(roomId);
-                    }
+                    refreshSupportUnreadFromCache(roomId);
                 };
                 const handleBackgroundMessage = (message) => {
                     if (message.roomId !== roomId) return;
+                    const isActiveRoomOpen = activeSupportRoomId === roomId && document.getElementById('support-chat-messages');
+                    if (isActiveRoomOpen) return;
                     const merged = mergeSupportMessages(readSupportChatCache(roomId), [message]);
                     writeSupportChatCache(roomId, merged);
-                    if (activeSupportRoomId === roomId && document.getElementById('support-chat-messages')) {
-                        activeSupportMessages = mergeSupportMessages(activeSupportMessages, [message]);
-                        renderSupportMessages(activeSupportMessages, 'user');
-                        markSupportChatSeen(roomId, activeSupportMessages);
-                    } else {
-                        refreshSupportUnreadFromCache(roomId);
-                    }
+                    refreshSupportUnreadFromCache(roomId);
                 };
                 supportChatBackgroundHandlers = {
                     history: handleBackgroundHistory,
@@ -4484,7 +4504,8 @@
             keyboardCleanup = installMobileChatKeyboardLift();
 
             activeSupportRoomId = getSupportRoomId(chatUserId);
-            activeSupportMessages = readSupportChatCache(activeSupportRoomId);
+            activeSupportMessages = mergeSupportMessages(readSupportChatCache(activeSupportRoomId));
+            writeSupportChatCache(activeSupportRoomId, activeSupportMessages);
             renderSupportMessages(activeSupportMessages, viewerRole);
             if (!isAdminView) markSupportChatSeen(activeSupportRoomId, activeSupportMessages);
             if (isAdminView) markAdminSupportChatSeen(activeSupportRoomId, activeSupportMessages);
@@ -4532,8 +4553,28 @@
 
             const sendMessage = async () => {
                 const input = document.getElementById('support-message-input');
+                const sendBtn = document.getElementById('support-send-btn');
                 const text = input.value.trim();
                 if (!text) return;
+                const now = Date.now();
+                const sendSignature = `${activeSupportRoomId}|${currentUser?.uid || ''}|${text}`;
+                if ((supportSendingMessage && supportLastSendSignature === sendSignature) || (supportLastSendSignature === sendSignature && now - supportLastSendAt < 1800)) {
+                    return;
+                }
+                supportSendingMessage = true;
+                supportLastSendSignature = sendSignature;
+                supportLastSendAt = now;
+                if (sendBtn) {
+                    sendBtn.disabled = true;
+                    sendBtn.classList.add('opacity-70');
+                }
+                const unlockSend = () => {
+                    supportSendingMessage = false;
+                    if (sendBtn) {
+                        sendBtn.disabled = false;
+                        sendBtn.classList.remove('opacity-70');
+                    }
+                };
                 input.value = '';
                 const userMeta = {
                     userId: chatUserId,
@@ -4546,11 +4587,13 @@
                     message: text,
                     userMeta
                 }, (response) => {
+                    unlockSend();
                     if (!response?.ok) {
                         console.error('Send support message failed:', response?.error);
                         showNotification('Message not sent. Please try again.', true);
                     }
                 });
+                setTimeout(unlockSend, 4000);
                 const updatedChat = {
                     userId: chatUserId,
                     roomId: activeSupportRoomId,
