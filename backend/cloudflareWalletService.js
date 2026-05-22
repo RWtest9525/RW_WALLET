@@ -180,11 +180,15 @@ async function initSchema(d1) {
       sender_id TEXT NOT NULL,
       message TEXT NOT NULL,
       timestamp INTEGER NOT NULL,
-      read_by_admin_at INTEGER
+      read_by_admin_at INTEGER,
+      read_by_user_at INTEGER,
+      client_message_id TEXT
     )
   `);
 
   await ensureColumn(d1, 'chats', 'read_by_admin_at', 'INTEGER');
+  await ensureColumn(d1, 'chats', 'read_by_user_at', 'INTEGER');
+  await ensureColumn(d1, 'chats', 'client_message_id', 'TEXT');
 
   await d1.query(`
     CREATE INDEX IF NOT EXISTS idx_chats_room_time
@@ -194,6 +198,12 @@ async function initSchema(d1) {
   await d1.query(`
     CREATE INDEX IF NOT EXISTS idx_chats_admin_read_cleanup
     ON chats (read_by_admin_at)
+  `);
+
+  await d1.query(`
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_chats_client_message_id
+    ON chats (client_message_id)
+    WHERE client_message_id IS NOT NULL
   `);
 
   await d1.query(`
@@ -366,7 +376,7 @@ async function upsertFirebaseUser(d1, decodedToken, profile = {}) {
 
 async function recentChatHistory(d1, roomId, limit = 50) {
   const rows = await d1.all(
-    `SELECT id, room_id, sender_id, message, timestamp, read_by_admin_at
+    `SELECT id, room_id, sender_id, message, timestamp, read_by_admin_at, read_by_user_at, client_message_id
      FROM chats
      WHERE room_id = ?
      ORDER BY timestamp DESC
@@ -377,21 +387,41 @@ async function recentChatHistory(d1, roomId, limit = 50) {
   return rows.reverse();
 }
 
-async function saveChatMessage(d1, { roomId, senderId, message, timestamp, readByAdminAt = null }) {
+async function saveChatMessage(d1, { roomId, senderId, message, timestamp, readByAdminAt = null, readByUserAt = null, clientMessageId = null }) {
+  const cleanClientMessageId = clientMessageId ? String(clientMessageId).slice(0, 120) : null;
   await d1.query(
-    `INSERT INTO chats (room_id, sender_id, message, timestamp, read_by_admin_at)
-     VALUES (?, ?, ?, ?, ?)`,
-    [roomId, senderId, message, timestamp, readByAdminAt]
+    `INSERT OR IGNORE INTO chats (room_id, sender_id, message, timestamp, read_by_admin_at, read_by_user_at, client_message_id)
+     VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    [roomId, senderId, message, timestamp, readByAdminAt, readByUserAt, cleanClientMessageId]
   );
+  if (!cleanClientMessageId) return true;
+  const row = await d1.first(
+    `SELECT sender_id, timestamp FROM chats WHERE client_message_id = ? LIMIT 1`,
+    [cleanClientMessageId]
+  );
+  return !!row && row.sender_id === senderId && Number(row.timestamp) === Number(timestamp);
 }
 
 async function markRoomReadByAdmin(d1, roomId, readAt = nowMs()) {
   await d1.query(
     `UPDATE chats
      SET read_by_admin_at = COALESCE(read_by_admin_at, ?)
-     WHERE room_id = ?`,
-    [readAt, roomId]
+     WHERE room_id = ?
+       AND sender_id != ?`,
+    [readAt, roomId, ADMIN_UID]
   );
+  return readAt;
+}
+
+async function markRoomReadByUser(d1, roomId, readAt = nowMs()) {
+  await d1.query(
+    `UPDATE chats
+     SET read_by_user_at = COALESCE(read_by_user_at, ?)
+     WHERE room_id = ?
+       AND sender_id = ?`,
+    [readAt, roomId, ADMIN_UID]
+  );
+  return readAt;
 }
 
 async function cleanupExpiredReadChats(d1) {
@@ -1003,6 +1033,9 @@ function requireHttpAuth(req, res, next) {
 
 function registerSocketHandlers(io, { d1 }) {
   const adminRooms = new Map();
+  const userRooms = new Map();
+  const recentlyHandledClientMessages = new Map();
+  const recentlyHandledMessageSignatures = new Map();
 
   const addAdminRoomPresence = (roomId, socketId) => {
     const sockets = adminRooms.get(roomId) || new Set();
@@ -1015,6 +1048,42 @@ function registerSocketHandlers(io, { d1 }) {
     if (!sockets) return;
     sockets.delete(socketId);
     if (sockets.size === 0) adminRooms.delete(roomId);
+  };
+
+  const addUserRoomPresence = (roomId, socketId) => {
+    const sockets = userRooms.get(roomId) || new Set();
+    sockets.add(socketId);
+    userRooms.set(roomId, sockets);
+  };
+
+  const removeUserRoomPresence = (roomId, socketId) => {
+    const sockets = userRooms.get(roomId);
+    if (!sockets) return;
+    sockets.delete(socketId);
+    if (sockets.size === 0) userRooms.delete(roomId);
+  };
+
+  const wasClientMessageRecentlyHandled = (clientMessageId) => {
+    if (!clientMessageId) return false;
+    const now = nowMs();
+    for (const [key, seenAt] of recentlyHandledClientMessages.entries()) {
+      if (now - seenAt > 30000) recentlyHandledClientMessages.delete(key);
+    }
+    if (recentlyHandledClientMessages.has(clientMessageId)) return true;
+    recentlyHandledClientMessages.set(clientMessageId, now);
+    return false;
+  };
+
+  const wasMessageSignatureRecentlyHandled = ({ roomId, senderId, message }) => {
+    const now = nowMs();
+    for (const [key, seenAt] of recentlyHandledMessageSignatures.entries()) {
+      if (now - seenAt > 2500) recentlyHandledMessageSignatures.delete(key);
+    }
+    const normalizedText = String(message || '').replace(/\s+/g, ' ').trim().toLowerCase();
+    const key = `${roomId}|${senderId}|${normalizedText}`;
+    if (recentlyHandledMessageSignatures.has(key)) return true;
+    recentlyHandledMessageSignatures.set(key, now);
+    return false;
   };
 
   io.use((socket, next) => {
@@ -1030,16 +1099,26 @@ function registerSocketHandlers(io, { d1 }) {
 
   io.on('connection', (socket) => {
     socket.adminJoinedRooms = new Set();
+    socket.userJoinedRooms = new Set();
 
-    socket.on('join_room', async ({ roomId, limit = 50 }, ack) => {
+    socket.on('join_room', async ({ roomId, limit = 50, markRead = true }, ack) => {
       try {
         if (!roomId) throw new Error('ROOM_REQUIRED');
         socket.join(roomId);
-        if (socket.user.isAdmin) {
-          addAdminRoomPresence(roomId, socket.id);
-          socket.adminJoinedRooms.add(roomId);
-          await markRoomReadByAdmin(d1, roomId);
-          cleanupExpiredReadChats(d1).catch((error) => console.error('Chat cleanup failed:', error));
+        if (markRead) {
+          let readAt = null;
+          if (socket.user.isAdmin) {
+            addAdminRoomPresence(roomId, socket.id);
+            socket.adminJoinedRooms.add(roomId);
+            readAt = await markRoomReadByAdmin(d1, roomId);
+            cleanupExpiredReadChats(d1).catch((error) => console.error('Chat cleanup failed:', error));
+            io.to(roomId).emit('chat_read', { roomId, readerRole: 'admin', readAt });
+          } else {
+            addUserRoomPresence(roomId, socket.id);
+            socket.userJoinedRooms.add(roomId);
+            readAt = await markRoomReadByUser(d1, roomId);
+            io.to(roomId).emit('chat_read', { roomId, readerRole: 'user', readAt });
+          }
         }
         const history = await recentChatHistory(d1, roomId, limit);
         socket.emit('chat_history', { roomId, history });
@@ -1053,29 +1132,46 @@ function registerSocketHandlers(io, { d1 }) {
       if (roomId) {
         socket.leave(roomId);
         removeAdminRoomPresence(roomId, socket.id);
+        removeUserRoomPresence(roomId, socket.id);
         socket.adminJoinedRooms.delete(roomId);
+        socket.userJoinedRooms.delete(roomId);
       }
       if (ack) ack({ ok: true });
     });
 
-    socket.on('send_message', ({ roomId, message, userMeta = {} }, ack) => {
+    socket.on('send_message', async ({ roomId, message, userMeta = {}, clientMessageId = null }, ack) => {
       try {
         if (!roomId || !String(message || '').trim()) throw new Error('ROOM_AND_MESSAGE_REQUIRED');
+        const cleanClientMessageId = clientMessageId ? String(clientMessageId).slice(0, 120) : null;
+        if (wasClientMessageRecentlyHandled(cleanClientMessageId)) {
+          if (ack) ack({ ok: true, duplicate: true });
+          return;
+        }
+        if (wasMessageSignatureRecentlyHandled({ roomId, senderId: socket.user.sub, message })) {
+          if (ack) ack({ ok: true, duplicate: true });
+          return;
+        }
 
         const timestamp = nowMs();
         const readByAdminAt = (!socket.user.isAdmin && adminRooms.has(roomId)) ? timestamp : null;
+        const readByUserAt = (socket.user.isAdmin && userRooms.has(roomId)) ? timestamp : null;
         const chatMessage = {
           roomId,
           senderId: socket.user.sub,
           message: String(message).slice(0, 4000),
           timestamp,
-          readByAdminAt
+          readByAdminAt,
+          readByUserAt,
+          clientMessageId: cleanClientMessageId
         };
 
+        const inserted = await saveChatMessage(d1, chatMessage);
+        if (!inserted) {
+          if (ack) ack({ ok: true, duplicate: true });
+          return;
+        }
         io.to(roomId).emit('new_message', chatMessage);
-        Promise.all([
-          saveChatMessage(d1, chatMessage),
-          upsertChatRoom(d1, {
+        upsertChatRoom(d1, {
             roomId,
             userId: userMeta.userId || roomId.replace(/^support_/, ''),
             userName: String(userMeta.userName || '').slice(0, 120),
@@ -1084,8 +1180,7 @@ function registerSocketHandlers(io, { d1 }) {
             lastMessage: chatMessage.message,
             lastSenderId: chatMessage.senderId,
             updatedAt: timestamp
-          })
-        ]).catch((error) => console.error('Async chat persist failed:', error));
+        }).catch((error) => console.error('Async chat room persist failed:', error));
 
         if (ack) ack({ ok: true, message: chatMessage });
       } catch (error) {
@@ -1095,7 +1190,9 @@ function registerSocketHandlers(io, { d1 }) {
 
     socket.on('disconnect', () => {
       socket.adminJoinedRooms.forEach((roomId) => removeAdminRoomPresence(roomId, socket.id));
+      socket.userJoinedRooms.forEach((roomId) => removeUserRoomPresence(roomId, socket.id));
       socket.adminJoinedRooms.clear();
+      socket.userJoinedRooms.clear();
     });
   });
 }
