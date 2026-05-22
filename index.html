@@ -3234,7 +3234,7 @@
             hydrateAdminUsersFromCache();
             initializeAdminUsersRealtime();
             refreshAdminDashboardCaches().catch(error => console.error("Admin data refresh failed:", error));
-            loadAdminChatsFromBackend().catch(error => console.error("Admin: Error loading Cloudflare support chats:", error));
+            loadAdminChatsFromBackend({ silent: true }).catch(error => console.error("Admin: Error loading Cloudflare support chats:", error));
         };
 
         // --- FULL PAGE RENDERERS ---
@@ -5029,13 +5029,13 @@
             document.getElementById('reviews-world-chat-card').onclick = () => openSupportChatPage(currentUser.uid, 'user');
         };
 
-        const loadAdminChatsFromBackend = async () => {
+        const loadAdminChatsFromBackend = async ({ silent = false, retry = true } = {}) => {
             if (currentUser?.uid !== ADMIN_UID) return;
             try {
                 const token = await getBackendAuthToken();
-                const response = await fetch(`${BACKEND_BASE_URL}/api/admin/chats?limit=200`, {
+                const response = await fetchWithTimeout(`${BACKEND_BASE_URL}/api/admin/chats?limit=200`, {
                     headers: { Authorization: `Bearer ${token}` }
-                });
+                }, 8000);
                 const data = await response.json().catch(() => ({}));
                 if (!response.ok || !data.ok) {
                     throw new Error(data.error || 'Admin chat load failed');
@@ -5056,7 +5056,12 @@
                 preloadAdminChatRooms(allSupportChatsCache);
             } catch (error) {
                 console.error('Cloudflare admin chat list failed:', error);
-                showNotification('Could not load chat list from backend.', true);
+                if (retry) {
+                    setTimeout(() => loadAdminChatsFromBackend({ silent, retry: false }).catch(() => {}), 2500);
+                }
+                if (!silent && document.getElementById('admin-chats-list')) {
+                    showNotification('Could not load chat list from backend. Retrying once...', true);
+                }
             }
         };
 
@@ -5173,7 +5178,7 @@
             setBottomNavActive('bottom-settings-btn');
             document.getElementById('admin-chat-search').addEventListener('input', renderAdminChatsList);
             renderAdminChatsList();
-            loadAdminChatsFromBackend();
+            loadAdminChatsFromBackend({ silent: false });
             ensureAdminChatUsersLoaded().then(renderAdminChatsList);
         };
 
