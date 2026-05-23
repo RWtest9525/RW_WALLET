@@ -4,7 +4,8 @@
 
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="viewport"
+        content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, interactive-widget=resizes-content">
     <title>Digital Wallet - Reviews World</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="preconnect" href="https://i.ibb.co">
@@ -4271,7 +4272,7 @@
             if (normalized.clientMessageId) return `client:${normalized.clientMessageId}`;
             const text = String(normalized.text || '').replace(/\s+/g, ' ').trim().toLowerCase();
             const timestamp = timestampToMillis(normalized.createdAt) || Date.now();
-            const closeTimeBucket = Math.floor(timestamp / 5000);
+            const closeTimeBucket = Math.floor(timestamp / 120000);
             return `${normalized.roomId || activeSupportRoomId}|${normalized.senderId}|${closeTimeBucket}|${text}`;
         };
 
@@ -4637,16 +4638,34 @@
                 const keepTypingVisible = () => {
                     const rect = shell.getBoundingClientRect();
                     const viewport = window.visualViewport;
-                    const visualBottom = viewport ? viewport.height + viewport.offsetTop : window.innerHeight;
-                    const keyboardHeight = viewport ? Math.max(0, window.innerHeight - visualBottom) : 0;
-                    if (keyboardHeight > 40) {
+                    const layoutHeight = Math.max(window.innerHeight || 0, document.documentElement.clientHeight || 0);
+                    const visualBottom = viewport ? viewport.height + viewport.offsetTop : layoutHeight;
+                    const bottomOffset = viewport ? Math.max(0, layoutHeight - visualBottom) : 0;
+                    const keyboardLikelyOpen = viewport
+                        ? (document.activeElement === input && (layoutHeight - viewport.height > 80 || viewport.height < screen.height * 0.82))
+                        : document.activeElement === input;
+                    if (keyboardLikelyOpen) {
+                        shell.style.position = 'fixed';
+                        shell.style.left = `${Math.max(0, rect.left)}px`;
+                        shell.style.top = `${viewport?.offsetTop || 0}px`;
+                        shell.style.width = `${rect.width}px`;
+                        shell.style.height = `${viewport?.height || layoutHeight}px`;
+                        shell.style.maxHeight = `${viewport?.height || layoutHeight}px`;
+                        shell.style.zIndex = '80';
                         composer.style.position = 'fixed';
                         composer.style.left = `${Math.max(0, rect.left)}px`;
                         composer.style.width = `${rect.width}px`;
-                        composer.style.bottom = `${Math.max(0, window.innerHeight - visualBottom)}px`;
+                        composer.style.bottom = `${bottomOffset}px`;
                         composer.style.zIndex = '95';
-                        messages.style.paddingBottom = '7rem';
+                        messages.style.paddingBottom = `${composer.offsetHeight + 18}px`;
                     } else {
+                        shell.style.position = '';
+                        shell.style.left = '';
+                        shell.style.top = '';
+                        shell.style.width = '';
+                        shell.style.height = '';
+                        shell.style.maxHeight = '';
+                        shell.style.zIndex = '';
                         composer.style.position = '';
                         composer.style.left = '';
                         composer.style.width = '';
@@ -4660,9 +4679,14 @@
                 };
 
                 const resetTypingPosition = () => {
+                    shell.style.position = '';
+                    shell.style.left = '';
+                    shell.style.top = '';
+                    shell.style.width = '';
                     shell.style.height = '';
                     shell.style.maxHeight = '';
                     shell.style.transform = '';
+                    shell.style.zIndex = '';
                     composer.style.position = '';
                     composer.style.left = '';
                     composer.style.width = '';
@@ -6085,6 +6109,10 @@
         };
         const normalizeWithdrawalMethodId = (item = {}) => {
             const candidates = [
+                item.giftCardType,
+                item.gift_card_type,
+                item.giftCardName,
+                item.gift_card_name,
                 item.methodId,
                 item.paymentMethod,
                 item.withdrawMethod,
@@ -6116,7 +6144,7 @@
                 return specificName;
             }
             if (!specificName && ['gift card', 'gift_card'].includes(rawName.toLowerCase())) {
-                return 'Gift Card (type not saved)';
+                return 'Gift Card - type not saved';
             }
             return specificName || rawName || fallback;
         };
@@ -7688,6 +7716,14 @@
                 const isGenericGiftCard = String(r.method || r.paymentMethod || '').toLowerCase().replace(/[\s-]+/g, '_') === 'gift_card';
                 const payoutDetailLabel = methodId === 'upi' ? 'UPI' : methodId === 'bank' ? 'Bank Details' : (isGiftOrEmailMethod || isGenericGiftCard) ? 'Email / Gift Card Details' : 'Payment Details';
                 const escapedDetail = escapeHtml(detailText);
+                const giftTypeControl = isGenericGiftCard ? `
+                    <select data-action="set-gift-card-type" data-userid="${r.userId}" data-requestid="${r.id}" class="text-xs font-bold bg-yellow-50 dark:bg-yellow-900/30 text-yellow-800 dark:text-yellow-100 border border-yellow-200 dark:border-yellow-700 px-2 py-1 rounded outline-none">
+                        <option value="">Set gift card type</option>
+                        <option value="amazon_gift">Amazon Gift Card</option>
+                        <option value="play_store">Google Play Gift Card</option>
+                        <option value="flipkart_gift">Flipkart Gift Card</option>
+                    </select>
+                ` : '';
                 return `
                 <div class="p-3 mb-2 bg-gray-50 dark:bg-gray-700/50 rounded-lg border border-gray-100 dark:border-gray-700">
                     <div class="flex flex-col sm:flex-row justify-between sm:items-start">
@@ -7702,6 +7738,7 @@
                             <div class="flex flex-col mt-2 gap-2">
                                 <div class="flex flex-wrap items-center gap-2">
                                     <p class="text-xs font-mono bg-gray-200 dark:bg-gray-600 px-2 py-1 rounded w-fit">Method: ${escapeHtml(methodName)}</p>
+                                    ${giftTypeControl}
                                     <p class="text-xs font-mono bg-indigo-100 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-200 px-2 py-1 rounded w-fit">${escapeHtml(payoutDetailLabel)}: ${escapedDetail}</p>
                                     ${detailText && detailText !== 'N/A' ? `
                                         <button data-action="copy-text" data-text="${escapedDetail}" class="px-2 py-1 text-[10px] font-bold rounded bg-indigo-600 text-white hover:bg-indigo-700">Copy Detail</button>
@@ -7764,6 +7801,36 @@
             summaryEl.textContent = `${targets.length} pending withdrawal(s) still need one-time balance cut. Total: ${formatCurrency(total)}.`;
             fixBtn.textContent = `Cut ${targets.length} Uncut Pending`;
             fixBtn.disabled = false;
+        };
+
+        const handleSetWithdrawalGiftCardType = async (userId, requestId, methodId) => {
+            const allowed = ['amazon_gift', 'play_store', 'flipkart_gift'];
+            if (!allowed.includes(methodId)) return;
+            const giftCardName = getWithdrawalMethodName(methodId, 'Gift Card');
+            const updatePayload = {
+                methodId,
+                paymentMethod: methodId,
+                method: giftCardName,
+                giftCardType: methodId,
+                giftCardName,
+                updatedAt: serverTimestamp()
+            };
+            try {
+                const reqRef = doc(db, `artifacts/${appId}/public/data/fund_requests`, requestId);
+                await updateDoc(reqRef, updatePayload);
+                const existing = allFundRequestsCache.find(req => req.id === requestId) || {};
+                const updatedRequest = { ...existing, ...updatePayload, updatedAt: Date.now() };
+                allFundRequestsCache = allFundRequestsCache.map(req => req.id === requestId ? updatedRequest : req);
+                renderAdminFundRequests(allFundRequestsCache);
+                updateCloudFundRequestStatus(requestId, updatedRequest.status || 'pending', updatedRequest)
+                    .catch(error => console.warn('Cloud gift card type update skipped:', error));
+                if (userId) syncRecentTransactionsToCloud(userId).catch(error => console.warn('Gift card transaction sync skipped:', error));
+                showNotification(`${giftCardName} saved for this withdrawal.`);
+            } catch (error) {
+                console.error('Gift card type update failed:', error);
+                showNotification(`Could not save gift card type: ${error.message}`, true);
+                renderAdminFundRequests(allFundRequestsCache);
+            }
         };
 
         const applyLegacyWithdrawalDeduction = async (userId, requestId, requestData = {}) => {
@@ -8636,6 +8703,10 @@
                 default:
                     paymentDetails = getProfilePaymentDetails(method).email || 'Not set';
                     methodSpecificDetails = { email: paymentDetails };
+                    if (['play_store', 'amazon_gift', 'flipkart_gift'].includes(method)) {
+                        methodSpecificDetails.giftCardType = method;
+                        methodSpecificDetails.giftCardName = methodName || getWithdrawalMethodName(method);
+                    }
                     if (amount < minWithdrawalRedeem) return showNotification(`Minimum withdrawal for this method is ₹${minWithdrawalRedeem}`, true);
             }
 
@@ -10482,6 +10553,13 @@
                     handleDeleteUser(userid, username);
                     break;
             }
+        });
+
+        document.body.addEventListener('change', (e) => {
+            const target = e.target.closest('[data-action="set-gift-card-type"]');
+            if (!target) return;
+            const { userid, requestid } = target.dataset;
+            handleSetWithdrawalGiftCardType(userid, requestid, target.value);
         });
 
         // --- STATIC EVENT LISTENERS ---
