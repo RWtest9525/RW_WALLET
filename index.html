@@ -1152,6 +1152,14 @@
                                 </span>
                                 <span class="text-sm font-medium text-green-700 dark:text-green-300">Users</span>
                             </button>
+                            <button id="admin-signup-approvals-btn"
+                                class="relative flex flex-col items-center justify-center p-3 min-h-28 bg-amber-50 dark:bg-amber-900/20 rounded-2xl hover:bg-amber-100 dark:hover:bg-amber-900/30 transition border border-amber-200 dark:border-amber-800 shadow-sm">
+                                <span id="admin-signup-approval-badge" class="hidden absolute right-2 top-2 min-w-6 h-6 rounded-full bg-red-600 px-2 text-center text-xs font-black leading-6 text-white shadow"></span>
+                                <span class="flex h-12 w-12 items-center justify-center rounded-2xl bg-white dark:bg-gray-800 shadow-sm mb-2">
+                                    <img src="https://cdn-icons-png.flaticon.com/512/10613/10613685.png" class="h-8 w-8 object-contain" alt="Signup Approvals">
+                                </span>
+                                <span class="text-sm font-medium text-amber-700 dark:text-amber-300">Approve Signup</span>
+                            </button>
                             <button id="admin-gift-codes-btn"
                                 class="flex flex-col items-center justify-center p-3 min-h-28 bg-purple-50 dark:bg-purple-900/20 rounded-2xl hover:bg-purple-100 dark:hover:bg-purple-900/30 transition border border-purple-200 dark:border-purple-800 shadow-sm">
                                 <span class="flex h-12 w-12 items-center justify-center rounded-2xl bg-white dark:bg-gray-800 shadow-sm mb-2">
@@ -2747,10 +2755,16 @@
             try {
                 await setPersistence(auth, browserLocalPersistence);
                 if (e.target.dataset.authMode === 'login') {
+                    sessionStorage.removeItem('rw_signup_in_progress');
                     const cred = await signInWithEmailAndPassword(auth, email, password);
 
                     // Check if user is banned
                     const userDoc = await getDoc(doc(db, `artifacts/${appId}/public/data/users`, cred.user.uid));
+                    if (userDoc.exists() && (isUserApprovalPending(userDoc.data()) || isUserApprovalRejected(userDoc.data()))) {
+                        const message = getApprovalHoldMessage(userDoc.data());
+                        await signOut(auth);
+                        throw new Error(message);
+                    }
                     if (userDoc.exists() && userDoc.data().isFlagged) {
                         const data = userDoc.data();
                         let banMsg = getBanMessage(data);
@@ -2782,6 +2796,7 @@
                         // This is an error, so reset the button
                         throw new Error('Name and Mobile Number are required.');
                     }
+                    sessionStorage.setItem('rw_signup_in_progress', '1');
                     const cred = await createUserWithEmailAndPassword(auth, email, password);
                     await setDoc(doc(db, `artifacts/${appId}/public/data/users`, cred.user.uid), {
                         uid: cred.user.uid,
@@ -2791,9 +2806,19 @@
                         paymentMethod: '',
                         paymentDetails: {},
                         balance: 0,
+                        approvalStatus: 'pending',
+                        accountStatus: 'pending_approval',
+                        isApproved: false,
+                        signupRequestedAt: serverTimestamp(),
                         createdAt: serverTimestamp()
                     });
-                    // On success, onAuthStateChanged will handle hiding the page
+                    await signOut(auth);
+                    setTimeout(() => sessionStorage.removeItem('rw_signup_in_progress'), 2000);
+                    document.getElementById('auth-error').textContent = 'Your account creation is pending. Please wait, admin will approve it soon.';
+                    authButton.disabled = false;
+                    buttonText.classList.remove('hidden');
+                    loader.classList.add('hidden');
+                    return;
                 }
             } catch (error) {
                 document.getElementById('auth-error').textContent = error.message;
@@ -2862,6 +2887,34 @@
             let message = `Your account has been suspended.\nReason: ${reason}`;
             message += expiry ? `\nSuspension ends on: ${expiry.toLocaleString('en-IN')}` : '\nThis is a permanent suspension.';
             return message;
+        };
+
+        const isUserApprovalPending = (data = {}) =>
+            data.approvalStatus === 'pending' || data.signupApprovalStatus === 'pending' || data.accountStatus === 'pending_approval';
+
+        const isUserApprovalRejected = (data = {}) =>
+            data.approvalStatus === 'rejected' || data.signupApprovalStatus === 'rejected' || data.accountStatus === 'rejected';
+
+        const getApprovalHoldMessage = (data = {}) => {
+            if (isUserApprovalRejected(data)) {
+                return data.approvalRejectionReason || 'Your account creation request was cancelled by admin.';
+            }
+            return 'Your account creation is pending. Please wait, admin will approve it soon.';
+        };
+
+        const enforceCurrentUserApproval = async (userId, userRef, data = {}) => {
+            if (userId === ADMIN_UID) return false;
+            if (!isUserApprovalPending(data) && !isUserApprovalRejected(data)) return false;
+            const message = getApprovalHoldMessage(data);
+            sessionStorage.setItem('lastApprovalMessage', message);
+            localStorage.removeItem('lastLoggedInUser');
+            document.getElementById('auth-screen').classList.remove('hidden');
+            document.getElementById('main-content').classList.add('hidden');
+            setMainChrome(false);
+            const authError = document.getElementById('auth-error');
+            if (authError) authError.textContent = message;
+            await signOut(auth);
+            return true;
         };
 
         const enforceCurrentUserBan = async (userId, userRef, data = {}) => {
@@ -2967,12 +3020,35 @@
             if (user) {
                 currentUser = user;
                 localStorage.setItem('lastLoggedInUser', user.uid);
+                if (user.uid !== ADMIN_UID && sessionStorage.getItem('rw_signup_in_progress') === '1') {
+                    const pendingMessage = 'Your account creation is pending. Please wait, admin will approve it soon.';
+                    sessionStorage.setItem('lastApprovalMessage', pendingMessage);
+                    document.getElementById('auth-screen').classList.remove('hidden');
+                    document.getElementById('main-content').classList.add('hidden');
+                    setMainChrome(false);
+                    const authError = document.getElementById('auth-error');
+                    if (authError) authError.textContent = pendingMessage;
+                    await signOut(auth);
+                    return;
+                }
 
                 // Hide loading overlay if shown
                 hideLoading();
 
                 const isAdmin = user.uid === ADMIN_UID;
                 hydrateUserFromCache(user.uid);
+                const userDocRef = doc(db, `artifacts/${appId}/public/data/users`, user.uid);
+                const userDocSnap = await getDoc(userDocRef).catch(error => {
+                    console.warn('Initial user approval check skipped:', error);
+                    return null;
+                });
+                if (userDocSnap?.exists()) {
+                    const approvalBlocked = await enforceCurrentUserApproval(user.uid, userDocRef, userDocSnap.data()).catch(error => {
+                        console.error('Approval enforcement failed:', error);
+                        return false;
+                    });
+                    if (approvalBlocked) return;
+                }
                 notificationsCache = readNotificationsCache(user.uid);
                 refreshNotificationUnreadCount(notificationsCache);
                 preloadNotificationsForUser(user.uid).catch(e => console.warn('Initial notification preload skipped:', e));
@@ -3038,6 +3114,12 @@
                     if (authError) authError.textContent = banMessage;
                     sessionStorage.removeItem('lastBanMessage');
                 }
+                const approvalMessage = sessionStorage.getItem('lastApprovalMessage');
+                if (approvalMessage) {
+                    const authError = document.getElementById('auth-error');
+                    if (authError) authError.textContent = approvalMessage;
+                    sessionStorage.removeItem('lastApprovalMessage');
+                }
 
                 closeSlideMenu();
             }
@@ -3057,6 +3139,11 @@
                         return false;
                     });
                     if (isBanned) return;
+                    const approvalBlocked = await enforceCurrentUserApproval(userId, userDocRef, data).catch(e => {
+                        console.error('Approval enforcement failed:', e);
+                        return false;
+                    });
+                    if (approvalBlocked) return;
                     if (!data.isFlagged && data.isDisabled) {
                         updateDoc(userDocRef, {
                             isDisabled: false,
@@ -3238,9 +3325,18 @@
             const minusTotalEl = document.getElementById('analytics-minus-balance-total');
             if (minusCountEl) minusCountEl.textContent = minusBalanceCount;
             if (minusTotalEl) minusTotalEl.textContent = `Total minus: ${formatCurrency(minusBalanceTotal)}`;
+            const pendingSignupCount = otherUsers.filter(isUserApprovalPending).length;
+            const signupBadge = document.getElementById('admin-signup-approval-badge');
+            if (signupBadge) {
+                signupBadge.textContent = pendingSignupCount > 99 ? '99+' : String(pendingSignupCount || '');
+                signupBadge.classList.toggle('hidden', pendingSignupCount <= 0);
+            }
 
             if (document.getElementById('admin-users-list-page')) {
                 updateAdminUserListView();
+            }
+            if (document.getElementById('signup-approvals-list')) {
+                showAdminSignupApprovalsPage();
             }
             if (document.getElementById('admin-chats-list')) {
                 renderAdminChatsList();
@@ -6962,6 +7058,95 @@
             }, 100);
         };
 
+        const getPendingSignupUsers = () =>
+            allUsersCache.filter(u => !isAdminUserRecord(u) && isUserApprovalPending(u));
+
+        const showAdminSignupApprovalsPage = () => {
+            const pendingUsers = getPendingSignupUsers()
+                .sort((a, b) => timestampToMillis(b.signupRequestedAt || b.createdAt) - timestampToMillis(a.signupRequestedAt || a.createdAt));
+            const content = `
+                ${getPageHeader('Approve User Signup')}
+                <div class="max-w-3xl mx-auto bg-white dark:bg-gray-800 p-4 sm:p-6 rounded-xl shadow-md border border-gray-100 dark:border-gray-700">
+                    <div class="flex items-center justify-between gap-3 mb-4">
+                        <div>
+                            <h3 class="text-lg font-bold">Pending Account Creation</h3>
+                            <p class="text-xs text-gray-500 dark:text-gray-400">${pendingUsers.length} user(s) waiting for admin approval.</p>
+                        </div>
+                        <button id="refresh-signup-approvals-btn" class="px-3 py-2 rounded-lg bg-gray-100 dark:bg-gray-700 text-xs font-bold">Refresh</button>
+                    </div>
+                    <div id="signup-approvals-list" class="space-y-2 max-h-[70vh] overflow-y-auto">
+                        ${pendingUsers.length ? pendingUsers.map(user => `
+                            <div class="rounded-xl border border-amber-100 dark:border-amber-800 bg-amber-50/60 dark:bg-amber-900/20 p-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                                <div class="min-w-0">
+                                    <p class="font-bold text-gray-900 dark:text-gray-100 truncate">${escapeHtml(user.name || 'No Name')}</p>
+                                    <p class="text-xs text-gray-600 dark:text-gray-300 truncate">${escapeHtml(user.email || '')}</p>
+                                    <p class="text-xs text-gray-600 dark:text-gray-300 truncate">${escapeHtml(user.mobile || 'No Mobile')}</p>
+                                    <p class="text-[10px] font-semibold text-amber-700 dark:text-amber-200 mt-1">Requested: ${formatDateDDMMYY(user.signupRequestedAt || user.createdAt || Date.now())}</p>
+                                </div>
+                                <div class="flex gap-2 shrink-0">
+                                    <button data-action="approve-signup-user" data-userid="${user.id || user.uid}" class="px-3 py-2 rounded-lg bg-emerald-600 text-white text-xs font-black">Approve</button>
+                                    <button data-action="cancel-signup-user" data-userid="${user.id || user.uid}" data-username="${escapeHtml(user.name || user.email || 'User')}" class="px-3 py-2 rounded-lg bg-red-600 text-white text-xs font-black">Cancel</button>
+                                </div>
+                            </div>
+                        `).join('') : '<p class="text-center py-8 text-sm text-gray-500 dark:text-gray-400">No pending signup approval.</p>'}
+                    </div>
+                </div>
+                ${getPageFooter()}`;
+            showPage(content);
+            setBottomNavActive('bottom-admin-btn');
+            document.getElementById('refresh-signup-approvals-btn')?.addEventListener('click', async () => {
+                await refreshAdminDashboardCaches();
+                showAdminSignupApprovalsPage();
+            });
+        };
+
+        const handleSignupApprovalAction = async (userId, action) => {
+            if (currentUser?.uid !== ADMIN_UID) return showNotification('Admin access only.', true);
+            const userRef = doc(db, `artifacts/${appId}/public/data/users`, userId);
+            try {
+                if (action === 'approve') {
+                    await updateDoc(userRef, {
+                        approvalStatus: 'approved',
+                        accountStatus: 'active',
+                        signupApprovalStatus: 'approved',
+                        isApproved: true,
+                        approvedAt: serverTimestamp(),
+                        approvedBy: currentUser.uid
+                    });
+                    showNotification('User signup approved.');
+                } else {
+                    await updateDoc(userRef, {
+                        approvalStatus: 'rejected',
+                        accountStatus: 'rejected',
+                        signupApprovalStatus: 'rejected',
+                        isApproved: false,
+                        isFlagged: true,
+                        isDisabled: true,
+                        approvalRejectionReason: 'Account creation cancelled by admin.',
+                        rejectedAt: serverTimestamp(),
+                        rejectedBy: currentUser.uid
+                    });
+                    showNotification('User signup cancelled.');
+                }
+                allUsersCache = allUsersCache.map(user => {
+                    if ((user.id || user.uid) !== userId) return user;
+                    return {
+                        ...user,
+                        approvalStatus: action === 'approve' ? 'approved' : 'rejected',
+                        accountStatus: action === 'approve' ? 'active' : 'rejected',
+                        signupApprovalStatus: action === 'approve' ? 'approved' : 'rejected',
+                        isApproved: action === 'approve',
+                        ...(action === 'cancel' ? { isFlagged: true, isDisabled: true } : {})
+                    };
+                });
+                showAdminSignupApprovalsPage();
+                refreshAdminDashboardCaches().catch(error => console.warn('Admin cache refresh skipped:', error));
+            } catch (error) {
+                console.error('Signup approval action failed:', error);
+                showNotification(`Could not update signup: ${error.message}`, true);
+            }
+        };
+
         const showAdminUsersPage = () => {
             const content = `
                 ${getPageHeader('User Management')}
@@ -6970,6 +7155,7 @@
                         <input type="text" id="user-search-input-page" placeholder="Search by name, email, or mobile..." class="flex-grow px-4 py-2 bg-gray-100 dark:bg-gray-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
                         <select id="user-filter-select-page" class="px-4 py-2 bg-gray-100 dark:bg-gray-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm">
                             <option value="all">All Users</option>
+                            <option value="pending_signup">Pending Signup Approval</option>
                             <option value="new">New Members (15 Days)</option>
                             <option value="active">Active Users</option>
                             <option value="inactive">Inactive Users</option>
@@ -7369,6 +7555,8 @@
                         <div class="flex flex-wrap items-center gap-1.5 pr-1">
                             <p class="font-semibold text-sm truncate max-w-full">${escapeHtml(u.name || 'No Name')}</p>
                             ${u.isFlagged ? '<span class="px-1.5 py-0.5 text-[10px] bg-red-600 text-white rounded uppercase font-bold">Flagged</span>' : ''}
+                            ${isUserApprovalPending(u) ? '<span class="px-1.5 py-0.5 text-[10px] bg-amber-500 text-white rounded uppercase font-bold">Pending Approval</span>' : ''}
+                            ${isUserApprovalRejected(u) ? '<span class="px-1.5 py-0.5 text-[10px] bg-gray-600 text-white rounded uppercase font-bold">Signup Cancelled</span>' : ''}
                             ${isMinusBalance ? '<span class="px-1.5 py-0.5 text-[10px] bg-red-600 text-white rounded uppercase font-bold">Minus</span>' : ''}
                             ${u.isProProfile ? '<span class="px-1.5 py-0.5 text-[10px] bg-blue-600 text-white rounded-full uppercase font-bold">Pro</span>' : ''}
                             ${updatedWeb ? '<span class="px-1.5 py-0.5 text-[10px] bg-emerald-600 text-white rounded uppercase font-bold">New Version</span>' : '<span class="px-1.5 py-0.5 text-[10px] bg-amber-500 text-white rounded uppercase font-bold">Old Version</span>'}
@@ -7423,6 +7611,8 @@
             // Apply filter
             if (filterValue === 'active') {
                 usersToRender = usersToRender.filter(u => !u.isFlagged && (getUserAvailableBalance(u) > 0 || u.hasRecentActivity));
+            } else if (filterValue === 'pending_signup') {
+                usersToRender = usersToRender.filter(isUserApprovalPending);
             } else if (filterValue === 'inactive') {
                 usersToRender = usersToRender.filter(u => u.isFlagged || (getUserAvailableBalance(u) <= 0 && !u.hasRecentActivity));
             } else if (filterValue === 'flagged') {
@@ -10552,6 +10742,14 @@
                 case 'delete-user':
                     handleDeleteUser(userid, username);
                     break;
+
+                case 'approve-signup-user':
+                    handleSignupApprovalAction(userid, 'approve');
+                    break;
+
+                case 'cancel-signup-user':
+                    handleSignupApprovalAction(userid, 'cancel');
+                    break;
             }
         });
 
@@ -10618,6 +10816,7 @@
         // Admin panel quick action buttons
         document.getElementById('admin-withdrawals-btn').addEventListener('click', () => openAdminQuickAction(showAdminWithdrawalsPage));
         document.getElementById('admin-users-btn').addEventListener('click', () => openAdminQuickAction(showAdminUsersPage));
+        document.getElementById('admin-signup-approvals-btn').addEventListener('click', () => openAdminQuickAction(showAdminSignupApprovalsPage));
         document.getElementById('admin-gift-codes-btn').addEventListener('click', () => openAdminQuickAction(showAdminGiftCodesPage));
         document.getElementById('admin-withdrawal-history-btn').addEventListener('click', () => openAdminQuickAction(showWithdrawalHistoryPage));
         document.getElementById('admin-withdraw-settings-btn').addEventListener('click', () => openAdminQuickAction(showAdminWithdrawSettingsModal));
