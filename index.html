@@ -4635,29 +4635,39 @@
                 if (!shell || !composer || !input || !messages) return null;
 
                 const keepTypingVisible = () => {
-                    let keyboardHeight = 0;
-                    if (window.visualViewport) {
-                        keyboardHeight = Math.max(0, window.innerHeight - window.visualViewport.height - window.visualViewport.offsetTop);
-                        const visibleHeight = Math.max(360, window.visualViewport.height);
-                        shell.style.height = `${visibleHeight}px`;
-                        shell.style.maxHeight = `${visibleHeight}px`;
-                        shell.style.transform = window.visualViewport.offsetTop ? `translateY(${window.visualViewport.offsetTop}px)` : '';
+                    const rect = shell.getBoundingClientRect();
+                    const viewport = window.visualViewport;
+                    const visualBottom = viewport ? viewport.height + viewport.offsetTop : window.innerHeight;
+                    const keyboardHeight = viewport ? Math.max(0, window.innerHeight - visualBottom) : 0;
+                    if (keyboardHeight > 40) {
+                        composer.style.position = 'fixed';
+                        composer.style.left = `${Math.max(0, rect.left)}px`;
+                        composer.style.width = `${rect.width}px`;
+                        composer.style.bottom = `${Math.max(0, window.innerHeight - visualBottom)}px`;
+                        composer.style.zIndex = '95';
+                        messages.style.paddingBottom = '7rem';
+                    } else {
+                        composer.style.position = '';
+                        composer.style.left = '';
+                        composer.style.width = '';
+                        composer.style.bottom = '';
+                        composer.style.zIndex = '';
+                        messages.style.paddingBottom = '';
                     }
-                    composer.style.transform = '';
-                    messages.style.paddingBottom = keyboardHeight > 40 ? '6rem' : '';
                     setTimeout(() => {
-                        input.scrollIntoView({ block: 'center', behavior: 'smooth' });
                         messages.scrollTop = messages.scrollHeight;
-                    }, 80);
+                    }, 60);
                 };
 
                 const resetTypingPosition = () => {
-                    if (window.visualViewport) {
-                        shell.style.height = '';
-                        shell.style.maxHeight = '';
-                        shell.style.transform = '';
-                    }
-                    composer.style.transform = '';
+                    shell.style.height = '';
+                    shell.style.maxHeight = '';
+                    shell.style.transform = '';
+                    composer.style.position = '';
+                    composer.style.left = '';
+                    composer.style.width = '';
+                    composer.style.bottom = '';
+                    composer.style.zIndex = '';
                     messages.style.paddingBottom = '';
                 };
 
@@ -5071,7 +5081,7 @@
             }
             revyBotMessages = [];
             const content = `
-                <div class="max-w-xl mx-auto bg-gray-100 dark:bg-gray-900 h-[100dvh] flex flex-col">
+                <div id="revy-chat-shell" class="max-w-xl mx-auto bg-gray-100 dark:bg-gray-900 h-[100dvh] flex flex-col">
                     <div class="bg-white dark:bg-gray-800 border border-gray-100 dark:border-gray-700 rounded-xl shadow-sm overflow-hidden flex flex-col h-full min-h-0">
                         <div class="flex items-center gap-3 p-3 border-b border-gray-100 dark:border-gray-700">
                             <button id="revy-back-btn" class="h-10 w-10 shrink-0 rounded-full bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 flex items-center justify-center">
@@ -5099,7 +5109,7 @@
                                 ['contact admin', 'Admin']
                             ].map(([question, label]) => `<button data-revy-question="${question}" class="revy-option shrink-0 px-3 py-1.5 rounded-full bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-200 text-xs font-bold">${label}</button>`).join('')}
                         </div>
-                        <div class="shrink-0 flex items-center gap-2 p-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] border-t border-gray-100 dark:border-gray-700 bg-white dark:bg-gray-800">
+                        <div id="revy-chat-composer" class="shrink-0 flex items-center gap-2 p-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] border-t border-gray-100 dark:border-gray-700 bg-white dark:bg-gray-800">
                             <input id="revy-message-input" type="text" placeholder="Or type your question" class="flex-1 min-w-0 px-4 py-2.5 bg-gray-100 dark:bg-gray-700 rounded-full focus:outline-none focus:ring-2 focus:ring-blue-500">
                             <button id="revy-send-btn" class="h-10 w-10 rounded-full bg-blue-600 text-white flex items-center justify-center">
                                 <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M2 21l21-9L2 3v7l15 2-15 2v7z"></path></svg>
@@ -5110,6 +5120,64 @@
                 ${getPageFooter()}`;
             showPage(content, { fullHeight: true });
             setBottomNavActive('bottom-help-btn');
+            let revyKeyboardCleanup = null;
+            const installRevyKeyboardLift = () => {
+                const shell = document.getElementById('revy-chat-shell');
+                const composer = document.getElementById('revy-chat-composer');
+                const input = document.getElementById('revy-message-input');
+                const messages = document.getElementById('revy-bot-messages');
+                if (!shell || !composer || !input || !messages) return null;
+
+                const keepTypingVisible = () => {
+                    const rect = shell.getBoundingClientRect();
+                    const viewport = window.visualViewport;
+                    const visualBottom = viewport ? viewport.height + viewport.offsetTop : window.innerHeight;
+                    const keyboardHeight = viewport ? Math.max(0, window.innerHeight - visualBottom) : 0;
+                    if (keyboardHeight > 40) {
+                        composer.style.position = 'fixed';
+                        composer.style.left = `${Math.max(0, rect.left)}px`;
+                        composer.style.width = `${rect.width}px`;
+                        composer.style.bottom = `${Math.max(0, window.innerHeight - visualBottom)}px`;
+                        composer.style.zIndex = '95';
+                        messages.style.paddingBottom = '7rem';
+                    } else {
+                        composer.style.position = '';
+                        composer.style.left = '';
+                        composer.style.width = '';
+                        composer.style.bottom = '';
+                        composer.style.zIndex = '';
+                        messages.style.paddingBottom = '';
+                    }
+                    setTimeout(() => {
+                        messages.scrollTop = messages.scrollHeight;
+                    }, 60);
+                };
+
+                const resetTypingPosition = () => {
+                    composer.style.position = '';
+                    composer.style.left = '';
+                    composer.style.width = '';
+                    composer.style.bottom = '';
+                    composer.style.zIndex = '';
+                    messages.style.paddingBottom = '';
+                };
+
+                const handleBlur = () => setTimeout(resetTypingPosition, 180);
+                input.addEventListener('focus', keepTypingVisible);
+                input.addEventListener('input', keepTypingVisible);
+                input.addEventListener('blur', handleBlur);
+                window.visualViewport?.addEventListener('resize', keepTypingVisible);
+                window.visualViewport?.addEventListener('scroll', keepTypingVisible);
+                return () => {
+                    input.removeEventListener('focus', keepTypingVisible);
+                    input.removeEventListener('input', keepTypingVisible);
+                    input.removeEventListener('blur', handleBlur);
+                    window.visualViewport?.removeEventListener('resize', keepTypingVisible);
+                    window.visualViewport?.removeEventListener('scroll', keepTypingVisible);
+                    resetTypingPosition();
+                };
+            };
+            revyKeyboardCleanup = installRevyKeyboardLift();
             const sendBotMessage = async () => {
                 const input = document.getElementById('revy-message-input');
                 const text = input.value.trim();
@@ -5136,8 +5204,14 @@
                 resetRevyBotTimer();
                 if (e.key === 'Enter') sendBotMessage();
             });
-            document.getElementById('revy-back-btn').onclick = showHelpSupportPage;
-            document.getElementById('revy-close-btn').onclick = closeRevyBotSession;
+            document.getElementById('revy-back-btn').onclick = () => {
+                if (revyKeyboardCleanup) revyKeyboardCleanup();
+                showHelpSupportPage();
+            };
+            document.getElementById('revy-close-btn').onclick = () => {
+                if (revyKeyboardCleanup) revyKeyboardCleanup();
+                closeRevyBotSession();
+            };
             addRevyBotMessage(`Hi ${currentUserData?.name || 'there'}, I am REVY, RW AI BOT. I can instantly help with wallet balance, withdrawal status, transaction history, payment details, recharge, gift code, loan, invoices, password reset, and app usage.`);
         };
 
