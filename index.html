@@ -1334,6 +1334,12 @@
                         </span>
                         <span>Admin</span>
                     </button>
+                    <button id="bottom-task-btn" class="bottom-nav-btn hidden flex flex-col items-center gap-1 py-1">
+                        <span class="bottom-nav-icon flex h-9 w-9 items-center justify-center rounded-xl bg-gray-100 dark:bg-gray-700 transition">
+                            <img src="https://cdn-icons-png.flaticon.com/512/3176/3176366.png" alt="Task" class="bottom-nav-img" loading="eager" fetchpriority="high" decoding="async">
+                        </span>
+                        <span>Task</span>
+                    </button>
                     <button id="bottom-help-btn" class="bottom-nav-btn flex flex-col items-center gap-1 py-1">
                         <span class="bottom-nav-icon relative flex h-9 w-9 items-center justify-center rounded-xl bg-gray-100 dark:bg-gray-700 transition">
                             <img src="https://cdn-icons-png.flaticon.com/512/5962/5962463.png" alt="Help" class="bottom-nav-img" loading="eager" fetchpriority="high" decoding="async">
@@ -3231,9 +3237,10 @@
                 startNotificationAutoRefresh(user.uid);
                 document.getElementById('admin-tab-button').classList.toggle('hidden', !isAdmin);
                 document.getElementById('bottom-admin-btn').classList.toggle('hidden', !isAdmin);
+                document.getElementById('bottom-task-btn').classList.toggle('hidden', !isAdmin);
                 const bottomHomeLabel = document.getElementById('bottom-home-label');
                 if (bottomHomeLabel) bottomHomeLabel.textContent = isAdmin ? 'Wallet' : 'Home';
-                document.getElementById('bottom-nav-grid').className = `mx-auto grid max-w-xl ${isAdmin ? 'grid-cols-5' : 'grid-cols-4'} items-center px-2 pt-2 text-[10px] sm:text-xs font-semibold text-gray-500 dark:text-gray-400`;
+                document.getElementById('bottom-nav-grid').className = `mx-auto grid max-w-xl ${isAdmin ? 'grid-cols-6' : 'grid-cols-4'} items-center px-2 pt-2 text-[10px] sm:text-xs font-semibold text-gray-500 dark:text-gray-400`;
                 currentMainSection = 'home';
                 switchTab('user-panel');
                 setBottomNavActive('bottom-home-btn');
@@ -3286,6 +3293,7 @@
                 document.getElementById('main-content').classList.add('hidden');
                 const bottomHomeLabel = document.getElementById('bottom-home-label');
                 if (bottomHomeLabel) bottomHomeLabel.textContent = 'Home';
+                document.getElementById('bottom-task-btn')?.classList.add('hidden');
                 setMainChrome(false);
                 document.getElementById('app-footer')?.classList.add('app-footer-hidden');
                 const banMessage = sessionStorage.getItem('lastBanMessage');
@@ -10841,6 +10849,7 @@
             showHomeMainPage();
         });
         document.getElementById('bottom-admin-btn').addEventListener('click', showAdminMainPage);
+        document.getElementById('bottom-task-btn').addEventListener('click', focusAdminTaskManager);
         document.getElementById('bottom-transactions-btn').addEventListener('click', () => {
             showAllTransactionsPage();
             setBottomNavActive('bottom-transactions-btn');
