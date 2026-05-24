@@ -4067,51 +4067,90 @@
         const showAdminTaskPage = () => {
             if (!currentUser || currentUser.uid !== ADMIN_UID) return showNotification('Admin access only.', true);
             currentMainSection = 'admin';
-            const taskCard = (title, detail, status, color = 'blue') => `
-                <button class="w-full text-left rounded-xl border border-gray-100 dark:border-gray-700 bg-white dark:bg-gray-800 p-4 shadow-sm hover:-translate-y-0.5 hover:shadow-md transition">
-                    <div class="flex items-start justify-between gap-3">
-                        <div>
-                            <p class="text-xs font-black uppercase text-${color}-500">${status}</p>
-                            <h4 class="mt-1 text-base font-black text-gray-900 dark:text-white">${title}</h4>
+            const projectCard = (icon, title, time, reward, accentClass) => `
+                <button class="shrink-0 w-36 text-left rounded-2xl bg-white dark:bg-gray-800 border border-gray-100 dark:border-gray-700 p-3 shadow-sm hover:-translate-y-0.5 hover:shadow-md transition">
+                    <div class="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl ${accentClass} p-2">
+                        <img src="${icon}" alt="${title}" class="h-full w-full object-contain">
+                    </div>
+                    <h4 class="mt-3 truncate text-sm font-black text-gray-900 dark:text-white">${title}</h4>
+                    <div class="mt-2 flex items-center justify-between text-[11px] font-bold text-gray-500 dark:text-gray-400">
+                        <span class="rounded-full bg-blue-50 px-2 py-1 text-blue-600 dark:bg-blue-900/30 dark:text-blue-200">${time}</span>
+                        <span class="text-emerald-600 dark:text-emerald-300">&#8377;${reward}</span>
+                    </div>
+                </button>`;
+            const taskRow = (title, detail, type, reward, statusClass) => `
+                <button class="w-full text-left rounded-2xl border border-gray-100 dark:border-gray-700 bg-white dark:bg-gray-800 p-4 shadow-sm hover:-translate-y-0.5 hover:shadow-md transition">
+                    <div class="flex items-center justify-between gap-3">
+                        <div class="min-w-0">
+                            <div class="flex items-center gap-2">
+                                <span class="rounded-full ${statusClass} px-2.5 py-1 text-[11px] font-black">${type}</span>
+                                <span class="text-xs font-bold text-gray-400">Layout only</span>
+                            </div>
+                            <h4 class="mt-2 truncate text-base font-black text-gray-900 dark:text-white">${title}</h4>
                             <p class="mt-1 text-sm leading-5 text-gray-500 dark:text-gray-400">${detail}</p>
                         </div>
-                        <span class="rounded-full bg-${color}-50 dark:bg-${color}-900/30 px-3 py-1 text-xs font-black text-${color}-700 dark:text-${color}-200">Ready</span>
+                        <div class="shrink-0 text-right">
+                            <p class="text-xs font-bold text-gray-400">Reward</p>
+                            <p class="text-lg font-black text-emerald-600 dark:text-emerald-300">&#8377;${reward}</p>
+                        </div>
                     </div>
                 </button>`;
             const content = `
                 ${getPageHeader('Task')}
                 <div class="max-w-4xl mx-auto space-y-5">
-                    <section class="rounded-2xl border border-gray-100 dark:border-gray-700 bg-white dark:bg-gray-800 p-5 shadow-sm">
-                        <div class="flex items-center justify-between gap-3">
-                            <div>
-                                <p class="text-xs font-black uppercase text-blue-500">Upper Task Box</p>
-                                <h3 class="mt-1 text-xl font-black">Instant Payment Task</h3>
-                                <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">Fast task layout for instant payment work.</p>
+                    <section class="overflow-hidden rounded-3xl bg-gradient-to-br from-slate-950 via-blue-900 to-cyan-700 p-5 text-white shadow-xl">
+                        <div class="flex gap-4 overflow-x-auto pb-1">
+                            <div class="min-w-[76%] sm:min-w-[48%] rounded-2xl bg-white/10 p-4 ring-1 ring-white/15">
+                                <p class="text-xs font-black uppercase text-cyan-100">Task Center</p>
+                                <h3 class="mt-2 text-2xl font-black leading-tight">Complete tasks and earn rewards</h3>
+                                <p class="mt-2 text-sm leading-5 text-white/75">Admin preview layout for wallet earning tasks.</p>
+                                <div class="mt-4 inline-flex rounded-full bg-white px-3 py-1.5 text-xs font-black text-blue-700">Admin only</div>
                             </div>
-                            <span class="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-blue-50 dark:bg-blue-900/30 p-2">
-                                <img src="https://cdn-icons-png.flaticon.com/512/1008/1008010.png" alt="Instant Payment Task" class="h-full w-full object-contain">
-                            </span>
-                        </div>
-                        <div class="mt-4 grid gap-3 sm:grid-cols-2">
-                            ${taskCard('App install task', 'User completes simple install and submits proof.', 'Instant', 'blue')}
-                            ${taskCard('Signup task', 'User completes signup and payment proof is checked.', 'Instant', 'emerald')}
+                            <div class="min-w-[70%] sm:min-w-[36%] rounded-2xl bg-amber-400 p-4 text-slate-950">
+                                <p class="text-xs font-black uppercase text-slate-700">Daily earning</p>
+                                <h3 class="mt-2 text-xl font-black leading-tight">Instant payout task flow</h3>
+                                <p class="mt-2 text-sm font-bold text-slate-700">Fast cards for simple tasks.</p>
+                            </div>
                         </div>
                     </section>
 
-                    <section class="rounded-2xl border border-gray-100 dark:border-gray-700 bg-white dark:bg-gray-800 p-5 shadow-sm">
-                        <div class="flex items-center justify-between gap-3">
-                            <div>
-                                <p class="text-xs font-black uppercase text-amber-500">Middle Task Box</p>
-                                <h3 class="mt-1 text-xl font-black">Review Task</h3>
-                                <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">Review-based task layout for proof and approval flow.</p>
-                            </div>
-                            <span class="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-amber-50 dark:bg-amber-900/30 p-2">
-                                <img src="https://cdn-icons-png.flaticon.com/512/1828/1828919.png" alt="Review Task" class="h-full w-full object-contain">
-                            </span>
+                    <section class="space-y-3">
+                        <div class="flex items-center justify-between">
+                            <h3 class="text-lg font-black">Category</h3>
+                            <button class="text-xs font-black text-blue-600 dark:text-blue-300">See more</button>
                         </div>
-                        <div class="mt-4 grid gap-3 sm:grid-cols-2">
-                            ${taskCard('Google review task', 'User submits review screenshot for admin approval.', 'Review', 'amber')}
-                            ${taskCard('Map rating task', 'User completes map rating and uploads proof.', 'Review', 'rose')}
+                        <div class="flex gap-2 overflow-x-auto pb-1">
+                            ${['Instant Payment Task', 'Review Task', 'App Installs', 'Survey', 'Signup'].map(label => `<button class="shrink-0 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-4 py-2 text-sm font-bold text-gray-600 dark:text-gray-300">${label}</button>`).join('')}
+                        </div>
+                    </section>
+
+                    <section class="rounded-3xl bg-blue-50 dark:bg-blue-950/30 p-4">
+                        <div class="flex items-center justify-between">
+                            <h3 class="text-sm font-black text-blue-700 dark:text-blue-200">Best projects to earn more</h3>
+                            <button class="rounded-full bg-white dark:bg-gray-800 px-3 py-1.5 text-xs font-black text-blue-600 dark:text-blue-200 shadow-sm">Filter</button>
+                        </div>
+                        <div class="mt-4 flex gap-3 overflow-x-auto pb-1">
+                            ${projectCard('https://cdn-icons-png.flaticon.com/512/888/888857.png', 'App Install', '5 min', '300', 'bg-orange-50')}
+                            ${projectCard('https://cdn-icons-png.flaticon.com/512/1828/1828919.png', 'Review Proof', '10 min', '101', 'bg-rose-50')}
+                            ${projectCard('https://cdn-icons-png.flaticon.com/512/942/942748.png', 'Signup Task', '25 min', '151', 'bg-red-50')}
+                            ${projectCard('https://cdn-icons-png.flaticon.com/512/3135/3135706.png', 'Partner Lead', '15 min', '250', 'bg-emerald-50')}
+                        </div>
+                    </section>
+
+                    <section class="space-y-3">
+                        <div class="flex items-center justify-between">
+                            <h3 class="text-lg font-black">Available Task</h3>
+                            <button class="h-9 w-9 rounded-xl bg-white dark:bg-gray-800 shadow-sm border border-gray-100 dark:border-gray-700 text-blue-600 font-black">=</button>
+                        </div>
+                        <div class="space-y-3">
+                            <div>
+                                <h4 class="mb-2 text-sm font-black text-gray-500 dark:text-gray-400">Instant Payment Task</h4>
+                                ${taskRow('Quick app activation', 'Instant reward style task card for simple app activation.', 'Instant', '300', 'bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-200')}
+                            </div>
+                            <div>
+                                <h4 class="mb-2 text-sm font-black text-gray-500 dark:text-gray-400">Review Task</h4>
+                                ${taskRow('Submit review proof', 'Review task card for screenshot/proof approval flow.', 'Review', '101', 'bg-amber-50 text-amber-700 dark:bg-amber-900/30 dark:text-amber-200')}
+                            </div>
                         </div>
                     </section>
                 </div>
