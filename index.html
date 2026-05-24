@@ -1288,29 +1288,6 @@
                             </button>
                         </div>
                     </div>
-                    <div id="admin-task-manager-layout" class="bg-white dark:bg-gray-800 p-5 sm:p-6 rounded-2xl shadow-md mb-6 border border-gray-100 dark:border-gray-700">
-                        <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                            <div>
-                                <h3 class="text-lg font-semibold">Home</h3>
-                                <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">Admin-only task layout. We will connect task creation, assignment, proof review, and wallet reward release one by one.</p>
-                            </div>
-                            <button class="w-full sm:w-auto rounded-xl bg-blue-600 px-4 py-2 text-sm font-bold text-white">New Task</button>
-                        </div>
-                        <div class="mt-4 grid gap-3 sm:grid-cols-3">
-                            <div class="rounded-xl bg-gray-50 p-4 dark:bg-gray-900">
-                                <p class="text-xs font-black uppercase text-gray-400">Draft</p>
-                                <p class="mt-2 text-sm font-semibold">Task title, amount, instructions, proof type.</p>
-                            </div>
-                            <div class="rounded-xl bg-gray-50 p-4 dark:bg-gray-900">
-                                <p class="text-xs font-black uppercase text-gray-400">Live</p>
-                                <p class="mt-2 text-sm font-semibold">Visibility, limits, status, deadline.</p>
-                            </div>
-                            <div class="rounded-xl bg-gray-50 p-4 dark:bg-gray-900">
-                                <p class="text-xs font-black uppercase text-gray-400">Review</p>
-                                <p class="mt-2 text-sm font-semibold">Approve proof, reject proof, release reward.</p>
-                            </div>
-                        </div>
-                    </div>
                 </div>
             </div>
 
@@ -4087,12 +4064,60 @@
             setBottomNavActive('bottom-admin-btn');
         };
 
-        const focusAdminTaskManager = () => {
+        const showAdminTaskPage = () => {
             if (!currentUser || currentUser.uid !== ADMIN_UID) return showNotification('Admin access only.', true);
-            showAdminMainPage();
-            setTimeout(() => {
-                document.getElementById('admin-task-manager-layout')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-            }, 80);
+            currentMainSection = 'admin';
+            const taskCard = (title, detail, status, color = 'blue') => `
+                <button class="w-full text-left rounded-xl border border-gray-100 dark:border-gray-700 bg-white dark:bg-gray-800 p-4 shadow-sm hover:-translate-y-0.5 hover:shadow-md transition">
+                    <div class="flex items-start justify-between gap-3">
+                        <div>
+                            <p class="text-xs font-black uppercase text-${color}-500">${status}</p>
+                            <h4 class="mt-1 text-base font-black text-gray-900 dark:text-white">${title}</h4>
+                            <p class="mt-1 text-sm leading-5 text-gray-500 dark:text-gray-400">${detail}</p>
+                        </div>
+                        <span class="rounded-full bg-${color}-50 dark:bg-${color}-900/30 px-3 py-1 text-xs font-black text-${color}-700 dark:text-${color}-200">Ready</span>
+                    </div>
+                </button>`;
+            const content = `
+                ${getPageHeader('Task')}
+                <div class="max-w-4xl mx-auto space-y-5">
+                    <section class="rounded-2xl border border-gray-100 dark:border-gray-700 bg-white dark:bg-gray-800 p-5 shadow-sm">
+                        <div class="flex items-center justify-between gap-3">
+                            <div>
+                                <p class="text-xs font-black uppercase text-blue-500">Upper Task Box</p>
+                                <h3 class="mt-1 text-xl font-black">Instant Payment Task</h3>
+                                <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">Fast task layout for instant payment work.</p>
+                            </div>
+                            <span class="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-blue-50 dark:bg-blue-900/30 p-2">
+                                <img src="https://cdn-icons-png.flaticon.com/512/1008/1008010.png" alt="Instant Payment Task" class="h-full w-full object-contain">
+                            </span>
+                        </div>
+                        <div class="mt-4 grid gap-3 sm:grid-cols-2">
+                            ${taskCard('App install task', 'User completes simple install and submits proof.', 'Instant', 'blue')}
+                            ${taskCard('Signup task', 'User completes signup and payment proof is checked.', 'Instant', 'emerald')}
+                        </div>
+                    </section>
+
+                    <section class="rounded-2xl border border-gray-100 dark:border-gray-700 bg-white dark:bg-gray-800 p-5 shadow-sm">
+                        <div class="flex items-center justify-between gap-3">
+                            <div>
+                                <p class="text-xs font-black uppercase text-amber-500">Middle Task Box</p>
+                                <h3 class="mt-1 text-xl font-black">Review Task</h3>
+                                <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">Review-based task layout for proof and approval flow.</p>
+                            </div>
+                            <span class="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-amber-50 dark:bg-amber-900/30 p-2">
+                                <img src="https://cdn-icons-png.flaticon.com/512/1828/1828919.png" alt="Review Task" class="h-full w-full object-contain">
+                            </span>
+                        </div>
+                        <div class="mt-4 grid gap-3 sm:grid-cols-2">
+                            ${taskCard('Google review task', 'User submits review screenshot for admin approval.', 'Review', 'amber')}
+                            ${taskCard('Map rating task', 'User completes map rating and uploads proof.', 'Review', 'rose')}
+                        </div>
+                    </section>
+                </div>
+                ${getPageFooter()}`;
+            showPage(content, { returnTo: 'admin' });
+            setBottomNavActive('bottom-task-btn');
         };
 
         const SUPPORT_PROFILE_DESCRIPTION = 'Hey, I am Yash Vishal founder Of Reviews World Pvt. Ltd. Working since 2021. I am currently Running more than 5-6 community of Reviews world. I have more than 1000+ active members in our community.Please let me know if you want to do any deal regarding App Reviews work, Map reviews work, and other type of reviews work, web Development, App Developement, etc.Working on making REVIEWS WORLD App since Jan. 2026. It will announced soon..🤗#stay_away_haters';
@@ -10849,7 +10874,7 @@
             showHomeMainPage();
         });
         document.getElementById('bottom-admin-btn').addEventListener('click', showAdminMainPage);
-        document.getElementById('bottom-task-btn').addEventListener('click', focusAdminTaskManager);
+        document.getElementById('bottom-task-btn').addEventListener('click', showAdminTaskPage);
         document.getElementById('bottom-transactions-btn').addEventListener('click', () => {
             showAllTransactionsPage();
             setBottomNavActive('bottom-transactions-btn');
@@ -10859,8 +10884,8 @@
         document.getElementById('notification-header-btn').addEventListener('click', showNotificationsPage);
 
         document.getElementById('manage-admin-wallet-btn').addEventListener('click', showManageAdminWalletModal);
-        document.getElementById('admin-manage-tasks-btn')?.addEventListener('click', focusAdminTaskManager);
-        document.getElementById('admin-manage-tasks-secondary-btn')?.addEventListener('click', focusAdminTaskManager);
+        document.getElementById('admin-manage-tasks-btn')?.addEventListener('click', showAdminTaskPage);
+        document.getElementById('admin-manage-tasks-secondary-btn')?.addEventListener('click', showAdminTaskPage);
 
         const openAdminQuickAction = (handler) => {
             currentMainSection = 'admin';
@@ -10892,7 +10917,7 @@
         document.getElementById('admin-loans-btn').addEventListener('click', () => openAdminQuickAction(showAdminLoanPage));
         document.getElementById('admin-investments-btn').addEventListener('click', () => openAdminQuickAction(showAdminInvestmentsPage));
         document.getElementById('admin-chats-btn').addEventListener('click', () => openAdminQuickAction(showAdminChatsPage));
-        document.getElementById('admin-tasks-btn').addEventListener('click', focusAdminTaskManager);
+        document.getElementById('admin-tasks-btn').addEventListener('click', showAdminTaskPage);
 
         // Withdraw Fund Button - Now opens full page
         document.getElementById('withdraw-fund-btn').addEventListener('click', () => openUserQuickAction(showWithdrawPage));
