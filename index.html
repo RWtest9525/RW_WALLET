@@ -2354,6 +2354,30 @@
         const normalizePhoneDigits = (value = '') => String(value || '').replace(/\D/g, '').slice(-10);
         const getUserMobileValue = (user = {}) =>
             user.mobile || user.phoneNumber || user.phone || user.userMobile || user.contactNumber || '';
+        const findExistingUserByMobile = async (mobile, excludeUid = '') => {
+            const digits = normalizePhoneDigits(mobile);
+            if (!/^\d{10}$/.test(digits)) return null;
+            const localMatch = allUsersCache.find(user =>
+                (user.id || user.uid) !== excludeUid && normalizePhoneDigits(getUserMobileValue(user)) === digits
+            );
+            if (localMatch) return localMatch;
+            const usersRef = collection(db, `artifacts/${appId}/public/data/users`);
+            const directQueries = [
+                query(usersRef, where('mobile', '==', digits)),
+                query(usersRef, where('phoneNumber', '==', digits))
+            ];
+            for (const mobileQuery of directQueries) {
+                const snap = await getDocs(mobileQuery);
+                const match = snap.docs
+                    .map(d => ({ id: d.id, ...d.data() }))
+                    .find(user => (user.id || user.uid) !== excludeUid);
+                if (match) return match;
+            }
+            const allSnap = await getDocs(usersRef);
+            return allSnap.docs
+                .map(d => ({ id: d.id, ...d.data() }))
+                .find(user => (user.id || user.uid) !== excludeUid && normalizePhoneDigits(getUserMobileValue(user)) === digits) || null;
+        };
         const userMatchesSearch = (user = {}, searchTerm = '') => {
             const rawSearch = String(searchTerm || '').trim().toLowerCase();
             if (!rawSearch) return true;
@@ -2695,7 +2719,10 @@
                 shell.style.height = '';
                 shell.style.maxHeight = '';
                 shell.style.zIndex = '';
+                composer.style.position = '';
+                composer.style.bottom = '';
                 composer.style.paddingBottom = '';
+                composer.style.zIndex = '';
                 messages.style.paddingBottom = '';
                 if (pageContainer) pageContainer.style.overflowY = 'hidden';
             };
@@ -2704,21 +2731,26 @@
                 const viewport = window.visualViewport;
                 const layoutHeight = Math.max(window.innerHeight || 0, document.documentElement.clientHeight || 0);
                 const viewportHeight = viewport?.height || layoutHeight;
+                const viewportTop = viewport?.offsetTop || 0;
+                const keyboardHeight = viewport ? Math.max(0, layoutHeight - viewportHeight - viewportTop) : 0;
                 const keyboardLikelyOpen = document.activeElement === input && (
-                    viewport ? (layoutHeight - viewportHeight > 60) : false
+                    viewport ? (layoutHeight - viewportHeight > 40 || keyboardHeight > 40) : false
                 );
 
                 if (keyboardLikelyOpen) {
                     const rect = shell.getBoundingClientRect();
                     shell.style.position = 'fixed';
                     shell.style.left = `${Math.max(0, rect.left)}px`;
-                    shell.style.top = `${viewport?.offsetTop || 0}px`;
+                    shell.style.top = `${viewportTop}px`;
                     shell.style.width = `${rect.width}px`;
-                    shell.style.height = `${viewportHeight}px`;
-                    shell.style.maxHeight = `${viewportHeight}px`;
+                    shell.style.height = `${viewportHeight - 1}px`;
+                    shell.style.maxHeight = `${viewportHeight - 1}px`;
                     shell.style.zIndex = '80';
-                    composer.style.paddingBottom = '0.75rem';
-                    messages.style.paddingBottom = `${composer.offsetHeight + 16}px`;
+                    composer.style.position = 'sticky';
+                    composer.style.bottom = '0';
+                    composer.style.paddingBottom = 'calc(0.75rem + env(safe-area-inset-bottom))';
+                    composer.style.zIndex = '5';
+                    messages.style.paddingBottom = `${composer.offsetHeight + keyboardHeight + 24}px`;
                     if (pageContainer) pageContainer.style.overflowY = 'hidden';
                 } else {
                     resetTypingPosition();
@@ -2726,7 +2758,7 @@
 
                 requestAnimationFrame(() => {
                     messages.scrollTop = messages.scrollHeight;
-                    input.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+                    composer.scrollIntoView({ block: 'end', inline: 'nearest' });
                 });
             };
 
@@ -2908,7 +2940,7 @@
             const email = document.getElementById('email').value;
             const password = document.getElementById('password').value;
             const name = document.getElementById('name').value;
-            const mobile = document.getElementById('mobile').value;
+            const mobile = normalizePhoneDigits(document.getElementById('mobile').value);
             document.getElementById('auth-error').textContent = '';
 
             try {
@@ -2955,6 +2987,13 @@
                         // This is an error, so reset the button
                         throw new Error('Name and Mobile Number are required.');
                     }
+                    if (!/^\d{10}$/.test(mobile)) {
+                        throw new Error('Mobile number must be exactly 10 digits.');
+                    }
+                    const existingMobileUser = await findExistingUserByMobile(mobile);
+                    if (existingMobileUser) {
+                        throw new Error('This mobile number is already registered. Please use another number.');
+                    }
                     sessionStorage.setItem('rw_signup_in_progress', '1');
                     const cred = await createUserWithEmailAndPassword(auth, email, password);
                     await setDoc(doc(db, `artifacts/${appId}/public/data/users`, cred.user.uid), {
@@ -2962,15 +3001,17 @@
                         email: cred.user.email,
                         name,
                         mobile,
+                        phoneNumber: mobile,
                         paymentMethod: '',
                         paymentDetails: {},
                         balance: 0,
                         approvalStatus: 'pending',
+                        signupApprovalStatus: 'pending',
                         accountStatus: 'pending_approval',
                         isApproved: false,
                         signupRequestedAt: serverTimestamp(),
                         createdAt: serverTimestamp()
-                    });
+                    }, { merge: true });
                     await signOut(auth);
                     setTimeout(() => sessionStorage.removeItem('rw_signup_in_progress'), 2000);
                     document.getElementById('auth-error').textContent = 'Your account creation is pending. Please wait, admin will approve it soon.';
@@ -3187,7 +3228,6 @@
                     setMainChrome(false);
                     const authError = document.getElementById('auth-error');
                     if (authError) authError.textContent = pendingMessage;
-                    await signOut(auth);
                     return;
                 }
 
@@ -10369,7 +10409,7 @@
 
         const handleUpdateProfile = async () => {
             const newName = document.getElementById('profile-name-input').value.trim();
-            const newMobile = document.getElementById('profile-mobile-input').value.trim();
+            const newMobile = normalizePhoneDigits(document.getElementById('profile-mobile-input').value);
             const selectedPaymentMethod = document.getElementById('profile-payment-method').value;
             const paymentMethod = selectedPaymentMethod || normalizeProfilePaymentMethod(currentUserData);
             const isAdminProfile = currentUser?.uid === ADMIN_UID;
@@ -10383,6 +10423,14 @@
             if (!phoneRegex.test(newMobile)) {
                 return showNotification('Mobile number must be exactly 10 digits.', true);
             }
+            let existingMobileUser = null;
+            try {
+                existingMobileUser = await findExistingUserByMobile(newMobile, currentUser?.uid);
+            } catch (error) {
+                console.warn('Mobile duplicate check failed:', error);
+                return showNotification('Could not verify mobile number. Please try again.', true);
+            }
+            if (existingMobileUser) return showNotification('This mobile number is already used by another account.', true);
 
             let paymentDetails = getProfilePaymentDetails(paymentMethod);
 
@@ -10422,6 +10470,7 @@
             const profileUpdate = {
                 name: newName,
                 mobile: newMobile,
+                phoneNumber: newMobile,
                 paymentMethod: paymentMethod,
                 paymentDetails: paymentMethod ? paymentDetails : getProfilePaymentDetails(currentUserData?.paymentMethod || '')
             };
