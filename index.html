@@ -2109,8 +2109,11 @@
             try {
                 const items = await loadFirebaseTransactions(userId, 2000);
                 await importFirestoreTransactionsToCloud(userId, items);
-                unifiedHistoryCache = mergeTransactionsByKey(readHistoryItemsFromCache(userId), unifiedHistoryCache, items);
-                writeHistoryItemsToCache(userId, unifiedHistoryCache);
+                const mergedUserHistory = mergeTransactionsByKey(readHistoryItemsFromCache(userId), items);
+                writeHistoryItemsToCache(userId, mergedUserHistory);
+                if (currentUser?.uid === userId) {
+                    unifiedHistoryCache = mergeTransactionsByKey(unifiedHistoryCache, mergedUserHistory);
+                }
             } catch (error) {
                 console.warn('Firebase transaction cache sync failed:', error);
             }
@@ -2144,13 +2147,17 @@
                         return [];
                     })
                 ]);
-                const cachedPending = (unifiedHistoryCache || []).filter(item => String(item.key || '').startsWith('req-') || item.status === 'pending');
+                const activeHistoryCache = currentUser?.uid === userId ? unifiedHistoryCache : readHistoryItemsFromCache(userId);
+                const cachedPending = (activeHistoryCache || []).filter(item => String(item.key || '').startsWith('req-') || item.status === 'pending');
                 const pendingHistoryItems = pendingWithdrawals.map(normalizePendingRequestForHistory);
-                unifiedHistoryCache = mergeTransactionsByKey(firebaseTransactions, cloudTransactions, cachedPending, pendingHistoryItems);
-                writeHistoryItemsToCache(userId, unifiedHistoryCache);
+                const mergedUserHistory = mergeTransactionsByKey(firebaseTransactions, cloudTransactions, cachedPending, pendingHistoryItems);
+                writeHistoryItemsToCache(userId, mergedUserHistory);
+                if (currentUser?.uid === userId) {
+                    unifiedHistoryCache = mergedUserHistory;
+                }
                 if (firebaseTransactions.length) importFirestoreTransactionsToCloud(userId, firebaseTransactions);
                 transactionHistoryPrefetch.loadedAt = Date.now();
-                return unifiedHistoryCache;
+                return mergedUserHistory;
             })().finally(() => {
                 transactionHistoryPrefetch.promise = null;
             });
@@ -2163,8 +2170,11 @@
                 ...item,
                 timestamp: item.timestamp || Date.now()
             });
-            unifiedHistoryCache = mergeTransactionsByKey([normalized], unifiedHistoryCache, readHistoryItemsFromCache(userId));
-            writeHistoryItemsToCache(userId, unifiedHistoryCache);
+            const mergedUserHistory = mergeTransactionsByKey([normalized], readHistoryItemsFromCache(userId), currentUser?.uid === userId ? unifiedHistoryCache : []);
+            writeHistoryItemsToCache(userId, mergedUserHistory);
+            if (currentUser?.uid === userId) {
+                unifiedHistoryCache = mergedUserHistory;
+            }
             transactionHistoryPrefetch = { userId, promise: null, loadedAt: 0 };
             if (document.getElementById('transactions-list')) {
                 document.getElementById('transactions-list').innerHTML = unifiedHistoryCache.slice(0, 5).map(tx => renderTransactionItem(tx)).join('');
@@ -10006,6 +10016,9 @@
                     balanceDeducted: balanceWasDeducted
                 });
                 syncRecentTransactionsToCloud(userId).catch(error => console.warn('Withdraw transaction background sync skipped:', error));
+                if (currentUser?.uid && currentUser.uid !== userId) {
+                    unifiedHistoryCache = readHistoryItemsFromCache(currentUser.uid);
+                }
                 notifyWithdrawalStatus({
                     userId,
                     status: newStatus,
