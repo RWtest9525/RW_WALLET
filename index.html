@@ -8982,41 +8982,121 @@
             return new Blob([pdf], { type: 'application/pdf' });
         };
 
-        const downloadInvestmentInvoice = (investment) => {
+        const createPartnerInvestmentInvoicePdf = (investment) => {
             const start = toDate(investment.startDate) || toDate(investment.createdAt) || new Date();
             const end = toDate(investment.endDate) || addMonthsClamped(start, investment.months || 1);
             const invoiceId = investment.invoiceId || `INV-${(investment.id || generateTransactionId()).slice(0, 8).toUpperCase()}`;
-            const lines = {
-                title: 'REVIEWS WORLD - PARTNER INVESTMENT INVOICE',
-                body: [
-                    `Invoice ID: ${invoiceId}`,
-                    `Generated On: ${new Date().toLocaleString('en-IN')}`,
-                    '',
-                    'Company: Reviews World / RW Wallet',
-                    'Document Type: Partner Investment Invoice',
-                    '',
-                    `User Name: ${investment.userName || currentUserData?.name || 'User'}`,
-                    `Mobile: ${investment.userMobile || currentUserData?.mobile || 'N/A'}`,
-                    `Email: ${investment.userEmail || currentUserData?.email || currentUser?.email || 'N/A'}`,
-                    '',
-                    `Investment Amount: ${formatPdfCurrency(investment.amount || 0)}`,
-                    `Duration: ${investment.months || 0} month(s)`,
-                    `Interest Rate: ${((investment.interestRate || PARTNER_INTEREST_RATE) * 100).toFixed(1)}% per month`,
-                    `Monthly Interest: ${formatPdfCurrency(investment.monthlyInterest || 0)}`,
-                    `Total Expected Interest: ${formatPdfCurrency(investment.totalInterest || 0)}`,
-                    `Interest Got: ${formatPdfCurrency(investment.paidInterest || 0)}`,
-                    `Maturity Value: ${formatPdfCurrency((investment.amount || 0) + (investment.totalInterest || 0))}`,
-                    '',
-                    `Starting Date: ${start.toLocaleDateString('en-IN')}`,
-                    `Ending Date: ${end.toLocaleDateString('en-IN')}`,
-                    `Status: ${(investment.status || 'active').toUpperCase()}`,
-                    '',
-                    'Terms: Interest is processed after every completed 30 days.',
-                    'Early withdrawal before end date gives no pending interest and 2% charge is deducted.',
-                    'User confirmed investment after reading all documents and terms.'
-                ]
+            const amount = Number(investment.amount || 0);
+            const monthlyInterest = Number(investment.monthlyInterest || (amount * (investment.interestRate || PARTNER_INTEREST_RATE)) || 0);
+            const totalInterest = Number(investment.totalInterest || (monthlyInterest * (investment.months || 0)) || 0);
+            const paidInterest = Number(investment.paidInterest || 0);
+            const maturityValue = amount + totalInterest;
+            const status = String(investment.status || 'active').toUpperCase();
+            const statusColor = status === 'COMPLETED' ? '0.05 0.55 0.32' : status === 'CANCELLED' ? '0.78 0.12 0.12' : '0.03 0.35 0.85';
+            const userName = investment.userName || currentUserData?.name || 'User';
+            const userMobile = investment.userMobile || currentUserData?.mobile || 'N/A';
+            const userEmail = investment.userEmail || currentUserData?.email || currentUser?.email || 'N/A';
+
+            const commands = [];
+            const text = (value, x, y, size = 10, font = 'F1', color = '0 0 0') => {
+                commands.push('BT', `/${font} ${size} Tf`, `${color} rg`, `${x} ${y} Td`, `(${escapePdfText(value)}) Tj`, 'ET');
             };
-            const blob = createSimplePdf(lines);
+            const fillRect = (x, y, w, h, color) => commands.push('q', `${color} rg`, `${x} ${y} ${w} ${h} re f`, 'Q');
+            const strokeRect = (x, y, w, h, color = '0.84 0.88 0.94') => commands.push('q', `${color} RG`, `${x} ${y} ${w} ${h} re S`, 'Q');
+            const line = (x1, y1, x2, y2, color = '0.84 0.88 0.94') => commands.push('q', `${color} RG`, `${x1} ${y1} m ${x2} ${y2} l S`, 'Q');
+            const labelValue = (label, value, x, y, w, accent = '0.02 0.45 0.36') => {
+                fillRect(x, y, w, 58, '1 1 1');
+                fillRect(x, y, 5, 58, accent);
+                strokeRect(x, y, w, 58, '0.88 0.91 0.96');
+                text(label, x + 16, y + 36, 8, 'F2', '0.42 0.49 0.6');
+                text(truncatePdfText(value, 28), x + 16, y + 17, 14, 'F2', '0.06 0.1 0.18');
+            };
+
+            fillRect(0, 0, 595, 842, '0.95 0.98 1');
+            fillRect(34, 708, 527, 96, '0.02 0.08 0.18');
+            fillRect(34, 708, 527, 14, '0.02 0.62 0.45');
+            fillRect(402, 742, 128, 28, '0.07 0.18 0.35');
+            fillRect(46, 654, 503, 34, '0.9 0.98 0.95');
+            text('REVIEWS WORLD', 54, 766, 22, 'F2', '1 1 1');
+            text('PARTNER INVESTMENT INVOICE', 54, 741, 13, 'F2', '0.74 0.92 1');
+            text(`Invoice ID: ${invoiceId}`, 410, 753, 9, 'F2', '1 1 1');
+            text(`Generated: ${new Date().toLocaleString('en-IN')}`, 54, 720, 8, 'F1', '0.78 0.84 0.93');
+            text(`Status: ${status}`, 410, 720, 9, 'F2', '0.55 0.95 0.78');
+            text('Partner investment receipt for RW Wallet records', 62, 668, 10, 'F2', '0.02 0.45 0.36');
+
+            labelValue('Billed To', truncatePdfText(userName, 34), 46, 574, 244, '0.02 0.45 0.36');
+            text(truncatePdfText(userEmail, 40), 62, 582, 8, 'F1', '0.35 0.42 0.52');
+            labelValue('Mobile Number', userMobile, 305, 574, 244, '0.03 0.35 0.85');
+            text(`Duration: ${investment.months || 0} month(s)`, 321, 582, 8, 'F1', '0.35 0.42 0.52');
+
+            labelValue('Investment Amount', formatPdfCurrency(amount), 46, 496, 156, '0.02 0.62 0.45');
+            labelValue('Monthly Interest', formatPdfCurrency(monthlyInterest), 220, 496, 156, '0.03 0.35 0.85');
+            labelValue('Maturity Value', formatPdfCurrency(maturityValue), 393, 496, 156, '0.92 0.5 0.08');
+
+            fillRect(46, 416, 503, 38, '0.02 0.08 0.18');
+            text('Field', 62, 431, 9, 'F2', '1 1 1');
+            text('Details', 216, 431, 9, 'F2', '1 1 1');
+            text('Amount / Value', 410, 431, 9, 'F2', '1 1 1');
+            const rows = [
+                ['Start Date', start.toLocaleDateString('en-IN'), '-'],
+                ['End Date', end.toLocaleDateString('en-IN'), '-'],
+                ['Interest Rate', `${((investment.interestRate || PARTNER_INTEREST_RATE) * 100).toFixed(1)}% per month`, '-'],
+                ['Total Expected Interest', `${investment.months || 0} month period`, formatPdfCurrency(totalInterest)],
+                ['Interest Got', 'Already processed', formatPdfCurrency(paidInterest)],
+                ['Current Status', status, formatPdfCurrency(maturityValue)]
+            ];
+            let y = 382;
+            rows.forEach((row, index) => {
+                fillRect(46, y - 10, 503, 34, index % 2 === 0 ? '1 1 1' : '0.98 0.99 1');
+                line(46, y - 11, 549, y - 11);
+                text(row[0], 62, y + 2, 8, 'F2', '0.12 0.18 0.3');
+                text(truncatePdfText(row[1], 32), 216, y + 2, 8, 'F1', row[0] === 'Current Status' ? statusColor : '0.22 0.28 0.38');
+                text(truncatePdfText(row[2], 20), 410, y + 2, 8, 'F2', row[0] === 'Current Status' ? statusColor : '0.02 0.45 0.36');
+                y -= 34;
+            });
+
+            fillRect(46, 126, 503, 88, '1 1 1');
+            strokeRect(46, 126, 503, 88);
+            fillRect(46, 196, 503, 18, '0.9 0.95 1');
+            text('Important Terms', 62, 201, 9, 'F2', '0.08 0.18 0.32');
+            text('1. Interest is processed after every completed 30 days.', 62, 176, 8, 'F1', '0.25 0.32 0.42');
+            text('2. Early withdrawal before end date gives no pending interest and 2% charge is deducted.', 62, 158, 8, 'F1', '0.25 0.32 0.42');
+            text('3. User confirmed this investment after reading all documents and terms.', 62, 140, 8, 'F1', '0.25 0.32 0.42');
+
+            fillRect(34, 54, 527, 44, '0.02 0.08 0.18');
+            text('This invoice is computer generated by RW Wallet.', 54, 80, 8, 'F1', '0.78 0.84 0.93');
+            text('REVIEWS WORLD | Partner Investment Records', 54, 65, 9, 'F2', '1 1 1');
+            text(`Invoice: ${invoiceId}`, 410, 65, 8, 'F1', '0.78 0.84 0.93');
+
+            const objects = [];
+            const addObject = (body) => {
+                objects.push(body);
+                return objects.length;
+            };
+            addObject('<< /Type /Catalog /Pages 2 0 R >>');
+            addObject('<< /Type /Pages /Kids [3 0 R] /Count 1 >>');
+            addObject('<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 4 0 R /F2 5 0 R >> >> /Contents 6 0 R >>');
+            addObject('<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>');
+            addObject('<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >>');
+            const content = commands.join('\n');
+            addObject(`<< /Length ${content.length} >>\nstream\n${content}\nendstream`);
+            let pdf = '%PDF-1.4\n';
+            const offsets = [0];
+            objects.forEach((obj, index) => {
+                offsets.push(pdf.length);
+                pdf += `${index + 1} 0 obj\n${obj}\nendobj\n`;
+            });
+            const xref = pdf.length;
+            pdf += `xref\n0 ${objects.length + 1}\n0000000000 65535 f \n`;
+            offsets.slice(1).forEach(offset => {
+                pdf += `${String(offset).padStart(10, '0')} 00000 n \n`;
+            });
+            pdf += `trailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF`;
+            return { blob: new Blob([pdf], { type: 'application/pdf' }), invoiceId };
+        };
+
+        const downloadInvestmentInvoice = (investment) => {
+            const { blob, invoiceId } = createPartnerInvestmentInvoicePdf(investment);
             const link = document.createElement('a');
             link.href = URL.createObjectURL(blob);
             link.download = `${invoiceId}.pdf`;
