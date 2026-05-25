@@ -2655,7 +2655,8 @@
 
         let activeKeyboardInput = null;
         const isKeyboardLiftTarget = (element) =>
-            element?.matches?.('input:not([type="checkbox"]):not([type="radio"]):not([type="hidden"]), textarea, select');
+            element?.matches?.('input:not([type="checkbox"]):not([type="radio"]):not([type="hidden"]), textarea, select')
+            && !element.closest?.('#support-chat-shell, #revy-chat-shell');
 
         const keepFocusedInputVisible = () => {
             const target = isKeyboardLiftTarget(activeKeyboardInput) ? activeKeyboardInput : null;
@@ -2720,6 +2721,8 @@
                 shell.style.maxHeight = '';
                 shell.style.zIndex = '';
                 composer.style.position = '';
+                composer.style.left = '';
+                composer.style.width = '';
                 composer.style.bottom = '';
                 composer.style.paddingBottom = '';
                 composer.style.zIndex = '';
@@ -2732,25 +2735,30 @@
                 const layoutHeight = Math.max(window.innerHeight || 0, document.documentElement.clientHeight || 0);
                 const viewportHeight = viewport?.height || layoutHeight;
                 const viewportTop = viewport?.offsetTop || 0;
-                const keyboardHeight = viewport ? Math.max(0, layoutHeight - viewportHeight - viewportTop) : 0;
+                const visualBottom = viewport ? viewport.height + viewport.offsetTop : layoutHeight;
+                const keyboardHeight = viewport ? Math.max(0, layoutHeight - visualBottom) : 0;
                 const keyboardLikelyOpen = document.activeElement === input && (
                     viewport ? (layoutHeight - viewportHeight > 40 || keyboardHeight > 40) : false
                 );
 
                 if (keyboardLikelyOpen) {
                     const rect = shell.getBoundingClientRect();
+                    const left = Math.max(0, rect.left);
+                    const width = Math.min(rect.width || window.innerWidth, window.innerWidth - left);
                     shell.style.position = 'fixed';
-                    shell.style.left = `${Math.max(0, rect.left)}px`;
+                    shell.style.left = `${left}px`;
                     shell.style.top = `${viewportTop}px`;
-                    shell.style.width = `${rect.width}px`;
+                    shell.style.width = `${width}px`;
                     shell.style.height = `${viewportHeight - 1}px`;
                     shell.style.maxHeight = `${viewportHeight - 1}px`;
                     shell.style.zIndex = '80';
-                    composer.style.position = 'sticky';
-                    composer.style.bottom = '0';
+                    composer.style.position = 'fixed';
+                    composer.style.left = `${left}px`;
+                    composer.style.width = `${width}px`;
+                    composer.style.bottom = `${keyboardHeight}px`;
                     composer.style.paddingBottom = 'calc(0.75rem + env(safe-area-inset-bottom))';
-                    composer.style.zIndex = '5';
-                    messages.style.paddingBottom = `${composer.offsetHeight + keyboardHeight + 24}px`;
+                    composer.style.zIndex = '95';
+                    messages.style.paddingBottom = `${composer.offsetHeight + 18}px`;
                     if (pageContainer) pageContainer.style.overflowY = 'hidden';
                 } else {
                     resetTypingPosition();
@@ -2758,7 +2766,6 @@
 
                 requestAnimationFrame(() => {
                     messages.scrollTop = messages.scrollHeight;
-                    composer.scrollIntoView({ block: 'end', inline: 'nearest' });
                 });
             };
 
