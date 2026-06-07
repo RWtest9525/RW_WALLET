@@ -1,3 +1,33 @@
+const showRuntimeRecoveryScreen = (error) => {
+    try {
+        const root = document.getElementById('rw-wallet-root') || document.body;
+        const message = String(error?.message || error || 'App failed to load.');
+        root.innerHTML = `
+            <div style="min-height:100vh;display:flex;align-items:center;justify-content:center;background:#f3f4f6;padding:20px;font-family:Inter,Arial,sans-serif;color:#111827;">
+                <div style="width:100%;max-width:420px;background:#fff;border:1px solid #e5e7eb;border-radius:22px;padding:24px;box-shadow:0 20px 45px rgba(15,23,42,.12);text-align:center;">
+                    <div style="width:54px;height:54px;border-radius:18px;background:#fee2e2;color:#dc2626;display:flex;align-items:center;justify-content:center;margin:0 auto 14px;font-size:28px;font-weight:900;">!</div>
+                    <h1 style="font-size:22px;line-height:1.2;margin:0 0 8px;font-weight:900;">App loading problem</h1>
+                    <p style="font-size:14px;line-height:1.5;color:#4b5563;margin:0 0 16px;">Please refresh once. If it repeats, update your browser/app.</p>
+                    <p style="font-size:11px;line-height:1.4;color:#9ca3af;word-break:break-word;margin:0 0 16px;">${message.replace(/[<>&"']/g, '')}</p>
+                    <button onclick="location.reload()" style="width:100%;border:0;border-radius:14px;background:#2563eb;color:#fff;font-weight:900;padding:13px 16px;">Refresh App</button>
+                </div>
+            </div>`;
+    } catch (_) {
+        document.body.innerHTML = '<button onclick="location.reload()">Refresh App</button>';
+    }
+};
+
+window.addEventListener('error', (event) => {
+    if (!document.querySelector('#auth-screen:not(.hidden), #main-content:not(.hidden), #page-container:not(.hidden)')) {
+        showRuntimeRecoveryScreen(event.error || event.message);
+    }
+});
+window.addEventListener('unhandledrejection', (event) => {
+    if (!document.querySelector('#auth-screen:not(.hidden), #main-content:not(.hidden), #page-container:not(.hidden)')) {
+        showRuntimeRecoveryScreen(event.reason);
+    }
+});
+
 document.addEventListener('DOMContentLoaded', () => {
             const ADMIN_UID = 'mOs5Fmp4RoRzeBDH4pZLMOpQx7Q2';
             const lastUser = localStorage.getItem('lastLoggedInUser');
@@ -120,4 +150,12 @@ document.addEventListener('DOMContentLoaded', () => {
                 document.getElementById('auth-screen').classList.remove('hidden');
                 document.getElementById('main-content').classList.add('hidden');
             }
+            setTimeout(() => {
+                const authVisible = !!document.querySelector('#auth-screen:not(.hidden)');
+                const mainVisible = !!document.querySelector('#main-content:not(.hidden)');
+                const pageVisible = !!document.querySelector('#page-container:not(.hidden)');
+                if (!authVisible && !mainVisible && !pageVisible) {
+                    showRuntimeRecoveryScreen('No visible app screen after startup.');
+                }
+            }, 4000);
         });

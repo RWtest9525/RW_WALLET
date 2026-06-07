@@ -2632,36 +2632,47 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                 .filter(task => (task.status || 'active') === 'active')
                 .sort((a, b) => timestampToMillis(b.createdAt) - timestampToMillis(a.createdAt));
             if (!activeTasks.length) {
-                container.innerHTML = '<p class="rounded-xl border border-dashed border-gray-200 dark:border-gray-700 p-4 text-center text-sm text-gray-500 dark:text-gray-400">No active task right now.</p>';
+                container.innerHTML = '<p class="rounded-2xl border border-dashed border-gray-200 dark:border-gray-700 p-6 text-center text-sm font-bold text-gray-500 dark:text-gray-400">No live missions right now.</p>';
                 return;
             }
-            const groups = activeTasks.reduce((acc, task) => {
-                const category = task.category || 'Other';
-                if (!acc[category]) acc[category] = [];
-                acc[category].push(task);
-                return acc;
-            }, {});
-            container.innerHTML = Object.entries(groups).map(([category, tasks]) => `
-                <div class="space-y-2">
-                    <div class="flex items-center justify-between">
-                        <h4 class="text-sm font-black text-gray-700 dark:text-gray-200">${escapeHtml(category)}</h4>
-                        <span class="text-[11px] font-bold text-gray-400">${tasks.length} task${tasks.length === 1 ? '' : 's'}</span>
-                    </div>
-                    <div class="grid grid-cols-1 gap-2">
-                        ${tasks.map(task => `
-                            <button data-action="open-user-task" data-taskid="${task.id}" class="w-full rounded-2xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900/30 p-3 text-left shadow-sm hover:border-blue-300 hover:bg-blue-50 dark:hover:bg-blue-900/20 transition">
-                                <div class="flex items-start justify-between gap-3">
-                                    <div class="min-w-0">
-                                        <p class="truncate text-sm font-black text-gray-900 dark:text-white">${escapeHtml(task.title || 'Task')}</p>
-                                        <p class="mt-1 line-clamp-1 text-xs text-gray-500 dark:text-gray-400">${escapeHtml(task.instructions || 'Tap to view task details.')}</p>
-                                    </div>
-                                    <span class="shrink-0 rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-black text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-200">${formatCurrency(task.rate || task.reward || 0)}</span>
-                                </div>
-                            </button>
-                        `).join('')}
-                    </div>
+            container.innerHTML = `
+                <div class="mb-3 flex items-center justify-between px-1">
+                    <p class="text-[10px] font-black uppercase tracking-[0.22em] text-slate-500 dark:text-slate-300">Live Missions</p>
+                    <span class="text-[11px] font-bold text-gray-400">${activeTasks.length} available</span>
                 </div>
-            `).join('');
+                <label class="mb-3 flex items-center gap-3 rounded-2xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-4 py-3 shadow-sm">
+                    <svg class="h-4 w-4 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="m21 21-4.35-4.35M10 18a8 8 0 1 1 0-16 8 8 0 0 1 0 16z"></path></svg>
+                    <input id="user-task-search" type="search" placeholder="Search app tasks..." class="min-w-0 flex-1 bg-transparent text-sm font-semibold outline-none placeholder:text-slate-500">
+                </label>
+                <div id="user-task-results" class="space-y-3"></div>`;
+
+            const renderList = () => {
+                const term = (document.getElementById('user-task-search')?.value || '').trim().toLowerCase();
+                const filtered = activeTasks.filter(task => [task.title, task.category, task.instructions].some(value => String(value || '').toLowerCase().includes(term)));
+                const results = document.getElementById('user-task-results');
+                if (!results) return;
+                results.innerHTML = filtered.length ? filtered.map(task => {
+                    const image = task.imageUrl || task.logoUrl || task.iconUrl || 'https://cdn-icons-png.flaticon.com/512/3176/3176366.png';
+                    return `
+                        <button data-action="open-user-task" data-taskid="${task.id}" class="w-full rounded-2xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-4 text-left shadow-sm transition hover:border-slate-400 dark:hover:border-slate-500">
+                            <div class="flex items-center gap-3">
+                                <span class="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-full border border-gray-200 bg-gray-50 dark:border-gray-700 dark:bg-gray-900">
+                                    <img src="${escapeHtml(image)}" alt="${escapeHtml(task.title || 'Task')}" class="h-full w-full object-cover" onerror="this.src='https://cdn-icons-png.flaticon.com/512/3176/3176366.png'">
+                                </span>
+                                <span class="min-w-0 flex-1">
+                                    <span class="block truncate text-sm font-black text-slate-950 dark:text-white">${escapeHtml(task.title || 'Task')}</span>
+                                    <span class="mt-1 inline-flex rounded bg-slate-100 px-1.5 py-0.5 text-[9px] font-black uppercase text-slate-600 dark:bg-slate-700 dark:text-slate-200">Instant</span>
+                                </span>
+                                <span class="text-right">
+                                    <span class="block text-[8px] font-black uppercase text-slate-400">Reward</span>
+                                    <span class="block text-lg font-black text-slate-950 dark:text-white">${formatCurrency(task.rate || task.reward || 0).replace('.00', '')}</span>
+                                </span>
+                            </div>
+                        </button>`;
+                }).join('') : '<p class="rounded-2xl border border-dashed border-gray-200 dark:border-gray-700 p-5 text-center text-sm font-bold text-gray-500">No matching mission found.</p>';
+            };
+            renderList();
+            document.getElementById('user-task-search')?.addEventListener('input', renderList);
         };
 
         const initializePublicHomeRealtime = () => {
@@ -3246,20 +3257,12 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             if (!currentUser) return showNotification('Please login first.', true);
             currentMainSection = 'task';
             const content = `
-                <header class="mb-4 p-4 bg-white dark:bg-gray-800 shadow-md page-header-fixed">
-                    <h2 class="text-xl font-bold">Task</h2>
+                <header class="mb-4 flex items-center gap-3 bg-white dark:bg-gray-800 px-4 py-3 shadow-sm page-header-fixed">
+                    <h2 class="text-base font-black uppercase tracking-tight text-slate-950 dark:text-white">Task</h2>
                 </header>
                 <div class="p-3 sm:p-4 pt-0 pb-28">
-                    <div class="mx-auto max-w-4xl space-y-5">
-                        <section id="home-ads-section" class="space-y-3">
-                            <div id="home-ads-carousel" class="relative overflow-hidden rounded-2xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 shadow-md"></div>
-                            <div id="home-ads-dots" class="flex items-center justify-center gap-1.5"></div>
-                        </section>
-                        <section id="home-tasks-section" class="rounded-2xl border border-gray-100 dark:border-gray-700 bg-white dark:bg-gray-800 p-4 shadow-md">
-                            <div class="mb-3 flex items-center justify-between gap-3">
-                                <h3 class="text-lg font-semibold">Tasks</h3>
-                                <span class="text-xs font-bold text-gray-400">Category wise</span>
-                            </div>
+                    <div class="mx-auto max-w-3xl">
+                        <section id="home-tasks-section">
                             <div id="home-task-category-list" class="space-y-4"></div>
                         </section>
                     </div>
@@ -3267,9 +3270,129 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                 ${getPageFooter()}`;
             showPage(content, { returnTo: currentUser?.uid === ADMIN_UID ? 'admin' : 'home', keepBottomNav: true });
             setBottomNavActive('bottom-task-btn');
-            renderHomeAdsCarousel();
             renderHomeTaskCategories();
             initializePublicHomeRealtime();
+        };
+
+        const showUserTaskDetailsPage = (taskId) => {
+            const task = allTasksCache.find(item => item.id === taskId);
+            if (!task) return showNotification('Task not found. Please refresh tasks.', true);
+            const reward = task.rate || task.reward || 0;
+            const taskTitle = task.title || 'Task Mission';
+            const appName = task.appName || taskTitle;
+            const reviewText = task.reviewText || task.copyText || task.instructions || 'good app';
+            const taskLink = task.taskLink || task.link || task.url || '';
+            const image = task.imageUrl || task.logoUrl || task.iconUrl || 'https://cdn-icons-png.flaticon.com/512/3176/3176366.png';
+            const content = `
+                <header class="mb-4 flex items-center justify-between bg-white dark:bg-gray-800 px-4 py-3 shadow-sm page-header-fixed">
+                    <div class="flex items-center gap-3">
+                        <button class="page-back-btn rounded-full p-2 text-slate-900 dark:text-white">
+                            <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 12H5m7 7-7-7 7-7"></path></svg>
+                        </button>
+                        <h2 class="text-base font-black uppercase text-slate-950 dark:text-white">Task Mission</h2>
+                    </div>
+                    <span class="h-9 w-9 overflow-hidden rounded-full bg-slate-100 dark:bg-slate-700">
+                        <img src="${escapeHtml(image)}" alt="${escapeHtml(appName)}" class="h-full w-full object-cover" onerror="this.src='https://cdn-icons-png.flaticon.com/512/3176/3176366.png'">
+                    </span>
+                </header>
+                <div class="px-5 pb-28">
+                    <div class="mx-auto max-w-xl space-y-5">
+                        <section class="rounded-2xl border border-slate-200 bg-slate-50 p-4 shadow-lg dark:border-slate-700 dark:bg-slate-900">
+                            <div class="flex items-center gap-3">
+                                <span class="flex h-10 w-10 items-center justify-center rounded-full bg-slate-200 text-slate-700 dark:bg-slate-700 dark:text-white">
+                                    <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 2m6-2A9 9 0 1 1 3 12a9 9 0 0 1 18 0z"></path></svg>
+                                </span>
+                                <div>
+                                    <p class="text-[10px] font-black uppercase tracking-[0.26em] text-slate-400">Session Timer</p>
+                                    <p id="task-session-timer" class="text-lg font-black text-slate-950 dark:text-white">4:40</p>
+                                </div>
+                            </div>
+                        </section>
+                        <section class="overflow-hidden rounded-[1.75rem] border-t-4 border-slate-950 bg-white shadow-xl dark:border-white dark:bg-gray-800">
+                            <div class="flex items-start justify-between bg-slate-50 p-5 dark:bg-slate-900">
+                                <div>
+                                    <p class="text-[10px] font-black uppercase tracking-widest text-slate-950 dark:text-white">${escapeHtml(task.category || 'Active App Review')}</p>
+                                    <h3 class="mt-2 text-lg font-black text-slate-950 dark:text-white">${escapeHtml(appName)}</h3>
+                                    <span class="mt-1 inline-flex rounded bg-white px-2 py-0.5 text-[9px] font-black uppercase text-slate-600 shadow-sm dark:bg-slate-700 dark:text-white">Instant</span>
+                                </div>
+                                <div class="rounded-2xl bg-slate-950 px-5 py-3 text-center text-white shadow-lg">
+                                    <p class="text-[8px] font-black uppercase text-white/60">Reward</p>
+                                    <p class="text-xl font-black">${formatCurrency(reward).replace('.00', '')}</p>
+                                </div>
+                            </div>
+                            <div class="space-y-5 p-5">
+                                <div>
+                                    <p class="mb-2 text-[10px] font-black uppercase tracking-widest text-slate-500"><span class="mr-2 rounded-full bg-slate-100 px-2 py-1">1</span> Get App</p>
+                                    <button id="task-download-btn" class="flex w-full items-center justify-center gap-2 rounded-xl border border-slate-300 bg-white px-4 py-3 text-xs font-black uppercase tracking-wide text-slate-950 shadow-sm dark:border-slate-600 dark:bg-slate-900 dark:text-white">
+                                        <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-4m-1-9h-6m6 0v6m0-6L10 12"></path></svg>
+                                        Download Application
+                                    </button>
+                                </div>
+                                <div>
+                                    <p class="mb-2 text-[10px] font-black uppercase tracking-widest text-slate-500"><span class="mr-2 rounded-full bg-slate-100 px-2 py-1">2</span> Copy & Review</p>
+                                    <div class="rounded-2xl border border-dashed border-slate-200 bg-slate-50 p-4 text-center dark:border-slate-700 dark:bg-slate-900">
+                                        <p class="mb-4 text-sm font-bold italic text-slate-950 dark:text-white">"${escapeHtml(reviewText)}"</p>
+                                        <button id="task-copy-review-btn" class="flex w-full items-center justify-center gap-2 rounded-xl bg-slate-950 px-4 py-3 text-xs font-black uppercase tracking-wide text-white">
+                                            <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16h8M8 12h8m-7 8h6a2 2 0 0 0 2-2V7l-5-5H9a2 2 0 0 0-2 2v16z"></path></svg>
+                                            Copy Review
+                                        </button>
+                                    </div>
+                                </div>
+                                <div>
+                                    <p class="mb-2 text-[10px] font-black uppercase tracking-widest text-slate-500"><span class="mr-2 rounded-full bg-slate-100 px-2 py-1">3</span> Upload Proof</p>
+                                    <label class="flex min-h-32 cursor-pointer flex-col items-center justify-center rounded-2xl border border-dashed border-slate-200 bg-white p-5 text-center dark:border-slate-700 dark:bg-slate-900">
+                                        <input id="task-proof-input" type="file" accept="image/*" class="hidden">
+                                        <svg class="h-6 w-6 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 16V4m0 0-4 4m4-4 4 4M4 16v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"></path></svg>
+                                        <span id="task-proof-label" class="mt-2 text-[10px] font-black uppercase text-slate-600 dark:text-slate-200">Select Screenshot</span>
+                                        <span class="text-[10px] text-slate-400">Duplicate screenshots will be detected</span>
+                                    </label>
+                                </div>
+                                <button id="task-submit-mission-btn" class="flex w-full items-center justify-center gap-2 rounded-xl bg-slate-950 px-4 py-4 text-sm font-black uppercase tracking-wide text-white disabled:bg-slate-400" disabled>Submit Mission</button>
+                            </div>
+                        </section>
+                    </div>
+                </div>
+                ${getPageFooter()}`;
+            showPage(content, { returnTo: 'task', keepBottomNav: true, onBack: showUserTaskPage });
+            setBottomNavActive('bottom-task-btn');
+            const downloadBtn = document.getElementById('task-download-btn');
+            downloadBtn.onclick = () => taskLink ? window.open(taskLink, '_blank', 'noopener') : showNotification('Task link is not added yet.', true);
+            document.getElementById('task-copy-review-btn').onclick = async () => {
+                try {
+                    await navigator.clipboard.writeText(reviewText);
+                    showNotification('Review copied.');
+                } catch {
+                    showNotification('Copy failed. Please copy manually.', true);
+                }
+            };
+            document.getElementById('task-proof-input').onchange = (event) => {
+                const file = event.target.files?.[0];
+                document.getElementById('task-proof-label').textContent = file ? file.name : 'Select Screenshot';
+                document.getElementById('task-submit-mission-btn').disabled = !file;
+            };
+            document.getElementById('task-submit-mission-btn').onclick = async () => {
+                const file = document.getElementById('task-proof-input')?.files?.[0];
+                if (!file) return showNotification('Please select screenshot proof first.', true);
+                try {
+                    await addDoc(collection(db, `artifacts/${appId}/public/data/task_submissions`), {
+                        taskId: task.id,
+                        taskTitle,
+                        userId: currentUser.uid,
+                        userName: currentUserData?.name || currentUser.email || 'User',
+                        userMobile: currentUserData?.mobile || '',
+                        reward: Number(reward || 0),
+                        proofFileName: file.name,
+                        proofFileSize: file.size,
+                        status: 'pending',
+                        submittedAt: serverTimestamp()
+                    });
+                    showNotification('Mission submitted for admin review.');
+                    showUserTaskPage();
+                } catch (error) {
+                    console.error('Task submission failed:', error);
+                    showNotification('Could not submit mission. Please contact admin.', true);
+                }
+            };
         };
 
         const showAdminTaskPage = () => {
@@ -6571,8 +6694,17 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                 </div>`;
         };
 
-        const showLoanPage = () => {
+        const showLoanPage = async () => {
             if (!currentUser || !currentUserData) return showNotification('User data not loaded. Please wait.', true);
+            try {
+                const freshUserSnap = await getDoc(doc(db, `artifacts/${appId}/public/data/users`, currentUser.uid));
+                if (freshUserSnap.exists()) {
+                    currentUserData = { ...currentUserData, ...freshUserSnap.data(), id: currentUser.uid, uid: currentUser.uid };
+                    writeCache(getUserCacheKey(currentUser.uid), currentUserData);
+                }
+            } catch (error) {
+                console.warn('Fresh loan user check skipped:', error);
+            }
 
             if (currentUserData.loanEligible || getLoanLimitAmount(currentUserData) > 0) {
                 showTakeLoanPage();
@@ -6653,9 +6785,9 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                     </div>
                     <input type="number" id="loan-amount-input" min="1" max="${maxLoanAmount}" placeholder="Enter amount up to ${formatCurrency(maxLoanAmount)}" class="w-full px-4 py-3 bg-gray-100 dark:bg-gray-700 rounded-lg">
                     <div id="loan-summary" class="bg-indigo-50 dark:bg-indigo-900/20 border border-indigo-100 dark:border-indigo-800 rounded-xl p-4 space-y-2 text-sm"></div>
-                    <label class="flex gap-3 rounded-xl border border-gray-200 dark:border-gray-700 p-3 text-sm">
-                        <input type="checkbox" id="loan-agreement-checkbox" class="mt-1">
-                        <span>I agree to the <button id="loan-agreement-link" type="button" class="text-indigo-600 dark:text-indigo-300 font-semibold underline">loan agreement and security terms</button>. I understand wallet funds can be reserved for repayment and missed repayment can block my account.</span>
+                    <label class="flex items-center gap-3 rounded-xl border border-gray-200 dark:border-gray-700 p-4 text-sm">
+                        <input type="checkbox" id="loan-agreement-checkbox" class="h-5 w-5">
+                        <span>I agree to the <button id="loan-agreement-link" type="button" class="text-indigo-600 dark:text-indigo-300 font-black underline">loan agreement</button>.</span>
                     </label>
                     <button id="confirm-take-loan-btn" class="w-full bg-indigo-600 text-white font-semibold py-3 rounded-lg hover:bg-indigo-700 transition">Take Loan</button>
                 </div>
@@ -8295,6 +8427,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
         };
 
         const handleTakeLoan = async () => {
+            if (!currentUser || !currentUserData) return showNotification('User data not loaded. Please wait and try again.', true);
             const amount = parseFloat(document.getElementById('loan-amount-input').value);
             const maxLoanAmount = Math.max(1, getLoanLimitAmount(currentUserData));
             if (isNaN(amount) || amount < 1 || amount > maxLoanAmount) {
@@ -8355,7 +8488,10 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                 hidePage();
             } catch (e) {
                 console.error('Take loan failed:', e);
-                showNotification(`Error: ${e.message}`, true);
+                const message = /permission|insufficient/i.test(e.message || '')
+                    ? 'Loan credit could not be completed for this account. Please contact admin to refresh your loan approval.'
+                    : (e.message || 'Could not take loan. Please try again.');
+                showNotification(message, true);
             }
         };
 
@@ -10741,15 +10877,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                     break;
 
                 case 'open-user-task': {
-                    const task = allTasksCache.find(item => item.id === taskid);
-                    renderModal('Task Details',
-                        `<div class="space-y-3 text-sm">
-                            <p class="font-black text-gray-900 dark:text-white">${escapeHtml(task?.title || 'Task')}</p>
-                            <p class="text-gray-500 dark:text-gray-400">${escapeHtml(task?.instructions || 'Task interior/details will be added later.')}</p>
-                            <p class="rounded-xl bg-emerald-50 dark:bg-emerald-900/20 p-3 font-black text-emerald-700 dark:text-emerald-200">Rate: ${formatCurrency(task?.rate || task?.reward || 0)}</p>
-                        </div>`,
-                        `<button onclick="window.closeModal()" class="px-4 py-2 text-sm bg-blue-600 text-white rounded-lg">Close</button>`,
-                        'max-w-md');
+                    showUserTaskDetailsPage(taskid);
                     break;
                 }
             }
