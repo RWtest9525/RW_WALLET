@@ -1396,7 +1396,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             if (!shell || !composer || !input || !messages) return null;
             try {
                 if ('virtualKeyboard' in navigator) {
-                    navigator.virtualKeyboard.overlaysContent = true;
+                    navigator.virtualKeyboard.overlaysContent = false;
                 }
             } catch (error) {
                 console.warn('Virtual keyboard overlay setup skipped:', error);
@@ -1410,6 +1410,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                 shell.style.height = '';
                 shell.style.maxHeight = '';
                 shell.style.zIndex = '';
+                shell.style.transform = '';
                 composer.style.position = '';
                 composer.style.left = '';
                 composer.style.width = '';
@@ -1435,33 +1436,27 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                 const inputFocused = document.activeElement === input;
 
                 if (inputFocused) {
-                    const rect = shell.getBoundingClientRect();
-                    const left = Math.max(0, rect.left);
-                    const width = Math.min(rect.width || window.innerWidth, window.innerWidth - left);
-                    const floatingBottom = keyboardHeight > 20
-                        ? keyboardHeight
-                        : Math.max(0, layoutHeight - visualBottom);
+                    const width = Math.min(window.innerWidth || 0, 576);
+                    const left = Math.max(0, ((window.innerWidth || width) - width) / 2);
+                    const lockedHeight = Math.max(240, viewportHeight - 1);
                     shell.style.position = 'fixed';
                     shell.style.left = `${left}px`;
                     shell.style.top = `${viewportTop}px`;
                     shell.style.width = `${width}px`;
-                    shell.style.height = `${viewportHeight - 1}px`;
-                    shell.style.maxHeight = `${viewportHeight - 1}px`;
+                    shell.style.height = `${lockedHeight}px`;
+                    shell.style.maxHeight = `${lockedHeight}px`;
                     shell.style.zIndex = '80';
-                    composer.style.position = 'fixed';
-                    composer.style.left = `${left}px`;
-                    composer.style.width = `${width}px`;
                     const composerHeight = composer.offsetHeight || 64;
-                    const topFromViewport = Math.max(viewportTop, viewportTop + viewportHeight - composerHeight - 2);
-                    composer.style.top = keyboardHeight > 20 ? 'auto' : `${topFromViewport}px`;
-                    composer.style.bottom = keyboardHeight > 20
-                        ? `${floatingBottom}px`
-                        : 'max(env(safe-area-inset-bottom), env(keyboard-inset-height, 0px))';
-                    composer.style.paddingBottom = 'calc(0.75rem + env(safe-area-inset-bottom))';
-                    composer.style.zIndex = '95';
-                    composer.style.boxShadow = '0 -10px 30px rgba(15, 23, 42, 0.16)';
+                    composer.style.position = '';
+                    composer.style.left = '';
+                    composer.style.width = '';
+                    composer.style.top = '';
+                    composer.style.bottom = '';
+                    composer.style.paddingBottom = keyboardHeight > 20 ? '0.75rem' : 'calc(0.75rem + env(safe-area-inset-bottom))';
+                    composer.style.zIndex = '';
+                    composer.style.boxShadow = '';
                     composer.style.transform = 'translateZ(0)';
-                    messages.style.paddingBottom = `${composerHeight + 18}px`;
+                    messages.style.paddingBottom = keyboardHeight > 20 ? `${composerHeight + 10}px` : '';
                     if (pageContainer) pageContainer.style.overflowY = 'hidden';
                 } else {
                     resetTypingPosition();

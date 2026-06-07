@@ -74,6 +74,17 @@ html,
             background-color: rgb(17 24 39);
         }
 
+        #support-chat-shell,
+        #revy-chat-shell {
+            overflow: hidden;
+            overscroll-behavior: none;
+        }
+
+        #support-chat-composer,
+        #revy-chat-composer {
+            contain: layout paint;
+        }
+
         /* Fixed Header for Pages */
         .page-header-fixed {
             position: sticky;
