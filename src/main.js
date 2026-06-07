@@ -1446,7 +1446,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                     return keyboardHeight;
                 }
                 const isTouchPhone = window.matchMedia?.('(pointer: coarse) and (max-width: 768px)')?.matches;
-                if (isTouchPhone && (Date.now() - focusStartedAt < 1200 || composer.classList.contains('chat-composer-floating'))) {
+                if (isTouchPhone && Date.now() - focusStartedAt < 1400) {
                     return lastKnownKeyboardHeight || Math.round(layoutHeight * 0.43);
                 }
                 return lastKnownKeyboardHeight || 0;
@@ -1491,16 +1491,22 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                 });
             };
 
-            const delayedKeepTypingVisible = () => {
+            const scheduleKeepTypingVisible = () => {
                 if (!focusStartedAt) focusStartedAt = Date.now();
                 keepTypingVisible();
                 setTimeout(keepTypingVisible, 120);
                 setTimeout(keepTypingVisible, 320);
+                setTimeout(keepTypingVisible, 900);
+                setTimeout(keepTypingVisible, 1500);
+            };
+            const refreshTypingVisible = () => {
+                focusStartedAt = Date.now();
+                scheduleKeepTypingVisible();
             };
             const handleFocus = () => {
                 focusStartedAt = Date.now();
                 lastKnownKeyboardHeight = 0;
-                delayedKeepTypingVisible();
+                scheduleKeepTypingVisible();
             };
             const handleBlur = () => {
                 focusStartedAt = 0;
@@ -1513,11 +1519,11 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                 resetTypingPosition();
             };
             const handleViewportChange = () => {
-                delayedKeepTypingVisible();
+                scheduleKeepTypingVisible();
             };
 
             input.addEventListener('focus', handleFocus);
-            input.addEventListener('input', delayedKeepTypingVisible);
+            input.addEventListener('input', refreshTypingVisible);
             input.addEventListener('blur', handleBlur);
             document.addEventListener('pointerdown', handlePointerDown, true);
             window.visualViewport?.addEventListener('resize', handleViewportChange);
@@ -1527,7 +1533,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
 
             return () => {
                 input.removeEventListener('focus', handleFocus);
-                input.removeEventListener('input', delayedKeepTypingVisible);
+                input.removeEventListener('input', refreshTypingVisible);
                 input.removeEventListener('blur', handleBlur);
                 document.removeEventListener('pointerdown', handlePointerDown, true);
                 window.visualViewport?.removeEventListener('resize', handleViewportChange);
@@ -2044,6 +2050,13 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
         // FIXED: Improved auth state change handler without freezing
         onAuthStateChanged(auth, async (user) => {
             console.log("Auth state changed, user:", user ? user.uid : 'null');
+            const pageContainerAtAuth = document.getElementById('page-container');
+            const shouldPreserveOpenPage = !!(
+                user &&
+                pageContainerAtAuth &&
+                !pageContainerAtAuth.classList.contains('hidden') &&
+                pageContainerAtAuth.innerHTML.trim()
+            );
 
             // Clean up previous listeners
             unsubscribers.forEach(unsub => unsub());
@@ -2063,12 +2076,14 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             currentUserData = null;
             unifiedHistoryCache = [];
             transactionHistoryPrefetch = { userId: '', promise: null, loadedAt: 0 };
-            if (activeChatUnsubscribe) {
+            if (activeChatUnsubscribe && !shouldPreserveOpenPage) {
                 activeChatUnsubscribe();
                 activeChatUnsubscribe = null;
             }
-            activeSupportRoomId = '';
-            activeSupportMessages = [];
+            if (!shouldPreserveOpenPage) {
+                activeSupportRoomId = '';
+                activeSupportMessages = [];
+            }
             supportChatUnreadCount = 0;
             adminChatUnreadCount = 0;
             supportChatPreloadUserId = '';
@@ -2140,18 +2155,25 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                 preloadNotificationsForUser(user.uid).catch(e => console.warn('Initial notification preload skipped:', e));
                 startNotificationAutoRefresh(user.uid);
                 applyAdminBottomChrome(isAdmin);
-                currentMainSection = 'home';
-                switchTab('user-panel');
-                setBottomNavActive('bottom-home-btn');
-                setMainChrome(true);
+                if (!shouldPreserveOpenPage) {
+                    currentMainSection = 'home';
+                    switchTab('user-panel');
+                    setBottomNavActive('bottom-home-btn');
+                    setMainChrome(true);
+                }
 
                 // Show main content after admin/user chrome is already ready.
                 document.getElementById('auth-screen').classList.add('hidden');
                 document.getElementById('main-content').classList.remove('hidden');
-                document.getElementById('dashboard-content').classList.remove('hidden');
-                document.getElementById('page-container').classList.add('hidden');
-                document.getElementById('page-container').innerHTML = '';
-                document.getElementById('page-container').style.overflowY = 'auto';
+                if (shouldPreserveOpenPage) {
+                    document.getElementById('dashboard-content').classList.add('hidden');
+                    document.getElementById('page-container').classList.remove('hidden');
+                } else {
+                    document.getElementById('dashboard-content').classList.remove('hidden');
+                    document.getElementById('page-container').classList.add('hidden');
+                    document.getElementById('page-container').innerHTML = '';
+                    document.getElementById('page-container').style.overflowY = 'auto';
+                }
                 document.getElementById('app-footer')?.classList.add('app-footer-hidden');
 
                 // Initialize user listeners (non-blocking)
