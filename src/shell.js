@@ -459,7 +459,7 @@ root.outerHTML = String.raw`
                         <span class="bottom-nav-icon flex h-9 w-9 items-center justify-center rounded-xl bg-gray-100 dark:bg-gray-700 transition">
                             <img src="https://cdn-icons-png.flaticon.com/512/3176/3176366.png" alt="Task" class="bottom-nav-img" loading="eager" fetchpriority="high" decoding="async">
                         </span>
-                        <span>Manage Task</span>
+                        <span>Task</span>
                     </button>
                     <button id="bottom-help-btn" class="bottom-nav-btn flex flex-col items-center gap-1 py-1">
                         <span class="bottom-nav-icon relative flex h-9 w-9 items-center justify-center rounded-xl bg-gray-100 dark:bg-gray-700 transition">
@@ -509,10 +509,10 @@ root.outerHTML = String.raw`
     </div>
 
     <!-- Audio elements for sound effects -->
-    <audio id="success-sound" preload="auto">
+    <audio id="success-sound" preload="none">
         <source src="https://assets.mixkit.co/sfx/preview/mixkit-correct-answer-tone-2870.mp3" type="audio/mpeg">
     </audio>
-    <audio id="error-sound" preload="auto">
+    <audio id="error-sound" preload="none">
         <source src="https://assets.mixkit.co/sfx/preview/mixkit-wrong-answer-fail-notification-946.mp3"
             type="audio/mpeg">
     </audio>
