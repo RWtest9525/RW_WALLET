@@ -5431,21 +5431,14 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
         };
 
         const notifyWithdrawalStatus = ({ userId, status, amount, txnId, requestId, rejectionReason = '', processedAt = Date.now() }) => {
-            const isCompleted = status === 'completed';
-            const title = isCompleted ? 'Withdrawal Successful' : 'Withdrawal Rejected';
-            const message = isCompleted
-                ? [
-                    `Your withdrawal of ${formatCurrency(amount)} has been successful.`,
-                    `Transaction ID: ${txnId || 'N/A'}`,
-                    `Request ID: ${requestId || 'N/A'}`,
-                    `Completed on: ${formatDateDDMMYY(processedAt)}`
-                ].join('\n')
-                : [
-                    `Your withdrawal of ${formatCurrency(amount)} was rejected.`,
-                    `Reason: ${rejectionReason || 'Not specified'}`,
-                    `Request ID: ${requestId || 'N/A'}`,
-                    `Updated on: ${formatDateDDMMYY(processedAt)}`
-                ].join('\n');
+            if (status === 'completed') return;
+            const title = 'Withdrawal Rejected';
+            const message = [
+                `Your withdrawal of ${formatCurrency(amount)} was rejected.`,
+                `Reason: ${rejectionReason || 'Not specified'}`,
+                `Request ID: ${requestId || 'N/A'}`,
+                `Updated on: ${formatDateDDMMYY(processedAt)}`
+            ].join('\n');
             sendSystemNotificationToUser({ userId, title, message });
         };
 
