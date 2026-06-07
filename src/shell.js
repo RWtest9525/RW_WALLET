@@ -225,17 +225,6 @@ root.outerHTML = String.raw`
                                     <p id="user-balance" class="text-4xl font-bold mt-4 tracking-tight">₹0.00</p>
                                 </div>
                             </div>
-                            <section id="home-ads-section" class="space-y-3">
-                                <div id="home-ads-carousel" class="relative overflow-hidden rounded-2xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 shadow-md"></div>
-                                <div id="home-ads-dots" class="flex items-center justify-center gap-1.5"></div>
-                            </section>
-                            <section id="home-tasks-section" class="rounded-2xl border border-gray-100 dark:border-gray-700 bg-white dark:bg-gray-800 p-4 shadow-md">
-                                <div class="mb-3 flex items-center justify-between gap-3">
-                                    <h3 class="text-lg font-semibold">Tasks</h3>
-                                    <span class="text-xs font-bold text-gray-400">Category wise</span>
-                                </div>
-                                <div id="home-task-category-list" class="space-y-4"></div>
-                            </section>
                             <div class="bg-white dark:bg-gray-800 p-5 rounded-2xl shadow-md border border-gray-100 dark:border-gray-700">
                                 <h3 class="text-lg font-semibold mb-4">Actions</h3>
                                 <div class="grid grid-cols-3 gap-2 sm:gap-3">

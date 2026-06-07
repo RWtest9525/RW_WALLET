@@ -1327,12 +1327,12 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
         const applyAdminBottomChrome = (isAdmin) => {
             document.getElementById('admin-tab-button')?.classList.toggle('hidden', !isAdmin);
             document.getElementById('bottom-admin-btn')?.classList.toggle('hidden', !isAdmin);
-            document.getElementById('bottom-task-btn')?.classList.toggle('hidden', !isAdmin);
+            document.getElementById('bottom-task-btn')?.classList.remove('hidden');
             const bottomHomeLabel = document.getElementById('bottom-home-label');
             if (bottomHomeLabel) bottomHomeLabel.textContent = isAdmin ? 'Wallet' : 'Home';
             const bottomGrid = document.getElementById('bottom-nav-grid');
             if (bottomGrid) {
-                bottomGrid.className = `mx-auto grid max-w-xl ${isAdmin ? 'grid-cols-6' : 'grid-cols-4'} items-center px-2 pt-2 text-[10px] sm:text-xs font-semibold text-gray-500 dark:text-gray-400`;
+                bottomGrid.className = `mx-auto grid max-w-xl ${isAdmin ? 'grid-cols-6' : 'grid-cols-5'} items-center px-2 pt-2 text-[10px] sm:text-xs font-semibold text-gray-500 dark:text-gray-400`;
             }
         };
 
@@ -2540,7 +2540,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                 const youtubeUrl = getYoutubeEmbedUrl(mediaUrl);
                 const isYoutube = getAdType(ad) === 'youtube' && youtubeUrl;
                 carousel.innerHTML = `
-                    <div class="relative aspect-[16/8.5] w-full overflow-hidden rounded-2xl border-2 border-white dark:border-gray-800 bg-gray-950 shadow-[0_18px_40px_rgba(15,23,42,0.18)]">
+                    <div class="relative mx-auto aspect-[16/7] w-full max-w-2xl overflow-hidden rounded-2xl border-2 border-white dark:border-gray-800 bg-gray-950 shadow-[0_18px_40px_rgba(15,23,42,0.18)]">
                         ${isYoutube ? `
                             <iframe src="${youtubeUrl}" title="${escapeHtml(ad.title || 'Advertisement')}" class="absolute inset-0 h-full w-full" allow="autoplay; encrypted-media; picture-in-picture" allowfullscreen></iframe>
                         ` : `
@@ -3163,8 +3163,6 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             currentMainSection = 'home';
             switchTab('user-panel');
             setBottomNavActive('bottom-home-btn');
-            renderHomeAdsCarousel();
-            renderHomeTaskCategories();
         };
 
         const showAdminMainPage = () => {
@@ -3181,6 +3179,36 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             currentMainSection = 'admin';
             switchTab('admin-panel');
             setBottomNavActive('bottom-admin-btn');
+        };
+
+        const showUserTaskPage = () => {
+            if (!currentUser) return showNotification('Please login first.', true);
+            currentMainSection = 'task';
+            const content = `
+                <header class="mb-4 p-4 bg-white dark:bg-gray-800 shadow-md page-header-fixed">
+                    <h2 class="text-xl font-bold">Task</h2>
+                </header>
+                <div class="p-3 sm:p-4 pt-0 pb-28">
+                    <div class="mx-auto max-w-4xl space-y-5">
+                        <section id="home-ads-section" class="space-y-3">
+                            <div id="home-ads-carousel" class="relative overflow-hidden rounded-2xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 shadow-md"></div>
+                            <div id="home-ads-dots" class="flex items-center justify-center gap-1.5"></div>
+                        </section>
+                        <section id="home-tasks-section" class="rounded-2xl border border-gray-100 dark:border-gray-700 bg-white dark:bg-gray-800 p-4 shadow-md">
+                            <div class="mb-3 flex items-center justify-between gap-3">
+                                <h3 class="text-lg font-semibold">Tasks</h3>
+                                <span class="text-xs font-bold text-gray-400">Category wise</span>
+                            </div>
+                            <div id="home-task-category-list" class="space-y-4"></div>
+                        </section>
+                    </div>
+                </div>
+                ${getPageFooter()}`;
+            showPage(content, { returnTo: currentUser?.uid === ADMIN_UID ? 'admin' : 'home', keepBottomNav: true });
+            setBottomNavActive('bottom-task-btn');
+            renderHomeAdsCarousel();
+            renderHomeTaskCategories();
+            initializePublicHomeRealtime();
         };
 
         const showAdminTaskPage = () => {
@@ -10704,7 +10732,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             showHomeMainPage();
         });
         document.getElementById('bottom-admin-btn').addEventListener('click', showAdminMainPage);
-        document.getElementById('bottom-task-btn').addEventListener('click', showAdminTaskPage);
+        document.getElementById('bottom-task-btn').addEventListener('click', showUserTaskPage);
         document.getElementById('bottom-transactions-btn').addEventListener('click', () => {
             showAllTransactionsPage();
             setBottomNavActive('bottom-transactions-btn');

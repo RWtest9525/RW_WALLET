@@ -14,6 +14,7 @@ document.addEventListener('DOMContentLoaded', () => {
             if (lastUser) {
                 document.getElementById('main-content').classList.remove('hidden');
                 document.getElementById('auth-screen').classList.add('hidden');
+                document.getElementById('bottom-task-btn')?.classList.remove('hidden');
                 if (lastUser === ADMIN_UID) {
                     document.getElementById('admin-tab-button')?.classList.remove('hidden');
                     document.getElementById('bottom-admin-btn')?.classList.remove('hidden');
