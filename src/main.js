@@ -1439,7 +1439,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
 
                 if (inputFocused) {
                     const isTouchPhone = window.matchMedia?.('(pointer: coarse) and (max-width: 768px)')?.matches;
-                    const fallbackKeyboardHeight = isTouchPhone && keyboardHeight < 80 ? Math.round(layoutHeight * 0.43) : 0;
+                    const fallbackKeyboardHeight = isTouchPhone && keyboardHeight < 80 && !composer.classList.contains('chat-composer-floating') ? Math.round(layoutHeight * 0.43) : 0;
                     const keyboardLift = Math.max(keyboardHeight, fallbackKeyboardHeight);
                     const width = Math.min(window.innerWidth || 0, 576);
                     const left = Math.max(0, ((window.innerWidth || width) - width) / 2);
@@ -1480,23 +1480,55 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                 setTimeout(keepTypingVisible, 320);
             };
             const handleBlur = () => setTimeout(resetTypingPosition, 180);
+            const handlePointerDown = (event) => {
+                if (event.target === input || composer.contains(event.target)) return;
+                input.blur();
+                resetTypingPosition();
+            };
+            const handleViewportChange = () => {
+                const viewport = window.visualViewport;
+                const layoutHeight = Math.max(window.innerHeight || 0, document.documentElement.clientHeight || 0);
+                const visualBottom = viewport ? viewport.height + viewport.offsetTop : layoutHeight;
+                const virtualKeyboardHeight = Number(navigator.virtualKeyboard?.boundingRect?.height || 0);
+                const viewportKeyboardHeight = viewport ? Math.max(0, layoutHeight - visualBottom) : 0;
+                const keyboardHeight = Math.max(virtualKeyboardHeight, viewportKeyboardHeight);
+                if (composer.classList.contains('chat-composer-floating') && keyboardHeight < 80) {
+                    setTimeout(() => {
+                        const latestViewport = window.visualViewport;
+                        const latestLayoutHeight = Math.max(window.innerHeight || 0, document.documentElement.clientHeight || 0);
+                        const latestVisualBottom = latestViewport ? latestViewport.height + latestViewport.offsetTop : latestLayoutHeight;
+                        const latestKeyboardHeight = Math.max(
+                            Number(navigator.virtualKeyboard?.boundingRect?.height || 0),
+                            latestViewport ? Math.max(0, latestLayoutHeight - latestVisualBottom) : 0
+                        );
+                        if (latestKeyboardHeight < 80) {
+                            input.blur();
+                            resetTypingPosition();
+                        }
+                    }, 180);
+                    return;
+                }
+                delayedKeepTypingVisible();
+            };
 
             input.addEventListener('focus', delayedKeepTypingVisible);
             input.addEventListener('input', delayedKeepTypingVisible);
             input.addEventListener('blur', handleBlur);
-            window.visualViewport?.addEventListener('resize', delayedKeepTypingVisible);
-            window.visualViewport?.addEventListener('scroll', delayedKeepTypingVisible);
-            navigator.virtualKeyboard?.addEventListener?.('geometrychange', delayedKeepTypingVisible);
-            window.addEventListener('orientationchange', delayedKeepTypingVisible);
+            document.addEventListener('pointerdown', handlePointerDown, true);
+            window.visualViewport?.addEventListener('resize', handleViewportChange);
+            window.visualViewport?.addEventListener('scroll', handleViewportChange);
+            navigator.virtualKeyboard?.addEventListener?.('geometrychange', handleViewportChange);
+            window.addEventListener('orientationchange', handleViewportChange);
 
             return () => {
                 input.removeEventListener('focus', delayedKeepTypingVisible);
                 input.removeEventListener('input', delayedKeepTypingVisible);
                 input.removeEventListener('blur', handleBlur);
-                window.visualViewport?.removeEventListener('resize', delayedKeepTypingVisible);
-                window.visualViewport?.removeEventListener('scroll', delayedKeepTypingVisible);
-                navigator.virtualKeyboard?.removeEventListener?.('geometrychange', delayedKeepTypingVisible);
-                window.removeEventListener('orientationchange', delayedKeepTypingVisible);
+                document.removeEventListener('pointerdown', handlePointerDown, true);
+                window.visualViewport?.removeEventListener('resize', handleViewportChange);
+                window.visualViewport?.removeEventListener('scroll', handleViewportChange);
+                navigator.virtualKeyboard?.removeEventListener?.('geometrychange', handleViewportChange);
+                window.removeEventListener('orientationchange', handleViewportChange);
                 resetTypingPosition();
             };
         };
