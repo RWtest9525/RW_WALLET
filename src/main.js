@@ -1396,7 +1396,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             if (!shell || !composer || !input || !messages) return null;
             try {
                 if ('virtualKeyboard' in navigator) {
-                    navigator.virtualKeyboard.overlaysContent = false;
+                    navigator.virtualKeyboard.overlaysContent = true;
                 }
             } catch (error) {
                 console.warn('Virtual keyboard overlay setup skipped:', error);
@@ -1411,6 +1411,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                 shell.style.maxHeight = '';
                 shell.style.zIndex = '';
                 shell.style.transform = '';
+                shell.classList.remove('chat-keyboard-active');
                 composer.style.position = '';
                 composer.style.left = '';
                 composer.style.width = '';
@@ -1420,6 +1421,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                 composer.style.zIndex = '';
                 composer.style.boxShadow = '';
                 composer.style.transform = '';
+                composer.classList.remove('chat-composer-floating');
                 messages.style.paddingBottom = '';
                 if (pageContainer) pageContainer.style.overflowY = 'hidden';
             };
@@ -1436,27 +1438,32 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                 const inputFocused = document.activeElement === input;
 
                 if (inputFocused) {
+                    const isTouchPhone = window.matchMedia?.('(pointer: coarse) and (max-width: 768px)')?.matches;
+                    const fallbackKeyboardHeight = isTouchPhone && keyboardHeight < 80 ? Math.round(layoutHeight * 0.43) : 0;
+                    const keyboardLift = Math.max(keyboardHeight, fallbackKeyboardHeight);
                     const width = Math.min(window.innerWidth || 0, 576);
                     const left = Math.max(0, ((window.innerWidth || width) - width) / 2);
-                    const lockedHeight = Math.max(240, viewportHeight - 1);
+                    const lockedHeight = Math.max(240, layoutHeight - 1);
                     shell.style.position = 'fixed';
                     shell.style.left = `${left}px`;
-                    shell.style.top = `${viewportTop}px`;
+                    shell.style.top = '0px';
                     shell.style.width = `${width}px`;
                     shell.style.height = `${lockedHeight}px`;
                     shell.style.maxHeight = `${lockedHeight}px`;
                     shell.style.zIndex = '80';
+                    shell.classList.add('chat-keyboard-active');
                     const composerHeight = composer.offsetHeight || 64;
-                    composer.style.position = '';
-                    composer.style.left = '';
-                    composer.style.width = '';
+                    composer.style.position = 'fixed';
+                    composer.style.left = `${left}px`;
+                    composer.style.width = `${width}px`;
                     composer.style.top = '';
-                    composer.style.bottom = '';
-                    composer.style.paddingBottom = keyboardHeight > 20 ? '0.75rem' : 'calc(0.75rem + env(safe-area-inset-bottom))';
-                    composer.style.zIndex = '';
-                    composer.style.boxShadow = '';
+                    composer.style.bottom = `${Math.max(0, keyboardLift)}px`;
+                    composer.style.paddingBottom = '0.75rem';
+                    composer.style.zIndex = '120';
+                    composer.style.boxShadow = '0 -10px 28px rgba(15, 23, 42, 0.14)';
                     composer.style.transform = 'translateZ(0)';
-                    messages.style.paddingBottom = keyboardHeight > 20 ? `${composerHeight + 10}px` : '';
+                    composer.classList.add('chat-composer-floating');
+                    messages.style.paddingBottom = `${composerHeight + keyboardLift + 16}px`;
                     if (pageContainer) pageContainer.style.overflowY = 'hidden';
                 } else {
                     resetTypingPosition();
