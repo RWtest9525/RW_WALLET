@@ -1394,6 +1394,13 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             const messages = document.getElementById(messagesId);
             const pageContainer = document.getElementById('page-container');
             if (!shell || !composer || !input || !messages) return null;
+            try {
+                if ('virtualKeyboard' in navigator) {
+                    navigator.virtualKeyboard.overlaysContent = true;
+                }
+            } catch (error) {
+                console.warn('Virtual keyboard overlay setup skipped:', error);
+            }
 
             const resetTypingPosition = () => {
                 shell.style.position = '';
@@ -1411,6 +1418,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                 composer.style.paddingBottom = '';
                 composer.style.zIndex = '';
                 composer.style.boxShadow = '';
+                composer.style.transform = '';
                 messages.style.paddingBottom = '';
                 if (pageContainer) pageContainer.style.overflowY = 'hidden';
             };
@@ -1421,16 +1429,18 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                 const viewportHeight = viewport?.height || layoutHeight;
                 const viewportTop = viewport?.offsetTop || 0;
                 const visualBottom = viewport ? viewport.height + viewport.offsetTop : layoutHeight;
-                const keyboardHeight = viewport ? Math.max(0, layoutHeight - visualBottom) : 0;
-                const keyboardLikelyOpen = document.activeElement === input && (
-                    viewport ? (layoutHeight - viewportHeight > 40 || keyboardHeight > 40) : false
-                );
+                const virtualKeyboardHeight = Number(navigator.virtualKeyboard?.boundingRect?.height || 0);
+                const viewportKeyboardHeight = viewport ? Math.max(0, layoutHeight - visualBottom) : 0;
+                const keyboardHeight = Math.max(virtualKeyboardHeight, viewportKeyboardHeight);
+                const inputFocused = document.activeElement === input;
 
-                if (keyboardLikelyOpen) {
+                if (inputFocused) {
                     const rect = shell.getBoundingClientRect();
                     const left = Math.max(0, rect.left);
                     const width = Math.min(rect.width || window.innerWidth, window.innerWidth - left);
-                    const floatingBottom = Math.max(0, layoutHeight - visualBottom);
+                    const floatingBottom = keyboardHeight > 20
+                        ? keyboardHeight
+                        : Math.max(0, layoutHeight - visualBottom);
                     shell.style.position = 'fixed';
                     shell.style.left = `${left}px`;
                     shell.style.top = `${viewportTop}px`;
@@ -1442,11 +1452,15 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                     composer.style.left = `${left}px`;
                     composer.style.width = `${width}px`;
                     const composerHeight = composer.offsetHeight || 64;
-                    composer.style.top = 'auto';
-                    composer.style.bottom = `${floatingBottom}px`;
+                    const topFromViewport = Math.max(viewportTop, viewportTop + viewportHeight - composerHeight - 2);
+                    composer.style.top = keyboardHeight > 20 ? 'auto' : `${topFromViewport}px`;
+                    composer.style.bottom = keyboardHeight > 20
+                        ? `${floatingBottom}px`
+                        : 'max(env(safe-area-inset-bottom), env(keyboard-inset-height, 0px))';
                     composer.style.paddingBottom = 'calc(0.75rem + env(safe-area-inset-bottom))';
                     composer.style.zIndex = '95';
                     composer.style.boxShadow = '0 -10px 30px rgba(15, 23, 42, 0.16)';
+                    composer.style.transform = 'translateZ(0)';
                     messages.style.paddingBottom = `${composerHeight + 18}px`;
                     if (pageContainer) pageContainer.style.overflowY = 'hidden';
                 } else {
@@ -1470,6 +1484,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             input.addEventListener('blur', handleBlur);
             window.visualViewport?.addEventListener('resize', delayedKeepTypingVisible);
             window.visualViewport?.addEventListener('scroll', delayedKeepTypingVisible);
+            navigator.virtualKeyboard?.addEventListener?.('geometrychange', delayedKeepTypingVisible);
             window.addEventListener('orientationchange', delayedKeepTypingVisible);
 
             return () => {
@@ -1478,6 +1493,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                 input.removeEventListener('blur', handleBlur);
                 window.visualViewport?.removeEventListener('resize', delayedKeepTypingVisible);
                 window.visualViewport?.removeEventListener('scroll', delayedKeepTypingVisible);
+                navigator.virtualKeyboard?.removeEventListener?.('geometrychange', delayedKeepTypingVisible);
                 window.removeEventListener('orientationchange', delayedKeepTypingVisible);
                 resetTypingPosition();
             };
