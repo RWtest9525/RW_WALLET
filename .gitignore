@@ -10,6 +10,8 @@ temp.js
 .env.*
 !backend/.env.example
 backend/.env
+node_modules/
+backend/node_modules/
 
 # OS files
 Thumbs.db

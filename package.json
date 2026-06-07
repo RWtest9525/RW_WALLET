@@ -1,0 +1,15 @@
+{
+  "name": "rw-wallet",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 127.0.0.1",
+    "preview": "vite preview --host 127.0.0.1",
+    "backend": "npm --prefix backend start",
+    "check": "node scripts/check-project.js"
+  },
+  "devDependencies": {
+    "vite": "^5.4.11"
+  }
+}
