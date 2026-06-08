@@ -1,7 +1,7 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
         import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, onAuthStateChanged, sendPasswordResetEmail, setPersistence, browserLocalPersistence } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
         import { getFirestore, doc, setDoc, getDoc, collection, collectionGroup, addDoc, onSnapshot, query, orderBy, Timestamp, writeBatch, runTransaction, deleteDoc, getDocs, serverTimestamp, where, arrayUnion, updateDoc, deleteField, increment, setLogLevel, limit as firestoreLimit } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
-        import { getStorage, ref as storageRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-storage.js";
+        import { getStorage, ref as storageRef, uploadBytesResumable, getDownloadURL } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-storage.js";
 
         // --- THEME LOGIC ---
         const applyTheme = (theme) => {
@@ -55,7 +55,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
         const PARTNER_MIN_INVESTMENT = 25;
         const LOAN_APPLICATION_VERSION = 2;
         const LOAN_DOCUMENT_MAX_SIZE_BYTES = 8 * 1024 * 1024;
-        const LOAN_DOCUMENT_UPLOAD_TIMEOUT_MS = 30000;
+        const LOAN_DOCUMENT_UPLOAD_TIMEOUT_MS = 120000;
         const PARTNER_ICON_URL = 'https://cdn-icons-png.flaticon.com/512/3135/3135706.png';
         const RECHARGE_OPERATORS = ['Jio', 'Airtel', 'Vi', 'BSNL', 'MTNL'];
         const RECHARGE_STATES = [
@@ -9111,7 +9111,32 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             });
         };
 
-        const uploadLoanDocumentFile = async (file, documentType) => {
+        const getLoanUploadErrorMessage = (error, label) => {
+            const code = String(error?.code || '');
+            if (code.includes('unauthorized')) return `${label} upload is blocked by storage permission. Please contact admin.`;
+            if (code.includes('quota-exceeded')) return `${label} upload failed because storage quota is full. Please contact admin.`;
+            if (code.includes('retry-limit-exceeded')) return `${label} upload failed because network is unstable. Please try again.`;
+            if (code.includes('canceled')) return `${label} upload was cancelled. Please try again.`;
+            return String(error?.message || `${label} upload failed. Please try again.`);
+        };
+
+        const uploadFileWithProgress = (ref, file, metadata, label, onProgress = () => {}) => new Promise((resolve, reject) => {
+            const uploadTask = uploadBytesResumable(ref, file, metadata);
+            uploadTask.on('state_changed', (snapshot) => {
+                const total = Number(snapshot.totalBytes || 0);
+                const transferred = Number(snapshot.bytesTransferred || 0);
+                if (total > 0) {
+                    onProgress(Math.max(1, Math.min(99, Math.round((transferred / total) * 100))));
+                }
+            }, (error) => {
+                reject(new Error(getLoanUploadErrorMessage(error, label)));
+            }, () => {
+                onProgress(100);
+                resolve(uploadTask.snapshot);
+            });
+        });
+
+        const uploadLoanDocumentFile = async (file, documentType, onProgress = () => {}) => {
             if (!file) return null;
             const validationError = validateLoanDocumentSelection(file, documentType);
             if (validationError) throw new Error(validationError);
@@ -9127,16 +9152,17 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             const safeName = String(preparedFile.name || `${documentType}.jpg`).replace(/[^\w.-]+/g, '_').slice(-80);
             const path = `artifacts/${appId}/loan_documents/${currentUser.uid}/${Date.now()}-${documentType}-${safeName}`;
             const ref = storageRef(storage, path);
+            onProgress(1);
             await withTimeout(
-                uploadBytes(ref, preparedFile, {
+                uploadFileWithProgress(ref, preparedFile, {
                     contentType: preparedFile.type || 'application/octet-stream',
                     customMetadata: {
                         userId: currentUser.uid,
                         documentType
                     }
-                }),
+                }, label, onProgress),
                 LOAN_DOCUMENT_UPLOAD_TIMEOUT_MS,
-                `${label} upload is taking too long. Please use a smaller file and try again.`
+                `${label} upload is taking too long. Please check internet or use a smaller file.`
             );
             const url = await withTimeout(
                 getDownloadURL(ref),
@@ -9185,10 +9211,12 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                     return;
                 }
                 if (btn) btn.textContent = 'Preparing...';
-                const [aadhaarDocument, selfieDocument] = await Promise.all([
-                    uploadLoanDocumentFile(documents.aadhaarFile, 'aadhaar'),
-                    uploadLoanDocumentFile(documents.selfieFile, 'selfie')
-                ]);
+                const aadhaarDocument = await uploadLoanDocumentFile(documents.aadhaarFile, 'aadhaar', (percent) => {
+                    if (btn) btn.textContent = `Aadhaar ${percent}%`;
+                });
+                const selfieDocument = await uploadLoanDocumentFile(documents.selfieFile, 'selfie', (percent) => {
+                    if (btn) btn.textContent = `Selfie ${percent}%`;
+                });
                 if (btn) btn.textContent = 'Submitting...';
                 await withTimeout(addDoc(collection(db, `artifacts/${appId}/public/data/loan_requests`), {
                     requestVersion: LOAN_APPLICATION_VERSION,
