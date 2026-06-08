@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://rw-wallet.vercel.app/sitemap.xml

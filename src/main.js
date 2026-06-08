@@ -6874,17 +6874,22 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                 { id: 2, title: 'Documents' },
                 { id: 3, title: 'Done' }
             ];
+            const progressWidth = step <= 1 ? '0%' : step === 2 ? '50%' : '100%';
             return `
-                <div class="grid grid-cols-3 gap-2">
+                <div class="relative px-3 pb-1 pt-2">
+                    <div class="absolute left-[18%] right-[18%] top-7 h-1 rounded-full bg-gray-200 dark:bg-gray-700"></div>
+                    <div class="absolute left-[18%] top-7 h-1 rounded-full bg-gradient-to-r from-indigo-600 via-blue-500 to-emerald-500 transition-all duration-300" style="width:${progressWidth}; max-width:64%;"></div>
+                    <div class="relative grid grid-cols-3 gap-2">
                     ${steps.map(item => {
                         const active = item.id === step;
                         const complete = item.id < step;
                         return `
                             <div class="flex flex-col items-center text-center">
-                                <div class="flex h-10 w-10 items-center justify-center rounded-full border-2 text-sm font-black ${complete ? 'border-emerald-500 bg-emerald-500 text-white' : active ? 'border-indigo-600 bg-indigo-600 text-white' : 'border-gray-200 bg-white text-gray-400 dark:border-gray-700 dark:bg-gray-900'}">${complete ? '&#10003;' : item.id}</div>
-                                <p class="mt-2 text-[10px] font-black uppercase leading-tight text-gray-500 dark:text-gray-400">${item.title}</p>
+                                <div class="relative z-10 flex h-12 w-12 items-center justify-center rounded-full border-2 text-sm font-black shadow-sm transition-all duration-300 ${complete ? 'border-emerald-500 bg-emerald-500 text-white shadow-emerald-200 dark:shadow-none' : active ? 'border-indigo-600 bg-gradient-to-br from-indigo-500 to-blue-600 text-white shadow-lg shadow-indigo-200 dark:shadow-none scale-105' : 'border-gray-200 bg-white text-gray-400 dark:border-gray-700 dark:bg-gray-900'}">${complete ? '&#10003;' : item.id}</div>
+                                <p class="mt-3 text-[10px] font-black uppercase leading-tight ${active ? 'text-indigo-700 dark:text-indigo-300' : complete ? 'text-emerald-700 dark:text-emerald-300' : 'text-gray-500 dark:text-gray-400'}">${item.title}</p>
                             </div>`;
                     }).join('')}
+                    </div>
                 </div>`;
         };
 
@@ -7027,35 +7032,42 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                 ...(loanApplicationDraft.personal || {})
             };
             const docs = loanApplicationDraft.documents || {};
+            const inputClass = 'w-full rounded-2xl border border-gray-200 bg-gray-50 px-4 py-4 text-base font-semibold text-slate-950 shadow-inner outline-none transition focus:border-indigo-400 focus:bg-white focus:ring-4 focus:ring-indigo-100 dark:border-gray-700 dark:bg-gray-900 dark:text-white dark:focus:border-indigo-500 dark:focus:ring-indigo-900/40';
             const stepContent = step === 1 ? `
                 <div class="space-y-3">
-                    <input id="loan-name-input" value="${escapeHtml(personal.name)}" placeholder="Your name" class="w-full px-4 py-3 bg-gray-100 dark:bg-gray-700 rounded-lg">
-                    <input id="loan-father-input" value="${escapeHtml(personal.fatherName)}" placeholder="Father's name" class="w-full px-4 py-3 bg-gray-100 dark:bg-gray-700 rounded-lg">
-                    <input id="loan-mobile-input" value="${escapeHtml(personal.mobile)}" maxlength="10" inputmode="numeric" placeholder="Mobile no." class="w-full px-4 py-3 bg-gray-100 dark:bg-gray-700 rounded-lg">
-                    <input id="loan-alt-mobile-input" value="${escapeHtml(personal.alternateMobile)}" maxlength="10" inputmode="numeric" placeholder="Alternate no." class="w-full px-4 py-3 bg-gray-100 dark:bg-gray-700 rounded-lg">
-                    <input id="loan-dob-input" value="${escapeHtml(personal.dob)}" maxlength="10" placeholder="Date of birth (DD_MM_YYYY)" class="w-full px-4 py-3 bg-gray-100 dark:bg-gray-700 rounded-lg">
-                    <input id="loan-aadhaar-input" value="${escapeHtml(personal.aadhaar)}" maxlength="12" inputmode="numeric" placeholder="Aadhaar number" class="w-full px-4 py-3 bg-gray-100 dark:bg-gray-700 rounded-lg">
+                    <input id="loan-name-input" value="${escapeHtml(personal.name)}" placeholder="Your name" class="${inputClass}">
+                    <input id="loan-father-input" value="${escapeHtml(personal.fatherName)}" placeholder="Father's name" class="${inputClass}">
+                    <input id="loan-mobile-input" value="${escapeHtml(personal.mobile)}" maxlength="10" inputmode="numeric" placeholder="Mobile no." class="${inputClass}">
+                    <input id="loan-alt-mobile-input" value="${escapeHtml(personal.alternateMobile)}" maxlength="10" inputmode="numeric" placeholder="Alternate no." class="${inputClass}">
+                    <input id="loan-dob-input" value="${escapeHtml(personal.dob)}" maxlength="10" placeholder="Date of birth (DD_MM_YYYY)" class="${inputClass}">
+                    <input id="loan-aadhaar-input" value="${escapeHtml(personal.aadhaar)}" maxlength="12" inputmode="numeric" placeholder="Aadhaar number" class="${inputClass}">
                 </div>` : step === 2 ? `
                 <div class="space-y-3">
-                    <label class="block rounded-2xl border border-dashed border-indigo-200 dark:border-indigo-800 bg-indigo-50/50 dark:bg-indigo-900/10 p-4 text-center">
+                    <label class="group block rounded-3xl border-2 border-dashed border-indigo-200 bg-indigo-50/70 p-5 text-center shadow-inner transition hover:border-indigo-400 hover:bg-indigo-50 dark:border-indigo-800 dark:bg-indigo-900/10">
                         <input id="loan-aadhaar-file-input" type="file" accept="image/*,.pdf" class="hidden">
-                        <span class="block text-sm font-black text-gray-900 dark:text-white">Upload Aadhaar Card</span>
+                        <span class="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-white text-indigo-600 shadow-sm dark:bg-gray-900">
+                            <svg class="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01.88-7.9A5 5 0 1117 11h1a3 3 0 010 6h-4m-4-4l2-2m0 0l2 2m-2-2v8"></path></svg>
+                        </span>
+                        <span class="mt-3 block text-sm font-black text-gray-900 dark:text-white">Upload Aadhaar Card</span>
                         <span id="loan-aadhaar-file-label" class="mt-1 block text-xs font-semibold text-gray-500 dark:text-gray-400">${escapeHtml(docs.aadhaarName || 'Tap to select Aadhaar image/PDF')}</span>
                     </label>
-                    <label class="block rounded-2xl border border-dashed border-emerald-200 dark:border-emerald-800 bg-emerald-50/50 dark:bg-emerald-900/10 p-4 text-center">
+                    <label class="group block rounded-3xl border-2 border-dashed border-emerald-200 bg-emerald-50/70 p-5 text-center shadow-inner transition hover:border-emerald-400 hover:bg-emerald-50 dark:border-emerald-800 dark:bg-emerald-900/10">
                         <input id="loan-selfie-file-input" type="file" accept="image/*" capture="user" class="hidden">
-                        <span class="block text-sm font-black text-gray-900 dark:text-white">Upload Selfie</span>
+                        <span class="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-white text-emerald-600 shadow-sm dark:bg-gray-900">
+                            <svg class="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.75 7.5a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.5 20.25a8.25 8.25 0 1116.5 0"></path></svg>
+                        </span>
+                        <span class="mt-3 block text-sm font-black text-gray-900 dark:text-white">Upload Selfie</span>
                         <span id="loan-selfie-file-label" class="mt-1 block text-xs font-semibold text-gray-500 dark:text-gray-400">${escapeHtml(docs.selfieName || 'Tap to select live selfie')}</span>
                     </label>
-                    <p class="rounded-xl bg-gray-50 dark:bg-gray-700 p-3 text-xs text-gray-500 dark:text-gray-300">Admin will verify Aadhaar and selfie match before approving loan limit.</p>
+                    <p class="rounded-2xl border border-amber-100 bg-amber-50 p-3 text-xs font-semibold text-amber-700 dark:border-amber-900/40 dark:bg-amber-900/20 dark:text-amber-200">Admin will verify Aadhaar and selfie match before approving loan limit.</p>
                 </div>` : `
                 <div class="space-y-4">
-                    <div class="rounded-2xl bg-gray-50 dark:bg-gray-700 p-4 text-sm">
+                    <div class="rounded-3xl border border-indigo-100 bg-gradient-to-br from-indigo-50 to-blue-50 p-4 text-sm shadow-inner dark:border-indigo-900/40 dark:from-indigo-900/20 dark:to-blue-900/10">
                         <div class="flex justify-between gap-3"><span>Name</span><span class="font-bold text-right">${escapeHtml(personal.name || 'N/A')}</span></div>
                         <div class="mt-2 flex justify-between gap-3"><span>Mobile</span><span class="font-bold text-right">${escapeHtml(personal.mobile || 'N/A')}</span></div>
                         <div class="mt-2 flex justify-between gap-3"><span>Documents</span><span class="font-bold text-right">${docs.aadhaarFile && docs.selfieFile ? 'Aadhaar + Selfie ready' : 'Missing'}</span></div>
                     </div>
-                    <label class="flex items-center gap-3 rounded-2xl border border-gray-200 dark:border-gray-700 p-4 text-sm">
+                    <label class="flex items-center gap-3 rounded-3xl border border-gray-200 bg-white p-4 text-sm shadow-sm dark:border-gray-700 dark:bg-gray-900">
                         <input type="checkbox" id="loan-final-terms-checkbox" class="h-5 w-5" ${loanApplicationDraft.acceptedTerms ? 'checked' : ''}>
                         <span>I agree to the <button id="loan-final-agreement-link" type="button" class="text-indigo-600 dark:text-indigo-300 font-black underline">loan agreement and security terms</button>.</span>
                     </label>
@@ -7063,14 +7075,23 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
 
             const content = `
                 ${getPageHeader('Take Loan')}
-                <div class="max-w-md mx-auto bg-white dark:bg-gray-800 p-5 rounded-2xl shadow-md space-y-5">
+                <div class="max-w-md mx-auto overflow-hidden rounded-[1.75rem] border border-white/80 bg-white shadow-[0_22px_55px_rgba(15,23,42,0.12)] dark:border-gray-700 dark:bg-gray-800">
+                    <div class="relative overflow-hidden bg-gradient-to-br from-indigo-700 via-blue-700 to-emerald-600 px-5 pb-7 pt-6 text-white">
+                        <div class="absolute -right-8 -top-10 h-28 w-28 rounded-full border border-white/20"></div>
+                        <div class="absolute right-8 bottom-3 h-12 w-12 rounded-2xl bg-white/10"></div>
+                        <p class="relative text-[10px] font-black uppercase tracking-[0.22em] text-white/65">Loan Request</p>
+                        <h3 class="relative mt-1 text-2xl font-black">Verify & Apply</h3>
+                        <p class="relative mt-1 text-xs font-semibold text-white/75">Complete all 3 steps for admin approval.</p>
+                    </div>
+                    <div class="-mt-4 space-y-5 rounded-t-[1.75rem] bg-white p-5 dark:bg-gray-800">
                     ${renderLoanStepCircles(step)}
                     <div class="overflow-hidden">
                         <div class="transition-transform duration-200 ease-out">${stepContent}</div>
                     </div>
                     <div class="flex gap-2">
-                        ${step > 1 ? '<button id="loan-back-step-btn" class="flex-1 rounded-xl bg-gray-100 dark:bg-gray-700 py-3 text-sm font-black text-gray-700 dark:text-gray-200">Back</button>' : ''}
-                        ${step < 3 ? '<button id="loan-next-step-btn" class="flex-1 rounded-xl bg-indigo-600 py-3 text-sm font-black text-white">Next</button>' : '<button id="submit-loan-request-btn" class="flex-1 rounded-xl bg-indigo-600 py-3 text-sm font-black text-white">Apply Now</button>'}
+                        ${step > 1 ? '<button id="loan-back-step-btn" class="flex-1 rounded-2xl bg-gray-100 py-3.5 text-sm font-black text-gray-700 shadow-sm transition hover:bg-gray-200 dark:bg-gray-700 dark:text-gray-200">Back</button>' : ''}
+                        ${step < 3 ? '<button id="loan-next-step-btn" class="flex-1 rounded-2xl bg-gradient-to-r from-indigo-600 to-blue-600 py-3.5 text-sm font-black text-white shadow-lg shadow-indigo-200 transition hover:from-indigo-700 hover:to-blue-700 dark:shadow-none">Next</button>' : '<button id="submit-loan-request-btn" class="flex-1 rounded-2xl bg-gradient-to-r from-indigo-600 to-emerald-600 py-3.5 text-sm font-black text-white shadow-lg shadow-indigo-200 transition hover:from-indigo-700 hover:to-emerald-700 dark:shadow-none">Apply Now</button>'}
+                    </div>
                     </div>
                 </div>
                 ${getPageFooter()}`;

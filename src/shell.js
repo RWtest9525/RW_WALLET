@@ -76,6 +76,11 @@ root.outerHTML = String.raw`
                         <span id="auth-prompt">Don't have an account?</span>
                         <a href="#" id="auth-toggle" class="font-semibold text-blue-500 hover:underline">Sign Up</a>
                     </p>
+                    <div class="mt-4 flex flex-wrap items-center justify-center gap-x-4 gap-y-2 text-[11px] font-semibold text-gray-400 dark:text-gray-500">
+                        <a href="/privacy.html" target="_blank" rel="noopener noreferrer" class="hover:text-blue-600 dark:hover:text-blue-300">Privacy</a>
+                        <a href="/terms.html" target="_blank" rel="noopener noreferrer" class="hover:text-blue-600 dark:hover:text-blue-300">Terms</a>
+                        <a href="/contact.html" target="_blank" rel="noopener noreferrer" class="hover:text-blue-600 dark:hover:text-blue-300">Contact</a>
+                    </div>
                 </div>
             </div>
         </div>
