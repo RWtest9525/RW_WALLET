@@ -203,33 +203,49 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             });
             return Promise.race([promise, timeoutPromise]).finally(() => clearTimeout(timeoutId));
         };
-        const getLoanLimitAmount = (user = currentUserData || {}) =>
-            Math.max(0, Number(user.maxLoanAmount || user.loanMaxAmount || user.creditLimit || user.loanCreditLimit || 0));
-        const hasSubmittedLoanDetails = (request = {}) => !!(
-            request.personalDetails ||
-            request.documents?.aadhaar ||
-            request.documents?.selfie ||
-            request.fatherName ||
-            request.aadhaar ||
-            request.aadhaarNumber
-        );
+        const getLoanLimitAmount = (user = currentUserData || {}) => {
+            user = user || {};
+            return Math.max(0, Number(user.maxLoanAmount || user.loanMaxAmount || user.creditLimit || user.loanCreditLimit || 0));
+        };
+        const hasSubmittedLoanDetails = (request = {}) => {
+            request = request || {};
+            return !!(
+                request.personalDetails ||
+                request.documents?.aadhaar ||
+                request.documents?.selfie ||
+                request.fatherName ||
+                request.aadhaar ||
+                request.aadhaarNumber
+            );
+        };
         const isModernLoanRequest = (request = {}) => {
+            request = request || {};
             const version = Number(request.requestVersion || request.loanApplicationVersion || request.latestLoanRequestVersion || 0);
             if (version >= LOAN_APPLICATION_VERSION) return true;
             const status = String(request.status || request.loanRequestStatus || '').trim().toLowerCase();
             return status === 'pending' && hasSubmittedLoanDetails(request);
         };
-        const hasModernLoanApproval = (user = currentUserData || {}) =>
-            getLoanLimitAmount(user) > 0 && Number(user.loanApplicationVersion || user.loanRequestVersion || 0) >= LOAN_APPLICATION_VERSION;
-        const isModernLoanRecord = (loan = {}) =>
-            Number(loan.loanApplicationVersion || loan.loanRequestVersion || loan.requestVersion || loan.latestLoanRequestVersion || 0) >= LOAN_APPLICATION_VERSION;
-        const isActiveLoanRecord = (loan = {}) => String(loan.status || '').toLowerCase() === 'active';
-        const getLoanPrincipal = (loan = {}) => Number(loan.amount || loan.principal || 0);
+        const hasModernLoanApproval = (user = currentUserData || {}) => {
+            user = user || {};
+            return getLoanLimitAmount(user) > 0 && Number(user.loanApplicationVersion || user.loanRequestVersion || 0) >= LOAN_APPLICATION_VERSION;
+        };
+        const isModernLoanRecord = (loan = {}) => {
+            loan = loan || {};
+            return Number(loan.loanApplicationVersion || loan.loanRequestVersion || loan.requestVersion || loan.latestLoanRequestVersion || 0) >= LOAN_APPLICATION_VERSION;
+        };
+        const isActiveLoanRecord = (loan = {}) => {
+            loan = loan || {};
+            return String(loan.status || '').toLowerCase() === 'active';
+        };
+        const getLoanPrincipal = (loan = {}) => {
+            loan = loan || {};
+            return Number(loan.amount || loan.principal || 0);
+        };
         const getUserLoanRecords = (userId, loans = allLoansCache) => loans
-            .filter(loan => loan.userId === userId && isModernLoanRecord(loan))
+            .filter(loan => loan && loan.userId === userId && isModernLoanRecord(loan))
             .sort((a, b) => timestampToMillis(b.createdAt || b.paidAt) - timestampToMillis(a.createdAt || a.paidAt));
         const getLatestModernLoanRequest = (userId, requests = allLoanRequestsCache) => requests
-            .filter(request => request.userId === userId && isModernLoanRequest(request))
+            .filter(request => request && request.userId === userId && isModernLoanRequest(request))
             .sort((a, b) => timestampToMillis(b.requestedAt || b.processedAt) - timestampToMillis(a.requestedAt || a.processedAt))[0] || null;
         const isAdminUserRecord = (user = {}) => {
             const email = String(user.email || '').trim().toLowerCase();
@@ -7232,12 +7248,16 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
 
         const toDate = (value) => value?.toDate ? value.toDate() : value ? new Date(value) : null;
 
-        const getLoanRequestStatus = (request = {}) => String(request.status || request.loanRequestStatus || '').trim().toLowerCase();
+        const getLoanRequestStatus = (request = {}) => {
+            request = request || {};
+            return String(request.status || request.loanRequestStatus || '').trim().toLowerCase();
+        };
         const isPendingModernLoanRequest = (request = {}) => isModernLoanRequest(request) && getLoanRequestStatus(request) === 'pending';
         const isRejectedModernLoanRequest = (request = {}) =>
             isModernLoanRequest(request) && ['rejected', 'cancelled', 'canceled', 'failed', 'denied'].includes(getLoanRequestStatus(request));
         const getValidDateFromMillis = (millis) => millis ? new Date(millis) : null;
         const getLoanRequestReapplyDate = (request = {}) => {
+            request = request || {};
             const explicitMillis = timestampToMillis(request.reapplyAfter || request.loanReapplyAfter || request.reapplyAt || request.cooldownUntil);
             const explicitDate = getValidDateFromMillis(explicitMillis);
             if (explicitDate && !Number.isNaN(explicitDate.getTime())) return explicitDate;
@@ -7249,6 +7269,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             return addMonthsClamped(baseDate, LOAN_REAPPLY_WAIT_MONTHS);
         };
         const getLoanReapplyBlock = (request = {}) => {
+            request = request || {};
             if (!isRejectedModernLoanRequest(request)) return null;
             const reapplyAt = getLoanRequestReapplyDate(request);
             if (!reapplyAt || Number.isNaN(reapplyAt.getTime()) || reapplyAt <= new Date()) return null;
@@ -7257,14 +7278,17 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                 reason: request.rejectionReason || request.reason || request.adminReason || 'Admin cancelled or rejected your loan request.'
             };
         };
-        const getUserLoanRequestMarker = (user = currentUserData || {}) => ({
-            userId: user.id || user.uid || currentUser?.uid || '',
-            status: user.loanRequestStatus || '',
-            latestLoanRequestVersion: user.latestLoanRequestVersion || user.loanRequestVersion || user.loanApplicationVersion || 0,
-            reapplyAfter: user.loanReapplyAfter || user.reapplyAfter || null,
-            processedAt: user.loanProcessedAt || user.processedAt || null,
-            rejectionReason: user.loanRejectionReason || user.loanRequestRejectionReason || user.rejectionReason || ''
-        });
+        const getUserLoanRequestMarker = (user = currentUserData || {}) => {
+            user = user || {};
+            return {
+                userId: user.id || user.uid || currentUser?.uid || '',
+                status: user.loanRequestStatus || '',
+                latestLoanRequestVersion: user.latestLoanRequestVersion || user.loanRequestVersion || user.loanApplicationVersion || 0,
+                reapplyAfter: user.loanReapplyAfter || user.reapplyAfter || null,
+                processedAt: user.loanProcessedAt || user.processedAt || null,
+                rejectionReason: user.loanRejectionReason || user.loanRequestRejectionReason || user.rejectionReason || ''
+            };
+        };
 
         const getPartnerInvestmentSummary = () => {
             const amount = parseFloat(document.getElementById('partner-amount-input')?.value || '0') || 0;
