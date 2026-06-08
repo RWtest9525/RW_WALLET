@@ -7,7 +7,9 @@
     "dev": "vite --host 127.0.0.1",
     "preview": "vite preview --host 127.0.0.1",
     "backend": "npm --prefix backend start",
-    "check": "node scripts/check-project.js"
+    "check": "node scripts/check-project.js",
+    "audit:duplicate-loans": "node scripts/audit-fix-duplicate-loans.cjs",
+    "fix:duplicate-loans": "node scripts/audit-fix-duplicate-loans.cjs --apply"
   },
   "devDependencies": {
     "vite": "^5.4.11"

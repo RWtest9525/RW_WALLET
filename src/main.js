@@ -8428,6 +8428,8 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
 
         const handleTakeLoan = async () => {
             if (!currentUser || !currentUserData) return showNotification('User data not loaded. Please wait and try again.', true);
+            const takeLoanBtn = document.getElementById('confirm-take-loan-btn');
+            if (takeLoanBtn?.disabled) return;
             const amount = parseFloat(document.getElementById('loan-amount-input').value);
             const maxLoanAmount = Math.max(1, getLoanLimitAmount(currentUserData));
             if (isNaN(amount) || amount < 1 || amount > maxLoanAmount) {
@@ -8441,17 +8443,28 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             const dueDate = getNextMonthRepaymentDate();
 
             try {
+                if (takeLoanBtn) {
+                    takeLoanBtn.disabled = true;
+                    takeLoanBtn.textContent = 'Processing...';
+                }
                 const userRef = doc(db, `artifacts/${appId}/public/data/users`, currentUser.uid);
                 await runTransaction(db, async (tx) => {
                     const userDoc = await tx.get(userRef);
                     if (!userDoc.exists()) throw new Error('User not found.');
-                    if (!userDoc.data().loanEligible) throw new Error('Loan is not approved for your account.');
-                    const approvedMaxLoan = Math.max(1, Number(userDoc.data().maxLoanAmount || userDoc.data().loanMaxAmount || 500));
+                    const userData = userDoc.data();
+                    const existingActiveLoanId = String(userData.activeLoanId || '').trim();
+                    const existingRepayable = Number(userData.activeLoanRepayable || userData.loanLockedAmount || 0);
+                    if (existingActiveLoanId || existingRepayable > 0) {
+                        throw new Error('You already have an active loan. Repay it before taking another loan.');
+                    }
+                    if (!userData.loanEligible && getLoanLimitAmount(userData) <= 0) throw new Error('Loan is not approved for your account.');
+                    const approvedMaxLoan = Math.max(0, getLoanLimitAmount(userData));
+                    if (approvedMaxLoan < 1) throw new Error('Loan limit is not approved for your account.');
                     if (amount > approvedMaxLoan) throw new Error(`Loan amount cannot exceed ${formatCurrency(approvedMaxLoan)}.`);
 
                     const loanRef = doc(collection(db, `artifacts/${appId}/public/data/loans`));
                     tx.update(userRef, {
-                        balance: (userDoc.data().balance || 0) + amount,
+                        balance: (userData.balance || 0) + amount,
                         loanEligible: true,
                         activeLoanId: loanRef.id,
                         activeLoanRepayable: totalRepayable,
@@ -8492,6 +8505,10 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                     ? 'Loan credit could not be completed for this account. Please contact admin to refresh your loan approval.'
                     : (e.message || 'Could not take loan. Please try again.');
                 showNotification(message, true);
+                if (takeLoanBtn) {
+                    takeLoanBtn.disabled = false;
+                    takeLoanBtn.textContent = 'Take Loan';
+                }
             }
         };
 

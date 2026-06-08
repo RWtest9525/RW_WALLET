@@ -103,12 +103,17 @@ const CHAT_RETENTION_AFTER_ADMIN_READ_MS = 15 * 24 * 60 * 60 * 1000;
 const NOTIFICATION_RETENTION_MS = 7 * 24 * 60 * 60 * 1000;
 
 function createAppToken(user) {
+  const firebaseUid = user.firebase_uid || user.firebaseUid || null;
+  const email = normalizeEmail(user.email);
+  const effectiveUserId = firebaseUid || user.id;
+  const isAdmin = user.id === ADMIN_UID || firebaseUid === ADMIN_UID || email === 'reviewsworld01@gmail.com';
   return jwt.sign(
     {
-      sub: user.id,
-      email: user.email,
-      firebaseUid: user.firebase_uid || null,
-      isAdmin: user.id === ADMIN_UID || user.firebase_uid === ADMIN_UID
+      sub: effectiveUserId,
+      d1UserId: user.id,
+      email,
+      firebaseUid,
+      isAdmin
     },
     process.env.APP_JWT_SECRET,
     { expiresIn: '7d' }
