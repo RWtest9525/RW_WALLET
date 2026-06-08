@@ -9074,7 +9074,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             const type = String(file?.type || '').toLowerCase();
             const name = String(file?.name || '').toLowerCase();
             const canDrawImage = /image\/(jpeg|jpg|png|webp)/i.test(type) || /\.(png|jpe?g|webp)$/i.test(name);
-            if (!isImage || !canDrawImage || Number(file.size || 0) <= 1.5 * 1024 * 1024) {
+            if (!isImage || !canDrawImage || Number(file.size || 0) <= 700 * 1024) {
                 return file;
             }
             return new Promise((resolve) => {
@@ -9082,7 +9082,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                 const objectUrl = URL.createObjectURL(file);
                 image.onload = () => {
                     try {
-                        const maxSide = documentType === 'selfie' ? 1280 : 1600;
+                        const maxSide = documentType === 'selfie' ? 1080 : 1400;
                         const ratio = Math.min(1, maxSide / Math.max(image.width || maxSide, image.height || maxSide));
                         const width = Math.max(1, Math.round((image.width || maxSide) * ratio));
                         const height = Math.max(1, Math.round((image.height || maxSide) * ratio));
@@ -9096,7 +9096,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                             if (!blob || blob.size >= file.size) return resolve(file);
                             const baseName = String(file.name || `${documentType}.jpg`).replace(/\.[^.]+$/, '');
                             resolve(new File([blob], `${baseName}-compressed.jpg`, { type: 'image/jpeg', lastModified: Date.now() }));
-                        }, 'image/jpeg', 0.82);
+                        }, 'image/jpeg', 0.76);
                     } catch (error) {
                         URL.revokeObjectURL(objectUrl);
                         console.warn('Loan image compression skipped:', error);
@@ -9136,26 +9136,84 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             });
         });
 
-        const uploadLoanDocumentFile = async (file, documentType, onProgress = () => {}) => {
-            if (!file) return null;
-            const validationError = validateLoanDocumentSelection(file, documentType);
-            if (validationError) throw new Error(validationError);
-            const label = documentType === 'selfie' ? 'Selfie photo' : 'Aadhaar document';
-            const preparedFile = await withTimeout(
-                compressLoanImageFile(file, documentType),
-                10000,
-                `${label} could not be prepared. Please try a smaller file.`
-            );
-            if (Number(preparedFile.size || 0) > LOAN_DOCUMENT_MAX_SIZE_BYTES) {
-                throw new Error(`${label} is too large. Please upload a file under 8 MB.`);
+        const uploadLoanDocumentToCloudflare = (file, originalFile, documentType, label, onProgress = () => {}) => new Promise(async (resolve, reject) => {
+            try {
+                const token = await getBackendAuthToken();
+                const params = new URLSearchParams({
+                    documentType,
+                    fileName: file.name || originalFile?.name || `${documentType}.jpg`,
+                    contentType: file.type || originalFile?.type || 'application/octet-stream',
+                    size: String(file.size || originalFile?.size || 0)
+                });
+                const xhr = new XMLHttpRequest();
+                xhr.open('POST', `${BACKEND_BASE_URL}/api/uploads/loan-document?${params.toString()}`, true);
+                xhr.setRequestHeader('Authorization', `Bearer ${token}`);
+                xhr.setRequestHeader('Content-Type', file.type || originalFile?.type || 'application/octet-stream');
+                xhr.timeout = LOAN_DOCUMENT_UPLOAD_TIMEOUT_MS;
+                xhr.upload.onprogress = (event) => {
+                    if (!event.lengthComputable) return;
+                    onProgress(Math.max(1, Math.min(99, Math.round((event.loaded / event.total) * 100))));
+                };
+                xhr.onload = () => {
+                    const payload = (() => {
+                        try {
+                            return JSON.parse(xhr.responseText || '{}');
+                        } catch {
+                            return {};
+                        }
+                    })();
+                    if (xhr.status >= 200 && xhr.status < 300 && payload?.ok && payload?.document?.url) {
+                        onProgress(100);
+                        resolve({
+                            name: originalFile?.name || payload.document.name || file.name || `${documentType}.jpg`,
+                            size: payload.document.size || file.size || originalFile?.size || 0,
+                            type: payload.document.type || file.type || originalFile?.type || '',
+                            path: payload.document.path || payload.document.key || '',
+                            key: payload.document.key || payload.document.path || '',
+                            url: payload.document.url,
+                            storage: payload.document.storage || 'cloudflare-r2',
+                            uploadedAt: payload.document.uploadedAt || Date.now()
+                        });
+                        return;
+                    }
+                    const errorCode = payload?.error || xhr.statusText || 'CLOUDFLARE_UPLOAD_FAILED';
+                    const error = new Error(`${label} Cloudflare upload failed: ${errorCode}`);
+                    error.code = errorCode;
+                    error.canUseFirebaseFallback = xhr.status >= 500 || xhr.status === 401 || xhr.status === 403 || [
+                        'R2_NOT_CONFIGURED',
+                        'R2_PUBLIC_URL_NOT_CONFIGURED',
+                        'LOAN_DOCUMENT_UPLOAD_FAILED',
+                        'BACKEND_TEMPORARILY_UNAVAILABLE'
+                    ].includes(errorCode);
+                    reject(error);
+                };
+                xhr.onerror = () => {
+                    const error = new Error(`${label} Cloudflare upload failed because backend was unreachable.`);
+                    error.canUseFirebaseFallback = true;
+                    reject(error);
+                };
+                xhr.ontimeout = () => {
+                    const error = new Error(`${label} Cloudflare upload is taking too long.`);
+                    error.canUseFirebaseFallback = true;
+                    reject(error);
+                };
+                onProgress(1);
+                xhr.send(file);
+            } catch (error) {
+                const uploadError = error instanceof Error ? error : new Error(String(error || `${label} Cloudflare upload failed.`));
+                uploadError.canUseFirebaseFallback = true;
+                reject(uploadError);
             }
-            const safeName = String(preparedFile.name || `${documentType}.jpg`).replace(/[^\w.-]+/g, '_').slice(-80);
+        });
+
+        const uploadLoanDocumentToFirebase = async (file, originalFile, documentType, label, onProgress = () => {}) => {
+            const safeName = String(file.name || `${documentType}.jpg`).replace(/[^\w.-]+/g, '_').slice(-80);
             const path = `artifacts/${appId}/loan_documents/${currentUser.uid}/${Date.now()}-${documentType}-${safeName}`;
             const ref = storageRef(storage, path);
             onProgress(1);
             await withTimeout(
-                uploadFileWithProgress(ref, preparedFile, {
-                    contentType: preparedFile.type || 'application/octet-stream',
+                uploadFileWithProgress(ref, file, {
+                    contentType: file.type || 'application/octet-stream',
                     customMetadata: {
                         userId: currentUser.uid,
                         documentType
@@ -9170,13 +9228,38 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                 `${label} uploaded but link was not ready. Please try again.`
             );
             return {
-                name: file.name || safeName,
-                size: preparedFile.size || file.size || 0,
-                type: preparedFile.type || file.type || '',
+                name: originalFile?.name || safeName,
+                size: file.size || originalFile?.size || 0,
+                type: file.type || originalFile?.type || '',
                 path,
                 url,
+                storage: 'firebase-storage',
                 uploadedAt: Date.now()
             };
+        };
+
+        const uploadLoanDocumentFile = async (file, documentType, onProgress = () => {}) => {
+            if (!file) return null;
+            const validationError = validateLoanDocumentSelection(file, documentType);
+            if (validationError) throw new Error(validationError);
+            const label = documentType === 'selfie' ? 'Selfie photo' : 'Aadhaar document';
+            const preparedFile = await withTimeout(
+                compressLoanImageFile(file, documentType),
+                10000,
+                `${label} could not be prepared. Please try a smaller file.`
+            );
+            if (Number(preparedFile.size || 0) > LOAN_DOCUMENT_MAX_SIZE_BYTES) {
+                throw new Error(`${label} is too large. Please upload a file under 8 MB.`);
+            }
+            try {
+                return await uploadLoanDocumentToCloudflare(preparedFile, file, documentType, label, onProgress);
+            } catch (cloudflareError) {
+                console.warn('Cloudflare loan document upload failed, using Firebase Storage fallback:', cloudflareError);
+                if (cloudflareError?.canUseFirebaseFallback === false) {
+                    throw new Error(getLoanUploadErrorMessage(cloudflareError, label));
+                }
+                return uploadLoanDocumentToFirebase(preparedFile, file, documentType, label, onProgress);
+            }
         };
 
         const handleSubmitLoanRequest = async () => {

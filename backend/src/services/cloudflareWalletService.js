@@ -1,6 +1,7 @@
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const admin = require('firebase-admin');
+const path = require('path');
 const { S3Client, PutObjectCommand, GetObjectCommand } = require('@aws-sdk/client-s3');
 
 const REQUIRED_ENV = [
@@ -101,6 +102,8 @@ function nowMs() {
 const ADMIN_UID = process.env.ADMIN_UID || 'mOs5Fmp4RoRzeBDH4pZLMOpQx7Q2';
 const CHAT_RETENTION_AFTER_ADMIN_READ_MS = 15 * 24 * 60 * 60 * 1000;
 const NOTIFICATION_RETENTION_MS = 7 * 24 * 60 * 60 * 1000;
+const LOAN_DOCUMENT_UPLOAD_MAX_BYTES = 8 * 1024 * 1024;
+const LOAN_DOCUMENT_TYPES = new Set(['aadhaar', 'selfie']);
 
 function createAppToken(user) {
   const firebaseUid = user.firebase_uid || user.firebaseUid || null;
@@ -780,6 +783,76 @@ async function getR2Object(r2, key) {
   return result.Body.transformToString();
 }
 
+function sanitizeUploadFileName(fileName = 'document') {
+  const cleaned = String(fileName || 'document')
+    .replace(/[^\w.-]+/g, '_')
+    .replace(/^_+|_+$/g, '')
+    .slice(-80);
+  return cleaned || 'document';
+}
+
+function sanitizePathSegment(value = 'user') {
+  const cleaned = String(value || 'user').replace(/[^\w-]+/g, '_').slice(0, 80);
+  return cleaned || 'user';
+}
+
+function normalizeContentType(value) {
+  return String(value || 'application/octet-stream').split(';')[0].trim().toLowerCase() || 'application/octet-stream';
+}
+
+function getLoanDocumentExtension(fileName, contentType) {
+  const ext = path.extname(String(fileName || '')).toLowerCase();
+  if (ext && ext.length <= 8) return ext;
+  if (contentType === 'application/pdf') return '.pdf';
+  if (contentType === 'image/png') return '.png';
+  if (contentType === 'image/webp') return '.webp';
+  if (contentType === 'image/heic') return '.heic';
+  if (contentType === 'image/heif') return '.heif';
+  return '.jpg';
+}
+
+function isSupportedLoanDocument(documentType, fileName, contentType) {
+  const ext = path.extname(String(fileName || '')).toLowerCase();
+  const isImage = contentType.startsWith('image/') || ['.jpg', '.jpeg', '.png', '.webp', '.heic', '.heif'].includes(ext);
+  const isPdf = contentType === 'application/pdf' || ext === '.pdf';
+  return documentType === 'selfie' ? isImage : isImage || isPdf;
+}
+
+function readRequestBody(req, maxBytes) {
+  return new Promise((resolve, reject) => {
+    const chunks = [];
+    let total = 0;
+    let finished = false;
+
+    const fail = (error) => {
+      if (finished) return;
+      finished = true;
+      reject(error);
+    };
+
+    req.on('data', (chunk) => {
+      if (finished) return;
+      total += chunk.length;
+      if (total > maxBytes) {
+        const error = new Error('UPLOAD_TOO_LARGE');
+        error.code = 'UPLOAD_TOO_LARGE';
+        fail(error);
+        req.destroy();
+        return;
+      }
+      chunks.push(chunk);
+    });
+
+    req.on('end', () => {
+      if (finished) return;
+      finished = true;
+      resolve(Buffer.concat(chunks, total));
+    });
+
+    req.on('error', fail);
+  });
+}
+
 function registerRoutes(app, { d1, r2 }) {
   app.post('/api/session/firebase', async (req, res) => {
     try {
@@ -945,6 +1018,64 @@ function registerRoutes(app, { d1, r2 }) {
       details: req.body.details || {}
     });
     res.json({ ok: true });
+  });
+
+  app.post('/api/uploads/loan-document', requireHttpAuth, async (req, res) => {
+    try {
+      if (!r2 || !process.env.CLOUDFLARE_R2_BUCKET) {
+        return res.status(503).json({ ok: false, error: 'R2_NOT_CONFIGURED' });
+      }
+      if (!process.env.CLOUDFLARE_R2_PUBLIC_BASE_URL) {
+        return res.status(503).json({ ok: false, error: 'R2_PUBLIC_URL_NOT_CONFIGURED' });
+      }
+
+      const documentType = String(req.query.documentType || '').trim().toLowerCase();
+      if (!LOAN_DOCUMENT_TYPES.has(documentType)) {
+        return res.status(400).json({ ok: false, error: 'INVALID_DOCUMENT_TYPE' });
+      }
+
+      const declaredSize = Number(req.headers['content-length'] || req.query.size || 0);
+      if (declaredSize > LOAN_DOCUMENT_UPLOAD_MAX_BYTES) {
+        return res.status(413).json({ ok: false, error: 'UPLOAD_TOO_LARGE' });
+      }
+
+      const originalName = sanitizeUploadFileName(req.query.fileName || `${documentType}.jpg`);
+      const contentType = normalizeContentType(req.headers['content-type'] || req.query.contentType);
+      if (!isSupportedLoanDocument(documentType, originalName, contentType)) {
+        return res.status(400).json({ ok: false, error: 'UNSUPPORTED_DOCUMENT_TYPE' });
+      }
+
+      const body = await readRequestBody(req, LOAN_DOCUMENT_UPLOAD_MAX_BYTES);
+      if (!body.length) {
+        return res.status(400).json({ ok: false, error: 'EMPTY_UPLOAD' });
+      }
+
+      const ext = getLoanDocumentExtension(originalName, contentType);
+      const baseName = sanitizeUploadFileName(path.basename(originalName, path.extname(originalName)) || documentType);
+      const userSegment = sanitizePathSegment(req.auth.sub || req.auth.firebaseUid || req.auth.d1UserId);
+      const key = `loan-documents/${userSegment}/${Date.now()}-${documentType}-${baseName}${ext}`;
+      const url = await putR2Object(r2, key, body, contentType);
+
+      return res.json({
+        ok: true,
+        document: {
+          name: originalName,
+          size: body.length,
+          type: contentType,
+          path: key,
+          key,
+          url,
+          storage: 'cloudflare-r2',
+          uploadedAt: nowMs()
+        }
+      });
+    } catch (error) {
+      if (error?.code === 'UPLOAD_TOO_LARGE' || error?.message === 'UPLOAD_TOO_LARGE') {
+        return res.status(413).json({ ok: false, error: 'UPLOAD_TOO_LARGE' });
+      }
+      console.error('Loan document upload failed:', error);
+      return res.status(500).json({ ok: false, error: 'LOAN_DOCUMENT_UPLOAD_FAILED' });
+    }
   });
 
   app.post('/api/invoices/:invoiceId', requireHttpAuth, async (req, res) => {
