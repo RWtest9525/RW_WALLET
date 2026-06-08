@@ -12,6 +12,7 @@ temp.js
 backend/.env
 node_modules/
 backend/node_modules/
+dist/
 
 # OS files
 Thumbs.db

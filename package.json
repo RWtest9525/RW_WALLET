@@ -7,6 +7,7 @@
     "dev": "vite --host 127.0.0.1",
     "preview": "vite preview --host 127.0.0.1",
     "backend": "npm --prefix backend start",
+    "build": "npm run build:css && vite build",
     "build:css": "tailwindcss -c ./tailwind.config.cjs -i ./src/styles/tailwind.input.css -o ./src/styles/tailwind.generated.css --minify",
     "check": "node scripts/check-project.js",
     "audit:duplicate-loans": "node scripts/audit-fix-duplicate-loans.cjs",
