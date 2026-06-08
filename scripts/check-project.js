@@ -7,6 +7,7 @@ const required = [
   'src/app.js',
   'src/shell.js',
   'src/main.js',
+  'src/styles/tailwind.generated.css',
   'src/styles/app.css',
   'src/config/tailwind.config.js',
   'backend/server.example.js',
@@ -19,7 +20,7 @@ const missing = required.filter((file) => !fs.existsSync(path.join(root, file)))
 
 const index = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
 const requiredLinks = [
-  '/src/config/tailwind.config.js',
+  '/src/styles/tailwind.generated.css',
   '/src/styles/app.css',
   '/src/app.js',
   '/src/shell.js',

@@ -115,6 +115,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
         let supportChatBackgroundHandlers = null;
         let adminChatBackgroundHandlers = null;
         let adminChatSubscribedRooms = new Set();
+        let supportSocketClientLoadPromise = null;
         let supportSendingMessage = false;
         let supportLastSendSignature = '';
         let supportLastSendAt = 0;
@@ -941,7 +942,56 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             return backendAuthPromise;
         };
 
-        const getSupportSocket = async () => {
+        const loadSocketIoClient = (timeoutMs = 2500) => {
+            if (typeof window.io === 'function') return Promise.resolve(window.io);
+            if (supportSocketClientLoadPromise) return supportSocketClientLoadPromise;
+
+            supportSocketClientLoadPromise = new Promise((resolve, reject) => {
+                const existing = document.querySelector('script[data-rw-socket-io-client="true"]');
+                const script = existing || document.createElement('script');
+                let done = false;
+                const finish = (callback, value) => {
+                    if (done) return;
+                    done = true;
+                    clearTimeout(timer);
+                    script.onload = null;
+                    script.onerror = null;
+                    callback(value);
+                };
+                const timer = setTimeout(() => {
+                    if (!existing) script.remove();
+                    finish(reject, new Error('Support chat realtime client timed out.'));
+                }, timeoutMs);
+
+                script.onload = () => {
+                    if (typeof window.io === 'function') {
+                        finish(resolve, window.io);
+                    } else {
+                        finish(reject, new Error('Support chat realtime client is not available.'));
+                    }
+                };
+                script.onerror = () => {
+                    if (!existing) script.remove();
+                    finish(reject, new Error('Support chat realtime client failed to load.'));
+                };
+
+                if (!existing) {
+                    script.src = `${BACKEND_BASE_URL}/socket.io/socket.io.js`;
+                    script.async = true;
+                    script.defer = true;
+                    script.dataset.rwSocketIoClient = 'true';
+                    document.head.appendChild(script);
+                }
+            }).catch(error => {
+                supportSocketClientLoadPromise = null;
+                throw error;
+            });
+
+            return supportSocketClientLoadPromise;
+        };
+
+        const getSupportSocket = async ({ timeoutMs = 2500 } = {}) => {
+            await loadSocketIoClient(timeoutMs);
             const token = await getBackendAuthToken();
             if (supportSocket?.connected) return supportSocket;
 
@@ -4594,7 +4644,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                 });
 
             try {
-                const socket = await getSupportSocket();
+                const socket = await getSupportSocket({ timeoutMs: 1800 });
                 if (supportChatBackgroundHandlers) {
                     socket.off('chat_history', supportChatBackgroundHandlers.history);
                     socket.off('new_message', supportChatBackgroundHandlers.message);
@@ -4630,7 +4680,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                 socket.on('chat_read', handleBackgroundRead);
                 socket.emit('join_room', { roomId, limit: 200, markRead: false });
             } catch (error) {
-                console.warn('Support chat background join failed:', error);
+                console.warn('Support chat realtime skipped:', error?.message || error);
             }
             await historyPromise;
         };
@@ -4829,7 +4879,6 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                     if (isAdminView) markAdminSupportChatSeen(activeSupportRoomId, activeSupportMessages);
                 })
                 .catch((error) => console.warn('Fast chat history fetch failed:', error));
-            const socket = await getSupportSocket();
             const handleHistory = ({ roomId, history = [] }) => {
                 if (roomId !== activeSupportRoomId) return;
                 if (!history.length && activeSupportMessages.length) return;
@@ -4852,20 +4901,28 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                 applySupportReadReceipt(activeSupportRoomId, readerRole, readAt);
                 renderSupportMessages(activeSupportMessages, viewerRole);
             };
-            socket.on('chat_history', handleHistory);
-            socket.on('new_message', handleNewMessage);
-            socket.on('chat_read', handleReadReceipt);
-            socket.emit('join_room', { roomId: activeSupportRoomId, limit: 200, markRead: true }, (response) => {
-                if (!response?.ok) {
-                    console.warn('Join support room failed:', response?.error);
-                }
-            });
+            let socket = null;
+            try {
+                socket = await getSupportSocket({ timeoutMs: 5000 });
+                socket.on('chat_history', handleHistory);
+                socket.on('new_message', handleNewMessage);
+                socket.on('chat_read', handleReadReceipt);
+                socket.emit('join_room', { roomId: activeSupportRoomId, limit: 200, markRead: true }, (response) => {
+                    if (!response?.ok) {
+                        console.warn('Join support room failed:', response?.error);
+                    }
+                });
+            } catch (error) {
+                console.warn('Support chat realtime is not ready:', error?.message || error);
+            }
             activeChatUnsubscribe = () => {
                 if (keyboardCleanup) keyboardCleanup();
-                socket.off('chat_history', handleHistory);
-                socket.off('new_message', handleNewMessage);
-                socket.off('chat_read', handleReadReceipt);
-                socket.emit('leave_room', { roomId: activeSupportRoomId });
+                if (socket) {
+                    socket.off('chat_history', handleHistory);
+                    socket.off('new_message', handleNewMessage);
+                    socket.off('chat_read', handleReadReceipt);
+                    socket.emit('leave_room', { roomId: activeSupportRoomId });
+                }
             };
 
             const sendMessage = async () => {
@@ -4899,6 +4956,20 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                     userEmail: chatMeta.userEmail || currentUserData?.email || currentUser?.email || '',
                     userMobile: chatMeta.userMobile || currentUserData?.mobile || ''
                 };
+                if (!socket?.connected) {
+                    try {
+                        socket = await getSupportSocket({ timeoutMs: 5000 });
+                        socket.on('chat_history', handleHistory);
+                        socket.on('new_message', handleNewMessage);
+                        socket.on('chat_read', handleReadReceipt);
+                        socket.emit('join_room', { roomId: activeSupportRoomId, limit: 200, markRead: true });
+                    } catch (error) {
+                        unlockSend();
+                        input.value = text;
+                        showNotification('Chat is still connecting. Please try again.', true);
+                        return;
+                    }
+                }
                 socket.emit('send_message', {
                     roomId: activeSupportRoomId,
                     message: text,
@@ -11630,24 +11701,13 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
         const preloadLogoImages = () => {
             const logoUrls = [
                 'https://i.ibb.co/x8YBYwGG/6233389803554672153.jpg',
-                'https://upload.wikimedia.org/wikipedia/commons/e/e1/UPI-Logo-vector.svg',
-                'https://upload.wikimedia.org/wikipedia/commons/d/d0/Google_Play_Arrow_logo.svg',
-                'https://upload.wikimedia.org/wikipedia/commons/a/a9/Amazon_logo.svg',
-                'https://cdn.iconscout.com/icon/free/png-256/free-flipkart-logo-icon-download-in-svg-png-gif-file-formats--online-shopping-brand-logos-pack-icons-226594.png',
-                'https://upload.wikimedia.org/wikipedia/commons/b/b5/PayPal.svg',
-                'https://cdn-icons-png.flaticon.com/512/7939/7939990.png',
-                'https://cdn-icons-png.flaticon.com/512/681/681494.png',
-                'https://cdn-icons-png.flaticon.com/512/2611/2611152.png',
-                'https://cdn-icons-png.flaticon.com/512/3652/3652191.png',
-                'https://cdn-icons-png.flaticon.com/512/5962/5962463.png',
-                'https://cdn-icons-png.flaticon.com/512/3135/3135715.png',
                 'https://cdn-icons-png.flaticon.com/512/1827/1827370.png'
             ];
 
             logoUrls.forEach((logoUrl) => {
                 const img = new Image();
-                img.decoding = 'sync';
-                img.loading = 'eager';
+                img.decoding = 'async';
+                img.loading = 'lazy';
                 img.src = logoUrl;
                 img.onload = function () {
                     document.querySelectorAll(`img[src="${logoUrl}"]`).forEach(logo => {

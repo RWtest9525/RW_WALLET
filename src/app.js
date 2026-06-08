@@ -28,7 +28,7 @@ window.addEventListener('unhandledrejection', (event) => {
     }
 });
 
-document.addEventListener('DOMContentLoaded', () => {
+const hydrateInstantShell = () => {
             const ADMIN_UID = 'mOs5Fmp4RoRzeBDH4pZLMOpQx7Q2';
             const lastUser = localStorage.getItem('lastLoggedInUser');
             const escapeHtml = (value = '') => String(value)
@@ -158,4 +158,10 @@ document.addEventListener('DOMContentLoaded', () => {
                     showRuntimeRecoveryScreen('No visible app screen after startup.');
                 }
             }, 4000);
-        });
+        };
+
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', hydrateInstantShell, { once: true });
+} else {
+    hydrateInstantShell();
+}
