@@ -172,6 +172,13 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
         };
         const getSpendableWalletBalance = (user = currentUserData || {}) =>
             Math.max(0, Number(user.balance || 0) - getLoanReservedAmount(user));
+        const getInsufficientWalletMessage = (user = currentUserData || {}) => {
+            const reservedAmount = getLoanReservedAmount(user);
+            if (reservedAmount > 0) {
+                return `Insufficient available balance. ${formatCurrency(reservedAmount)} is reserved for loan repayment.`;
+            }
+            return 'Insufficient wallet balance.';
+        };
         const getLoanLimitAmount = (user = currentUserData || {}) =>
             Math.max(0, Number(user.maxLoanAmount || user.loanMaxAmount || user.creditLimit || user.loanCreditLimit || 0));
         const isModernLoanRequest = (request = {}) =>
@@ -6398,7 +6405,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             }
 
             if (!currentUserData || getSpendableWalletBalance(currentUserData) < amount) {
-                return showNotification(`Insufficient available balance. ${formatCurrency(getLoanReservedAmount(currentUserData))} is reserved for loan repayment.`, true);
+                return showNotification(getInsufficientWalletMessage(currentUserData), true);
             }
 
             let methodDetails = '';
@@ -6586,7 +6593,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             if (!state) return showNotification('Please select state.', true);
             if (amount <= 0) return showNotification('Please enter a valid recharge amount.', true);
             if (!planDetails) return showNotification('Please enter validity or plan details.', true);
-            if (getSpendableWalletBalance(currentUserData) < chargeAmount) return showNotification(`Insufficient available balance. ${formatCurrency(getLoanReservedAmount(currentUserData))} is reserved for loan repayment.`, true);
+            if (getSpendableWalletBalance(currentUserData) < chargeAmount) return showNotification(getInsufficientWalletMessage(currentUserData), true);
 
             renderModal('Confirm Mobile Recharge',
                 `<div class="space-y-4">
@@ -8852,7 +8859,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                     if (!userDoc.exists()) throw new Error("User account not found!");
 
                     const currentBalance = userDoc.data().balance || 0;
-                    if (getSpendableWalletBalance(userDoc.data()) < chargeAmount) throw new Error("Insufficient available balance. Some wallet funds are reserved for loan repayment.");
+                    if (getSpendableWalletBalance(userDoc.data()) < chargeAmount) throw new Error(getInsufficientWalletMessage(userDoc.data()));
 
                     const balanceAfter = currentBalance - chargeAmount;
                     requestPayload.balanceBefore = currentBalance;
@@ -9158,7 +9165,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                 return showNotification('Please accept partner terms and conditions.', true);
             }
             if (getSpendableWalletBalance(currentUserData) < amount) {
-                return showNotification(`Insufficient available balance. ${formatCurrency(getLoanReservedAmount(currentUserData))} is reserved for loan repayment.`, true);
+                return showNotification(getInsufficientWalletMessage(currentUserData), true);
             }
 
             try {
@@ -9171,7 +9178,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                     if (!userDoc.exists()) throw new Error('User account not found.');
                     const balance = userDoc.data().balance || 0;
                     if (amount < PARTNER_MIN_INVESTMENT) throw new Error(`Minimum partner investment is ${formatCurrency(PARTNER_MIN_INVESTMENT)}.`);
-                    if (getSpendableWalletBalance(userDoc.data()) < amount) throw new Error('Insufficient available balance. Some wallet funds are reserved for loan repayment.');
+                    if (getSpendableWalletBalance(userDoc.data()) < amount) throw new Error(getInsufficientWalletMessage(userDoc.data()));
 
                     tx.update(userRef, { balance: balance - amount });
                     tx.set(investmentRef, {
@@ -9617,7 +9624,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                     if (!userDoc.exists()) throw new Error("User account not found!");
 
                     const currentBalance = userDoc.data().balance || 0;
-                    if (getSpendableWalletBalance(userDoc.data()) < amount) throw new Error("Insufficient available balance. Some wallet funds are reserved for loan repayment.");
+                    if (getSpendableWalletBalance(userDoc.data()) < amount) throw new Error(getInsufficientWalletMessage(userDoc.data()));
 
                     // 1. Deduct balance immediately
                     const balanceAfter = currentBalance - amount;
@@ -9683,7 +9690,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
 
             // Check if user has sufficient balance
             if (!currentUserData || getSpendableWalletBalance(currentUserData) < amount) {
-                return showNotification(`Insufficient available balance. ${formatCurrency(getLoanReservedAmount(currentUserData))} is reserved for loan repayment.`, true);
+                return showNotification(getInsufficientWalletMessage(currentUserData), true);
             }
 
             try {
@@ -9804,7 +9811,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
 
                     // Check if sender has sufficient balance
                     if (getSpendableWalletBalance(senderDoc.data()) < amount) {
-                        throw new Error("Insufficient available balance. Some wallet funds are reserved for loan repayment.");
+                        throw new Error(getInsufficientWalletMessage(senderDoc.data()));
                     }
 
                     // Update balances
