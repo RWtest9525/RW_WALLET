@@ -6828,12 +6828,22 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             };
         };
 
+        const normalizeLoanDob = (dob = '') => {
+            const value = String(dob || '').trim();
+            const match = /^(\d{1,2})[\/_-](\d{1,2})[\/_-](\d{4})$/.exec(value);
+            if (!match) return value;
+            const day = match[1].padStart(2, '0');
+            const month = match[2].padStart(2, '0');
+            const year = match[3];
+            return `${day}/${month}/${year}`;
+        };
+
         const getLoanRequestPersonal = () => ({
             name: document.getElementById('loan-name-input')?.value.trim() || '',
             fatherName: document.getElementById('loan-father-input')?.value.trim() || '',
             mobile: document.getElementById('loan-mobile-input')?.value.trim() || '',
             alternateMobile: document.getElementById('loan-alt-mobile-input')?.value.trim() || '',
-            dob: document.getElementById('loan-dob-input')?.value.trim() || '',
+            dob: normalizeLoanDob(document.getElementById('loan-dob-input')?.value || ''),
             aadhaar: document.getElementById('loan-aadhaar-input')?.value.trim() || ''
         });
 
@@ -7031,6 +7041,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                 aadhaar: '',
                 ...(loanApplicationDraft.personal || {})
             };
+            personal.dob = normalizeLoanDob(personal.dob);
             const docs = loanApplicationDraft.documents || {};
             const inputClass = 'w-full rounded-2xl border border-gray-200 bg-gray-50 px-4 py-4 text-base font-semibold text-slate-950 shadow-inner outline-none transition focus:border-indigo-400 focus:bg-white focus:ring-4 focus:ring-indigo-100 dark:border-gray-700 dark:bg-gray-900 dark:text-white dark:focus:border-indigo-500 dark:focus:ring-indigo-900/40';
             const stepContent = step === 1 ? `
@@ -7039,7 +7050,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                     <input id="loan-father-input" value="${escapeHtml(personal.fatherName)}" placeholder="Father's name" class="${inputClass}">
                     <input id="loan-mobile-input" value="${escapeHtml(personal.mobile)}" maxlength="10" inputmode="numeric" placeholder="Mobile no." class="${inputClass}">
                     <input id="loan-alt-mobile-input" value="${escapeHtml(personal.alternateMobile)}" maxlength="10" inputmode="numeric" placeholder="Alternate no." class="${inputClass}">
-                    <input id="loan-dob-input" value="${escapeHtml(personal.dob)}" maxlength="10" placeholder="Date of birth (DD_MM_YYYY)" class="${inputClass}">
+                    <input id="loan-dob-input" value="${escapeHtml(personal.dob)}" maxlength="10" autocomplete="bday" placeholder="Date of birth (DD/MM/YYYY)" class="${inputClass}">
                     <input id="loan-aadhaar-input" value="${escapeHtml(personal.aadhaar)}" maxlength="12" inputmode="numeric" placeholder="Aadhaar number" class="${inputClass}">
                 </div>` : step === 2 ? `
                 <div class="space-y-3">
@@ -7110,6 +7121,9 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                 if (validateLoanApplicationStep(step)) handleSubmitLoanRequest();
             });
             document.getElementById('loan-final-agreement-link')?.addEventListener('click', showLoanAgreementModal);
+            document.getElementById('loan-dob-input')?.addEventListener('blur', (event) => {
+                event.target.value = normalizeLoanDob(event.target.value);
+            });
             document.getElementById('loan-aadhaar-file-input')?.addEventListener('change', (event) => {
                 const file = event.target.files?.[0] || null;
                 loanApplicationDraft.documents = { ...(loanApplicationDraft.documents || {}), aadhaarFile: file, aadhaarName: file?.name || '' };
@@ -8995,7 +9009,8 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
         };
 
         const isValidLoanDob = (dob) => {
-            const match = /^(\d{2})_(\d{2})_(\d{4})$/.exec(dob);
+            const normalizedDob = normalizeLoanDob(dob);
+            const match = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(normalizedDob);
             if (!match) return false;
 
             const day = Number(match[1]);
@@ -9003,7 +9018,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             const year = Number(match[3]);
             const date = new Date(year, month - 1, day);
 
-            return date.getFullYear() === year && date.getMonth() === month - 1 && date.getDate() === day;
+            return year >= 1900 && date.getFullYear() === year && date.getMonth() === month - 1 && date.getDate() === day;
         };
 
         const uploadLoanDocumentFile = async (file, documentType) => {
