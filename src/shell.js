@@ -517,12 +517,4 @@ root.outerHTML = String.raw`
         <!-- Content will be injected by JS -->
     </div>
 
-    <!-- Audio elements for sound effects -->
-    <audio id="success-sound" preload="none">
-        <source src="https://assets.mixkit.co/sfx/preview/mixkit-correct-answer-tone-2870.mp3" type="audio/mpeg">
-    </audio>
-    <audio id="error-sound" preload="none">
-        <source src="https://assets.mixkit.co/sfx/preview/mixkit-wrong-answer-fail-notification-946.mp3"
-            type="audio/mpeg">
-    </audio>
 `;

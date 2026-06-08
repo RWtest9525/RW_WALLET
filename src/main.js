@@ -1216,22 +1216,9 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             return `TXN${timestamp}${random}`.toUpperCase();
         };
 
-        // Sound functions
-        const playSuccessSound = () => {
-            const audio = document.getElementById('success-sound');
-            if (audio) {
-                audio.currentTime = 0;
-                audio.play().catch(e => console.log("Audio play failed:", e));
-            }
-        };
-
-        const playErrorSound = () => {
-            const audio = document.getElementById('error-sound');
-            if (audio) {
-                audio.currentTime = 0;
-                audio.play().catch(e => console.log("Audio play failed:", e));
-            }
-        };
+        // Keep toast feedback visual-only so startup never pulls blocked external media.
+        const playSuccessSound = () => {};
+        const playErrorSound = () => {};
 
         const closeNotification = () => {
             if (notificationTimeout) clearTimeout(notificationTimeout);
@@ -2720,7 +2707,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
         const getYoutubeEmbedUrl = (url = '') => {
             const value = String(url || '').trim();
             const match = value.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/shorts\/|youtube\.com\/embed\/)([A-Za-z0-9_-]{6,})/);
-            return match ? `https://www.youtube.com/embed/${match[1]}?autoplay=1&mute=1&playsinline=1&rel=0` : '';
+            return match ? `https://www.youtube.com/embed/${match[1]}?mute=1&playsinline=1&rel=0` : '';
         };
 
         const getAdType = (ad = {}) => {
@@ -2751,7 +2738,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                 carousel.innerHTML = `
                     <div class="relative mx-auto aspect-[16/7] w-full max-w-2xl overflow-hidden rounded-2xl border-2 border-white dark:border-gray-800 bg-gray-950 shadow-[0_18px_40px_rgba(15,23,42,0.18)]">
                         ${isYoutube ? `
-                            <iframe src="${youtubeUrl}" title="${escapeHtml(ad.title || 'Advertisement')}" class="absolute inset-0 h-full w-full" allow="autoplay; encrypted-media; picture-in-picture" allowfullscreen></iframe>
+                            <iframe src="${youtubeUrl}" title="${escapeHtml(ad.title || 'Advertisement')}" class="absolute inset-0 h-full w-full" allow="encrypted-media; picture-in-picture" allowfullscreen></iframe>
                         ` : `
                             <img src="${escapeHtml(mediaUrl)}" alt="${escapeHtml(ad.title || 'Advertisement')}" class="absolute inset-0 h-full w-full object-cover" loading="eager" decoding="async" onerror="this.src='https://images.unsplash.com/photo-1551288049-bebda4e38f71?auto=format&fit=crop&w=1200&q=80'">
                         `}
@@ -5101,11 +5088,11 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             if (!userId || userId === ADMIN_UID) return;
             const roomId = getSupportRoomId(userId);
             const cached = readSupportChatCache(roomId);
-            if (supportChatPreloadUserId === userId && supportSocket?.connected && cached.length) return;
+            if (supportChatPreloadUserId === userId && cached.length) return;
             supportChatPreloadUserId = userId;
             if (cached.length) refreshSupportUnreadFromCache(roomId);
 
-            const historyPromise = fetchSupportChatHistory(roomId, 200)
+            await fetchSupportChatHistory(roomId, 200)
                 .then((history) => {
                 const merged = mergeSupportMessages(cached, history);
                 writeSupportChatCache(roomId, merged);
@@ -5116,47 +5103,6 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                     console.warn('Support chat preload failed:', error);
                     return cached;
                 });
-
-            try {
-                const socket = await getSupportSocket({ timeoutMs: 1800 });
-                if (supportChatBackgroundHandlers) {
-                    socket.off('chat_history', supportChatBackgroundHandlers.history);
-                    socket.off('new_message', supportChatBackgroundHandlers.message);
-                    socket.off('chat_read', supportChatBackgroundHandlers.read);
-                }
-                const handleBackgroundHistory = ({ roomId: incomingRoomId, history = [] }) => {
-                    if (incomingRoomId !== roomId) return;
-                    const isActiveRoomOpen = activeSupportRoomId === roomId && document.getElementById('support-chat-messages');
-                    if (isActiveRoomOpen) return;
-                    const merged = mergeSupportMessages(readSupportChatCache(roomId), history);
-                    writeSupportChatCache(roomId, merged);
-                    refreshSupportUnreadFromCache(roomId);
-                };
-                const handleBackgroundMessage = (message) => {
-                    if (message.roomId !== roomId) return;
-                    const isActiveRoomOpen = activeSupportRoomId === roomId && document.getElementById('support-chat-messages');
-                    if (isActiveRoomOpen) return;
-                    const merged = mergeSupportMessages(readSupportChatCache(roomId), [message]);
-                    writeSupportChatCache(roomId, merged);
-                    refreshSupportUnreadFromCache(roomId);
-                };
-                const handleBackgroundRead = ({ roomId: incomingRoomId, readerRole, readAt }) => {
-                    if (incomingRoomId !== roomId) return;
-                    applySupportReadReceipt(roomId, readerRole, readAt);
-                };
-                supportChatBackgroundHandlers = {
-                    history: handleBackgroundHistory,
-                    message: handleBackgroundMessage,
-                    read: handleBackgroundRead
-                };
-                socket.on('chat_history', handleBackgroundHistory);
-                socket.on('new_message', handleBackgroundMessage);
-                socket.on('chat_read', handleBackgroundRead);
-                socket.emit('join_room', { roomId, limit: 200, markRead: false });
-            } catch (error) {
-                console.warn('Support chat realtime skipped:', error?.message || error);
-            }
-            await historyPromise;
         };
 
         const preloadAdminChatRooms = (chats = allSupportChatsCache) => {
@@ -5863,7 +5809,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             document.getElementById('reviews-world-chat-card').onclick = () => openSupportChatPage(currentUser.uid, 'user');
         };
 
-        const loadAdminChatsFromBackend = async ({ silent = false, retry = true } = {}) => {
+        const loadAdminChatsFromBackend = async ({ silent = false, retry = true, subscribeRealtime = false } = {}) => {
             if (currentUser?.uid !== ADMIN_UID) return;
             try {
                 const token = await getBackendAuthToken();
@@ -5888,11 +5834,14 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                 refreshAdminChatUnreadCount();
                 renderAdminChatsList();
                 preloadAdminChatRooms(allSupportChatsCache);
-                subscribeAdminChatRooms(allSupportChatsCache).catch(error => console.warn('Admin chat socket subscribe skipped:', error));
+                if (subscribeRealtime) {
+                    subscribeAdminChatRooms(allSupportChatsCache).catch(error => console.warn('Admin chat socket subscribe skipped:', error));
+                }
             } catch (error) {
-                console.error('Cloudflare admin chat list failed:', error);
+                const log = silent ? console.warn : console.error;
+                log('Cloudflare admin chat list failed:', error);
                 if (retry) {
-                    setTimeout(() => loadAdminChatsFromBackend({ silent, retry: false }).catch(() => {}), 2500);
+                    setTimeout(() => loadAdminChatsFromBackend({ silent, retry: false, subscribeRealtime }).catch(() => {}), 2500);
                 }
                 if (!silent && document.getElementById('admin-chats-list')) {
                     showNotification('Could not load chat list from backend. Retrying once...', true);
@@ -6013,7 +5962,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             setBottomNavActive('bottom-settings-btn');
             document.getElementById('admin-chat-search').addEventListener('input', renderAdminChatsList);
             renderAdminChatsList();
-            loadAdminChatsFromBackend({ silent: false });
+            loadAdminChatsFromBackend({ silent: false, subscribeRealtime: true });
             ensureAdminChatUsersLoaded().then(renderAdminChatsList);
         };
 
@@ -7290,6 +7239,31 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             };
         };
 
+        const getActiveLoanFromUserMarker = (user = currentUserData || {}) => {
+            user = user || {};
+            if (Number(user.activeLoanVersion || 0) < LOAN_APPLICATION_VERSION) return null;
+            const activeLoanId = String(user.activeLoanId || '').trim();
+            const totalRepayable = Number(user.activeLoanRepayable ?? user.loanLockedAmount ?? 0);
+            if (!activeLoanId && totalRepayable <= 0) return null;
+            const amount = Number(user.activeLoanAmount ?? user.activeLoanPrincipal ?? user.loanPrincipal ?? 0);
+            return {
+                id: activeLoanId || `active-${user.id || user.uid || currentUser?.uid || 'loan'}`,
+                userId: user.id || user.uid || currentUser?.uid || '',
+                userName: user.name || 'User',
+                userMobile: user.mobile || '',
+                amount,
+                principal: amount,
+                interest: Number(user.activeLoanInterest ?? Math.max(0, totalRepayable - amount)),
+                totalRepayable,
+                lockedAmount: totalRepayable,
+                dueDate: user.activeLoanDueDate || user.loanDueDate || null,
+                status: 'active',
+                loanApplicationVersion: LOAN_APPLICATION_VERSION,
+                loanRequestVersion: LOAN_APPLICATION_VERSION,
+                createdAt: user.activeLoanCreatedAt || Date.now()
+            };
+        };
+
         const getPartnerInvestmentSummary = () => {
             const amount = parseFloat(document.getElementById('partner-amount-input')?.value || '0') || 0;
             const months = parseInt(document.getElementById('partner-months-input')?.value || '0') || 0;
@@ -7525,12 +7499,17 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             });
         };
 
-        const showLoanPage = async () => {
+        const runAfterFirstPaint = (callback) => {
+            const run = () => setTimeout(callback, 0);
+            if (typeof requestAnimationFrame === 'function') {
+                requestAnimationFrame(run);
+            } else {
+                run();
+            }
+        };
+
+        const showLoanPage = () => {
             if (!currentUser || !currentUserData) return showNotification('User data not loaded. Please wait.', true);
-            let userLoans = getUserLoanRecords(currentUser.uid);
-            let userLoanRequests = allLoanRequestsCache
-                .filter(request => request.userId === currentUser.uid && isModernLoanRequest(request))
-                .sort((a, b) => timestampToMillis(b.requestedAt || b.processedAt) - timestampToMillis(a.requestedAt || a.processedAt));
 
             const showLoanApplicationStart = () => {
                 loanApplicationDraft = {
@@ -7549,7 +7528,12 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                 showLoanApplicationPage(1);
             };
 
-            const renderLoanState = (loans = userLoans, requests = userLoanRequests) => {
+            const markerLoan = getActiveLoanFromUserMarker(currentUserData);
+            const markerRequest = getUserLoanRequestMarker(currentUserData);
+            const markerRequests = isModernLoanRequest(markerRequest) ? [markerRequest] : [];
+            const markerLoans = markerLoan ? [markerLoan] : [];
+
+            const renderLoanState = (loans = markerLoans, requests = markerRequests) => {
                 const pendingModernRequest = requests.find(isPendingModernLoanRequest) || null;
                 const latestModernRequest = getLatestModernLoanRequest(currentUser.uid, requests);
                 const userLoanMarker = getUserLoanRequestMarker(currentUserData);
@@ -7570,36 +7554,59 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                 showLoanApplicationStart();
             };
 
-            renderLoanState(userLoans, userLoanRequests);
-            try {
-                const [freshUserSnap, loanSnap, loanReqSnap] = await Promise.all([
-                    getDoc(doc(db, `artifacts/${appId}/public/data/users`, currentUser.uid)),
-                    getDocs(query(collection(db, `artifacts/${appId}/public/data/loans`), where("userId", "==", currentUser.uid))),
-                    getDocs(query(collection(db, `artifacts/${appId}/public/data/loan_requests`), where("userId", "==", currentUser.uid)))
-                ]);
-                if (freshUserSnap.exists()) {
-                    currentUserData = { ...currentUserData, ...freshUserSnap.data(), id: currentUser.uid, uid: currentUser.uid };
-                    writeCache(getUserCacheKey(currentUser.uid), currentUserData);
+            renderLoanState(markerLoans, markerRequests);
+
+            runAfterFirstPaint(async () => {
+                let userLoans = getUserLoanRecords(currentUser.uid);
+                if (markerLoan && !userLoans.some(loan => loan.id === markerLoan.id)) {
+                    userLoans = [markerLoan, ...userLoans];
                 }
-                userLoans = loanSnap.docs.map(d => ({ id: d.id, ...d.data() }))
-                    .filter(isModernLoanRecord)
-                    .sort((a, b) => timestampToMillis(b.createdAt || b.paidAt) - timestampToMillis(a.createdAt || a.paidAt));
-                allLoansCache = [
-                    ...allLoansCache.filter(loan => loan.userId !== currentUser.uid),
-                    ...userLoans
-                ];
-                userLoanRequests = loanReqSnap.docs
-                    .map(d => ({ id: d.id, ...d.data() }))
-                    .filter(isModernLoanRequest)
+                let userLoanRequests = allLoanRequestsCache
+                    .filter(request => request && request.userId === currentUser.uid && isModernLoanRequest(request))
                     .sort((a, b) => timestampToMillis(b.requestedAt || b.processedAt) - timestampToMillis(a.requestedAt || a.processedAt));
-                allLoanRequestsCache = [
-                    ...allLoanRequestsCache.filter(request => request.userId !== currentUser.uid),
-                    ...userLoanRequests
-                ].sort((a, b) => timestampToMillis(b.requestedAt || b.processedAt) - timestampToMillis(a.requestedAt || a.processedAt));
+                if (markerRequests.length && !userLoanRequests.some(request => request.id && request.id === markerRequests[0].id)) {
+                    userLoanRequests = [...markerRequests, ...userLoanRequests];
+                }
                 renderLoanState(userLoans, userLoanRequests);
-            } catch (error) {
-                console.warn('Fresh loan state check skipped:', error);
-            }
+
+                try {
+                    const [freshUserSnap, loanSnap, loanReqSnap] = await Promise.all([
+                        getDoc(doc(db, `artifacts/${appId}/public/data/users`, currentUser.uid)),
+                        getDocs(query(collection(db, `artifacts/${appId}/public/data/loans`), where("userId", "==", currentUser.uid))),
+                        getDocs(query(collection(db, `artifacts/${appId}/public/data/loan_requests`), where("userId", "==", currentUser.uid)))
+                    ]);
+                    if (freshUserSnap.exists()) {
+                        currentUserData = { ...currentUserData, ...freshUserSnap.data(), id: currentUser.uid, uid: currentUser.uid };
+                        writeCache(getUserCacheKey(currentUser.uid), currentUserData);
+                    }
+                    userLoans = loanSnap.docs.map(d => ({ id: d.id, ...d.data() }))
+                        .filter(isModernLoanRecord)
+                        .sort((a, b) => timestampToMillis(b.createdAt || b.paidAt) - timestampToMillis(a.createdAt || a.paidAt));
+                    const freshMarkerLoan = getActiveLoanFromUserMarker(currentUserData);
+                    if (freshMarkerLoan && !userLoans.some(loan => loan.id === freshMarkerLoan.id)) {
+                        userLoans = [freshMarkerLoan, ...userLoans];
+                    }
+                    allLoansCache = [
+                        ...allLoansCache.filter(loan => loan && loan.userId !== currentUser.uid),
+                        ...userLoans
+                    ];
+                    userLoanRequests = loanReqSnap.docs
+                        .map(d => ({ id: d.id, ...d.data() }))
+                        .filter(isModernLoanRequest)
+                        .sort((a, b) => timestampToMillis(b.requestedAt || b.processedAt) - timestampToMillis(a.requestedAt || a.processedAt));
+                    const freshMarkerRequest = getUserLoanRequestMarker(currentUserData);
+                    if (isModernLoanRequest(freshMarkerRequest) && !userLoanRequests.some(request => request.id && request.id === freshMarkerRequest.id)) {
+                        userLoanRequests = [freshMarkerRequest, ...userLoanRequests];
+                    }
+                    allLoanRequestsCache = [
+                        ...allLoanRequestsCache.filter(request => request && request.userId !== currentUser.uid),
+                        ...userLoanRequests
+                    ].sort((a, b) => timestampToMillis(b.requestedAt || b.processedAt) - timestampToMillis(a.requestedAt || a.processedAt));
+                    renderLoanState(userLoans, userLoanRequests);
+                } catch (error) {
+                    console.warn('Fresh loan state check skipped:', error);
+                }
+            });
         };
 
         const showLoanApplicationPage = (step = 1) => {
@@ -10035,7 +10042,11 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                         loanEligible: true,
                         activeLoanId: loanRef.id,
                         activeLoanVersion: LOAN_APPLICATION_VERSION,
+                        activeLoanAmount: amount,
+                        activeLoanInterest: interest,
                         activeLoanRepayable: totalRepayable,
+                        activeLoanDueDate: Timestamp.fromDate(dueDate),
+                        activeLoanCreatedAt: serverTimestamp(),
                         loanLockedAmount: totalRepayable
                     });
                     tx.set(loanRef, {
@@ -10097,7 +10108,11 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                         balance: (userDoc.data().balance || 0) - loan.totalRepayable,
                         activeLoanId: deleteField(),
                         activeLoanVersion: deleteField(),
+                        activeLoanAmount: deleteField(),
+                        activeLoanInterest: deleteField(),
                         activeLoanRepayable: deleteField(),
+                        activeLoanDueDate: deleteField(),
+                        activeLoanCreatedAt: deleteField(),
                         loanLockedAmount: deleteField()
                     });
                     tx.update(loanRef, {
@@ -10335,7 +10350,11 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                     balance: balance - (loan.totalRepayable || 0),
                     activeLoanId: deleteField(),
                     activeLoanVersion: deleteField(),
+                    activeLoanAmount: deleteField(),
+                    activeLoanInterest: deleteField(),
                     activeLoanRepayable: deleteField(),
+                    activeLoanDueDate: deleteField(),
+                    activeLoanCreatedAt: deleteField(),
                     loanLockedAmount: deleteField()
                 });
                 tx.update(loanRef, {
