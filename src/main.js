@@ -54,6 +54,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
         const PARTNER_INTEREST_RATE = 0.01;
         const PARTNER_MIN_INVESTMENT = 25;
         const LOAN_APPLICATION_VERSION = 2;
+        const LOAN_REAPPLY_WAIT_MONTHS = 3;
         const LOAN_DOCUMENT_MAX_SIZE_BYTES = 8 * 1024 * 1024;
         const LOAN_DOCUMENT_UPLOAD_TIMEOUT_MS = 120000;
         const PARTNER_ICON_URL = 'https://cdn-icons-png.flaticon.com/512/3135/3135706.png';
@@ -65,6 +66,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             'Uttar Pradesh East', 'Uttar Pradesh West', 'West Bengal'
         ];
         const BACKEND_BASE_URL = 'https://rw-wallet.onrender.com';
+        const RW_LOGO_URL = 'https://i.ibb.co/x8YBYwGG/6233389803554672153.jpg';
 
         const app = initializeApp(firebaseConfig);
         const auth = getAuth(app);
@@ -139,6 +141,9 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
         let revyBotTimer = null;
         let currentMainSection = 'home';
         let notificationTimeout;
+        let appConfigCache = {};
+        let maintenanceCountdownTimer = null;
+        let whatsNewPopupVisible = false;
 
         const unsubscribers = [];
 
@@ -168,6 +173,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             return 0;
         };
         const getLoanReservedAmount = (user = currentUserData || {}) => {
+            if (Number(user.activeLoanVersion || 0) < LOAN_APPLICATION_VERSION) return 0;
             const explicit = Number(user.loanLockedAmount ?? user.loan_locked_amount ?? 0);
             const activeRepayable = Number(user.activeLoanRepayable ?? user.active_loan_repayable ?? 0);
             const rawReserve = Number.isFinite(explicit) && explicit > 0 ? explicit : activeRepayable;
@@ -182,6 +188,14 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             }
             return 'Insufficient wallet balance.';
         };
+        const getInsufficientRechargeMessage = (user = currentUserData || {}, requiredAmount = 0) => {
+            const balance = Number(user.balance || 0);
+            const reservedAmount = getLoanReservedAmount(user);
+            if (reservedAmount > 0 && balance >= Number(requiredAmount || 0)) {
+                return `Insufficient available balance. ${formatCurrency(reservedAmount)} is reserved for loan repayment.`;
+            }
+            return 'Insufficient wallet balance for mobile recharge.';
+        };
         const withTimeout = (promise, timeoutMs, message) => {
             let timeoutId;
             const timeoutPromise = new Promise((_, reject) => {
@@ -191,14 +205,28 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
         };
         const getLoanLimitAmount = (user = currentUserData || {}) =>
             Math.max(0, Number(user.maxLoanAmount || user.loanMaxAmount || user.creditLimit || user.loanCreditLimit || 0));
-        const isModernLoanRequest = (request = {}) =>
-            Number(request.requestVersion || request.loanApplicationVersion || 0) >= LOAN_APPLICATION_VERSION;
+        const hasSubmittedLoanDetails = (request = {}) => !!(
+            request.personalDetails ||
+            request.documents?.aadhaar ||
+            request.documents?.selfie ||
+            request.fatherName ||
+            request.aadhaar ||
+            request.aadhaarNumber
+        );
+        const isModernLoanRequest = (request = {}) => {
+            const version = Number(request.requestVersion || request.loanApplicationVersion || request.latestLoanRequestVersion || 0);
+            if (version >= LOAN_APPLICATION_VERSION) return true;
+            const status = String(request.status || request.loanRequestStatus || '').trim().toLowerCase();
+            return status === 'pending' && hasSubmittedLoanDetails(request);
+        };
         const hasModernLoanApproval = (user = currentUserData || {}) =>
             getLoanLimitAmount(user) > 0 && Number(user.loanApplicationVersion || user.loanRequestVersion || 0) >= LOAN_APPLICATION_VERSION;
+        const isModernLoanRecord = (loan = {}) =>
+            Number(loan.loanApplicationVersion || loan.loanRequestVersion || loan.requestVersion || loan.latestLoanRequestVersion || 0) >= LOAN_APPLICATION_VERSION;
         const isActiveLoanRecord = (loan = {}) => String(loan.status || '').toLowerCase() === 'active';
         const getLoanPrincipal = (loan = {}) => Number(loan.amount || loan.principal || 0);
         const getUserLoanRecords = (userId, loans = allLoansCache) => loans
-            .filter(loan => loan.userId === userId)
+            .filter(loan => loan.userId === userId && isModernLoanRecord(loan))
             .sort((a, b) => timestampToMillis(b.createdAt || b.paidAt) - timestampToMillis(a.createdAt || a.paidAt));
         const getLatestModernLoanRequest = (userId, requests = allLoanRequestsCache) => requests
             .filter(request => request.userId === userId && isModernLoanRequest(request))
@@ -291,13 +319,15 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
         const normalizeTransactionType = (item = {}) => {
             const rawType = String(item.type || '').toLowerCase().replace(/\s+/g, '_');
             const comment = String(item.comment || item.remarks || '').toLowerCase();
-            if (rawType === 'debit' || rawType.includes('debit') || rawType.includes('deduct') || rawType.includes('cut') || comment.includes('admin debit') || comment.includes('balance cut') || comment.includes('deduct')) return 'debit';
             if (rawType.includes('withdraw') || comment.includes('withdraw')) return 'withdrawal';
             if (rawType.includes('recharge') || comment.includes('recharge')) return 'mobile_recharge';
             if (rawType.includes('gift')) return 'gift_card';
             if (rawType.includes('wallet_transfer') || rawType === 'transfer') return 'wallet_transfer';
+            if (rawType === 'credit' || rawType.includes('credit') || rawType.includes('received') || rawType.includes('deposit') || rawType.includes('add_fund')) return 'credit';
+            if (rawType === 'debit' || rawType.includes('debit') || rawType.includes('deduct') || rawType.includes('cut')) return 'debit';
             if (rawType.includes('sent') || comment.includes('money sent')) return 'debit';
-            if (rawType === 'credit' || rawType.includes('received') || rawType.includes('deposit') || rawType.includes('add_fund') || comment.includes('admin credit')) return 'credit';
+            if (comment.includes('admin credit')) return 'credit';
+            if (comment.includes('admin debit') || comment.includes('balance cut') || comment.includes('deduct')) return 'debit';
             if (Number(item.amount || 0) > 0) return 'credit';
             if (Number(item.amount || 0) < 0) return 'debit';
             return rawType || 'transaction';
@@ -2211,6 +2241,8 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
 
                 const isAdmin = user.uid === ADMIN_UID;
                 applyAdminBottomChrome(isAdmin);
+                applyMaintenanceMode();
+                showWhatsNewPopupIfNeeded();
                 hydrateUserFromCache(user.uid);
                 const userDocRef = doc(db, `artifacts/${appId}/public/data/users`, user.uid);
                 const userDocSnap = await getDoc(userDocRef).catch(error => {
@@ -2282,6 +2314,8 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             } else {
                 currentUser = null;
                 backendAuthToken = '';
+                removeMaintenanceOverlay();
+                closeWhatsNewPopup(false);
                 if (supportSocket) {
                     supportSocket.disconnect();
                     supportSocket = null;
@@ -2326,6 +2360,8 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                     console.log("User data snapshot received");
                     const data = doc.data();
                     currentUserData = { id: userId, uid: userId, ...data };
+                    applyMaintenanceMode();
+                    showWhatsNewPopupIfNeeded();
                     const isBanned = await enforceCurrentUserBan(userId, userDocRef, data).catch(e => {
                         console.error('Ban enforcement failed:', e);
                         return false;
@@ -2613,15 +2649,27 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             }
         };
 
+        const updateAdminLoanRequestBadge = () => {
+            const badge = document.getElementById('admin-loan-request-badge');
+            if (!badge) return;
+            const pendingCount = allLoanRequestsCache.filter(request =>
+                isModernLoanRequest(request) &&
+                String(request.status || request.loanRequestStatus || '').trim().toLowerCase() === 'pending'
+            ).length;
+            badge.textContent = pendingCount > 99 ? '99+' : String(pendingCount || '');
+            badge.classList.toggle('hidden', pendingCount <= 0);
+        };
+
         const applyAdminLoanRequestsSnapshot = (docs = []) => {
             allLoanRequestsCache = docs.map(doc => ({ id: doc.id, ...doc.data() }));
+            updateAdminLoanRequestBadge();
             if (document.getElementById('admin-loan-page')) {
                 renderAdminLoanPage();
             }
         };
 
         const applyAdminLoansSnapshot = (docs = []) => {
-            allLoansCache = docs.map(doc => ({ id: doc.id, ...doc.data() }));
+            allLoansCache = docs.map(doc => ({ id: doc.id, ...doc.data() })).filter(isModernLoanRecord);
             if (document.getElementById('admin-loan-page')) {
                 renderAdminLoanPage();
             }
@@ -3308,6 +3356,8 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                         ${renderSettingAction('settings-admin-gift-codes', 'Gift Codes', 'https://cdn-icons-png.flaticon.com/512/2611/2611152.png', 'purple')}
                         ${renderSettingAction('settings-admin-history', 'Withdrawal History', 'https://cdn-icons-png.flaticon.com/512/3652/3652191.png', 'yellow')}
                         ${renderSettingAction('settings-admin-chat', 'Manage Chat', 'https://cdn-icons-png.flaticon.com/512/5962/5962463.png', 'rose')}
+                        ${renderSettingAction('settings-admin-maintenance', 'Maintenance Mode', 'https://cdn-icons-png.flaticon.com/512/2099/2099058.png', 'red')}
+                        ${renderSettingAction('settings-admin-whats-new', "What's New Popup", 'https://cdn-icons-png.flaticon.com/512/1828/1828884.png', 'blue')}
                     </div>` : ''}
                     <button id="settings-logout-btn" class="flex items-center justify-center w-full p-4 rounded-2xl bg-red-50 dark:bg-red-900/20 border border-red-100 dark:border-red-800 text-red-600 dark:text-red-300 font-bold">Logout</button>
                 </div>
@@ -3326,6 +3376,403 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                 document.getElementById('settings-admin-gift-codes').onclick = showAdminGiftCodesPage;
                 document.getElementById('settings-admin-history').onclick = showWithdrawalHistoryPage;
                 document.getElementById('settings-admin-chat').onclick = showAdminChatsPage;
+                document.getElementById('settings-admin-maintenance').onclick = showMaintenanceSettingsPage;
+                document.getElementById('settings-admin-whats-new').onclick = showWhatsNewSettingsPage;
+            }
+        };
+
+        const getMaintenanceEndMillis = (config = appConfigCache) =>
+            timestampToMillis(config.maintenanceEndsAt || config.maintenance_ends_at || config.maintenanceEndAt || 0);
+
+        const isMaintenanceConfigActive = (config = appConfigCache) => {
+            const enabled = !!(config.maintenanceEnabled || config.maintenance_enabled);
+            if (!enabled) return false;
+            const endMillis = getMaintenanceEndMillis(config);
+            return !endMillis || endMillis > Date.now();
+        };
+
+        const formatMaintenanceCountdown = (millis) => {
+            const totalSeconds = Math.max(0, Math.floor(Number(millis || 0) / 1000));
+            const days = Math.floor(totalSeconds / 86400);
+            const hours = Math.floor((totalSeconds % 86400) / 3600);
+            const minutes = Math.floor((totalSeconds % 3600) / 60);
+            const seconds = totalSeconds % 60;
+            if (days > 0) return `${days}d ${String(hours).padStart(2, '0')}h ${String(minutes).padStart(2, '0')}m ${String(seconds).padStart(2, '0')}s`;
+            return `${String(hours).padStart(2, '0')}h ${String(minutes).padStart(2, '0')}m ${String(seconds).padStart(2, '0')}s`;
+        };
+
+        const removeMaintenanceOverlay = () => {
+            if (maintenanceCountdownTimer) {
+                clearInterval(maintenanceCountdownTimer);
+                maintenanceCountdownTimer = null;
+            }
+            document.getElementById('app-maintenance-overlay')?.remove();
+            document.body.classList.remove('overflow-hidden');
+        };
+
+        const renderMaintenanceOverlay = () => {
+            if (!currentUser || currentUser.uid === ADMIN_UID || !isMaintenanceConfigActive(appConfigCache)) {
+                removeMaintenanceOverlay();
+                return;
+            }
+            const endMillis = getMaintenanceEndMillis(appConfigCache);
+            if (endMillis && endMillis <= Date.now()) {
+                removeMaintenanceOverlay();
+                return;
+            }
+
+            let overlay = document.getElementById('app-maintenance-overlay');
+            if (!overlay) {
+                overlay = document.createElement('div');
+                overlay.id = 'app-maintenance-overlay';
+                overlay.className = 'fixed inset-0 z-[9999] overflow-y-auto bg-slate-950 text-white';
+                document.body.appendChild(overlay);
+            }
+            document.body.classList.add('overflow-hidden');
+
+            const message = appConfigCache.maintenanceMessage || 'We are improving your wallet experience. Please wait until the maintenance window is complete.';
+            const countdown = endMillis ? formatMaintenanceCountdown(endMillis - Date.now()) : 'Updating now';
+            if (overlay.dataset.maintenanceMessage === message) {
+                const countdownEl = document.getElementById('maintenance-countdown-text');
+                if (countdownEl) countdownEl.textContent = countdown;
+                if (!maintenanceCountdownTimer) {
+                    maintenanceCountdownTimer = setInterval(renderMaintenanceOverlay, 1000);
+                }
+                return;
+            }
+            overlay.dataset.maintenanceMessage = message;
+            overlay.innerHTML = `
+                <div class="min-h-screen bg-gradient-to-br from-slate-950 via-blue-950 to-emerald-900 px-5 py-8 flex items-center justify-center">
+                    <div class="w-full max-w-md rounded-[2rem] border border-white/15 bg-white/10 p-6 text-center shadow-2xl backdrop-blur-xl">
+                        <div class="mx-auto flex h-20 w-20 items-center justify-center rounded-3xl bg-white shadow-xl">
+                            <img src="${RW_LOGO_URL}" alt="REVIEWS WORLD" class="h-16 w-16 rounded-2xl object-cover">
+                        </div>
+                        <p class="mt-6 text-xs font-black uppercase tracking-[0.35em] text-cyan-200">App Under Maintenance</p>
+                        <h1 class="mt-3 text-3xl font-black leading-tight">We will be back soon</h1>
+                        <p class="mt-3 text-sm font-medium leading-6 text-white/75">${escapeHtml(message)}</p>
+                        <div class="mt-6 rounded-3xl border border-white/15 bg-slate-950/50 p-5 shadow-inner">
+                            <p class="text-xs font-black uppercase tracking-[0.25em] text-emerald-200">Time Remaining</p>
+                            <p id="maintenance-countdown-text" class="mt-2 text-3xl font-black tabular-nums">${escapeHtml(countdown)}</p>
+                        </div>
+                        <div class="mt-5 grid grid-cols-3 gap-2 text-xs font-bold text-white/70">
+                            <div class="rounded-2xl bg-white/10 px-3 py-3">Security</div>
+                            <div class="rounded-2xl bg-white/10 px-3 py-3">Speed</div>
+                            <div class="rounded-2xl bg-white/10 px-3 py-3">Stability</div>
+                        </div>
+                        <p class="mt-5 text-xs text-white/55">Please keep the app open. It will continue automatically when maintenance ends.</p>
+                    </div>
+                </div>`;
+
+            if (!maintenanceCountdownTimer) {
+                maintenanceCountdownTimer = setInterval(renderMaintenanceOverlay, 1000);
+            }
+        };
+
+        const applyMaintenanceMode = () => {
+            renderMaintenanceOverlay();
+        };
+
+        const getWhatsNewId = (config = appConfigCache) => {
+            const explicit = String(config.whatsNewId || config.whats_new_id || '').trim();
+            if (explicit) return explicit;
+            const updatedMillis = timestampToMillis(config.whatsNewUpdatedAt || config.whats_new_updated_at || 0);
+            if (updatedMillis) return String(updatedMillis);
+            const message = String(config.whatsNewMessage || config.whats_new_message || '').trim();
+            return message ? `msg-${message.length}-${message.slice(0, 32)}` : '';
+        };
+
+        const getWhatsNewSeenKey = (userId = currentUser?.uid || '') => `rw_wallet_whats_new_seen_${userId}`;
+
+        const closeWhatsNewPopup = (markSeen = true) => {
+            const id = getWhatsNewId(appConfigCache);
+            if (markSeen && currentUser?.uid && id) {
+                localStorage.setItem(getWhatsNewSeenKey(currentUser.uid), id);
+            }
+            whatsNewPopupVisible = false;
+            document.getElementById('whats-new-overlay')?.remove();
+        };
+
+        window.closeWhatsNewPopup = () => closeWhatsNewPopup(true);
+
+        const showWhatsNewPopupIfNeeded = () => {
+            const enabled = appConfigCache.whatsNewEnabled !== false && appConfigCache.whats_new_enabled !== false;
+            const message = String(appConfigCache.whatsNewMessage || appConfigCache.whats_new_message || '').trim();
+            const id = getWhatsNewId(appConfigCache);
+            if (!currentUser || currentUser.uid === ADMIN_UID) {
+                closeWhatsNewPopup(false);
+                return;
+            }
+            if (!enabled || !message || !id) {
+                closeWhatsNewPopup(false);
+                return;
+            }
+            if (isMaintenanceConfigActive(appConfigCache)) {
+                closeWhatsNewPopup(false);
+                return;
+            }
+            if (whatsNewPopupVisible) return;
+            if (localStorage.getItem(getWhatsNewSeenKey(currentUser.uid)) === id) return;
+
+            const title = String(appConfigCache.whatsNewTitle || appConfigCache.whats_new_title || "What's New").trim() || "What's New";
+            const overlay = document.createElement('div');
+            overlay.id = 'whats-new-overlay';
+            overlay.className = 'fixed inset-0 z-[75] flex items-center justify-center bg-slate-950/55 p-4 backdrop-blur-sm';
+            overlay.innerHTML = `
+                <div class="w-full max-w-md overflow-hidden rounded-3xl bg-white shadow-2xl dark:bg-gray-900 dark:text-white">
+                    <div class="relative bg-gradient-to-br from-indigo-600 via-blue-600 to-emerald-500 px-6 py-6 text-white">
+                        <button type="button" onclick="window.closeWhatsNewPopup()" class="absolute right-4 top-4 flex h-9 w-9 items-center justify-center rounded-full bg-white/20 text-2xl font-light text-white hover:bg-white/30" aria-label="Close">&times;</button>
+                        <div class="flex h-14 w-14 items-center justify-center rounded-2xl bg-white shadow-lg">
+                            <img src="${RW_LOGO_URL}" alt="REVIEWS WORLD" class="h-11 w-11 rounded-xl object-cover">
+                        </div>
+                        <p class="mt-5 text-xs font-black uppercase tracking-[0.25em] text-white/70">REVIEWS WORLD</p>
+                        <h2 class="mt-2 pr-10 text-2xl font-black leading-tight">${escapeHtml(title)}</h2>
+                    </div>
+                    <div class="space-y-4 px-6 py-5">
+                        <p class="whitespace-pre-line text-sm font-medium leading-6 text-gray-600 dark:text-gray-300">${escapeHtml(message)}</p>
+                        <button type="button" onclick="window.closeWhatsNewPopup()" class="w-full rounded-2xl bg-slate-950 px-4 py-3 font-black text-white shadow-lg dark:bg-white dark:text-slate-950">Got it</button>
+                    </div>
+                </div>`;
+            document.body.appendChild(overlay);
+            whatsNewPopupVisible = true;
+        };
+
+        const showMaintenanceSettingsPage = () => {
+            if (!currentUser || currentUser.uid !== ADMIN_UID) return showNotification('Admin access only.', true);
+            const active = isMaintenanceConfigActive(appConfigCache);
+            const endMillis = getMaintenanceEndMillis(appConfigCache);
+            const remainingMinutes = active && endMillis ? Math.max(1, Math.ceil((endMillis - Date.now()) / 60000)) : 30;
+            const endText = active && endMillis ? new Date(endMillis).toLocaleString('en-IN') : 'Not scheduled';
+            const message = appConfigCache.maintenanceMessage || 'We are improving your wallet experience. Please wait until the maintenance window is complete.';
+
+            showPage(`
+                ${getPageHeader('Maintenance Mode')}
+                <div class="max-w-lg mx-auto space-y-4">
+                    <div class="rounded-3xl bg-gradient-to-br from-slate-950 via-blue-900 to-emerald-700 p-5 text-white shadow-xl">
+                        <p class="text-xs font-black uppercase tracking-[0.25em] text-white/65">Admin Control</p>
+                        <div class="mt-4 flex items-center justify-between gap-3">
+                            <div>
+                                <h3 class="text-2xl font-black">${active ? 'Maintenance is ON' : 'Maintenance is OFF'}</h3>
+                                <p class="mt-1 text-sm text-white/70">${active ? `Ends: ${escapeHtml(endText)}` : 'Users can open the app normally.'}</p>
+                            </div>
+                            <span class="rounded-2xl px-4 py-2 text-xs font-black ${active ? 'bg-red-500 text-white' : 'bg-emerald-400 text-slate-950'}">${active ? 'LIVE' : 'OPEN'}</span>
+                        </div>
+                    </div>
+                    <div class="rounded-2xl bg-white dark:bg-gray-800 p-5 shadow-md border border-gray-100 dark:border-gray-700 space-y-4">
+                        <div>
+                            <label class="text-sm font-black text-gray-700 dark:text-gray-200">Timer in minutes</label>
+                            <input id="maintenance-minutes-input" type="number" min="1" max="4320" value="${remainingMinutes}" class="mt-2 w-full rounded-2xl bg-gray-100 dark:bg-gray-700 px-4 py-3 text-lg font-black focus:outline-none focus:ring-2 focus:ring-blue-500">
+                        </div>
+                        <div class="grid grid-cols-4 gap-2">
+                            <button data-maintenance-minutes="15" class="maintenance-quick-btn rounded-xl bg-gray-100 dark:bg-gray-700 px-3 py-2 text-xs font-black">15m</button>
+                            <button data-maintenance-minutes="30" class="maintenance-quick-btn rounded-xl bg-gray-100 dark:bg-gray-700 px-3 py-2 text-xs font-black">30m</button>
+                            <button data-maintenance-minutes="60" class="maintenance-quick-btn rounded-xl bg-gray-100 dark:bg-gray-700 px-3 py-2 text-xs font-black">1h</button>
+                            <button data-maintenance-minutes="120" class="maintenance-quick-btn rounded-xl bg-gray-100 dark:bg-gray-700 px-3 py-2 text-xs font-black">2h</button>
+                        </div>
+                        <div>
+                            <label class="text-sm font-black text-gray-700 dark:text-gray-200">Message for users</label>
+                            <textarea id="maintenance-message-input" rows="3" maxlength="180" class="mt-2 w-full rounded-2xl bg-gray-100 dark:bg-gray-700 px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500">${escapeHtml(message)}</textarea>
+                        </div>
+                        <div class="rounded-2xl bg-blue-50 dark:bg-blue-900/20 border border-blue-100 dark:border-blue-800 p-4 text-sm text-blue-800 dark:text-blue-100">
+                            Users will see a full-screen maintenance page with countdown. Admin account will keep working normally.
+                        </div>
+                    </div>
+                    <div class="grid grid-cols-2 gap-3">
+                        <button id="maintenance-off-btn" class="rounded-2xl bg-gray-100 dark:bg-gray-700 px-4 py-4 font-black text-gray-700 dark:text-gray-100">Turn Off</button>
+                        <button id="maintenance-save-btn" class="rounded-2xl bg-blue-600 px-4 py-4 font-black text-white shadow-lg shadow-blue-200 dark:shadow-none">${active ? 'Update Timer' : 'Start Maintenance'}</button>
+                    </div>
+                </div>
+                ${getPageFooter()}`, { returnTo: 'settings', keepBottomNav: true, onBack: showSettingsPage });
+
+            document.querySelectorAll('.maintenance-quick-btn').forEach(button => {
+                button.addEventListener('click', () => {
+                    const input = document.getElementById('maintenance-minutes-input');
+                    if (input) input.value = button.dataset.maintenanceMinutes || '30';
+                });
+            });
+            document.getElementById('maintenance-off-btn')?.addEventListener('click', handleTurnOffMaintenance);
+            document.getElementById('maintenance-save-btn')?.addEventListener('click', handleSaveMaintenanceSettings);
+        };
+
+        const handleSaveMaintenanceSettings = async () => {
+            if (!currentUser || currentUser.uid !== ADMIN_UID) return showNotification('Admin access only.', true);
+            const saveBtn = document.getElementById('maintenance-save-btn');
+            const minutes = Number(document.getElementById('maintenance-minutes-input')?.value || 0);
+            const message = String(document.getElementById('maintenance-message-input')?.value || '').trim()
+                || 'We are improving your wallet experience. Please wait until the maintenance window is complete.';
+            if (!Number.isFinite(minutes) || minutes < 1 || minutes > 4320) {
+                return showNotification('Please enter timer between 1 minute and 4320 minutes.', true);
+            }
+            try {
+                if (saveBtn) {
+                    saveBtn.disabled = true;
+                    saveBtn.textContent = 'Saving...';
+                }
+                const endDate = new Date(Date.now() + minutes * 60 * 1000);
+                await setDoc(doc(db, `artifacts/${appId}/settings`, 'app_config'), {
+                    maintenanceEnabled: true,
+                    maintenanceEndsAt: Timestamp.fromDate(endDate),
+                    maintenanceMessage: message,
+                    maintenanceUpdatedAt: serverTimestamp(),
+                    maintenanceUpdatedBy: currentUser.uid
+                }, { merge: true });
+                showNotification('Maintenance mode started.');
+                appConfigCache = {
+                    ...appConfigCache,
+                    maintenanceEnabled: true,
+                    maintenanceEndsAt: Timestamp.fromDate(endDate),
+                    maintenanceMessage: message
+                };
+                applyMaintenanceMode();
+                showMaintenanceSettingsPage();
+            } catch (error) {
+                console.error('Maintenance settings save failed:', error);
+                showNotification('Could not save maintenance settings. Please try again.', true);
+            } finally {
+                if (saveBtn) {
+                    saveBtn.disabled = false;
+                    saveBtn.textContent = isMaintenanceConfigActive(appConfigCache) ? 'Update Timer' : 'Start Maintenance';
+                }
+            }
+        };
+
+        const handleTurnOffMaintenance = async () => {
+            if (!currentUser || currentUser.uid !== ADMIN_UID) return showNotification('Admin access only.', true);
+            const offBtn = document.getElementById('maintenance-off-btn');
+            try {
+                if (offBtn) {
+                    offBtn.disabled = true;
+                    offBtn.textContent = 'Turning Off...';
+                }
+                await setDoc(doc(db, `artifacts/${appId}/settings`, 'app_config'), {
+                    maintenanceEnabled: false,
+                    maintenanceEndsAt: null,
+                    maintenanceUpdatedAt: serverTimestamp(),
+                    maintenanceUpdatedBy: currentUser.uid
+                }, { merge: true });
+                appConfigCache = { ...appConfigCache, maintenanceEnabled: false, maintenanceEndsAt: null };
+                applyMaintenanceMode();
+                showNotification('Maintenance mode turned off.');
+                showMaintenanceSettingsPage();
+            } catch (error) {
+                console.error('Maintenance off failed:', error);
+                showNotification('Could not turn off maintenance mode. Please try again.', true);
+            } finally {
+                if (offBtn) {
+                    offBtn.disabled = false;
+                    offBtn.textContent = 'Turn Off';
+                }
+            }
+        };
+
+        const showWhatsNewSettingsPage = () => {
+            if (!currentUser || currentUser.uid !== ADMIN_UID) return showNotification('Admin access only.', true);
+            const enabled = appConfigCache.whatsNewEnabled !== false && appConfigCache.whats_new_enabled !== false;
+            const title = appConfigCache.whatsNewTitle || appConfigCache.whats_new_title || "What's New";
+            const message = appConfigCache.whatsNewMessage || appConfigCache.whats_new_message || '';
+            const updatedMillis = timestampToMillis(appConfigCache.whatsNewUpdatedAt || appConfigCache.whats_new_updated_at || 0);
+            const updatedText = updatedMillis ? new Date(updatedMillis).toLocaleString('en-IN') : 'Not sent yet';
+
+            showPage(`
+                ${getPageHeader("What's New")}
+                <div class="mx-auto max-w-lg space-y-4">
+                    <div class="rounded-3xl bg-gradient-to-br from-indigo-600 via-blue-600 to-emerald-500 p-5 text-white shadow-xl">
+                        <p class="text-xs font-black uppercase tracking-[0.25em] text-white/70">User Popup</p>
+                        <h3 class="mt-2 text-2xl font-black">What's New Message</h3>
+                        <p class="mt-2 text-sm text-white/75">Last update: ${escapeHtml(updatedText)}</p>
+                    </div>
+                    <div class="rounded-2xl border border-gray-100 bg-white p-5 shadow-md dark:border-gray-700 dark:bg-gray-800">
+                        <label class="flex items-center justify-between gap-3 rounded-2xl bg-gray-50 px-4 py-3 text-sm font-black dark:bg-gray-700">
+                            <span>Show popup to users</span>
+                            <input id="whats-new-enabled-input" type="checkbox" ${enabled ? 'checked' : ''} class="h-5 w-5 accent-indigo-600">
+                        </label>
+                        <div class="mt-4">
+                            <label class="text-sm font-black text-gray-700 dark:text-gray-200">Popup title</label>
+                            <input id="whats-new-title-input" maxlength="80" value="${escapeHtml(title)}" class="mt-2 w-full rounded-2xl bg-gray-100 px-4 py-3 font-bold outline-none focus:ring-2 focus:ring-indigo-500 dark:bg-gray-700">
+                        </div>
+                        <div class="mt-4">
+                            <label class="text-sm font-black text-gray-700 dark:text-gray-200">Message</label>
+                            <textarea id="whats-new-message-input" rows="7" maxlength="1200" placeholder="Type new update for users..." class="mt-2 w-full rounded-2xl bg-gray-100 px-4 py-3 outline-none focus:ring-2 focus:ring-indigo-500 dark:bg-gray-700">${escapeHtml(message)}</textarea>
+                            <p class="mt-2 text-xs text-gray-500 dark:text-gray-400">Saving creates a new update ID, so every user will see it once. After they close it, it will not repeat until you save another update.</p>
+                        </div>
+                    </div>
+                    <div class="grid grid-cols-2 gap-3">
+                        <button id="whats-new-disable-btn" class="rounded-2xl bg-gray-100 px-4 py-4 font-black text-gray-700 dark:bg-gray-700 dark:text-gray-100">Turn Off</button>
+                        <button id="whats-new-save-btn" class="rounded-2xl bg-indigo-600 px-4 py-4 font-black text-white shadow-lg shadow-indigo-200 dark:shadow-none">Save & Show</button>
+                    </div>
+                </div>
+                ${getPageFooter()}`, { returnTo: 'settings', keepBottomNav: true, onBack: showSettingsPage });
+
+            document.getElementById('whats-new-save-btn')?.addEventListener('click', handleSaveWhatsNewSettings);
+            document.getElementById('whats-new-disable-btn')?.addEventListener('click', handleDisableWhatsNew);
+        };
+
+        const handleSaveWhatsNewSettings = async () => {
+            if (!currentUser || currentUser.uid !== ADMIN_UID) return showNotification('Admin access only.', true);
+            const saveBtn = document.getElementById('whats-new-save-btn');
+            const title = String(document.getElementById('whats-new-title-input')?.value || '').trim() || "What's New";
+            const message = String(document.getElementById('whats-new-message-input')?.value || '').trim();
+            const enabled = !!document.getElementById('whats-new-enabled-input')?.checked;
+            if (!message) return showNotification('Please type What\'s New message.', true);
+            const whatsNewId = `wn-${Date.now()}`;
+            try {
+                if (saveBtn) {
+                    saveBtn.disabled = true;
+                    saveBtn.textContent = 'Saving...';
+                }
+                await setDoc(doc(db, `artifacts/${appId}/settings`, 'app_config'), {
+                    whatsNewEnabled: enabled,
+                    whatsNewTitle: title,
+                    whatsNewMessage: message,
+                    whatsNewId,
+                    whatsNewUpdatedAt: serverTimestamp(),
+                    whatsNewUpdatedBy: currentUser.uid
+                }, { merge: true });
+                appConfigCache = {
+                    ...appConfigCache,
+                    whatsNewEnabled: enabled,
+                    whatsNewTitle: title,
+                    whatsNewMessage: message,
+                    whatsNewId,
+                    whatsNewUpdatedAt: Date.now()
+                };
+                showNotification(enabled ? "What's New popup saved." : "What's New saved but turned off.");
+                showWhatsNewSettingsPage();
+            } catch (error) {
+                console.error("What's New save failed:", error);
+                showNotification("Could not save What's New message. Please try again.", true);
+            } finally {
+                if (saveBtn) {
+                    saveBtn.disabled = false;
+                    saveBtn.textContent = 'Save & Show';
+                }
+            }
+        };
+
+        const handleDisableWhatsNew = async () => {
+            if (!currentUser || currentUser.uid !== ADMIN_UID) return showNotification('Admin access only.', true);
+            const offBtn = document.getElementById('whats-new-disable-btn');
+            try {
+                if (offBtn) {
+                    offBtn.disabled = true;
+                    offBtn.textContent = 'Turning Off...';
+                }
+                await setDoc(doc(db, `artifacts/${appId}/settings`, 'app_config'), {
+                    whatsNewEnabled: false,
+                    whatsNewUpdatedAt: serverTimestamp(),
+                    whatsNewUpdatedBy: currentUser.uid
+                }, { merge: true });
+                appConfigCache = { ...appConfigCache, whatsNewEnabled: false };
+                closeWhatsNewPopup(false);
+                showNotification("What's New popup turned off.");
+                showWhatsNewSettingsPage();
+            } catch (error) {
+                console.error("What's New off failed:", error);
+                showNotification("Could not turn off What's New popup. Please try again.", true);
+            } finally {
+                if (offBtn) {
+                    offBtn.disabled = false;
+                    offBtn.textContent = 'Turn Off';
+                }
             }
         };
 
@@ -3358,6 +3805,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             currentMainSection = 'admin';
             switchTab('admin-panel');
             setBottomNavActive('bottom-admin-btn');
+            updateAdminLoanRequestBadge();
         };
 
         const showUserTaskPage = () => {
@@ -5134,7 +5582,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             const text = String(question || '').toLowerCase();
             const compactText = text.replace(/[^a-z0-9]+/g, ' ').trim();
             const hasAny = (...words) => words.some(word => compactText.includes(String(word).toLowerCase()));
-            const activeLoan = allLoansCache.find(loan => loan.userId === currentUser?.uid && loan.status === 'active');
+            const activeLoan = allLoansCache.find(loan => loan.userId === currentUser?.uid && loan.status === 'active' && isModernLoanRecord(loan));
             const activeInvestment = allInvestmentsCache.find(item => item.userId === currentUser?.uid && item.status === 'active');
 
             if (hasAny('earn', 'earning', 'income', 'make money', 'track income', 'work', 'task', 'review work', 'reviews work', 'map review', 'download work', 'like comment')) {
@@ -6673,7 +7121,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             if (!state) return showNotification('Please select state.', true);
             if (amount <= 0) return showNotification('Please enter a valid recharge amount.', true);
             if (!planDetails) return showNotification('Please enter validity or plan details.', true);
-            if (getSpendableWalletBalance(currentUserData) < chargeAmount) return showNotification(getInsufficientWalletMessage(currentUserData), true);
+            if (getSpendableWalletBalance(currentUserData) < chargeAmount) return showNotification(getInsufficientRechargeMessage(currentUserData, chargeAmount), true);
 
             renderModal('Confirm Mobile Recharge',
                 `<div class="space-y-4">
@@ -6783,6 +7231,40 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
 
         const toDate = (value) => value?.toDate ? value.toDate() : value ? new Date(value) : null;
 
+        const getLoanRequestStatus = (request = {}) => String(request.status || request.loanRequestStatus || '').trim().toLowerCase();
+        const isPendingModernLoanRequest = (request = {}) => isModernLoanRequest(request) && getLoanRequestStatus(request) === 'pending';
+        const isRejectedModernLoanRequest = (request = {}) =>
+            isModernLoanRequest(request) && ['rejected', 'cancelled', 'canceled', 'failed', 'denied'].includes(getLoanRequestStatus(request));
+        const getValidDateFromMillis = (millis) => millis ? new Date(millis) : null;
+        const getLoanRequestReapplyDate = (request = {}) => {
+            const explicitMillis = timestampToMillis(request.reapplyAfter || request.loanReapplyAfter || request.reapplyAt || request.cooldownUntil);
+            const explicitDate = getValidDateFromMillis(explicitMillis);
+            if (explicitDate && !Number.isNaN(explicitDate.getTime())) return explicitDate;
+            const baseMillis = timestampToMillis(
+                request.processedAt || request.rejectedAt || request.cancelledAt || request.canceledAt ||
+                request.requestedAt || request.timestamp || request.createdAt
+            );
+            const baseDate = getValidDateFromMillis(baseMillis) || new Date();
+            return addMonthsClamped(baseDate, LOAN_REAPPLY_WAIT_MONTHS);
+        };
+        const getLoanReapplyBlock = (request = {}) => {
+            if (!isRejectedModernLoanRequest(request)) return null;
+            const reapplyAt = getLoanRequestReapplyDate(request);
+            if (!reapplyAt || Number.isNaN(reapplyAt.getTime()) || reapplyAt <= new Date()) return null;
+            return {
+                reapplyAt,
+                reason: request.rejectionReason || request.reason || request.adminReason || 'Admin cancelled or rejected your loan request.'
+            };
+        };
+        const getUserLoanRequestMarker = (user = currentUserData || {}) => ({
+            userId: user.id || user.uid || currentUser?.uid || '',
+            status: user.loanRequestStatus || '',
+            latestLoanRequestVersion: user.latestLoanRequestVersion || user.loanRequestVersion || user.loanApplicationVersion || 0,
+            reapplyAfter: user.loanReapplyAfter || user.reapplyAfter || null,
+            processedAt: user.loanProcessedAt || user.processedAt || null,
+            rejectionReason: user.loanRejectionReason || user.loanRequestRejectionReason || user.rejectionReason || ''
+        });
+
         const getPartnerInvestmentSummary = () => {
             const amount = parseFloat(document.getElementById('partner-amount-input')?.value || '0') || 0;
             const months = parseInt(document.getElementById('partner-months-input')?.value || '0') || 0;
@@ -6823,7 +7305,8 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
         };
 
         const buildLoanSummary = (user = currentUserData || {}, loans = []) => {
-            const activeLoans = loans.filter(isActiveLoanRecord);
+            const modernLoans = loans.filter(isModernLoanRecord);
+            const activeLoans = modernLoans.filter(isActiveLoanRecord);
             const maxLimit = getLoanLimitAmount(user);
             const usedAmount = activeLoans.reduce((sum, loan) => sum + getLoanPrincipal(loan), 0);
             const repayableAmount = activeLoans.reduce((sum, loan) => sum + Number(loan.totalRepayable || 0), 0);
@@ -6833,7 +7316,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                 repayableAmount,
                 availableAmount: Math.max(0, maxLimit - usedAmount),
                 activeLoans,
-                loans
+                loans: modernLoans
             };
         };
 
@@ -6926,11 +7409,39 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                 ${getPageFooter()}`);
         };
 
+        const showLoanRejectedCooldownPage = (request = {}) => {
+            const block = getLoanReapplyBlock(request);
+            const reapplyText = block?.reapplyAt
+                ? block.reapplyAt.toLocaleDateString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric' })
+                : 'after 3 months';
+            showPage(`
+                ${getPageHeader('Take Loan')}
+                <div class="max-w-md mx-auto bg-white dark:bg-gray-800 p-6 rounded-xl shadow-md text-center space-y-4">
+                    <div class="w-14 h-14 rounded-2xl bg-red-100 dark:bg-red-900/30 text-red-600 mx-auto flex items-center justify-center">
+                        <svg class="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"></path></svg>
+                    </div>
+                    <div>
+                        <h3 class="text-lg font-semibold">You are currently not eligible.</h3>
+                        <p class="mt-2 text-sm text-gray-500 dark:text-gray-400">Your loan request was cancelled or rejected by admin.</p>
+                    </div>
+                    <div class="rounded-2xl bg-red-50 dark:bg-red-900/20 border border-red-100 dark:border-red-800 p-4 text-left text-sm">
+                        <p class="text-xs font-black uppercase text-red-500">Reason</p>
+                        <p class="mt-1 text-gray-700 dark:text-gray-200">${escapeHtml(block?.reason || 'Admin cancelled or rejected your loan request.')}</p>
+                    </div>
+                    <div class="rounded-2xl bg-indigo-50 dark:bg-indigo-900/20 border border-indigo-100 dark:border-indigo-800 p-4">
+                        <p class="text-xs font-black uppercase text-indigo-600 dark:text-indigo-300">Apply Again</p>
+                        <p class="mt-1 font-black text-gray-900 dark:text-white">${escapeHtml(reapplyText)}</p>
+                        <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">After 3 months you can submit a fresh loan form.</p>
+                    </div>
+                </div>
+                ${getPageFooter()}`);
+        };
+
         const showLoanCreditDashboardPage = (loans = []) => {
             const summary = buildLoanSummary(currentUserData, loans);
             const activeLoan = summary.activeLoans[0] || null;
             const canTakeLoan = hasModernLoanApproval(currentUserData) && summary.activeLoans.length === 0 && summary.availableAmount > 0;
-            const historyCards = loans.length ? loans.map(loan => {
+            const historyCards = summary.loans.length ? summary.loans.map(loan => {
                 const dueDate = toDate(loan.dueDate);
                 const createdAt = toDate(loan.createdAt);
                 const isActive = isActiveLoanRecord(loan);
@@ -6976,7 +7487,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                     <div class="space-y-3">
                         <div class="flex items-center justify-between px-1">
                             <h3 class="text-sm font-black text-gray-900 dark:text-white">Loan History</h3>
-                            <span class="text-xs font-bold text-gray-400">${loans.length} record(s)</span>
+                            <span class="text-xs font-bold text-gray-400">${summary.loans.length} record(s)</span>
                         </div>
                         ${historyCards}
                     </div>
@@ -6992,36 +7503,55 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
         const showLoanPage = async () => {
             if (!currentUser || !currentUserData) return showNotification('User data not loaded. Please wait.', true);
             let userLoans = getUserLoanRecords(currentUser.uid);
-            let pendingModernRequest = getLatestModernLoanRequest(currentUser.uid);
+            let userLoanRequests = allLoanRequestsCache
+                .filter(request => request.userId === currentUser.uid && isModernLoanRequest(request))
+                .sort((a, b) => timestampToMillis(b.requestedAt || b.processedAt) - timestampToMillis(a.requestedAt || a.processedAt));
+            let pendingModernRequest = userLoanRequests.find(isPendingModernLoanRequest) || null;
+            let latestModernRequest = getLatestModernLoanRequest(currentUser.uid, userLoanRequests);
             try {
-                const [freshUserSnap, loanSnap, pendingReqSnap] = await Promise.all([
+                const [freshUserSnap, loanSnap, loanReqSnap] = await Promise.all([
                     getDoc(doc(db, `artifacts/${appId}/public/data/users`, currentUser.uid)),
                     getDocs(query(collection(db, `artifacts/${appId}/public/data/loans`), where("userId", "==", currentUser.uid))),
-                    getDocs(query(collection(db, `artifacts/${appId}/public/data/loan_requests`), where("userId", "==", currentUser.uid), where("status", "==", "pending")))
+                    getDocs(query(collection(db, `artifacts/${appId}/public/data/loan_requests`), where("userId", "==", currentUser.uid)))
                 ]);
                 if (freshUserSnap.exists()) {
                     currentUserData = { ...currentUserData, ...freshUserSnap.data(), id: currentUser.uid, uid: currentUser.uid };
                     writeCache(getUserCacheKey(currentUser.uid), currentUserData);
                 }
                 userLoans = loanSnap.docs.map(d => ({ id: d.id, ...d.data() }))
+                    .filter(isModernLoanRecord)
                     .sort((a, b) => timestampToMillis(b.createdAt || b.paidAt) - timestampToMillis(a.createdAt || a.paidAt));
                 allLoansCache = [
                     ...allLoansCache.filter(loan => loan.userId !== currentUser.uid),
                     ...userLoans
                 ];
-                const pendingRequests = pendingReqSnap.docs.map(d => ({ id: d.id, ...d.data() }));
-                pendingModernRequest = pendingRequests.find(isModernLoanRequest) || pendingModernRequest;
+                userLoanRequests = loanReqSnap.docs
+                    .map(d => ({ id: d.id, ...d.data() }))
+                    .filter(isModernLoanRequest)
+                    .sort((a, b) => timestampToMillis(b.requestedAt || b.processedAt) - timestampToMillis(a.requestedAt || a.processedAt));
+                allLoanRequestsCache = [
+                    ...allLoanRequestsCache.filter(request => request.userId !== currentUser.uid),
+                    ...userLoanRequests
+                ].sort((a, b) => timestampToMillis(b.requestedAt || b.processedAt) - timestampToMillis(a.requestedAt || a.processedAt));
+                pendingModernRequest = userLoanRequests.find(isPendingModernLoanRequest) || null;
+                latestModernRequest = getLatestModernLoanRequest(currentUser.uid, userLoanRequests);
             } catch (error) {
                 console.warn('Fresh loan state check skipped:', error);
             }
 
+            const userLoanMarker = getUserLoanRequestMarker(currentUserData);
             const activeLoans = userLoans.filter(isActiveLoanRecord);
             if (activeLoans.length || hasModernLoanApproval(currentUserData)) {
                 showLoanCreditDashboardPage(userLoans);
                 return;
             }
-            if (pendingModernRequest) {
+            if (pendingModernRequest || isPendingModernLoanRequest(userLoanMarker)) {
                 showLoanPendingPage();
+                return;
+            }
+            const reapplyBlock = getLoanReapplyBlock(latestModernRequest) || getLoanReapplyBlock(userLoanMarker);
+            if (reapplyBlock) {
+                showLoanRejectedCooldownPage(latestModernRequest || userLoanMarker);
                 return;
             }
             loanApplicationDraft = {
@@ -8590,6 +9120,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
         const renderAdminLoanPage = () => {
             const listEl = document.getElementById('admin-loan-list');
             if (!listEl) return;
+            updateAdminLoanRequestBadge();
             const filter = window.currentLoanFilter || 'pending';
             document.querySelectorAll('.loan-filter-btn').forEach(btn => {
                 const active = btn.dataset.loanFilter === filter;
@@ -8599,7 +9130,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
 
             if (filter === 'loans') {
                 const grouped = new Map();
-                [...allLoansCache].forEach(loan => {
+                [...allLoansCache].filter(isModernLoanRecord).forEach(loan => {
                     const userId = loan.userId || 'unknown';
                     const current = grouped.get(userId) || { userId, loans: [], user: allUsersCache.find(user => (user.id || user.uid) === userId) || {} };
                     current.loans.push(loan);
@@ -8646,7 +9177,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                 return;
             }
 
-            let requests = [...allLoanRequestsCache].filter(r => r.status === filter && isModernLoanRequest(r));
+            let requests = [...allLoanRequestsCache].filter(r => getLoanRequestStatus(r) === filter && isModernLoanRequest(r));
             requests = requests.filter(r => !search || [r.name, r.fatherName, r.mobile, r.alternateMobile, r.dob, r.aadhaar].some(v => (v || '').toString().toLowerCase().includes(search)));
             listEl.innerHTML = requests.length ? requests.map(r => `
                 <div class="p-4 mb-3 bg-gray-50 dark:bg-gray-700/50 rounded-xl text-sm">
@@ -8659,8 +9190,8 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                             <p class="text-xs text-gray-500">Aadhaar: ${r.aadhaar || 'N/A'}</p>
                             <p class="text-xs text-gray-500">User: ${r.userEmail || 'N/A'}</p>
                             <div class="flex flex-wrap gap-2 pt-1">
-                                ${r.documents?.aadhaar?.url ? `<a href="${escapeHtml(r.documents.aadhaar.url)}" target="_blank" rel="noopener" class="rounded bg-indigo-100 px-2 py-1 text-[10px] font-black text-indigo-700">View Aadhaar</a>` : '<span class="rounded bg-gray-100 px-2 py-1 text-[10px] font-black text-gray-500">No Aadhaar file</span>'}
-                                ${r.documents?.selfie?.url ? `<a href="${escapeHtml(r.documents.selfie.url)}" target="_blank" rel="noopener" class="rounded bg-emerald-100 px-2 py-1 text-[10px] font-black text-emerald-700">View Selfie</a>` : '<span class="rounded bg-gray-100 px-2 py-1 text-[10px] font-black text-gray-500">No selfie file</span>'}
+                                ${r.documents?.aadhaar?.url ? `<button type="button" data-action="preview-loan-doc" data-requestid="${r.id}" data-doctype="aadhaar" class="rounded bg-indigo-100 px-2 py-1 text-[10px] font-black text-indigo-700">View Aadhaar</button>` : '<span class="rounded bg-gray-100 px-2 py-1 text-[10px] font-black text-gray-500">No Aadhaar file</span>'}
+                                ${r.documents?.selfie?.url ? `<button type="button" data-action="preview-loan-doc" data-requestid="${r.id}" data-doctype="selfie" class="rounded bg-emerald-100 px-2 py-1 text-[10px] font-black text-emerald-700">View Selfie</button>` : '<span class="rounded bg-gray-100 px-2 py-1 text-[10px] font-black text-gray-500">No selfie file</span>'}
                             </div>
                             ${r.maxLoanAmount ? `<p class="text-xs font-semibold text-indigo-600 dark:text-indigo-300">Approved Max: ${formatCurrency(r.maxLoanAmount)}</p>` : ''}
                         </div>
@@ -8722,8 +9253,8 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                     <div class="rounded-2xl bg-white dark:bg-gray-800 p-5 shadow-sm border border-gray-100 dark:border-gray-700">
                         <h3 class="text-sm font-black text-gray-900 dark:text-white">Uploaded Documents</h3>
                         <div class="mt-3 flex flex-wrap gap-2 text-xs">
-                            ${request?.documents?.aadhaar?.url ? `<a href="${escapeHtml(request.documents.aadhaar.url)}" target="_blank" rel="noopener" class="rounded-lg bg-indigo-100 px-3 py-2 font-black text-indigo-700">Open Aadhaar</a>` : '<span class="rounded-lg bg-gray-100 px-3 py-2 font-black text-gray-500">Aadhaar not uploaded</span>'}
-                            ${request?.documents?.selfie?.url ? `<a href="${escapeHtml(request.documents.selfie.url)}" target="_blank" rel="noopener" class="rounded-lg bg-emerald-100 px-3 py-2 font-black text-emerald-700">Open Selfie</a>` : '<span class="rounded-lg bg-gray-100 px-3 py-2 font-black text-gray-500">Selfie not uploaded</span>'}
+                            ${request?.documents?.aadhaar?.url ? `<button type="button" data-action="preview-loan-doc" data-requestid="${request.id}" data-doctype="aadhaar" class="rounded-lg bg-indigo-100 px-3 py-2 font-black text-indigo-700">Open Aadhaar</button>` : '<span class="rounded-lg bg-gray-100 px-3 py-2 font-black text-gray-500">Aadhaar not uploaded</span>'}
+                            ${request?.documents?.selfie?.url ? `<button type="button" data-action="preview-loan-doc" data-requestid="${request.id}" data-doctype="selfie" class="rounded-lg bg-emerald-100 px-3 py-2 font-black text-emerald-700">Open Selfie</button>` : '<span class="rounded-lg bg-gray-100 px-3 py-2 font-black text-gray-500">Selfie not uploaded</span>'}
                             <span class="rounded-lg bg-yellow-100 px-3 py-2 font-black text-yellow-700">Match: ${escapeHtml(request?.documents?.aadhaarSelfieMatchStatus || 'pending_admin_review')}</span>
                         </div>
                     </div>
@@ -8734,6 +9265,37 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                 </div>
                 ${getPageFooter()}`);
             setBottomNavActive('bottom-admin-btn');
+        };
+
+        const showLoanDocumentPreviewModal = (requestId, docType) => {
+            const request = allLoanRequestsCache.find(item => item.id === requestId);
+            const documentInfo = request?.documents?.[docType];
+            const url = String(documentInfo?.url || '').trim();
+            if (!url) return showNotification('Document not found.', true);
+
+            const label = docType === 'selfie' ? 'Selfie' : 'Aadhaar';
+            const source = escapeHtml(url);
+            const filename = String(documentInfo?.name || url || '').toLowerCase();
+            const fileType = String(documentInfo?.type || documentInfo?.contentType || '').toLowerCase();
+            const isPdf = fileType.includes('pdf') || /\.pdf(?:[?#].*)?$/i.test(filename);
+            const isImage = fileType.startsWith('image/') || /\.(png|jpe?g|webp|gif|bmp|heic|heif)(?:[?#].*)?$/i.test(filename) || !isPdf;
+            const preview = isPdf
+                ? `<iframe src="${source}" title="${label} document" class="h-[70vh] w-full rounded-2xl border border-gray-200 bg-white dark:border-gray-700"></iframe>`
+                : `<div class="max-h-[72vh] overflow-auto rounded-2xl bg-gray-100 dark:bg-gray-900 p-2">
+                        <img src="${source}" alt="${label} document" class="mx-auto max-h-[68vh] w-auto max-w-full rounded-xl object-contain">
+                   </div>`;
+
+            renderModal(`${label} Document`,
+                `<div class="space-y-3">
+                    <div class="rounded-2xl bg-indigo-50 px-4 py-3 text-sm dark:bg-indigo-900/20">
+                        <p class="font-black text-gray-900 dark:text-white">${escapeHtml(request?.name || 'Loan Applicant')}</p>
+                        <p class="text-xs text-gray-500 dark:text-gray-400">${escapeHtml(request?.mobile || request?.userEmail || '')}</p>
+                    </div>
+                    ${preview}
+                </div>`,
+                `<a href="${source}" target="_blank" rel="noopener" class="rounded-lg bg-gray-100 px-4 py-2 text-sm font-black text-gray-700 dark:bg-gray-700 dark:text-gray-100">Open Link</a>
+                 <button onclick="window.closeModal()" class="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-black text-white">Close</button>`,
+                'max-w-4xl');
         };
 
         const showAdminLoanDetailModal = (loanId) => {
@@ -8989,7 +9551,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                     if (!userDoc.exists()) throw new Error("User account not found!");
 
                     const currentBalance = userDoc.data().balance || 0;
-                    if (getSpendableWalletBalance(userDoc.data()) < chargeAmount) throw new Error(getInsufficientWalletMessage(userDoc.data()));
+                    if (getSpendableWalletBalance(userDoc.data()) < chargeAmount) throw new Error(getInsufficientRechargeMessage(userDoc.data(), chargeAmount));
 
                     const balanceAfter = currentBalance - chargeAmount;
                     requestPayload.balanceBefore = currentBalance;
@@ -9021,14 +9583,21 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                     });
                 });
 
-                await upsertCloudFundRequest(requestPayload);
-                await syncRecentTransactionsToCloud(currentUser.uid);
+                upsertCloudFundRequest(requestPayload).catch(error => {
+                    console.warn('Recharge cloud request sync skipped:', error);
+                });
+                syncRecentTransactionsToCloud(currentUser.uid).catch(error => {
+                    console.warn('Recharge cloud transaction sync skipped:', error);
+                });
                 showNotification('Recharge request submitted and wallet amount deducted!', false, true);
                 window.closeModal();
                 hidePage();
             } catch (e) {
                 console.error("Recharge request failed:", e);
-                showFriendlyError('Could not submit recharge request. Please try again.');
+                const message = String(e?.message || '').trim();
+                showNotification(message && !/permission|firebase|internal|network/i.test(message)
+                    ? message
+                    : 'Could not submit recharge request. Please try again.', true);
             }
         };
 
@@ -9280,17 +9849,28 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                     btn.disabled = true;
                     btn.textContent = 'Checking...';
                 }
-                const pendingSnap = await withTimeout(
+                const existingRequestSnap = await withTimeout(
                     getDocs(query(
                         collection(db, `artifacts/${appId}/public/data/loan_requests`),
-                        where("userId", "==", currentUser.uid),
-                        where("status", "==", "pending")
+                        where("userId", "==", currentUser.uid)
                     )),
                     15000,
-                    'Could not check your pending loan request. Please try again.'
+                    'Could not check your loan request status. Please try again.'
                 );
-                if (pendingSnap.docs.some(d => isModernLoanRequest(d.data()))) {
+                const existingModernRequests = existingRequestSnap.docs
+                    .map(d => ({ id: d.id, ...d.data() }))
+                    .filter(isModernLoanRequest)
+                    .sort((a, b) => timestampToMillis(b.requestedAt || b.processedAt) - timestampToMillis(a.requestedAt || a.processedAt));
+                const pendingModernRequest = existingModernRequests.find(isPendingModernLoanRequest);
+                const userLoanMarker = getUserLoanRequestMarker(currentUserData);
+                if (pendingModernRequest || isPendingModernLoanRequest(userLoanMarker)) {
                     showLoanPendingPage();
+                    return;
+                }
+                const latestModernRequest = getLatestModernLoanRequest(currentUser.uid, existingModernRequests);
+                const reapplyBlock = getLoanReapplyBlock(latestModernRequest) || getLoanReapplyBlock(userLoanMarker);
+                if (reapplyBlock) {
+                    showLoanRejectedCooldownPage(latestModernRequest || userLoanMarker);
                     return;
                 }
                 if (btn) btn.textContent = 'Preparing...';
@@ -9332,7 +9912,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                         <div class="w-14 h-14 rounded-full bg-yellow-100 dark:bg-yellow-900/30 text-yellow-600 mx-auto flex items-center justify-center">
                             <svg class="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M12 2a10 10 0 100 20 10 10 0 000-20z"></path></svg>
                         </div>
-                        <h3 class="font-semibold">You are currently not eligible.</h3>
+                        <h3 class="font-semibold">Loan Request Pending</h3>
                         <p class="text-sm text-gray-500 dark:text-gray-400">Your account details and documents have been sent to admin. You will continue after approval.</p>
                     </div>`,
                     `<button onclick="window.closeModal(); hidePage();" class="px-4 py-2 text-sm bg-indigo-600 text-white rounded-lg">OK</button>`,
@@ -9376,8 +9956,11 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                     where("userId", "==", currentUser.uid),
                     where("status", "==", "active")
                 ));
-                if (!activeLoanSnap.empty) {
-                    const activeLoan = { id: activeLoanSnap.docs[0].id, ...activeLoanSnap.docs[0].data() };
+                const activeModernLoan = activeLoanSnap.docs
+                    .map(docItem => ({ id: docItem.id, ...docItem.data() }))
+                    .find(isModernLoanRecord);
+                if (activeModernLoan) {
+                    const activeLoan = activeModernLoan;
                     showActiveLoanPage(activeLoan);
                     throw new Error('You already have an active loan. Repay it before taking another loan.');
                 }
@@ -9388,7 +9971,8 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                     const userData = userDoc.data();
                     const existingActiveLoanId = String(userData.activeLoanId || '').trim();
                     const existingRepayable = Number(userData.activeLoanRepayable || userData.loanLockedAmount || 0);
-                    if (existingActiveLoanId || existingRepayable > 0) {
+                    const hasModernActiveLoanMarker = Number(userData.activeLoanVersion || 0) >= LOAN_APPLICATION_VERSION;
+                    if ((existingActiveLoanId || existingRepayable > 0) && hasModernActiveLoanMarker) {
                         throw new Error('You already have an active loan. Repay it before taking another loan.');
                     }
                     if (!hasModernLoanApproval(userData)) throw new Error('Please submit updated loan details and wait for admin approval.');
@@ -9402,10 +9986,13 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                         balance: (userData.balance || 0) + amount,
                         loanEligible: true,
                         activeLoanId: loanRef.id,
+                        activeLoanVersion: LOAN_APPLICATION_VERSION,
                         activeLoanRepayable: totalRepayable,
                         loanLockedAmount: totalRepayable
                     });
                     tx.set(loanRef, {
+                        loanApplicationVersion: LOAN_APPLICATION_VERSION,
+                        loanRequestVersion: LOAN_APPLICATION_VERSION,
                         userId: currentUser.uid,
                         userName: currentUserData.name || 'User',
                         userMobile: currentUserData.mobile || '',
@@ -9461,6 +10048,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                     tx.update(userRef, {
                         balance: (userDoc.data().balance || 0) - loan.totalRepayable,
                         activeLoanId: deleteField(),
+                        activeLoanVersion: deleteField(),
                         activeLoanRepayable: deleteField(),
                         loanLockedAmount: deleteField()
                     });
@@ -9604,6 +10192,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             ));
             for (const d of snap.docs) {
                 const loan = { id: d.id, ...d.data() };
+                if (!isModernLoanRecord(loan)) continue;
                 if (toDate(loan.dueDate) && toDate(loan.dueDate) <= new Date()) {
                     try {
                         await processDueLoanRepayment(loan.id);
@@ -9664,6 +10253,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                 const loanDoc = await tx.get(loanRef);
                 if (!loanDoc.exists()) throw new Error('Loan not found.');
                 const loan = loanDoc.data();
+                if (!isModernLoanRecord(loan)) throw new Error('Legacy loan record is not processed by the new loan system.');
                 if (loan.status !== 'active') throw new Error('Loan is already closed.');
                 const dueDate = toDate(loan.dueDate);
                 if (!dueDate || dueDate > new Date()) throw new Error('Loan due date is not completed yet.');
@@ -9696,6 +10286,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                 tx.update(userRef, {
                     balance: balance - (loan.totalRepayable || 0),
                     activeLoanId: deleteField(),
+                    activeLoanVersion: deleteField(),
                     activeLoanRepayable: deleteField(),
                     loanLockedAmount: deleteField()
                 });
@@ -10587,6 +11178,8 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                 if (newStatus === 'approved' && (!Number.isFinite(Number(maxLoanAmount)) || Number(maxLoanAmount) < 1)) {
                     return showApproveLoanRequestModal(userId, requestId);
                 }
+                const rejectedAt = newStatus === 'approved' ? null : new Date();
+                const reapplyAfter = rejectedAt ? addMonthsClamped(rejectedAt, LOAN_REAPPLY_WAIT_MONTHS) : null;
                 const requestRef = doc(db, `artifacts/${appId}/public/data/loan_requests`, requestId);
                 const userRef = doc(db, `artifacts/${appId}/public/data/users`, userId);
                 await runTransaction(db, async (tx) => {
@@ -10595,7 +11188,11 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                     tx.update(requestRef, {
                         status: newStatus,
                         processedAt: serverTimestamp(),
-                        processedBy: currentUser.uid
+                        processedBy: currentUser.uid,
+                        ...(reapplyAfter ? {
+                            reapplyAfter: Timestamp.fromDate(reapplyAfter),
+                            rejectionReason: 'Loan request cancelled by admin.'
+                        } : {})
                     });
                     if (newStatus === 'approved') {
                         tx.update(userRef, {
@@ -10605,7 +11202,9 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                             loanApplicationVersion: LOAN_APPLICATION_VERSION,
                             loanRequestStatus: 'approved',
                             loanApprovedAt: serverTimestamp(),
-                            loanApprovedBy: currentUser.uid
+                            loanApprovedBy: currentUser.uid,
+                            loanReapplyAfter: deleteField(),
+                            loanRejectionReason: deleteField()
                         });
                         tx.update(requestRef, {
                             maxLoanAmount: Number(maxLoanAmount),
@@ -10613,9 +11212,16 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                         });
                     } else {
                         tx.update(userRef, {
+                            loanEligible: false,
+                            maxLoanAmount: 0,
+                            loanMaxAmount: 0,
                             loanRequestStatus: newStatus,
+                            latestLoanRequestVersion: LOAN_APPLICATION_VERSION,
+                            loanApplicationVersion: LOAN_APPLICATION_VERSION,
                             loanProcessedAt: serverTimestamp(),
-                            loanProcessedBy: currentUser.uid
+                            loanProcessedBy: currentUser.uid,
+                            loanReapplyAfter: Timestamp.fromDate(reapplyAfter),
+                            loanRejectionReason: 'Loan request cancelled by admin.'
                         });
                     }
                 });
@@ -10977,9 +11583,12 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                         timestamp: serverTimestamp(),
                         transactionId: generateTransactionId(),
                         status: 'completed',
+                        senderName: 'REVIEWS WORLD',
+                        senderMobile: 'Admin Wallet',
                         recipientName: userDoc.data().name || 'User',
                         recipientMobile: userDoc.data().mobile || '',
                         recipientIsProProfile: !!userDoc.data().isProProfile,
+                        mode: 'Admin Credit',
                         balanceBefore: oldBalance,
                         balanceAfter: newBalance,
                         isAdminTransaction: true
@@ -10999,6 +11608,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
         const showEditUserBalanceModal = (userId) => {
             const user = allUsersCache.find(u => u.id === userId);
             if (!user) return showNotification('Error: User not found.', true);
+            const currentBalance = Number.isFinite(Number(user.balance)) ? Number(user.balance) : getUserAvailableBalance(user);
 
             const content = `
                 <div class="space-y-4">
@@ -11009,13 +11619,13 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                     </div>
                     <div class="space-y-1">
                         <label class="text-sm font-medium text-gray-500 dark:text-gray-400">Current Balance:</label>
-                        <input type="text" value="${formatCurrency(getUserAvailableBalance(user))}" class="w-full px-4 py-2 bg-gray-100 dark:bg-gray-700 rounded-lg cursor-not-allowed" readonly>
+                        <input type="text" value="${formatCurrency(currentBalance)}" class="w-full px-4 py-2 bg-gray-100 dark:bg-gray-700 rounded-lg cursor-not-allowed" readonly>
                     </div>
                     <div class="space-y-1">
                         <label class="text-sm font-medium text-gray-500 dark:text-gray-400">New Balance:</label>
-                        <input type="number" id="edit-balance-input" placeholder="Enter new total balance (e.g., 50.00)" class="w-full px-4 py-2 bg-white dark:bg-gray-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" value="${getUserAvailableBalance(user)}">
+                        <input type="number" id="edit-balance-input" step="0.01" placeholder="Enter new total balance (e.g., -50.00)" class="w-full px-4 py-2 bg-white dark:bg-gray-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" value="${currentBalance}">
                     </div>
-                    <p class="text-xs text-gray-500 dark:text-gray-400">This will SET the user's balance to this new amount. It does not add or subtract.</p>
+                    <p class="text-xs text-gray-500 dark:text-gray-400">This will SET the user's total wallet balance. Negative balance is allowed and future credits will recover it automatically.</p>
                 </div>`;
             const actions = `
                 <button onclick="window.closeModal()" class="px-4 py-2 text-sm bg-gray-200 dark:bg-gray-600 rounded-lg">Cancel</button>
@@ -11036,35 +11646,36 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             }
 
             const newBalance = parseFloat(newBalanceInput);
-            if (newBalance < 0) {
-                return showNotification('Balance cannot be negative.', true);
-            }
 
             const userRef = doc(db, `artifacts/${appId}/public/data/users`, userId);
-            const user = allUsersCache.find(u => u.id === userId) || {};
-            const oldBalance = getUserAvailableBalance(user);
-            const changeAmount = newBalance - oldBalance;
-
-            if (changeAmount === 0) {
-                return showNotification("New balance is the same as the old balance.", true);
-            }
 
             try {
-                const transactionPayload = {
-                    type: changeAmount > 0 ? 'credit' : 'debit',
-                    amount: Math.abs(changeAmount),
-                    comment: changeAmount > 0 ? 'Admin Credit' : 'Admin Debit',
-                    timestamp: serverTimestamp(),
-                    adminComment: "Manual balance adjustment",
-                    transactionId: generateTransactionId(),
-                    balanceBefore: oldBalance,
-                    balanceAfter: newBalance,
-                    status: 'completed',
-                    isAdminTransaction: true
-                };
+                let transactionPayload = null;
                 await runTransaction(db, async (tx) => {
                     const freshUserDoc = await tx.get(userRef);
                     if (!freshUserDoc.exists()) throw new Error('User not found!');
+                    const userData = freshUserDoc.data();
+                    const oldBalance = Number.isFinite(Number(userData.balance)) ? Number(userData.balance) : getUserAvailableBalance(userData);
+                    const changeAmount = Number((newBalance - oldBalance).toFixed(2));
+                    if (changeAmount === 0) throw new Error('NO_BALANCE_CHANGE');
+                    transactionPayload = {
+                        type: changeAmount > 0 ? 'credit' : 'debit',
+                        amount: Math.abs(changeAmount),
+                        comment: changeAmount > 0 ? 'Admin Balance Credit' : 'Admin Balance Debit',
+                        timestamp: serverTimestamp(),
+                        adminComment: "Manual balance adjustment",
+                        transactionId: generateTransactionId(),
+                        balanceBefore: oldBalance,
+                        balanceAfter: newBalance,
+                        status: 'completed',
+                        senderName: changeAmount > 0 ? 'REVIEWS WORLD' : (userData.name || 'User'),
+                        senderMobile: changeAmount > 0 ? 'Admin Wallet' : (userData.mobile || ''),
+                        recipientName: changeAmount > 0 ? (userData.name || 'User') : 'REVIEWS WORLD',
+                        recipientMobile: changeAmount > 0 ? (userData.mobile || '') : 'Admin Wallet',
+                        recipientIsProProfile: changeAmount > 0 ? !!userData.isProProfile : true,
+                        mode: changeAmount > 0 ? 'Admin Credit' : 'Admin Debit',
+                        isAdminTransaction: true
+                    };
                     tx.update(userRef, { balance: newBalance });
                     tx.set(doc(collection(userRef, 'transactions'), getSafeTransactionDocId(transactionPayload.transactionId)), transactionPayload, { merge: true });
                 });
@@ -11084,6 +11695,9 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                 window.closeModal();
                 if (document.getElementById('admin-users-list-page')) updateAdminUserListView();
             } catch (e) {
+                if (e.message === 'NO_BALANCE_CHANGE') {
+                    return showNotification("New balance is the same as the old balance.", true);
+                }
                 console.error("Edit balance failed:", e);
                 showFriendlyError('Could not update balance. Please try again.');
             }
@@ -11466,13 +12080,18 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             const recipientProfile = findUserProfile({ name: recipientName, mobile: recipientMobile });
             const senderIsPro = !!item.senderIsProProfile || !!senderProfile?.isProProfile;
             const recipientIsPro = !!item.recipientIsProProfile || !!recipientProfile?.isProProfile;
-            const remarks = item.comment || (item.isAdminTransaction ? 'Payment By reviews World' : 'Money Transfer');
+            let remarks = item.comment || (item.isAdminTransaction ? 'Payment By reviews World' : 'Money Transfer');
             const rawStatus = item.status || 'completed';
             const isWithdrawal = item.type === 'withdrawal';
             const isGiftCard = item.type === 'gift_card';
             const isRejected = rawStatus === 'rejected' || rawStatus === 'failed';
             const isPending = rawStatus === 'pending';
-            const isAdminCredit = item.isAdminTransaction || (item.type === 'credit' && isReviewsWorldName(remarks));
+            const normalizedDetailType = normalizeTransactionType(item);
+            if (normalizedDetailType === 'credit' && /admin\s+debit/i.test(remarks)) {
+                remarks = 'Admin Balance Credit';
+            }
+            const isAdminCredit = (item.isAdminTransaction && isCredit) || normalizedDetailType === 'credit' && (isReviewsWorldName(remarks) || isReviewsWorldName(senderName));
+            const isAdminDebit = item.isAdminTransaction && !isCredit && normalizedDetailType === 'debit';
             const giftCodeFromComment = (remarks.match(/redeemed code\s+([A-Z0-9-]+)/i) || [])[1] || '';
             const txnDisplayId = isGiftCard ? (item.giftCode || giftCodeFromComment || item.transactionId) : (item.adminTransactionId || item.transactionId);
             const methodId = item.methodId || (item.upiId ? 'upi' : item.accountNumber ? 'bank' : remarks.toLowerCase().includes('amazon') ? 'amazon_gift' : remarks.toLowerCase().includes('flipkart') ? 'flipkart_gift' : remarks.toLowerCase().includes('play') ? 'play_store' : remarks.toLowerCase().includes('paypal') ? 'paypal' : '');
@@ -11495,6 +12114,14 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                 fromParty = { label: 'From', name: 'REVIEWS WORLD', detail: 'Admin Wallet', appLogo: true };
                 toParty = { label: 'To', name: recipientName || viewedUser.name || 'User', detail: 'RW Wallet Balance', appLogo: recipientIsPro || !!viewedUser?.isProProfile };
                 modeLabel = 'Admin Credit';
+            }
+
+            if (isAdminDebit) {
+                statusTitle = 'Money Debited';
+                statusLabel = 'Admin Debit';
+                fromParty = { label: 'From', name: viewedUser.name || senderName || 'User', detail: viewedUser.mobile || senderMobile || '', appLogo: !!viewedUser?.isProProfile || senderIsPro };
+                toParty = { label: 'To', name: 'REVIEWS WORLD', detail: 'Admin Wallet', appLogo: true };
+                modeLabel = 'Admin Debit';
             }
 
             if (isGiftCard) {
@@ -11782,6 +12409,10 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                     showAdminAddLoanLimitModal(userid);
                     break;
 
+                case 'preview-loan-doc':
+                    showLoanDocumentPreviewModal(requestid, target.dataset.doctype);
+                    break;
+
                 case 'mark-as-paid':
                     handleRequestAction(userid, requestid, 'completed');
                     break;
@@ -11936,6 +12567,8 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
         document.getElementById('admin-gift-codes-btn').addEventListener('click', () => openAdminQuickAction(showAdminGiftCodesPage));
         document.getElementById('admin-withdrawal-history-btn').addEventListener('click', () => openAdminQuickAction(showWithdrawalHistoryPage));
         document.getElementById('admin-withdraw-settings-btn').addEventListener('click', () => openAdminQuickAction(showAdminWithdrawSettingsModal));
+        document.getElementById('admin-maintenance-btn')?.addEventListener('click', () => openAdminQuickAction(showMaintenanceSettingsPage));
+        document.getElementById('admin-whats-new-btn')?.addEventListener('click', () => openAdminQuickAction(showWhatsNewSettingsPage));
         document.getElementById('admin-recharge-requests-btn').addEventListener('click', () => openAdminQuickAction(showAdminRechargeRequestsPage));
         document.getElementById('admin-loans-btn').addEventListener('click', () => openAdminQuickAction(showAdminLoanPage));
         document.getElementById('admin-investments-btn').addEventListener('click', () => openAdminQuickAction(showAdminInvestmentsPage));
@@ -12059,6 +12692,13 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             }
         };
 
+        const applyAppConfig = (config = {}) => {
+            appConfigCache = { ...(appConfigCache || {}), ...(config || {}) };
+            applyWithdrawalConfig(appConfigCache);
+            applyMaintenanceMode();
+            showWhatsNewPopupIfNeeded();
+        };
+
         const loadWithdrawalSettingsOnce = async (force = false) => {
             const now = Date.now();
             if (!force && withdrawalSettingsLoadedAt && now - withdrawalSettingsLoadedAt < 30000) return;
@@ -12066,7 +12706,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
 
             withdrawalSettingsLoadPromise = getDoc(doc(db, `artifacts/${appId}/settings`, 'app_config'))
                 .then(snapshot => {
-                    if (snapshot.exists()) applyWithdrawalConfig(snapshot.data());
+                    if (snapshot.exists()) applyAppConfig(snapshot.data());
                     withdrawalSettingsLoadedAt = Date.now();
                 })
                 .catch(error => {
@@ -12193,7 +12833,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                 if (versionDoc.exists()) {
                     const config = versionDoc.data();
 
-                    applyWithdrawalConfig(config);
+                    applyAppConfig(config);
                     withdrawalSettingsLoadedAt = Date.now();
 
                     // Check for updates (optional)
@@ -12209,7 +12849,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
         const startWithdrawalSettingsListener = () => {
             onSnapshot(doc(db, `artifacts/${appId}/settings`, 'app_config'), (snapshot) => {
                 if (!snapshot.exists()) return;
-                applyWithdrawalConfig(snapshot.data());
+                applyAppConfig(snapshot.data());
                 withdrawalSettingsLoadedAt = Date.now();
             }, (error) => console.error('Withdrawal settings listener failed:', error));
         };

@@ -381,6 +381,20 @@ root.outerHTML = String.raw`
                                 <span class="text-sm font-medium text-purple-700 dark:text-purple-300">Withdrawal
                                     Settings</span>
                             </button>
+                            <button id="admin-maintenance-btn"
+                                class="flex flex-col items-center justify-center p-3 min-h-28 bg-red-50 dark:bg-red-900/20 rounded-2xl hover:bg-red-100 dark:hover:bg-red-900/30 transition border border-red-200 dark:border-red-800 shadow-sm">
+                                <span class="flex h-12 w-12 items-center justify-center rounded-2xl bg-white dark:bg-gray-800 shadow-sm mb-2">
+                                    <img src="https://cdn-icons-png.flaticon.com/512/2099/2099058.png" class="h-8 w-8 object-contain" alt="Maintenance">
+                                </span>
+                                <span class="text-sm font-medium text-red-700 dark:text-red-300">Maintenance</span>
+                            </button>
+                            <button id="admin-whats-new-btn"
+                                class="flex flex-col items-center justify-center p-3 min-h-28 bg-blue-50 dark:bg-blue-900/20 rounded-2xl hover:bg-blue-100 dark:hover:bg-blue-900/30 transition border border-blue-200 dark:border-blue-800 shadow-sm">
+                                <span class="flex h-12 w-12 items-center justify-center rounded-2xl bg-white dark:bg-gray-800 shadow-sm mb-2">
+                                    <img src="https://cdn-icons-png.flaticon.com/512/1828/1828884.png" class="h-8 w-8 object-contain" alt="What's New">
+                                </span>
+                                <span class="text-sm font-medium text-blue-700 dark:text-blue-300">What's New</span>
+                            </button>
                             <button id="admin-recharge-requests-btn"
                                 class="flex flex-col items-center justify-center p-3 min-h-28 bg-sky-50 dark:bg-sky-900/20 rounded-2xl hover:bg-sky-100 dark:hover:bg-sky-900/30 transition border border-sky-200 dark:border-sky-800 shadow-sm">
                                 <span class="flex h-12 w-12 items-center justify-center rounded-2xl bg-white dark:bg-gray-800 shadow-sm mb-2">
@@ -389,7 +403,8 @@ root.outerHTML = String.raw`
                                 <span class="text-sm font-medium text-sky-700 dark:text-sky-300">Recharge Requests</span>
                             </button>
                             <button id="admin-loans-btn"
-                                class="flex flex-col items-center justify-center p-3 min-h-28 bg-indigo-50 dark:bg-indigo-900/20 rounded-2xl hover:bg-indigo-100 dark:hover:bg-indigo-900/30 transition border border-indigo-200 dark:border-indigo-800 shadow-sm">
+                                class="relative flex flex-col items-center justify-center p-3 min-h-28 bg-indigo-50 dark:bg-indigo-900/20 rounded-2xl hover:bg-indigo-100 dark:hover:bg-indigo-900/30 transition border border-indigo-200 dark:border-indigo-800 shadow-sm">
+                                <span id="admin-loan-request-badge" class="hidden absolute right-2 top-2 min-w-6 h-6 rounded-full bg-red-600 px-2 text-center text-xs font-black leading-6 text-white shadow"></span>
                                 <span class="flex h-12 w-12 items-center justify-center rounded-2xl bg-white dark:bg-gray-800 shadow-sm mb-2">
                                     <img src="https://cdn-icons-png.flaticon.com/512/9197/9197103.png" class="h-8 w-8 object-contain" alt="Manage Loan">
                                 </span>
