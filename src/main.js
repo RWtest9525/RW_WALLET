@@ -7507,8 +7507,46 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             let userLoanRequests = allLoanRequestsCache
                 .filter(request => request.userId === currentUser.uid && isModernLoanRequest(request))
                 .sort((a, b) => timestampToMillis(b.requestedAt || b.processedAt) - timestampToMillis(a.requestedAt || a.processedAt));
-            let pendingModernRequest = userLoanRequests.find(isPendingModernLoanRequest) || null;
-            let latestModernRequest = getLatestModernLoanRequest(currentUser.uid, userLoanRequests);
+
+            const showLoanApplicationStart = () => {
+                loanApplicationDraft = {
+                    step: 1,
+                    personal: {
+                        name: currentUserData.name || '',
+                        mobile: currentUserData.mobile || '',
+                        fatherName: '',
+                        alternateMobile: '',
+                        dob: '',
+                        aadhaar: ''
+                    },
+                    documents: {},
+                    acceptedTerms: false
+                };
+                showLoanApplicationPage(1);
+            };
+
+            const renderLoanState = (loans = userLoans, requests = userLoanRequests) => {
+                const pendingModernRequest = requests.find(isPendingModernLoanRequest) || null;
+                const latestModernRequest = getLatestModernLoanRequest(currentUser.uid, requests);
+                const userLoanMarker = getUserLoanRequestMarker(currentUserData);
+                const activeLoans = loans.filter(isActiveLoanRecord);
+                if (activeLoans.length || hasModernLoanApproval(currentUserData)) {
+                    showLoanCreditDashboardPage(loans);
+                    return;
+                }
+                if (pendingModernRequest || isPendingModernLoanRequest(userLoanMarker)) {
+                    showLoanPendingPage();
+                    return;
+                }
+                const reapplyBlock = getLoanReapplyBlock(latestModernRequest) || getLoanReapplyBlock(userLoanMarker);
+                if (reapplyBlock) {
+                    showLoanRejectedCooldownPage(latestModernRequest || userLoanMarker);
+                    return;
+                }
+                showLoanApplicationStart();
+            };
+
+            renderLoanState(userLoans, userLoanRequests);
             try {
                 const [freshUserSnap, loanSnap, loanReqSnap] = await Promise.all([
                     getDoc(doc(db, `artifacts/${appId}/public/data/users`, currentUser.uid)),
@@ -7534,41 +7572,10 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                     ...allLoanRequestsCache.filter(request => request.userId !== currentUser.uid),
                     ...userLoanRequests
                 ].sort((a, b) => timestampToMillis(b.requestedAt || b.processedAt) - timestampToMillis(a.requestedAt || a.processedAt));
-                pendingModernRequest = userLoanRequests.find(isPendingModernLoanRequest) || null;
-                latestModernRequest = getLatestModernLoanRequest(currentUser.uid, userLoanRequests);
+                renderLoanState(userLoans, userLoanRequests);
             } catch (error) {
                 console.warn('Fresh loan state check skipped:', error);
             }
-
-            const userLoanMarker = getUserLoanRequestMarker(currentUserData);
-            const activeLoans = userLoans.filter(isActiveLoanRecord);
-            if (activeLoans.length || hasModernLoanApproval(currentUserData)) {
-                showLoanCreditDashboardPage(userLoans);
-                return;
-            }
-            if (pendingModernRequest || isPendingModernLoanRequest(userLoanMarker)) {
-                showLoanPendingPage();
-                return;
-            }
-            const reapplyBlock = getLoanReapplyBlock(latestModernRequest) || getLoanReapplyBlock(userLoanMarker);
-            if (reapplyBlock) {
-                showLoanRejectedCooldownPage(latestModernRequest || userLoanMarker);
-                return;
-            }
-            loanApplicationDraft = {
-                step: 1,
-                personal: {
-                    name: currentUserData.name || '',
-                    mobile: currentUserData.mobile || '',
-                    fatherName: '',
-                    alternateMobile: '',
-                    dob: '',
-                    aadhaar: ''
-                },
-                documents: {},
-                acceptedTerms: false
-            };
-            showLoanApplicationPage(1);
         };
 
         const showLoanApplicationPage = (step = 1) => {
@@ -12517,6 +12524,12 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             }
         });
 
+        document.body.addEventListener('click', (e) => {
+            if (!e.target.closest('#loan-btn')) return;
+            e.preventDefault();
+            openLoanQuickAction();
+        });
+
         document.body.addEventListener('change', (e) => {
             const target = e.target.closest('[data-action="set-gift-card-type"]');
             if (!target) return;
@@ -12570,7 +12583,31 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
         const openUserQuickAction = (handler) => {
             currentMainSection = 'home';
             setBottomNavActive('bottom-home-btn');
-            handler();
+            try {
+                const result = handler();
+                if (result?.catch) {
+                    result.catch(error => {
+                        console.error('User quick action failed:', error);
+                        showNotification('This page could not open. Please try again.', true);
+                    });
+                }
+                return result;
+            } catch (error) {
+                console.error('User quick action failed:', error);
+                showNotification('This page could not open. Please try again.', true);
+                return null;
+            }
+        };
+
+        let loanPageOpening = false;
+        const openLoanQuickAction = () => {
+            if (loanPageOpening) return;
+            loanPageOpening = true;
+            Promise.resolve(openUserQuickAction(showLoanPage)).finally(() => {
+                setTimeout(() => {
+                    loanPageOpening = false;
+                }, 250);
+            });
         };
 
         document.getElementById('analytics-total-users-card').addEventListener('click', () => openAdminQuickAction(() => showAdminUsersPageWithFilter('all')));
@@ -12611,7 +12648,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
         // Pay to Wallet Button - Now opens full page
         document.getElementById('pay-to-wallet-btn').addEventListener('click', () => openUserQuickAction(showPayToWalletPage));
         document.getElementById('mobile-recharge-btn').addEventListener('click', () => openUserQuickAction(showMobileRechargePage));
-        document.getElementById('loan-btn').addEventListener('click', () => openUserQuickAction(showLoanPage));
+        document.getElementById('loan-btn').addEventListener('click', openLoanQuickAction);
         document.getElementById('partner-btn').addEventListener('click', () => openUserQuickAction(showPartnerPage));
 
         // Preload logo images to prevent loading flicker
