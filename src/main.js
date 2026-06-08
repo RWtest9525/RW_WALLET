@@ -1,6 +1,7 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
         import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, onAuthStateChanged, sendPasswordResetEmail, setPersistence, browserLocalPersistence } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
         import { getFirestore, doc, setDoc, getDoc, collection, collectionGroup, addDoc, onSnapshot, query, orderBy, Timestamp, writeBatch, runTransaction, deleteDoc, getDocs, serverTimestamp, where, arrayUnion, updateDoc, deleteField, increment, setLogLevel, limit as firestoreLimit } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        import { getStorage, ref as storageRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-storage.js";
 
         // --- THEME LOGIC ---
         const applyTheme = (theme) => {
@@ -51,6 +52,8 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
         const LEGACY_WITHDRAWAL_DEDUCTION_CUTOFF = new Date(2026, 4, 20).getTime();
         const RECHARGE_DISCOUNT_RATE = 0.01;
         const PARTNER_INTEREST_RATE = 0.01;
+        const PARTNER_MIN_INVESTMENT = 25;
+        const LOAN_APPLICATION_VERSION = 2;
         const PARTNER_ICON_URL = 'https://cdn-icons-png.flaticon.com/512/3135/3135706.png';
         const RECHARGE_OPERATORS = ['Jio', 'Airtel', 'Vi', 'BSNL', 'MTNL'];
         const RECHARGE_STATES = [
@@ -64,6 +67,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
         const app = initializeApp(firebaseConfig);
         const auth = getAuth(app);
         const db = getFirestore(app);
+        const storage = getStorage(app);
         setPersistence(auth, browserLocalPersistence).catch(error => {
             console.warn('Could not enable local auth persistence:', error);
         });
@@ -118,6 +122,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
         let notificationUnreadCount = 0;
         let adminNotificationsCache = [];
         let notificationRefreshTimer = null;
+        let loanApplicationDraft = { step: 1, personal: {}, documents: {}, acceptedTerms: false };
         let adminNotificationSelectedUsers = [];
         let adminUsersRealtimeStarted = false;
         let adminFundRequestsRealtimeStarted = false;
@@ -169,6 +174,18 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             Math.max(0, Number(user.balance || 0) - getLoanReservedAmount(user));
         const getLoanLimitAmount = (user = currentUserData || {}) =>
             Math.max(0, Number(user.maxLoanAmount || user.loanMaxAmount || user.creditLimit || user.loanCreditLimit || 0));
+        const isModernLoanRequest = (request = {}) =>
+            Number(request.requestVersion || request.loanApplicationVersion || 0) >= LOAN_APPLICATION_VERSION;
+        const hasModernLoanApproval = (user = currentUserData || {}) =>
+            getLoanLimitAmount(user) > 0 && Number(user.loanApplicationVersion || user.loanRequestVersion || 0) >= LOAN_APPLICATION_VERSION;
+        const isActiveLoanRecord = (loan = {}) => String(loan.status || '').toLowerCase() === 'active';
+        const getLoanPrincipal = (loan = {}) => Number(loan.amount || loan.principal || 0);
+        const getUserLoanRecords = (userId, loans = allLoansCache) => loans
+            .filter(loan => loan.userId === userId)
+            .sort((a, b) => timestampToMillis(b.createdAt || b.paidAt) - timestampToMillis(a.createdAt || a.paidAt));
+        const getLatestModernLoanRequest = (userId, requests = allLoanRequestsCache) => requests
+            .filter(request => request.userId === userId && isModernLoanRequest(request))
+            .sort((a, b) => timestampToMillis(b.requestedAt || b.processedAt) - timestampToMillis(a.requestedAt || a.processedAt))[0] || null;
         const isAdminUserRecord = (user = {}) => {
             const email = String(user.email || '').trim().toLowerCase();
             return user.id === ADMIN_UID || user.uid === ADMIN_UID || email === 'reviewsworld01@gmail.com';
@@ -2635,20 +2652,34 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                 container.innerHTML = '<p class="rounded-2xl border border-dashed border-gray-200 dark:border-gray-700 p-6 text-center text-sm font-bold text-gray-500 dark:text-gray-400">No live missions right now.</p>';
                 return;
             }
+            const categories = ['All', ...Array.from(new Set(activeTasks.map(task => task.category || 'Other'))).slice(0, 8)];
             container.innerHTML = `
-                <div class="mb-3 flex items-center justify-between px-1">
-                    <p class="text-[10px] font-black uppercase tracking-[0.22em] text-slate-500 dark:text-slate-300">Live Missions</p>
+                <div class="mb-3 flex items-center justify-between gap-3 px-1">
+                    <div>
+                        <p class="text-[10px] font-black uppercase tracking-[0.22em] text-slate-500 dark:text-slate-300">Task Categories</p>
+                        <h3 class="text-lg font-black text-slate-950 dark:text-white">Live Missions</h3>
+                    </div>
                     <span class="text-[11px] font-bold text-gray-400">${activeTasks.length} available</span>
                 </div>
                 <label class="mb-3 flex items-center gap-3 rounded-2xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-4 py-3 shadow-sm">
                     <svg class="h-4 w-4 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="m21 21-4.35-4.35M10 18a8 8 0 1 1 0-16 8 8 0 0 1 0 16z"></path></svg>
                     <input id="user-task-search" type="search" placeholder="Search app tasks..." class="min-w-0 flex-1 bg-transparent text-sm font-semibold outline-none placeholder:text-slate-500">
                 </label>
+                <div id="user-task-category-chips" class="mb-3 flex gap-2 overflow-x-auto pb-1">
+                    ${categories.map((category, index) => `
+                        <button type="button" data-task-category="${escapeHtml(category)}" class="user-task-category-chip shrink-0 rounded-full px-3 py-2 text-xs font-black ${index === 0 ? 'bg-slate-950 text-white dark:bg-white dark:text-slate-950' : 'bg-white text-slate-600 border border-gray-200 dark:bg-gray-800 dark:text-slate-200 dark:border-gray-700'}">${escapeHtml(category)}</button>
+                    `).join('')}
+                </div>
                 <div id="user-task-results" class="space-y-3"></div>`;
 
+            let selectedCategory = 'All';
             const renderList = () => {
                 const term = (document.getElementById('user-task-search')?.value || '').trim().toLowerCase();
-                const filtered = activeTasks.filter(task => [task.title, task.category, task.instructions].some(value => String(value || '').toLowerCase().includes(term)));
+                const filtered = activeTasks.filter(task => {
+                    const matchesCategory = selectedCategory === 'All' || String(task.category || 'Other') === selectedCategory;
+                    const matchesSearch = !term || [task.title, task.category, task.instructions, task.appName].some(value => String(value || '').toLowerCase().includes(term));
+                    return matchesCategory && matchesSearch;
+                });
                 const results = document.getElementById('user-task-results');
                 if (!results) return;
                 results.innerHTML = filtered.length ? filtered.map(task => {
@@ -2673,6 +2704,16 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             };
             renderList();
             document.getElementById('user-task-search')?.addEventListener('input', renderList);
+            document.querySelectorAll('.user-task-category-chip').forEach(chip => {
+                chip.addEventListener('click', () => {
+                    selectedCategory = chip.dataset.taskCategory || 'All';
+                    document.querySelectorAll('.user-task-category-chip').forEach(btn => {
+                        const isActive = btn.dataset.taskCategory === selectedCategory;
+                        btn.className = `user-task-category-chip shrink-0 rounded-full px-3 py-2 text-xs font-black ${isActive ? 'bg-slate-950 text-white dark:bg-white dark:text-slate-950' : 'bg-white text-slate-600 border border-gray-200 dark:bg-gray-800 dark:text-slate-200 dark:border-gray-700'}`;
+                    });
+                    renderList();
+                });
+            });
         };
 
         const initializePublicHomeRealtime = () => {
@@ -6694,79 +6735,314 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                 </div>`;
         };
 
+        const buildLoanSummary = (user = currentUserData || {}, loans = []) => {
+            const activeLoans = loans.filter(isActiveLoanRecord);
+            const maxLimit = getLoanLimitAmount(user);
+            const usedAmount = activeLoans.reduce((sum, loan) => sum + getLoanPrincipal(loan), 0);
+            const repayableAmount = activeLoans.reduce((sum, loan) => sum + Number(loan.totalRepayable || 0), 0);
+            return {
+                maxLimit,
+                usedAmount,
+                repayableAmount,
+                availableAmount: Math.max(0, maxLimit - usedAmount),
+                activeLoans,
+                loans
+            };
+        };
+
+        const getLoanRequestPersonal = () => ({
+            name: document.getElementById('loan-name-input')?.value.trim() || '',
+            fatherName: document.getElementById('loan-father-input')?.value.trim() || '',
+            mobile: document.getElementById('loan-mobile-input')?.value.trim() || '',
+            alternateMobile: document.getElementById('loan-alt-mobile-input')?.value.trim() || '',
+            dob: document.getElementById('loan-dob-input')?.value.trim() || '',
+            aadhaar: document.getElementById('loan-aadhaar-input')?.value.trim() || ''
+        });
+
+        const saveLoanApplicationDraftFromDom = (step = loanApplicationDraft.step || 1) => {
+            if (step === 1) {
+                loanApplicationDraft.personal = getLoanRequestPersonal();
+            }
+            if (step === 3) {
+                loanApplicationDraft.acceptedTerms = !!document.getElementById('loan-final-terms-checkbox')?.checked;
+            }
+        };
+
+        const validateLoanApplicationStep = (step) => {
+            if (step === 1) {
+                const { name, fatherName, mobile, alternateMobile, dob, aadhaar } = loanApplicationDraft.personal || {};
+                if (!name || !fatherName || !/^\d{10}$/.test(mobile) || !/^\d{10}$/.test(alternateMobile) || !isValidLoanDob(dob) || !/^\d{12}$/.test(aadhaar)) {
+                    showNotification('Please fill all personal details correctly.', true);
+                    return false;
+                }
+            }
+            if (step === 2) {
+                const docs = loanApplicationDraft.documents || {};
+                if (!docs.aadhaarFile || !docs.selfieFile) {
+                    showNotification('Please upload Aadhaar card and selfie photo.', true);
+                    return false;
+                }
+            }
+            if (step === 3 && !loanApplicationDraft.acceptedTerms) {
+                showNotification('Please accept loan terms before applying.', true);
+                return false;
+            }
+            return true;
+        };
+
+        const renderLoanStepCircles = (step) => {
+            const steps = [
+                { id: 1, title: 'Personal Details' },
+                { id: 2, title: 'Documents' },
+                { id: 3, title: 'Done' }
+            ];
+            return `
+                <div class="grid grid-cols-3 gap-2">
+                    ${steps.map(item => {
+                        const active = item.id === step;
+                        const complete = item.id < step;
+                        return `
+                            <div class="flex flex-col items-center text-center">
+                                <div class="flex h-10 w-10 items-center justify-center rounded-full border-2 text-sm font-black ${complete ? 'border-emerald-500 bg-emerald-500 text-white' : active ? 'border-indigo-600 bg-indigo-600 text-white' : 'border-gray-200 bg-white text-gray-400 dark:border-gray-700 dark:bg-gray-900'}">${complete ? '&#10003;' : item.id}</div>
+                                <p class="mt-2 text-[10px] font-black uppercase leading-tight text-gray-500 dark:text-gray-400">${item.title}</p>
+                            </div>`;
+                    }).join('')}
+                </div>`;
+        };
+
+        const showLoanPendingPage = () => {
+            showPage(`
+                ${getPageHeader('Take Loan')}
+                <div class="max-w-md mx-auto bg-white dark:bg-gray-800 p-6 rounded-xl shadow-md text-center space-y-3">
+                    <div class="w-14 h-14 rounded-2xl bg-yellow-100 dark:bg-yellow-900/30 text-yellow-600 mx-auto flex items-center justify-center">
+                        <svg class="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M12 2a10 10 0 100 20 10 10 0 000-20z"></path></svg>
+                    </div>
+                    <h3 class="text-lg font-semibold">Loan Request Pending</h3>
+                    <p class="text-sm text-gray-500 dark:text-gray-400">Your updated details and documents have been sent to admin. After approval, your credit limit will appear here.</p>
+                </div>
+                ${getPageFooter()}`);
+        };
+
+        const showLoanCreditDashboardPage = (loans = []) => {
+            const summary = buildLoanSummary(currentUserData, loans);
+            const activeLoan = summary.activeLoans[0] || null;
+            const canTakeLoan = hasModernLoanApproval(currentUserData) && summary.activeLoans.length === 0 && summary.availableAmount > 0;
+            const historyCards = loans.length ? loans.map(loan => {
+                const dueDate = toDate(loan.dueDate);
+                const createdAt = toDate(loan.createdAt);
+                const isActive = isActiveLoanRecord(loan);
+                return `
+                    <button data-action="user-view-loan-detail" data-loanid="${loan.id}" class="w-full rounded-2xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-4 text-left shadow-sm">
+                        <div class="flex justify-between gap-3">
+                            <div>
+                                <p class="text-sm font-black text-gray-900 dark:text-white">${formatCurrency(loan.amount || 0)}</p>
+                                <p class="text-xs text-gray-500 dark:text-gray-400">${createdAt ? createdAt.toLocaleDateString('en-IN') : 'Loan date N/A'} | Due ${dueDate ? dueDate.toLocaleDateString('en-IN') : 'N/A'}</p>
+                            </div>
+                            <span class="h-fit rounded-full px-3 py-1 text-[10px] font-black uppercase ${isActive ? 'bg-indigo-100 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-200' : 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-200'}">${escapeHtml(loan.status || 'active')}</span>
+                        </div>
+                        <div class="mt-3 grid grid-cols-2 gap-2 text-xs">
+                            <div class="rounded-xl bg-gray-50 dark:bg-gray-700 p-2"><span class="text-gray-500">Interest</span><p class="font-bold">${formatCurrency(loan.interest || 0)}</p></div>
+                            <div class="rounded-xl bg-gray-50 dark:bg-gray-700 p-2"><span class="text-gray-500">Repay</span><p class="font-bold">${formatCurrency(loan.totalRepayable || 0)}</p></div>
+                        </div>
+                    </button>`;
+            }).join('') : '<p class="rounded-2xl border border-dashed border-gray-200 dark:border-gray-700 p-5 text-center text-sm font-bold text-gray-500">No loan history yet.</p>';
+
+            showPage(`
+                ${getPageHeader('Take Loan')}
+                <div class="max-w-md mx-auto space-y-5">
+                    <div class="rounded-3xl bg-gradient-to-br from-slate-950 via-indigo-900 to-blue-700 p-5 text-white shadow-xl">
+                        <p class="text-xs font-black uppercase tracking-widest text-white/60">RW Pay Later</p>
+                        <div class="mt-4 grid grid-cols-2 gap-3">
+                            <div>
+                                <p class="text-xs text-white/60">Max Limit</p>
+                                <p class="text-2xl font-black">${formatCurrency(summary.maxLimit)}</p>
+                            </div>
+                            <div class="text-right">
+                                <p class="text-xs text-white/60">Available</p>
+                                <p class="text-2xl font-black">${formatCurrency(summary.availableAmount)}</p>
+                            </div>
+                        </div>
+                        <div class="mt-4 rounded-2xl bg-white/10 p-3 text-sm">
+                            <div class="flex justify-between"><span>Used Amount</span><span class="font-black">${formatCurrency(summary.usedAmount)}</span></div>
+                            <div class="mt-1 flex justify-between"><span>Total Repayable</span><span class="font-black">${formatCurrency(summary.repayableAmount)}</span></div>
+                        </div>
+                    </div>
+                    <button id="loan-dashboard-action-btn" ${canTakeLoan || activeLoan ? '' : 'disabled'} class="w-full rounded-2xl ${canTakeLoan ? 'bg-indigo-600 hover:bg-indigo-700' : activeLoan ? 'bg-emerald-600 hover:bg-emerald-700' : 'bg-gray-300 cursor-not-allowed'} py-3 font-black text-white transition">
+                        ${canTakeLoan ? 'Take Loan' : activeLoan ? 'Repay Active Loan' : 'No Available Limit'}
+                    </button>
+                    <div class="space-y-3">
+                        <div class="flex items-center justify-between px-1">
+                            <h3 class="text-sm font-black text-gray-900 dark:text-white">Loan History</h3>
+                            <span class="text-xs font-bold text-gray-400">${loans.length} record(s)</span>
+                        </div>
+                        ${historyCards}
+                    </div>
+                </div>
+                ${getPageFooter()}`);
+
+            document.getElementById('loan-dashboard-action-btn')?.addEventListener('click', () => {
+                if (canTakeLoan) return showTakeLoanPage();
+                if (activeLoan) return showActiveLoanPage(activeLoan);
+            });
+        };
+
         const showLoanPage = async () => {
             if (!currentUser || !currentUserData) return showNotification('User data not loaded. Please wait.', true);
+            let userLoans = getUserLoanRecords(currentUser.uid);
+            let pendingModernRequest = getLatestModernLoanRequest(currentUser.uid);
             try {
-                const freshUserSnap = await getDoc(doc(db, `artifacts/${appId}/public/data/users`, currentUser.uid));
+                const [freshUserSnap, loanSnap, pendingReqSnap] = await Promise.all([
+                    getDoc(doc(db, `artifacts/${appId}/public/data/users`, currentUser.uid)),
+                    getDocs(query(collection(db, `artifacts/${appId}/public/data/loans`), where("userId", "==", currentUser.uid))),
+                    getDocs(query(collection(db, `artifacts/${appId}/public/data/loan_requests`), where("userId", "==", currentUser.uid), where("status", "==", "pending")))
+                ]);
                 if (freshUserSnap.exists()) {
                     currentUserData = { ...currentUserData, ...freshUserSnap.data(), id: currentUser.uid, uid: currentUser.uid };
                     writeCache(getUserCacheKey(currentUser.uid), currentUserData);
                 }
+                userLoans = loanSnap.docs.map(d => ({ id: d.id, ...d.data() }))
+                    .sort((a, b) => timestampToMillis(b.createdAt || b.paidAt) - timestampToMillis(a.createdAt || a.paidAt));
+                allLoansCache = [
+                    ...allLoansCache.filter(loan => loan.userId !== currentUser.uid),
+                    ...userLoans
+                ];
+                const pendingRequests = pendingReqSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+                pendingModernRequest = pendingRequests.find(isModernLoanRequest) || pendingModernRequest;
             } catch (error) {
-                console.warn('Fresh loan user check skipped:', error);
+                console.warn('Fresh loan state check skipped:', error);
             }
 
-            if (currentUserData.loanEligible || getLoanLimitAmount(currentUserData) > 0) {
-                showTakeLoanPage();
-            } else {
-                showLoanApplicationPage();
+            const activeLoans = userLoans.filter(isActiveLoanRecord);
+            if (activeLoans.length || hasModernLoanApproval(currentUserData)) {
+                showLoanCreditDashboardPage(userLoans);
+                return;
             }
-
-            Promise.all([
-                getDocs(query(
-                collection(db, `artifacts/${appId}/public/data/loans`),
-                where("userId", "==", currentUser.uid),
-                where("status", "==", "active")
-                )),
-                getDocs(query(
-                collection(db, `artifacts/${appId}/public/data/loan_requests`),
-                where("userId", "==", currentUser.uid),
-                where("status", "==", "pending")
-                ))
-            ]).then(([activeLoanSnap, pendingReqSnap]) => {
-                if (activeLoanSnap.empty && pendingReqSnap.empty) return;
-                if (activeLoanSnap.empty === false) {
-                    const loan = { id: activeLoanSnap.docs[0].id, ...activeLoanSnap.docs[0].data() };
-                    showActiveLoanPage(loan);
-                    return;
-                }
-                showPage(`
-                    ${getPageHeader('Take Loan')}
-                    <div class="max-w-md mx-auto bg-white dark:bg-gray-800 p-6 rounded-xl shadow-md text-center space-y-3">
-                        <div class="w-14 h-14 rounded-2xl bg-yellow-100 dark:bg-yellow-900/30 text-yellow-600 mx-auto flex items-center justify-center">
-                            <svg class="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M12 2a10 10 0 100 20 10 10 0 000-20z"></path></svg>
-                        </div>
-                        <h3 class="text-lg font-semibold">Loan Request Pending</h3>
-                        <p class="text-sm text-gray-500 dark:text-gray-400">Your eligibility request is under review. We will notify soon.</p>
-                    </div>
-                    ${getPageFooter()}`);
-            }).catch(error => console.warn('Loan state background check skipped:', error));
+            if (pendingModernRequest) {
+                showLoanPendingPage();
+                return;
+            }
+            loanApplicationDraft = {
+                step: 1,
+                personal: {
+                    name: currentUserData.name || '',
+                    mobile: currentUserData.mobile || '',
+                    fatherName: '',
+                    alternateMobile: '',
+                    dob: '',
+                    aadhaar: ''
+                },
+                documents: {},
+                acceptedTerms: false
+            };
+            showLoanApplicationPage(1);
         };
 
-        const showLoanApplicationPage = () => {
+        const showLoanApplicationPage = (step = 1) => {
+            loanApplicationDraft.step = step;
+            const personal = {
+                name: currentUserData?.name || '',
+                mobile: currentUserData?.mobile || '',
+                fatherName: '',
+                alternateMobile: '',
+                dob: '',
+                aadhaar: '',
+                ...(loanApplicationDraft.personal || {})
+            };
+            const docs = loanApplicationDraft.documents || {};
+            const stepContent = step === 1 ? `
+                <div class="space-y-3">
+                    <input id="loan-name-input" value="${escapeHtml(personal.name)}" placeholder="Your name" class="w-full px-4 py-3 bg-gray-100 dark:bg-gray-700 rounded-lg">
+                    <input id="loan-father-input" value="${escapeHtml(personal.fatherName)}" placeholder="Father's name" class="w-full px-4 py-3 bg-gray-100 dark:bg-gray-700 rounded-lg">
+                    <input id="loan-mobile-input" value="${escapeHtml(personal.mobile)}" maxlength="10" inputmode="numeric" placeholder="Mobile no." class="w-full px-4 py-3 bg-gray-100 dark:bg-gray-700 rounded-lg">
+                    <input id="loan-alt-mobile-input" value="${escapeHtml(personal.alternateMobile)}" maxlength="10" inputmode="numeric" placeholder="Alternate no." class="w-full px-4 py-3 bg-gray-100 dark:bg-gray-700 rounded-lg">
+                    <input id="loan-dob-input" value="${escapeHtml(personal.dob)}" maxlength="10" placeholder="Date of birth (DD_MM_YYYY)" class="w-full px-4 py-3 bg-gray-100 dark:bg-gray-700 rounded-lg">
+                    <input id="loan-aadhaar-input" value="${escapeHtml(personal.aadhaar)}" maxlength="12" inputmode="numeric" placeholder="Aadhaar number" class="w-full px-4 py-3 bg-gray-100 dark:bg-gray-700 rounded-lg">
+                </div>` : step === 2 ? `
+                <div class="space-y-3">
+                    <label class="block rounded-2xl border border-dashed border-indigo-200 dark:border-indigo-800 bg-indigo-50/50 dark:bg-indigo-900/10 p-4 text-center">
+                        <input id="loan-aadhaar-file-input" type="file" accept="image/*,.pdf" class="hidden">
+                        <span class="block text-sm font-black text-gray-900 dark:text-white">Upload Aadhaar Card</span>
+                        <span id="loan-aadhaar-file-label" class="mt-1 block text-xs font-semibold text-gray-500 dark:text-gray-400">${escapeHtml(docs.aadhaarName || 'Tap to select Aadhaar image/PDF')}</span>
+                    </label>
+                    <label class="block rounded-2xl border border-dashed border-emerald-200 dark:border-emerald-800 bg-emerald-50/50 dark:bg-emerald-900/10 p-4 text-center">
+                        <input id="loan-selfie-file-input" type="file" accept="image/*" capture="user" class="hidden">
+                        <span class="block text-sm font-black text-gray-900 dark:text-white">Upload Selfie</span>
+                        <span id="loan-selfie-file-label" class="mt-1 block text-xs font-semibold text-gray-500 dark:text-gray-400">${escapeHtml(docs.selfieName || 'Tap to select live selfie')}</span>
+                    </label>
+                    <p class="rounded-xl bg-gray-50 dark:bg-gray-700 p-3 text-xs text-gray-500 dark:text-gray-300">Admin will verify Aadhaar and selfie match before approving loan limit.</p>
+                </div>` : `
+                <div class="space-y-4">
+                    <div class="rounded-2xl bg-gray-50 dark:bg-gray-700 p-4 text-sm">
+                        <div class="flex justify-between gap-3"><span>Name</span><span class="font-bold text-right">${escapeHtml(personal.name || 'N/A')}</span></div>
+                        <div class="mt-2 flex justify-between gap-3"><span>Mobile</span><span class="font-bold text-right">${escapeHtml(personal.mobile || 'N/A')}</span></div>
+                        <div class="mt-2 flex justify-between gap-3"><span>Documents</span><span class="font-bold text-right">${docs.aadhaarFile && docs.selfieFile ? 'Aadhaar + Selfie ready' : 'Missing'}</span></div>
+                    </div>
+                    <label class="flex items-center gap-3 rounded-2xl border border-gray-200 dark:border-gray-700 p-4 text-sm">
+                        <input type="checkbox" id="loan-final-terms-checkbox" class="h-5 w-5" ${loanApplicationDraft.acceptedTerms ? 'checked' : ''}>
+                        <span>I agree to the <button id="loan-final-agreement-link" type="button" class="text-indigo-600 dark:text-indigo-300 font-black underline">loan agreement and security terms</button>.</span>
+                    </label>
+                </div>`;
+
             const content = `
                 ${getPageHeader('Take Loan')}
-                <div class="max-w-md mx-auto bg-white dark:bg-gray-800 p-6 rounded-xl shadow-md space-y-5">
-                    <div class="text-center">
-                        <h3 class="text-lg font-semibold">Loan Eligibility Request</h3>
-                        <p class="text-sm text-gray-500 dark:text-gray-400 mt-1">Submit details for admin review.</p>
+                <div class="max-w-md mx-auto bg-white dark:bg-gray-800 p-5 rounded-2xl shadow-md space-y-5">
+                    ${renderLoanStepCircles(step)}
+                    <div class="overflow-hidden">
+                        <div class="transition-transform duration-200 ease-out">${stepContent}</div>
                     </div>
-                    <div class="space-y-3">
-                        <input id="loan-name-input" value="${currentUserData.name || ''}" placeholder="Your name" class="w-full px-4 py-3 bg-gray-100 dark:bg-gray-700 rounded-lg">
-                        <input id="loan-father-input" placeholder="Father's name" class="w-full px-4 py-3 bg-gray-100 dark:bg-gray-700 rounded-lg">
-                        <input id="loan-mobile-input" value="${currentUserData.mobile || ''}" maxlength="10" placeholder="Mobile no." class="w-full px-4 py-3 bg-gray-100 dark:bg-gray-700 rounded-lg">
-                        <input id="loan-alt-mobile-input" maxlength="10" placeholder="Alternate no." class="w-full px-4 py-3 bg-gray-100 dark:bg-gray-700 rounded-lg">
-                        <input id="loan-dob-input" maxlength="10" placeholder="Date of birth (DD_MM_YYYY)" class="w-full px-4 py-3 bg-gray-100 dark:bg-gray-700 rounded-lg">
-                        <input id="loan-aadhaar-input" maxlength="12" placeholder="Aadhaar number" class="w-full px-4 py-3 bg-gray-100 dark:bg-gray-700 rounded-lg">
+                    <div class="flex gap-2">
+                        ${step > 1 ? '<button id="loan-back-step-btn" class="flex-1 rounded-xl bg-gray-100 dark:bg-gray-700 py-3 text-sm font-black text-gray-700 dark:text-gray-200">Back</button>' : ''}
+                        ${step < 3 ? '<button id="loan-next-step-btn" class="flex-1 rounded-xl bg-indigo-600 py-3 text-sm font-black text-white">Next</button>' : '<button id="submit-loan-request-btn" class="flex-1 rounded-xl bg-indigo-600 py-3 text-sm font-black text-white">Apply Now</button>'}
                     </div>
-                    <button id="submit-loan-request-btn" class="w-full bg-indigo-600 text-white font-semibold py-3 rounded-lg hover:bg-indigo-700 transition">Submit Request</button>
                 </div>
                 ${getPageFooter()}`;
             showPage(content);
-            document.getElementById('submit-loan-request-btn').onclick = handleSubmitLoanRequest;
+
+            document.getElementById('loan-back-step-btn')?.addEventListener('click', () => {
+                saveLoanApplicationDraftFromDom(step);
+                showLoanApplicationPage(step - 1);
+            });
+            document.getElementById('loan-next-step-btn')?.addEventListener('click', () => {
+                saveLoanApplicationDraftFromDom(step);
+                if (validateLoanApplicationStep(step)) showLoanApplicationPage(step + 1);
+            });
+            document.getElementById('submit-loan-request-btn')?.addEventListener('click', () => {
+                saveLoanApplicationDraftFromDom(step);
+                if (validateLoanApplicationStep(step)) handleSubmitLoanRequest();
+            });
+            document.getElementById('loan-final-agreement-link')?.addEventListener('click', showLoanAgreementModal);
+            document.getElementById('loan-aadhaar-file-input')?.addEventListener('change', (event) => {
+                const file = event.target.files?.[0] || null;
+                loanApplicationDraft.documents = { ...(loanApplicationDraft.documents || {}), aadhaarFile: file, aadhaarName: file?.name || '' };
+                const label = document.getElementById('loan-aadhaar-file-label');
+                if (label) label.textContent = file?.name || 'Tap to select Aadhaar image/PDF';
+            });
+            document.getElementById('loan-selfie-file-input')?.addEventListener('change', (event) => {
+                const file = event.target.files?.[0] || null;
+                loanApplicationDraft.documents = { ...(loanApplicationDraft.documents || {}), selfieFile: file, selfieName: file?.name || '' };
+                const label = document.getElementById('loan-selfie-file-label');
+                if (label) label.textContent = file?.name || 'Tap to select live selfie';
+            });
         };
 
         const showTakeLoanPage = () => {
+            if (!hasModernLoanApproval(currentUserData)) {
+                loanApplicationDraft = {
+                    step: 1,
+                    personal: {
+                        name: currentUserData?.name || '',
+                        mobile: currentUserData?.mobile || '',
+                        fatherName: '',
+                        alternateMobile: '',
+                        dob: '',
+                        aadhaar: ''
+                    },
+                    documents: {},
+                    acceptedTerms: false
+                };
+                showLoanApplicationPage(1);
+                return;
+            }
             const dueDate = getNextMonthRepaymentDate();
             const maxLoanAmount = Math.max(1, getLoanLimitAmount(currentUserData));
             const content = `
@@ -6774,7 +7050,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                 <div class="max-w-md mx-auto bg-white dark:bg-gray-800 p-6 rounded-xl shadow-md space-y-5">
                     <div class="text-center">
                         <h3 class="text-lg font-semibold">Choose Loan Amount</h3>
-                        <p class="text-sm text-gray-500 dark:text-gray-400 mt-1">Amount between ₹1 and ₹500. Interest is 2% for 1 month.</p>
+                        <p class="text-sm text-gray-500 dark:text-gray-400 mt-1">Amount between 1 and your approved limit. Interest is 2% for 1 month.</p>
                     </div>
                     <div class="rounded-xl bg-indigo-50 dark:bg-indigo-900/20 border border-indigo-100 dark:border-indigo-800 p-4">
                         <div class="flex justify-between text-sm">
@@ -6799,7 +7075,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                 amountInput.placeholder = `Enter amount up to ${formatCurrency(maxLoanAmount)}`;
             }
             const loanHelpText = amountInput?.closest('.space-y-5')?.querySelector('.text-center p');
-            if (loanHelpText) loanHelpText.textContent = `Amount between ₹1 and ${formatCurrency(maxLoanAmount)}. Interest is 2% for 1 month.`;
+            if (loanHelpText) loanHelpText.textContent = `Amount between 1 and ${formatCurrency(maxLoanAmount)}. Interest is 2% for 1 month.`;
             const updateSummary = () => {
                 const amount = parseFloat(document.getElementById('loan-amount-input').value) || 0;
                 const interest = Number((amount * 0.02).toFixed(2));
@@ -6846,6 +7122,31 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                 </div>
                 ${getPageFooter()}`);
             document.getElementById('repay-loan-btn').onclick = () => handleRepayLoan(loan);
+        };
+
+        const showUserLoanDetailModal = (loanId) => {
+            const loan = allLoansCache.find(item => item.id === loanId) || getUserLoanRecords(currentUser?.uid || '').find(item => item.id === loanId);
+            if (!loan) return showNotification('Loan details not found. Please refresh.', true);
+            const dueDate = toDate(loan.dueDate);
+            const createdAt = toDate(loan.createdAt);
+            const paidAt = toDate(loan.paidAt);
+            renderModal('Loan Details',
+                `<div class="space-y-3 text-sm">
+                    <div class="rounded-2xl bg-indigo-50 dark:bg-indigo-900/20 border border-indigo-100 dark:border-indigo-800 p-4">
+                        <div class="flex justify-between"><span>Loan Amount</span><span class="font-black">${formatCurrency(loan.amount || 0)}</span></div>
+                        <div class="mt-2 flex justify-between"><span>Interest</span><span class="font-black">${formatCurrency(loan.interest || 0)}</span></div>
+                        <div class="mt-2 flex justify-between text-base"><span>Total Repay</span><span class="font-black">${formatCurrency(loan.totalRepayable || 0)}</span></div>
+                    </div>
+                    <div class="rounded-2xl border border-gray-200 dark:border-gray-700 p-4 space-y-2">
+                        <div class="flex justify-between gap-3"><span>Status</span><span class="font-bold text-right">${escapeHtml(loan.status || 'active')}</span></div>
+                        <div class="flex justify-between gap-3"><span>Credit Limit</span><span class="font-bold text-right">${formatCurrency(loan.creditLimitAtBorrow || getLoanLimitAmount(currentUserData))}</span></div>
+                        <div class="flex justify-between gap-3"><span>Created</span><span class="font-bold text-right">${createdAt ? createdAt.toLocaleDateString('en-IN') : 'N/A'}</span></div>
+                        <div class="flex justify-between gap-3"><span>Due Date</span><span class="font-bold text-right">${dueDate ? dueDate.toLocaleDateString('en-IN') : 'N/A'}</span></div>
+                        ${paidAt ? `<div class="flex justify-between gap-3"><span>Paid At</span><span class="font-bold text-right">${paidAt.toLocaleDateString('en-IN')}</span></div>` : ''}
+                    </div>
+                </div>`,
+                `<button onclick="window.closeModal()" class="px-4 py-2 text-sm bg-indigo-600 text-white rounded-lg">Close</button>`,
+                'max-w-md');
         };
 
         const attachInvestmentInvoiceButtons = (investments = []) => {
@@ -6963,7 +7264,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                         <p class="text-sm text-gray-500 dark:text-gray-400">1% monthly interest, processed every 30 days.</p>
                     </div>
                     <div class="space-y-3">
-                        <input type="number" id="partner-amount-input" min="50" placeholder="Minimum investment ₹50" class="w-full px-4 py-3 bg-gray-100 dark:bg-gray-700 rounded-lg">
+                        <input type="number" id="partner-amount-input" min="${PARTNER_MIN_INVESTMENT}" placeholder="Minimum investment ${formatCurrency(PARTNER_MIN_INVESTMENT)}" class="w-full px-4 py-3 bg-gray-100 dark:bg-gray-700 rounded-lg">
                         <input type="number" id="partner-months-input" min="1" max="60" placeholder="Type no. of months e.g. 1, 2, 3" class="w-full px-4 py-3 bg-gray-100 dark:bg-gray-700 rounded-lg">
                     </div>
                     <div id="partner-investment-summary" class="rounded-2xl bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-100 dark:border-emerald-800 p-3"></div>
@@ -8160,37 +8461,55 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             const search = (document.getElementById('loan-admin-search')?.value || '').toLowerCase();
 
             if (filter === 'loans') {
-                let loans = [...allLoansCache].filter(l => !search || [l.userName, l.userMobile, l.status].some(v => (v || '').toString().toLowerCase().includes(search)));
-                listEl.innerHTML = loans.length ? loans.map(l => {
-                    const rawDueDate = toDate(l.dueDate);
-                    const dueDate = rawDueDate ? rawDueDate.toLocaleDateString('en-IN') : 'N/A';
-                    const canAutoDebit = l.status === 'active' && rawDueDate && rawDueDate <= new Date();
-                    const isOverdue = l.status === 'active' && !!l.overdueAt;
+                const grouped = new Map();
+                [...allLoansCache].forEach(loan => {
+                    const userId = loan.userId || 'unknown';
+                    const current = grouped.get(userId) || { userId, loans: [], user: allUsersCache.find(user => (user.id || user.uid) === userId) || {} };
+                    current.loans.push(loan);
+                    grouped.set(userId, current);
+                });
+                let groups = Array.from(grouped.values()).map(group => {
+                    const loans = group.loans.sort((a, b) => timestampToMillis(b.createdAt || b.paidAt) - timestampToMillis(a.createdAt || a.paidAt));
+                    const activeLoans = loans.filter(isActiveLoanRecord);
+                    const totalUsed = activeLoans.reduce((sum, loan) => sum + Number(loan.amount || 0), 0);
+                    const totalRepayable = activeLoans.reduce((sum, loan) => sum + Number(loan.totalRepayable || 0), 0);
+                    const latest = loans[0] || {};
+                    const user = group.user || {};
+                    return { ...group, loans, activeLoans, totalUsed, totalRepayable, latest, user };
+                }).filter(group => !search || [
+                    group.user.name,
+                    group.user.mobile,
+                    group.user.email,
+                    group.latest.userName,
+                    group.latest.userMobile,
+                    group.latest.status
+                ].some(v => String(v || '').toLowerCase().includes(search)));
+
+                groups.sort((a, b) => timestampToMillis(b.latest.createdAt || b.latest.paidAt) - timestampToMillis(a.latest.createdAt || a.latest.paidAt));
+                listEl.innerHTML = groups.length ? groups.map(group => {
+                    const displayName = group.user.name || group.latest.userName || 'User';
+                    const displayMobile = group.user.mobile || group.latest.userMobile || '';
                     return `
-                        <div class="p-4 mb-3 bg-gray-50 dark:bg-gray-700/50 rounded-xl text-sm">
+                        <button data-action="view-admin-loan-user" data-userid="${group.userId}" class="w-full p-4 mb-3 bg-gray-50 dark:bg-gray-700/50 rounded-xl text-left text-sm border border-gray-100 dark:border-gray-700">
                             <div class="flex justify-between gap-3">
-                                <div>
-                                    <p class="font-semibold">${l.userName || 'User'} <span class="text-xs uppercase ${isOverdue ? 'text-red-500' : 'text-gray-500'}">${isOverdue ? 'overdue' : l.status}</span></p>
-                                    <p class="text-xs text-gray-500">${l.userMobile || ''}</p>
-                                    <p class="text-xs text-gray-500">Due: ${dueDate}</p>
-                                    ${isOverdue ? '<p class="text-xs font-semibold text-red-500">User account locked for unpaid due loan.</p>' : ''}
+                                <div class="min-w-0">
+                                    <p class="font-black truncate">${escapeHtml(displayName)}</p>
+                                    <p class="text-xs text-gray-500 truncate">${escapeHtml(displayMobile || group.user.email || '')}</p>
+                                    <p class="mt-1 text-xs text-gray-500">${group.loans.length} loan record(s) | ${group.activeLoans.length} active</p>
                                 </div>
-                                <div class="text-right">
-                                    <p class="font-bold">${formatCurrency(l.totalRepayable || 0)}</p>
-                                    <p class="text-xs text-gray-500">Principal ${formatCurrency(l.amount || 0)}</p>
+                                <div class="text-right shrink-0">
+                                    <p class="font-black">${formatCurrency(group.totalUsed)}</p>
+                                    <p class="text-xs text-gray-500">Used now</p>
+                                    <p class="text-xs font-semibold text-indigo-600 dark:text-indigo-300">Limit ${formatCurrency(getLoanLimitAmount(group.user))}</p>
                                 </div>
                             </div>
-                            ${l.status === 'active' ? `
-                                <div class="mt-3 flex flex-wrap gap-2">
-                                    <button data-action="admin-loan-auto-debit" data-loanid="${l.id}" ${canAutoDebit ? '' : 'disabled'} class="px-3 py-1 text-xs rounded font-semibold ${canAutoDebit ? 'bg-indigo-600 text-white' : 'bg-gray-200 dark:bg-gray-600 text-gray-500 cursor-not-allowed'}">Auto Debit Loan</button>
-                                    <span class="px-3 py-1 text-xs rounded ${canAutoDebit ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'}">${canAutoDebit ? 'Due date complete' : 'Due date not complete'}</span>
-                                </div>` : ''}
-                        </div>`;
-                }).join('') : '<p class="text-center text-gray-500 py-6">No loans found.</p>';
+                            ${group.totalRepayable ? `<div class="mt-3 rounded-xl bg-white dark:bg-gray-800 px-3 py-2 text-xs font-bold text-gray-600 dark:text-gray-300">Active repayable: ${formatCurrency(group.totalRepayable)}</div>` : ''}
+                        </button>`;
+                }).join('') : '<p class="text-center text-gray-500 py-6">No loan users found.</p>';
                 return;
             }
 
-            let requests = [...allLoanRequestsCache].filter(r => r.status === filter);
+            let requests = [...allLoanRequestsCache].filter(r => r.status === filter && isModernLoanRequest(r));
             requests = requests.filter(r => !search || [r.name, r.fatherName, r.mobile, r.alternateMobile, r.dob, r.aadhaar].some(v => (v || '').toString().toLowerCase().includes(search)));
             listEl.innerHTML = requests.length ? requests.map(r => `
                 <div class="p-4 mb-3 bg-gray-50 dark:bg-gray-700/50 rounded-xl text-sm">
@@ -8202,6 +8521,10 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                             <p class="text-xs text-gray-500">DOB: ${r.dob || 'N/A'}</p>
                             <p class="text-xs text-gray-500">Aadhaar: ${r.aadhaar || 'N/A'}</p>
                             <p class="text-xs text-gray-500">User: ${r.userEmail || 'N/A'}</p>
+                            <div class="flex flex-wrap gap-2 pt-1">
+                                ${r.documents?.aadhaar?.url ? `<a href="${escapeHtml(r.documents.aadhaar.url)}" target="_blank" rel="noopener" class="rounded bg-indigo-100 px-2 py-1 text-[10px] font-black text-indigo-700">View Aadhaar</a>` : '<span class="rounded bg-gray-100 px-2 py-1 text-[10px] font-black text-gray-500">No Aadhaar file</span>'}
+                                ${r.documents?.selfie?.url ? `<a href="${escapeHtml(r.documents.selfie.url)}" target="_blank" rel="noopener" class="rounded bg-emerald-100 px-2 py-1 text-[10px] font-black text-emerald-700">View Selfie</a>` : '<span class="rounded bg-gray-100 px-2 py-1 text-[10px] font-black text-gray-500">No selfie file</span>'}
+                            </div>
                             ${r.maxLoanAmount ? `<p class="text-xs font-semibold text-indigo-600 dark:text-indigo-300">Approved Max: ${formatCurrency(r.maxLoanAmount)}</p>` : ''}
                         </div>
                         ${r.status === 'pending' ? `
@@ -8211,6 +8534,144 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                             </div>` : ''}
                     </div>
                 </div>`).join('') : '<p class="text-center text-gray-500 py-6">No loan requests found.</p>';
+        };
+
+        const showAdminLoanUserDetailsPage = (userId) => {
+            const user = allUsersCache.find(item => (item.id || item.uid) === userId) || {};
+            const loans = getUserLoanRecords(userId);
+            const summary = buildLoanSummary(user, loans);
+            const request = getLatestModernLoanRequest(userId);
+            const loanRows = loans.length ? loans.map(loan => {
+                const dueDate = toDate(loan.dueDate);
+                const createdAt = toDate(loan.createdAt);
+                const canAutoDebit = isActiveLoanRecord(loan) && dueDate && dueDate <= new Date();
+                return `
+                    <div class="rounded-2xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-4 text-sm">
+                        <div class="flex justify-between gap-3">
+                            <div>
+                                <p class="font-black">${formatCurrency(loan.amount || 0)} <span class="text-[10px] uppercase text-gray-500">${escapeHtml(loan.status || 'active')}</span></p>
+                                <p class="text-xs text-gray-500">${createdAt ? createdAt.toLocaleDateString('en-IN') : 'N/A'} | Due ${dueDate ? dueDate.toLocaleDateString('en-IN') : 'N/A'}</p>
+                            </div>
+                            <div class="text-right">
+                                <p class="font-black">${formatCurrency(loan.totalRepayable || 0)}</p>
+                                <p class="text-xs text-gray-500">Repay</p>
+                            </div>
+                        </div>
+                        <div class="mt-3 flex flex-wrap gap-2">
+                            <button data-action="admin-view-loan-detail" data-loanid="${loan.id}" class="rounded-lg bg-slate-900 px-3 py-2 text-xs font-black text-white dark:bg-slate-100 dark:text-slate-900">Full Details</button>
+                            ${isActiveLoanRecord(loan) ? `<button data-action="admin-loan-auto-debit" data-loanid="${loan.id}" ${canAutoDebit ? '' : 'disabled'} class="rounded-lg px-3 py-2 text-xs font-black ${canAutoDebit ? 'bg-indigo-600 text-white' : 'bg-gray-200 text-gray-500 dark:bg-gray-700'}">Auto Debit</button>` : ''}
+                        </div>
+                    </div>`;
+            }).join('') : '<p class="rounded-2xl border border-dashed border-gray-200 dark:border-gray-700 p-5 text-center text-sm font-bold text-gray-500">No loan history.</p>';
+
+            showPage(`
+                ${getPageHeader('Loan User Details')}
+                <div class="max-w-3xl mx-auto space-y-4">
+                    <div class="rounded-2xl bg-white dark:bg-gray-800 p-5 shadow-sm border border-gray-100 dark:border-gray-700">
+                        <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                            <div>
+                                <h3 class="text-lg font-black text-gray-900 dark:text-white">${escapeHtml(user.name || request?.name || 'User')}</h3>
+                                <p class="text-xs text-gray-500">${escapeHtml(user.mobile || request?.mobile || '')} ${user.email ? `| ${escapeHtml(user.email)}` : ''}</p>
+                            </div>
+                            <button data-action="admin-add-loan-limit" data-userid="${userId}" class="rounded-xl bg-indigo-600 px-4 py-3 text-sm font-black text-white">Add / Change Limit</button>
+                        </div>
+                        <div class="mt-4 grid grid-cols-2 sm:grid-cols-4 gap-3 text-sm">
+                            <div class="rounded-xl bg-indigo-50 dark:bg-indigo-900/20 p-3"><p class="text-xs text-gray-500">Max Limit</p><p class="font-black">${formatCurrency(summary.maxLimit)}</p></div>
+                            <div class="rounded-xl bg-blue-50 dark:bg-blue-900/20 p-3"><p class="text-xs text-gray-500">Used</p><p class="font-black">${formatCurrency(summary.usedAmount)}</p></div>
+                            <div class="rounded-xl bg-emerald-50 dark:bg-emerald-900/20 p-3"><p class="text-xs text-gray-500">Available</p><p class="font-black">${formatCurrency(summary.availableAmount)}</p></div>
+                            <div class="rounded-xl bg-amber-50 dark:bg-amber-900/20 p-3"><p class="text-xs text-gray-500">Repayable</p><p class="font-black">${formatCurrency(summary.repayableAmount)}</p></div>
+                        </div>
+                    </div>
+                    <div class="rounded-2xl bg-white dark:bg-gray-800 p-5 shadow-sm border border-gray-100 dark:border-gray-700">
+                        <h3 class="text-sm font-black text-gray-900 dark:text-white">Uploaded Documents</h3>
+                        <div class="mt-3 flex flex-wrap gap-2 text-xs">
+                            ${request?.documents?.aadhaar?.url ? `<a href="${escapeHtml(request.documents.aadhaar.url)}" target="_blank" rel="noopener" class="rounded-lg bg-indigo-100 px-3 py-2 font-black text-indigo-700">Open Aadhaar</a>` : '<span class="rounded-lg bg-gray-100 px-3 py-2 font-black text-gray-500">Aadhaar not uploaded</span>'}
+                            ${request?.documents?.selfie?.url ? `<a href="${escapeHtml(request.documents.selfie.url)}" target="_blank" rel="noopener" class="rounded-lg bg-emerald-100 px-3 py-2 font-black text-emerald-700">Open Selfie</a>` : '<span class="rounded-lg bg-gray-100 px-3 py-2 font-black text-gray-500">Selfie not uploaded</span>'}
+                            <span class="rounded-lg bg-yellow-100 px-3 py-2 font-black text-yellow-700">Match: ${escapeHtml(request?.documents?.aadhaarSelfieMatchStatus || 'pending_admin_review')}</span>
+                        </div>
+                    </div>
+                    <div class="space-y-3">
+                        <h3 class="px-1 text-sm font-black text-gray-900 dark:text-white">Loan History</h3>
+                        ${loanRows}
+                    </div>
+                </div>
+                ${getPageFooter()}`);
+            setBottomNavActive('bottom-admin-btn');
+        };
+
+        const showAdminLoanDetailModal = (loanId) => {
+            const loan = allLoansCache.find(item => item.id === loanId);
+            if (!loan) return showNotification('Loan details not found.', true);
+            const dueDate = toDate(loan.dueDate);
+            const createdAt = toDate(loan.createdAt);
+            const paidAt = toDate(loan.paidAt);
+            renderModal('Admin Loan Details',
+                `<div class="space-y-3 text-sm">
+                    <div class="rounded-2xl bg-gray-50 dark:bg-gray-700 p-4 space-y-2">
+                        <div class="flex justify-between gap-3"><span>User</span><span class="font-bold text-right">${escapeHtml(loan.userName || 'User')}</span></div>
+                        <div class="flex justify-between gap-3"><span>Mobile</span><span class="font-bold text-right">${escapeHtml(loan.userMobile || 'N/A')}</span></div>
+                        <div class="flex justify-between gap-3"><span>Status</span><span class="font-bold text-right">${escapeHtml(loan.status || 'active')}</span></div>
+                    </div>
+                    <div class="rounded-2xl border border-gray-200 dark:border-gray-700 p-4 space-y-2">
+                        <div class="flex justify-between gap-3"><span>Principal</span><span class="font-black">${formatCurrency(loan.amount || 0)}</span></div>
+                        <div class="flex justify-between gap-3"><span>Interest</span><span class="font-black">${formatCurrency(loan.interest || 0)}</span></div>
+                        <div class="flex justify-between gap-3"><span>Total Repay</span><span class="font-black">${formatCurrency(loan.totalRepayable || 0)}</span></div>
+                        <div class="flex justify-between gap-3"><span>Credit Limit</span><span class="font-black">${formatCurrency(loan.creditLimitAtBorrow || 0)}</span></div>
+                        <div class="flex justify-between gap-3"><span>Created</span><span class="font-black">${createdAt ? createdAt.toLocaleDateString('en-IN') : 'N/A'}</span></div>
+                        <div class="flex justify-between gap-3"><span>Due Date</span><span class="font-black">${dueDate ? dueDate.toLocaleDateString('en-IN') : 'N/A'}</span></div>
+                        ${paidAt ? `<div class="flex justify-between gap-3"><span>Paid</span><span class="font-black">${paidAt.toLocaleDateString('en-IN')}</span></div>` : ''}
+                    </div>
+                </div>`,
+                `<button onclick="window.closeModal()" class="px-4 py-2 text-sm bg-indigo-600 text-white rounded-lg">Close</button>`,
+                'max-w-md');
+        };
+
+        const showAdminAddLoanLimitModal = (userId) => {
+            const user = allUsersCache.find(item => (item.id || item.uid) === userId) || {};
+            renderModal('Update Loan Limit',
+                `<div class="space-y-4">
+                    <div class="rounded-xl bg-indigo-50 dark:bg-indigo-900/20 border border-indigo-100 dark:border-indigo-800 p-3 text-sm">
+                        <p class="font-black">${escapeHtml(user.name || 'User')}</p>
+                        <p class="text-xs text-gray-500">${escapeHtml(user.mobile || user.email || '')}</p>
+                    </div>
+                    <input type="number" id="admin-loan-limit-input" min="1" step="1" value="${getLoanLimitAmount(user) || ''}" placeholder="New max credit limit" class="w-full px-4 py-3 bg-gray-100 dark:bg-gray-700 rounded-lg">
+                </div>`,
+                `<button onclick="window.closeModal()" class="px-4 py-2 text-sm bg-gray-200 dark:bg-gray-600 rounded-lg">Cancel</button>
+                 <button id="confirm-admin-loan-limit-btn" class="px-4 py-2 text-sm bg-indigo-600 text-white rounded-lg">Save Limit</button>`,
+                'max-w-md');
+            document.getElementById('confirm-admin-loan-limit-btn').onclick = async () => {
+                const amount = Number(document.getElementById('admin-loan-limit-input')?.value || 0);
+                if (!Number.isFinite(amount) || amount < 1) return showNotification('Enter a valid loan limit.', true);
+                await updateAdminLoanLimit(userId, amount);
+            };
+        };
+
+        const updateAdminLoanLimit = async (userId, amount) => {
+            try {
+                await updateDoc(doc(db, `artifacts/${appId}/public/data/users`, userId), {
+                    loanEligible: true,
+                    maxLoanAmount: Number(amount),
+                    loanMaxAmount: Number(amount),
+                    loanApplicationVersion: LOAN_APPLICATION_VERSION,
+                    loanRequestStatus: 'approved',
+                    loanLimitUpdatedAt: serverTimestamp(),
+                    loanLimitUpdatedBy: currentUser.uid
+                });
+                allUsersCache = allUsersCache.map(user => (user.id || user.uid) === userId ? {
+                    ...user,
+                    loanEligible: true,
+                    maxLoanAmount: Number(amount),
+                    loanMaxAmount: Number(amount),
+                    loanApplicationVersion: LOAN_APPLICATION_VERSION,
+                    loanRequestStatus: 'approved'
+                } : user);
+                showNotification('Loan limit updated.');
+                window.closeModal();
+                showAdminLoanUserDetailsPage(userId);
+            } catch (error) {
+                console.error('Loan limit update failed:', error);
+                showNotification(`Error: ${error.message}`, true);
+            }
         };
 
         const showAdminInvestmentsPage = () => {
@@ -8235,32 +8696,95 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             const search = (document.getElementById('investment-admin-search')?.value || '').toLowerCase();
             let investments = [...allInvestmentsCache].filter(i => !search || [i.userName, i.userMobile, i.userEmail, i.invoiceId, i.status].some(v => (v || '').toString().toLowerCase().includes(search)));
 
-            listEl.innerHTML = investments.length ? investments.map(inv => {
+            const grouped = new Map();
+            investments.forEach(inv => {
+                const userId = inv.userId || 'unknown';
+                const group = grouped.get(userId) || { userId, user: allUsersCache.find(user => (user.id || user.uid) === userId) || {}, investments: [] };
+                group.investments.push(inv);
+                grouped.set(userId, group);
+            });
+            const groups = Array.from(grouped.values()).map(group => {
+                const active = group.investments.filter(inv => (inv.status || 'active') === 'active');
+                const totalAmount = group.investments.reduce((sum, inv) => sum + Number(inv.amount || 0), 0);
+                const activeAmount = active.reduce((sum, inv) => sum + Number(inv.amount || 0), 0);
+                const paidInterest = group.investments.reduce((sum, inv) => sum + Number(inv.paidInterest || 0), 0);
+                const latest = group.investments.sort((a, b) => timestampToMillis(b.createdAt) - timestampToMillis(a.createdAt))[0] || {};
+                return { ...group, active, totalAmount, activeAmount, paidInterest, latest };
+            }).sort((a, b) => timestampToMillis(b.latest.createdAt) - timestampToMillis(a.latest.createdAt));
+
+            listEl.innerHTML = groups.length ? groups.map(group => {
+                const name = group.user.name || group.latest.userName || 'User';
+                const mobile = group.user.mobile || group.latest.userMobile || '';
+                return `
+                    <button data-action="view-admin-investment-user" data-userid="${group.userId}" class="w-full p-4 mb-3 bg-gray-50 dark:bg-gray-700/50 rounded-xl text-left text-sm border border-gray-100 dark:border-gray-700">
+                        <div class="flex justify-between gap-3">
+                            <div class="min-w-0">
+                                <p class="font-black truncate">${escapeHtml(name)}</p>
+                                <p class="text-xs text-gray-500 truncate">${escapeHtml(mobile || group.user.email || group.latest.userEmail || '')}</p>
+                                <p class="mt-1 text-xs text-gray-500">${group.investments.length} investment record(s) | ${group.active.length} active</p>
+                            </div>
+                            <div class="text-right shrink-0">
+                                <p class="font-black">${formatCurrency(group.activeAmount)}</p>
+                                <p class="text-xs text-gray-500">Active</p>
+                            </div>
+                        </div>
+                        <div class="mt-3 grid grid-cols-2 gap-2 text-xs">
+                            <div class="rounded-xl bg-white dark:bg-gray-800 p-2"><span class="text-gray-500">Total Invested</span><p class="font-bold">${formatCurrency(group.totalAmount)}</p></div>
+                            <div class="rounded-xl bg-white dark:bg-gray-800 p-2"><span class="text-gray-500">Interest Paid</span><p class="font-bold">${formatCurrency(group.paidInterest)}</p></div>
+                        </div>
+                    </button>`;
+            }).join('') : '<p class="text-center text-gray-500 py-6">No partner investments found.</p>';
+        };
+
+        const showAdminInvestmentUserDetailsPage = (userId) => {
+            const user = allUsersCache.find(item => (item.id || item.uid) === userId) || {};
+            const investments = allInvestmentsCache
+                .filter(inv => inv.userId === userId)
+                .sort((a, b) => timestampToMillis(b.createdAt) - timestampToMillis(a.createdAt));
+            const active = investments.filter(inv => (inv.status || 'active') === 'active');
+            const totalAmount = investments.reduce((sum, inv) => sum + Number(inv.amount || 0), 0);
+            const activeAmount = active.reduce((sum, inv) => sum + Number(inv.amount || 0), 0);
+            const paidInterest = investments.reduce((sum, inv) => sum + Number(inv.paidInterest || 0), 0);
+            const cards = investments.length ? investments.map(inv => {
                 const next = toDate(inv.nextPayoutAt);
                 const end = toDate(inv.endDate);
                 const due = inv.status === 'active' && next && next <= new Date();
-                const matured = inv.status === 'active' && end && end <= new Date();
                 return `
-                    <div class="p-4 mb-3 bg-gray-50 dark:bg-gray-700/50 rounded-xl text-sm border border-gray-100 dark:border-gray-700">
-                        <div class="flex flex-col sm:flex-row sm:justify-between gap-3">
-                            <div class="space-y-1">
-                                <p class="font-bold">${inv.userName || 'User'} <span class="text-xs uppercase text-gray-500">${inv.status || 'active'}</span></p>
-                                <p class="text-xs text-gray-500">${inv.userMobile || ''} ${inv.userEmail ? `| ${inv.userEmail}` : ''}</p>
-                                <p class="text-xs text-gray-500">Invoice: ${inv.invoiceId || inv.id}</p>
-                                <p class="text-xs text-gray-500">Next interest: ${next && inv.status === 'active' ? next.toLocaleDateString('en-IN') : 'Done'} | End: ${end ? end.toLocaleDateString('en-IN') : 'N/A'}</p>
+                    <div class="rounded-2xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-4 text-sm">
+                        <div class="flex justify-between gap-3">
+                            <div>
+                                <p class="font-black">${formatCurrency(inv.amount || 0)} <span class="text-[10px] uppercase text-gray-500">${escapeHtml(inv.status || 'active')}</span></p>
+                                <p class="text-xs text-gray-500">Invoice: ${escapeHtml(inv.invoiceId || inv.id)}</p>
+                                <p class="text-xs text-gray-500">Next: ${next && inv.status === 'active' ? next.toLocaleDateString('en-IN') : 'Done'} | End: ${end ? end.toLocaleDateString('en-IN') : 'N/A'}</p>
                             </div>
-                            <div class="sm:text-right">
-                                <p class="font-bold">${formatCurrency(inv.amount || 0)}</p>
-                                <p class="text-xs text-gray-500">Got ${formatCurrency(inv.paidInterest || 0)} / ${formatCurrency(inv.totalInterest || 0)}</p>
+                            <div class="text-right">
+                                <p class="font-black">${formatCurrency(inv.paidInterest || 0)}</p>
+                                <p class="text-xs text-gray-500">Interest paid</p>
                             </div>
                         </div>
                         <div class="mt-3 flex flex-wrap gap-2">
-                            <button data-action="process-investment-interest" data-investmentid="${inv.id}" ${due ? '' : 'disabled'} class="px-3 py-1 text-xs rounded font-semibold ${due ? 'bg-emerald-600 text-white' : 'bg-gray-200 dark:bg-gray-600 text-gray-500 cursor-not-allowed'}">Give Interest</button>
-                            <button data-action="download-admin-investment-invoice" data-investmentid="${inv.id}" class="px-3 py-1 text-xs rounded font-semibold bg-slate-800 text-white">Invoice</button>
-                            <span class="px-3 py-1 text-xs rounded ${matured ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'}">${due ? '30 days complete' : 'Not due yet'}</span>
+                            <button data-action="process-investment-interest" data-investmentid="${inv.id}" ${due ? '' : 'disabled'} class="rounded-lg px-3 py-2 text-xs font-black ${due ? 'bg-emerald-600 text-white' : 'bg-gray-200 text-gray-500 dark:bg-gray-700'}">Give Interest</button>
+                            <button data-action="download-admin-investment-invoice" data-investmentid="${inv.id}" class="rounded-lg bg-slate-900 px-3 py-2 text-xs font-black text-white dark:bg-slate-100 dark:text-slate-900">Invoice</button>
                         </div>
                     </div>`;
-            }).join('') : '<p class="text-center text-gray-500 py-6">No partner investments found.</p>';
+            }).join('') : '<p class="rounded-2xl border border-dashed border-gray-200 dark:border-gray-700 p-5 text-center text-sm font-bold text-gray-500">No investment history.</p>';
+
+            showPage(`
+                ${getPageHeader('Partner User Details')}
+                <div class="max-w-3xl mx-auto space-y-4">
+                    <div class="rounded-2xl bg-white dark:bg-gray-800 p-5 shadow-sm border border-gray-100 dark:border-gray-700">
+                        <h3 class="text-lg font-black text-gray-900 dark:text-white">${escapeHtml(user.name || investments[0]?.userName || 'User')}</h3>
+                        <p class="text-xs text-gray-500">${escapeHtml(user.mobile || investments[0]?.userMobile || '')} ${user.email ? `| ${escapeHtml(user.email)}` : ''}</p>
+                        <div class="mt-4 grid grid-cols-3 gap-3 text-sm">
+                            <div class="rounded-xl bg-emerald-50 dark:bg-emerald-900/20 p-3"><p class="text-xs text-gray-500">Active</p><p class="font-black">${formatCurrency(activeAmount)}</p></div>
+                            <div class="rounded-xl bg-blue-50 dark:bg-blue-900/20 p-3"><p class="text-xs text-gray-500">Total</p><p class="font-black">${formatCurrency(totalAmount)}</p></div>
+                            <div class="rounded-xl bg-amber-50 dark:bg-amber-900/20 p-3"><p class="text-xs text-gray-500">Interest</p><p class="font-black">${formatCurrency(paidInterest)}</p></div>
+                        </div>
+                    </div>
+                    <div class="space-y-3">${cards}</div>
+                </div>
+                ${getPageFooter()}`);
+            setBottomNavActive('bottom-admin-btn');
         };
 
         const processDuePartnerInvestmentsForAdmin = async (showToast = false) => {
@@ -8383,20 +8907,62 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             return date.getFullYear() === year && date.getMonth() === month - 1 && date.getDate() === day;
         };
 
+        const uploadLoanDocumentFile = async (file, documentType) => {
+            if (!file) return null;
+            const safeName = String(file.name || `${documentType}.jpg`).replace(/[^\w.-]+/g, '_').slice(-80);
+            const path = `artifacts/${appId}/loan_documents/${currentUser.uid}/${Date.now()}-${documentType}-${safeName}`;
+            const ref = storageRef(storage, path);
+            await uploadBytes(ref, file, {
+                contentType: file.type || 'application/octet-stream',
+                customMetadata: {
+                    userId: currentUser.uid,
+                    documentType
+                }
+            });
+            const url = await getDownloadURL(ref);
+            return {
+                name: file.name || safeName,
+                size: file.size || 0,
+                type: file.type || '',
+                path,
+                url,
+                uploadedAt: Date.now()
+            };
+        };
+
         const handleSubmitLoanRequest = async () => {
-            const name = document.getElementById('loan-name-input').value.trim();
-            const fatherName = document.getElementById('loan-father-input').value.trim();
-            const mobile = document.getElementById('loan-mobile-input').value.trim();
-            const alternateMobile = document.getElementById('loan-alt-mobile-input').value.trim();
-            const dob = document.getElementById('loan-dob-input').value.trim();
-            const aadhaar = document.getElementById('loan-aadhaar-input').value.trim();
+            const btn = document.getElementById('submit-loan-request-btn');
+            const { name, fatherName, mobile, alternateMobile, dob, aadhaar } = loanApplicationDraft.personal || {};
+            const documents = loanApplicationDraft.documents || {};
 
             if (!name || !fatherName || !/^\d{10}$/.test(mobile) || !/^\d{10}$/.test(alternateMobile) || !isValidLoanDob(dob) || !/^\d{12}$/.test(aadhaar)) {
                 return showNotification('Please fill all loan details correctly.', true);
             }
+            if (!documents.aadhaarFile || !documents.selfieFile) {
+                return showNotification('Please upload Aadhaar card and selfie photo.', true);
+            }
 
             try {
+                if (btn) {
+                    btn.disabled = true;
+                    btn.textContent = 'Uploading...';
+                }
+                const pendingSnap = await getDocs(query(
+                    collection(db, `artifacts/${appId}/public/data/loan_requests`),
+                    where("userId", "==", currentUser.uid),
+                    where("status", "==", "pending")
+                ));
+                if (pendingSnap.docs.some(d => isModernLoanRequest(d.data()))) {
+                    showLoanPendingPage();
+                    return;
+                }
+                const [aadhaarDocument, selfieDocument] = await Promise.all([
+                    uploadLoanDocumentFile(documents.aadhaarFile, 'aadhaar'),
+                    uploadLoanDocumentFile(documents.selfieFile, 'selfie')
+                ]);
                 await addDoc(collection(db, `artifacts/${appId}/public/data/loan_requests`), {
+                    requestVersion: LOAN_APPLICATION_VERSION,
+                    loanApplicationVersion: LOAN_APPLICATION_VERSION,
                     userId: currentUser.uid,
                     userEmail: currentUserData.email || currentUser.email || '',
                     name,
@@ -8405,9 +8971,20 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                     alternateMobile,
                     dob,
                     aadhaar,
+                    personalDetails: { name, fatherName, mobile, alternateMobile, dob, aadhaar },
+                    documents: {
+                        aadhaar: aadhaarDocument,
+                        selfie: selfieDocument,
+                        aadhaarSelfieMatchStatus: 'pending_admin_review'
+                    },
                     status: 'pending',
                     requestedAt: serverTimestamp()
                 });
+                await updateDoc(doc(db, `artifacts/${appId}/public/data/users`, currentUser.uid), {
+                    latestLoanRequestVersion: LOAN_APPLICATION_VERSION,
+                    loanRequestStatus: 'pending',
+                    loanRequestedAt: serverTimestamp()
+                }).catch(error => console.warn('Loan request user marker skipped:', error));
 
                 renderModal('Loan Request Submitted',
                     `<div class="text-center space-y-3">
@@ -8415,14 +8992,19 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                             <svg class="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M12 2a10 10 0 100 20 10 10 0 000-20z"></path></svg>
                         </div>
                         <h3 class="font-semibold">You are currently not eligible.</h3>
-                        <p class="text-sm text-gray-500 dark:text-gray-400">We will notify soon.</p>
+                        <p class="text-sm text-gray-500 dark:text-gray-400">Your account details and documents have been sent to admin. You will continue after approval.</p>
                     </div>`,
                     `<button onclick="window.closeModal(); hidePage();" class="px-4 py-2 text-sm bg-indigo-600 text-white rounded-lg">OK</button>`,
                     'max-w-sm', true
                 );
             } catch (e) {
                 console.error('Loan request failed:', e);
-                showNotification(`Error: ${e.message}`, true);
+                showNotification('Could not submit loan request. Please try again.', true);
+            } finally {
+                if (btn) {
+                    btn.disabled = false;
+                    btn.textContent = 'Apply Now';
+                }
             }
         };
 
@@ -8447,6 +9029,16 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                     takeLoanBtn.disabled = true;
                     takeLoanBtn.textContent = 'Processing...';
                 }
+                const activeLoanSnap = await getDocs(query(
+                    collection(db, `artifacts/${appId}/public/data/loans`),
+                    where("userId", "==", currentUser.uid),
+                    where("status", "==", "active")
+                ));
+                if (!activeLoanSnap.empty) {
+                    const activeLoan = { id: activeLoanSnap.docs[0].id, ...activeLoanSnap.docs[0].data() };
+                    showActiveLoanPage(activeLoan);
+                    throw new Error('You already have an active loan. Repay it before taking another loan.');
+                }
                 const userRef = doc(db, `artifacts/${appId}/public/data/users`, currentUser.uid);
                 await runTransaction(db, async (tx) => {
                     const userDoc = await tx.get(userRef);
@@ -8457,6 +9049,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                     if (existingActiveLoanId || existingRepayable > 0) {
                         throw new Error('You already have an active loan. Repay it before taking another loan.');
                     }
+                    if (!hasModernLoanApproval(userData)) throw new Error('Please submit updated loan details and wait for admin approval.');
                     if (!userData.loanEligible && getLoanLimitAmount(userData) <= 0) throw new Error('Loan is not approved for your account.');
                     const approvedMaxLoan = Math.max(0, getLoanLimitAmount(userData));
                     if (approvedMaxLoan < 1) throw new Error('Loan limit is not approved for your account.');
@@ -8558,8 +9151,8 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             if (amount <= 0 || months <= 0 || months > 60 || !endDate) {
                 return showNotification('Enter valid amount and months.', true);
             }
-            if (amount < 50) {
-                return showNotification('Minimum partner investment is ₹50.', true);
+            if (amount < PARTNER_MIN_INVESTMENT) {
+                return showNotification(`Minimum partner investment is ${formatCurrency(PARTNER_MIN_INVESTMENT)}.`, true);
             }
             if (!document.getElementById('partner-terms-checkbox').checked) {
                 return showNotification('Please accept partner terms and conditions.', true);
@@ -8577,7 +9170,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                     const userDoc = await tx.get(userRef);
                     if (!userDoc.exists()) throw new Error('User account not found.');
                     const balance = userDoc.data().balance || 0;
-                    if (amount < 50) throw new Error('Minimum partner investment is ₹50.');
+                    if (amount < PARTNER_MIN_INVESTMENT) throw new Error(`Minimum partner investment is ${formatCurrency(PARTNER_MIN_INVESTMENT)}.`);
                     if (getSpendableWalletBalance(userDoc.data()) < amount) throw new Error('Insufficient available balance. Some wallet funds are reserved for loan repayment.');
 
                     tx.update(userRef, { balance: balance - amount });
@@ -9666,10 +10259,21 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                         tx.update(userRef, {
                             loanEligible: true,
                             maxLoanAmount: Number(maxLoanAmount),
-                            loanMaxAmount: Number(maxLoanAmount)
+                            loanMaxAmount: Number(maxLoanAmount),
+                            loanApplicationVersion: LOAN_APPLICATION_VERSION,
+                            loanRequestStatus: 'approved',
+                            loanApprovedAt: serverTimestamp(),
+                            loanApprovedBy: currentUser.uid
                         });
                         tx.update(requestRef, {
-                            maxLoanAmount: Number(maxLoanAmount)
+                            maxLoanAmount: Number(maxLoanAmount),
+                            loanApplicationVersion: LOAN_APPLICATION_VERSION
+                        });
+                    } else {
+                        tx.update(userRef, {
+                            loanRequestStatus: newStatus,
+                            loanProcessedAt: serverTimestamp(),
+                            loanProcessedBy: currentUser.uid
                         });
                     }
                 });
@@ -10796,6 +11400,10 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                         .catch(e => showNotification(`Error: ${e.message}`, true));
                     break;
 
+                case 'view-admin-investment-user':
+                    showAdminInvestmentUserDetailsPage(userid);
+                    break;
+
                 case 'download-admin-investment-invoice': {
                     const inv = allInvestmentsCache.find(i => i.id === target.dataset.investmentid);
                     if (inv) downloadInvestmentInvoice(inv);
@@ -10814,6 +11422,22 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                         .then(() => refreshAdminDashboardCaches())
                         .then(renderAdminLoanPage)
                         .catch(e => showNotification(`Error: ${e.message}`, true));
+                    break;
+
+                case 'user-view-loan-detail':
+                    showUserLoanDetailModal(target.dataset.loanid);
+                    break;
+
+                case 'view-admin-loan-user':
+                    showAdminLoanUserDetailsPage(userid);
+                    break;
+
+                case 'admin-view-loan-detail':
+                    showAdminLoanDetailModal(target.dataset.loanid);
+                    break;
+
+                case 'admin-add-loan-limit':
+                    showAdminAddLoanLimitModal(userid);
                     break;
 
                 case 'mark-as-paid':
