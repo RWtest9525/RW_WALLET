@@ -37,7 +37,7 @@ html,
             position: relative;
             isolation: isolate;
             background:
-                linear-gradient(135deg, #06111f 0%, #0f2f68 48%, #047857 100%);
+                linear-gradient(145deg, #06111f 0%, #12316a 55%, #04745f 100%);
         }
 
         .maintenance-premium-bg::before {
@@ -46,11 +46,9 @@ html,
             inset: 0;
             z-index: 0;
             pointer-events: none;
-            background-image:
-                linear-gradient(rgba(255, 255, 255, 0.08) 1px, transparent 1px),
-                linear-gradient(90deg, rgba(255, 255, 255, 0.08) 1px, transparent 1px);
-            background-size: 36px 36px;
-            mask-image: linear-gradient(to bottom, rgba(0, 0, 0, 0.9), transparent 78%);
+            background:
+                linear-gradient(120deg, rgba(255, 255, 255, 0.18), transparent 32%),
+                linear-gradient(300deg, rgba(16, 185, 129, 0.2), transparent 44%);
         }
 
         .maintenance-premium-bg::after {
@@ -60,7 +58,7 @@ html,
             z-index: 0;
             pointer-events: none;
             background:
-                linear-gradient(180deg, rgba(255, 255, 255, 0.14), transparent 34%, rgba(2, 6, 23, 0.35));
+                linear-gradient(180deg, transparent 35%, rgba(2, 6, 23, 0.38));
         }
 
         #main-content {

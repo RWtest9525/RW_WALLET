@@ -3429,16 +3429,15 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             const countdownEl = document.getElementById('maintenance-countdown-text');
             if (countdownEl) countdownEl.textContent = countdown;
 
-            const parts = endMillis ? getMaintenanceCountdownParts(endMillis - Date.now()) : null;
-            const boxes = [
-                ['maintenance-hours-box', parts ? String(parts.hours).padStart(2, '0') : '--'],
-                ['maintenance-minutes-box', parts ? String(parts.minutes).padStart(2, '0') : '--'],
-                ['maintenance-seconds-box', parts ? String(parts.seconds).padStart(2, '0') : '--']
-            ];
-            boxes.forEach(([id, text]) => {
-                const box = document.getElementById(id);
-                if (box) box.textContent = text;
-            });
+            const progressEl = document.getElementById('maintenance-progress-fill');
+            if (progressEl) {
+                const configuredSeconds = Number(appConfigCache.maintenanceDurationSeconds || appConfigCache.maintenance_duration_seconds || 0);
+                const remainingSeconds = endMillis ? Math.max(0, Math.ceil((endMillis - Date.now()) / 1000)) : 0;
+                const progress = configuredSeconds > 0
+                    ? Math.min(100, Math.max(6, ((configuredSeconds - remainingSeconds) / configuredSeconds) * 100))
+                    : 35;
+                progressEl.style.width = `${progress}%`;
+            }
         };
 
         const removeMaintenanceOverlay = () => {
@@ -3484,58 +3483,27 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             const endText = endMillis ? new Date(endMillis).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' }) : 'In progress';
             overlay.innerHTML = `
                 <div class="maintenance-premium-bg min-h-[100dvh] px-4 py-6 text-white">
-                    <div class="relative z-10 mx-auto flex min-h-[calc(100dvh-3rem)] w-full max-w-5xl items-center">
-                        <div class="grid w-full gap-5 lg:grid-cols-2 lg:items-center">
-                            <section class="rounded-[2rem] border border-white/15 bg-white/10 p-5 shadow-2xl backdrop-blur-xl sm:p-8">
-                                <div class="flex items-center gap-4">
-                                    <div class="flex h-16 w-16 shrink-0 items-center justify-center rounded-3xl bg-white p-2 shadow-xl sm:h-20 sm:w-20">
-                                        <img src="${RW_LOGO_URL}" alt="REVIEWS WORLD" class="h-full w-full rounded-2xl object-cover">
-                                    </div>
-                                    <div>
-                                        <p class="text-xs font-extrabold uppercase text-cyan-100/80">Reviews World</p>
-                                        <h1 class="mt-1 text-3xl font-extrabold leading-tight sm:text-4xl">We will be back soon</h1>
-                                    </div>
+                    <div class="relative z-10 mx-auto flex min-h-[calc(100dvh-3rem)] w-full max-w-xl items-center justify-center">
+                        <section class="w-full overflow-hidden rounded-[2rem] border border-white/20 bg-white/95 p-6 text-center text-slate-950 shadow-2xl sm:p-8">
+                            <div class="mx-auto flex h-20 w-20 items-center justify-center rounded-3xl bg-slate-950 p-2 shadow-xl">
+                                <img src="${RW_LOGO_URL}" alt="REVIEWS WORLD" class="h-full w-full rounded-2xl object-cover">
+                            </div>
+                            <p class="mt-6 text-xs font-extrabold uppercase text-blue-600">App Under Maintenance</p>
+                            <h1 class="mt-3 text-3xl font-extrabold leading-tight sm:text-4xl">We will be back soon</h1>
+                            <p class="mx-auto mt-3 max-w-md text-sm font-semibold leading-6 text-slate-600">${escapeHtml(message)}</p>
+
+                            <div class="mt-7 rounded-[1.5rem] bg-slate-950 px-5 py-6 text-white shadow-xl">
+                                <p id="maintenance-countdown-text" class="text-5xl font-extrabold leading-none tabular-nums sm:text-6xl">${escapeHtml(countdown)}</p>
+                                <p class="mt-3 text-xs font-extrabold uppercase text-cyan-100/80">Remaining Time</p>
+                                <div class="mt-5 h-2 overflow-hidden rounded-full bg-white/15">
+                                    <div id="maintenance-progress-fill" class="h-full rounded-full bg-gradient-to-r from-cyan-300 via-blue-400 to-emerald-300 transition-[width] duration-500" style="width: 6%"></div>
                                 </div>
-                                <div class="mt-7 rounded-3xl border border-white/15 bg-slate-950/35 p-5">
-                                    <p class="text-xs font-extrabold uppercase text-emerald-100/80">App Under Maintenance</p>
-                                    <p class="mt-3 text-base font-semibold leading-7 text-white/80">${escapeHtml(message)}</p>
-                                </div>
-                                <div class="mt-5 grid grid-cols-3 gap-2 text-center text-xs font-extrabold text-white/80">
-                                    <span class="rounded-2xl border border-white/10 bg-white/10 px-3 py-3">Secure</span>
-                                    <span class="rounded-2xl border border-white/10 bg-white/10 px-3 py-3">Faster</span>
-                                    <span class="rounded-2xl border border-white/10 bg-white/10 px-3 py-3">Stable</span>
-                                </div>
-                            </section>
-                            <section class="rounded-[2rem] border border-white/15 bg-white/95 p-5 text-slate-950 shadow-2xl sm:p-8">
-                                <div class="flex items-center justify-between gap-3">
-                                    <div>
-                                        <p class="text-xs font-extrabold uppercase text-blue-600">Time Remaining</p>
-                                        <p id="maintenance-countdown-text" class="mt-2 text-4xl font-extrabold tabular-nums sm:text-5xl">${escapeHtml(countdown)}</p>
-                                    </div>
-                                    <div class="rounded-2xl bg-emerald-50 px-4 py-3 text-right text-xs font-extrabold text-emerald-700">
-                                        <p>Ends</p>
-                                        <p class="mt-1 text-slate-900">${escapeHtml(endText)}</p>
-                                    </div>
-                                </div>
-                                <div class="mt-6 grid grid-cols-3 gap-3">
-                                    <div class="rounded-3xl border border-blue-100 bg-blue-50 p-4 text-center shadow-sm">
-                                        <p id="maintenance-hours-box" class="text-3xl font-extrabold tabular-nums">${endMillis ? String(getMaintenanceCountdownParts(endMillis - Date.now()).hours).padStart(2, '0') : '--'}</p>
-                                        <p class="mt-1 text-xs font-extrabold uppercase text-slate-500">Hours</p>
-                                    </div>
-                                    <div class="rounded-3xl border border-cyan-100 bg-cyan-50 p-4 text-center shadow-sm">
-                                        <p id="maintenance-minutes-box" class="text-3xl font-extrabold tabular-nums">${endMillis ? String(getMaintenanceCountdownParts(endMillis - Date.now()).minutes).padStart(2, '0') : '--'}</p>
-                                        <p class="mt-1 text-xs font-extrabold uppercase text-slate-500">Minutes</p>
-                                    </div>
-                                    <div class="rounded-3xl border border-emerald-100 bg-emerald-50 p-4 text-center shadow-sm">
-                                        <p id="maintenance-seconds-box" class="text-3xl font-extrabold tabular-nums">${endMillis ? String(getMaintenanceCountdownParts(endMillis - Date.now()).seconds).padStart(2, '0') : '--'}</p>
-                                        <p class="mt-1 text-xs font-extrabold uppercase text-slate-500">Seconds</p>
-                                    </div>
-                                </div>
-                                <p class="mt-6 rounded-2xl bg-slate-100 px-4 py-4 text-center text-sm font-semibold leading-6 text-slate-600">
-                                    The app will open automatically when maintenance is complete. Admin can turn it off anytime.
-                                </p>
-                            </section>
-                        </div>
+                            </div>
+
+                            <p class="mt-5 rounded-2xl bg-slate-100 px-4 py-3 text-sm font-semibold text-slate-600">
+                                Expected opening: <span class="font-extrabold text-slate-950">${escapeHtml(endText)}</span>
+                            </p>
+                        </section>
                     </div>
                 </div>`;
             updateMaintenanceCountdownUi(endMillis);
