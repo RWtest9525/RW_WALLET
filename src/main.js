@@ -54,6 +54,8 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
         const PARTNER_INTEREST_RATE = 0.01;
         const PARTNER_MIN_INVESTMENT = 25;
         const LOAN_APPLICATION_VERSION = 2;
+        const LOAN_DOCUMENT_MAX_SIZE_BYTES = 8 * 1024 * 1024;
+        const LOAN_DOCUMENT_UPLOAD_TIMEOUT_MS = 30000;
         const PARTNER_ICON_URL = 'https://cdn-icons-png.flaticon.com/512/3135/3135706.png';
         const RECHARGE_OPERATORS = ['Jio', 'Airtel', 'Vi', 'BSNL', 'MTNL'];
         const RECHARGE_STATES = [
@@ -179,6 +181,13 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                 return `Insufficient available balance. ${formatCurrency(reservedAmount)} is reserved for loan repayment.`;
             }
             return 'Insufficient wallet balance.';
+        };
+        const withTimeout = (promise, timeoutMs, message) => {
+            let timeoutId;
+            const timeoutPromise = new Promise((_, reject) => {
+                timeoutId = setTimeout(() => reject(new Error(message)), timeoutMs);
+            });
+            return Promise.race([promise, timeoutPromise]).finally(() => clearTimeout(timeoutId));
         };
         const getLoanLimitAmount = (user = currentUserData || {}) =>
             Math.max(0, Number(user.maxLoanAmount || user.loanMaxAmount || user.creditLimit || user.loanCreditLimit || 0));
@@ -6866,8 +6875,9 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             }
             if (step === 2) {
                 const docs = loanApplicationDraft.documents || {};
-                if (!docs.aadhaarFile || !docs.selfieFile) {
-                    showNotification('Please upload Aadhaar card and selfie photo.', true);
+                const documentError = validateLoanDocumentSelection(docs.aadhaarFile, 'aadhaar') || validateLoanDocumentSelection(docs.selfieFile, 'selfie');
+                if (documentError) {
+                    showNotification(documentError, true);
                     return false;
                 }
             }
@@ -7126,12 +7136,26 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             });
             document.getElementById('loan-aadhaar-file-input')?.addEventListener('change', (event) => {
                 const file = event.target.files?.[0] || null;
+                if (!file) return;
+                const error = validateLoanDocumentSelection(file, 'aadhaar');
+                if (error) {
+                    event.target.value = '';
+                    showNotification(error, true);
+                    return;
+                }
                 loanApplicationDraft.documents = { ...(loanApplicationDraft.documents || {}), aadhaarFile: file, aadhaarName: file?.name || '' };
                 const label = document.getElementById('loan-aadhaar-file-label');
                 if (label) label.textContent = file?.name || 'Tap to select Aadhaar image/PDF';
             });
             document.getElementById('loan-selfie-file-input')?.addEventListener('change', (event) => {
                 const file = event.target.files?.[0] || null;
+                if (!file) return;
+                const error = validateLoanDocumentSelection(file, 'selfie');
+                if (error) {
+                    event.target.value = '';
+                    showNotification(error, true);
+                    return;
+                }
                 loanApplicationDraft.documents = { ...(loanApplicationDraft.documents || {}), selfieFile: file, selfieName: file?.name || '' };
                 const label = document.getElementById('loan-selfie-file-label');
                 if (label) label.textContent = file?.name || 'Tap to select live selfie';
@@ -9021,23 +9045,108 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             return year >= 1900 && date.getFullYear() === year && date.getMonth() === month - 1 && date.getDate() === day;
         };
 
+        const getLoanDocumentFileKind = (file) => {
+            const type = String(file?.type || '').toLowerCase();
+            const name = String(file?.name || '').toLowerCase();
+            const isImage = type.startsWith('image/') || /\.(png|jpe?g|webp|heic|heif)$/i.test(name);
+            const isPdf = type === 'application/pdf' || /\.pdf$/i.test(name);
+            return { isImage, isPdf };
+        };
+
+        const validateLoanDocumentSelection = (file, documentType) => {
+            const label = documentType === 'selfie' ? 'Selfie photo' : 'Aadhaar document';
+            if (!file) return `${label} is required.`;
+            const { isImage, isPdf } = getLoanDocumentFileKind(file);
+            if (Number(file.size || 0) > LOAN_DOCUMENT_MAX_SIZE_BYTES && !isImage) {
+                return `${label} is too large. Please upload a file under 8 MB.`;
+            }
+            if (documentType === 'selfie' && !isImage) {
+                return 'Selfie photo must be an image file.';
+            }
+            if (documentType === 'aadhaar' && !isImage && !isPdf) {
+                return 'Aadhaar document must be an image or PDF file.';
+            }
+            return '';
+        };
+
+        const compressLoanImageFile = async (file, documentType) => {
+            const { isImage } = getLoanDocumentFileKind(file);
+            const type = String(file?.type || '').toLowerCase();
+            const name = String(file?.name || '').toLowerCase();
+            const canDrawImage = /image\/(jpeg|jpg|png|webp)/i.test(type) || /\.(png|jpe?g|webp)$/i.test(name);
+            if (!isImage || !canDrawImage || Number(file.size || 0) <= 1.5 * 1024 * 1024) {
+                return file;
+            }
+            return new Promise((resolve) => {
+                const image = new Image();
+                const objectUrl = URL.createObjectURL(file);
+                image.onload = () => {
+                    try {
+                        const maxSide = documentType === 'selfie' ? 1280 : 1600;
+                        const ratio = Math.min(1, maxSide / Math.max(image.width || maxSide, image.height || maxSide));
+                        const width = Math.max(1, Math.round((image.width || maxSide) * ratio));
+                        const height = Math.max(1, Math.round((image.height || maxSide) * ratio));
+                        const canvas = document.createElement('canvas');
+                        canvas.width = width;
+                        canvas.height = height;
+                        const ctx = canvas.getContext('2d');
+                        ctx.drawImage(image, 0, 0, width, height);
+                        canvas.toBlob((blob) => {
+                            URL.revokeObjectURL(objectUrl);
+                            if (!blob || blob.size >= file.size) return resolve(file);
+                            const baseName = String(file.name || `${documentType}.jpg`).replace(/\.[^.]+$/, '');
+                            resolve(new File([blob], `${baseName}-compressed.jpg`, { type: 'image/jpeg', lastModified: Date.now() }));
+                        }, 'image/jpeg', 0.82);
+                    } catch (error) {
+                        URL.revokeObjectURL(objectUrl);
+                        console.warn('Loan image compression skipped:', error);
+                        resolve(file);
+                    }
+                };
+                image.onerror = () => {
+                    URL.revokeObjectURL(objectUrl);
+                    resolve(file);
+                };
+                image.src = objectUrl;
+            });
+        };
+
         const uploadLoanDocumentFile = async (file, documentType) => {
             if (!file) return null;
-            const safeName = String(file.name || `${documentType}.jpg`).replace(/[^\w.-]+/g, '_').slice(-80);
+            const validationError = validateLoanDocumentSelection(file, documentType);
+            if (validationError) throw new Error(validationError);
+            const label = documentType === 'selfie' ? 'Selfie photo' : 'Aadhaar document';
+            const preparedFile = await withTimeout(
+                compressLoanImageFile(file, documentType),
+                10000,
+                `${label} could not be prepared. Please try a smaller file.`
+            );
+            if (Number(preparedFile.size || 0) > LOAN_DOCUMENT_MAX_SIZE_BYTES) {
+                throw new Error(`${label} is too large. Please upload a file under 8 MB.`);
+            }
+            const safeName = String(preparedFile.name || `${documentType}.jpg`).replace(/[^\w.-]+/g, '_').slice(-80);
             const path = `artifacts/${appId}/loan_documents/${currentUser.uid}/${Date.now()}-${documentType}-${safeName}`;
             const ref = storageRef(storage, path);
-            await uploadBytes(ref, file, {
-                contentType: file.type || 'application/octet-stream',
-                customMetadata: {
-                    userId: currentUser.uid,
-                    documentType
-                }
-            });
-            const url = await getDownloadURL(ref);
+            await withTimeout(
+                uploadBytes(ref, preparedFile, {
+                    contentType: preparedFile.type || 'application/octet-stream',
+                    customMetadata: {
+                        userId: currentUser.uid,
+                        documentType
+                    }
+                }),
+                LOAN_DOCUMENT_UPLOAD_TIMEOUT_MS,
+                `${label} upload is taking too long. Please use a smaller file and try again.`
+            );
+            const url = await withTimeout(
+                getDownloadURL(ref),
+                10000,
+                `${label} uploaded but link was not ready. Please try again.`
+            );
             return {
                 name: file.name || safeName,
-                size: file.size || 0,
-                type: file.type || '',
+                size: preparedFile.size || file.size || 0,
+                type: preparedFile.type || file.type || '',
                 path,
                 url,
                 uploadedAt: Date.now()
@@ -9052,29 +9161,36 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             if (!name || !fatherName || !/^\d{10}$/.test(mobile) || !/^\d{10}$/.test(alternateMobile) || !isValidLoanDob(dob) || !/^\d{12}$/.test(aadhaar)) {
                 return showNotification('Please fill all loan details correctly.', true);
             }
-            if (!documents.aadhaarFile || !documents.selfieFile) {
-                return showNotification('Please upload Aadhaar card and selfie photo.', true);
+            const documentError = validateLoanDocumentSelection(documents.aadhaarFile, 'aadhaar') || validateLoanDocumentSelection(documents.selfieFile, 'selfie');
+            if (documentError) {
+                return showNotification(documentError, true);
             }
 
             try {
                 if (btn) {
                     btn.disabled = true;
-                    btn.textContent = 'Uploading...';
+                    btn.textContent = 'Checking...';
                 }
-                const pendingSnap = await getDocs(query(
-                    collection(db, `artifacts/${appId}/public/data/loan_requests`),
-                    where("userId", "==", currentUser.uid),
-                    where("status", "==", "pending")
-                ));
+                const pendingSnap = await withTimeout(
+                    getDocs(query(
+                        collection(db, `artifacts/${appId}/public/data/loan_requests`),
+                        where("userId", "==", currentUser.uid),
+                        where("status", "==", "pending")
+                    )),
+                    15000,
+                    'Could not check your pending loan request. Please try again.'
+                );
                 if (pendingSnap.docs.some(d => isModernLoanRequest(d.data()))) {
                     showLoanPendingPage();
                     return;
                 }
+                if (btn) btn.textContent = 'Preparing...';
                 const [aadhaarDocument, selfieDocument] = await Promise.all([
                     uploadLoanDocumentFile(documents.aadhaarFile, 'aadhaar'),
                     uploadLoanDocumentFile(documents.selfieFile, 'selfie')
                 ]);
-                await addDoc(collection(db, `artifacts/${appId}/public/data/loan_requests`), {
+                if (btn) btn.textContent = 'Submitting...';
+                await withTimeout(addDoc(collection(db, `artifacts/${appId}/public/data/loan_requests`), {
                     requestVersion: LOAN_APPLICATION_VERSION,
                     loanApplicationVersion: LOAN_APPLICATION_VERSION,
                     userId: currentUser.uid,
@@ -9093,7 +9209,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                     },
                     status: 'pending',
                     requestedAt: serverTimestamp()
-                });
+                }), 15000, 'Could not save loan request. Please try again.');
                 await updateDoc(doc(db, `artifacts/${appId}/public/data/users`, currentUser.uid), {
                     latestLoanRequestVersion: LOAN_APPLICATION_VERSION,
                     loanRequestStatus: 'pending',
@@ -9113,7 +9229,8 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                 );
             } catch (e) {
                 console.error('Loan request failed:', e);
-                showNotification('Could not submit loan request. Please try again.', true);
+                const message = String(e?.message || '').trim();
+                showNotification(message || 'Could not submit loan request. Please try again.', true);
             } finally {
                 if (btn) {
                     btn.disabled = false;
