@@ -1295,8 +1295,9 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
         };
 
         const renderTransactionItem = (item, isFullPage = false) => {
-            const clickableClass = item.status !== 'pending' ? 'tx-item-clickable' : '';
-            const dataKey = item.status !== 'pending' ? `data-key="${item.key}"` : '';
+            const hasDetailKey = !!item.key;
+            const clickableClass = hasDetailKey ? 'tx-item-clickable cursor-pointer' : '';
+            const dataKey = hasDetailKey ? `data-key="${item.key}"` : '';
 
             if (item.type === 'mobile_recharge') {
                 const isPending = item.status === 'pending';
@@ -1322,7 +1323,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
 
             if (item.status === 'pending') {
                 return `
-                    <div class="flex justify-between items-center p-3 bg-yellow-50 dark:bg-yellow-900/20 rounded-lg text-sm">
+                    <div class="flex justify-between items-center p-3 bg-yellow-50 dark:bg-yellow-900/20 rounded-lg text-sm ${clickableClass}" ${dataKey}>
                         <div class="flex-1">
                             <p class="font-semibold capitalize">Withdrawal Request</p>
                             <p class="text-xs text-gray-500 dark:text-gray-400">${formatDate(item.timestamp)}</p>
@@ -7791,9 +7792,25 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             document.getElementById('repay-loan-btn').onclick = () => handleRepayLoan(loan);
         };
 
-        const showUserLoanDetailModal = (loanId) => {
-            const loan = allLoansCache.find(item => item.id === loanId) || getUserLoanRecords(currentUser?.uid || '').find(item => item.id === loanId);
-            if (!loan) return showNotification('Loan details not found. Please refresh.', true);
+        const showUserLoanDetailModal = async (loanId) => {
+            let loan = allLoansCache.find(item => item.id === loanId) || getUserLoanRecords(currentUser?.uid || '').find(item => item.id === loanId);
+            if (!loan && loanId) {
+                try {
+                    const loanSnap = await getDoc(doc(db, `artifacts/${appId}/public/data/loans`, loanId));
+                    if (loanSnap.exists()) {
+                        loan = { id: loanSnap.id, ...loanSnap.data() };
+                        if (loan.userId === currentUser?.uid && isModernLoanRecord(loan)) {
+                            allLoansCache = [
+                                ...allLoansCache.filter(item => item.id !== loan.id),
+                                loan
+                            ].sort((a, b) => timestampToMillis(b.createdAt || b.paidAt) - timestampToMillis(a.createdAt || a.paidAt));
+                        }
+                    }
+                } catch (error) {
+                    console.error('Loan detail lookup failed:', error);
+                }
+            }
+            if (!loan || loan.userId !== currentUser?.uid) return showNotification('Loan details not found. Please refresh.', true);
             const dueDate = toDate(loan.dueDate);
             const createdAt = toDate(loan.createdAt);
             const paidAt = toDate(loan.paidAt);
@@ -12394,7 +12411,10 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                     break;
 
                 case 'user-view-loan-detail':
-                    showUserLoanDetailModal(target.dataset.loanid);
+                    showUserLoanDetailModal(target.dataset.loanid).catch(error => {
+                        console.error('Loan details open failed:', error);
+                        showNotification('Loan details could not open. Please try again.', true);
+                    });
                     break;
 
                 case 'view-admin-loan-user':
