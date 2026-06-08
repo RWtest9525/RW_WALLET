@@ -444,8 +444,8 @@ root.outerHTML = String.raw`
                 </div>
             </div>
 
-            <nav id="bottom-nav" class="fixed inset-x-0 bottom-0 z-50 w-full border-t border-gray-200 dark:border-gray-700 bg-white/98 dark:bg-gray-800/98 shadow-[0_-10px_28px_rgba(15,23,42,0.12)] backdrop-blur">
-                <div id="bottom-nav-grid" class="mx-auto grid max-w-xl grid-cols-4 items-center px-2 pt-2 text-[10px] sm:text-xs font-semibold text-gray-500 dark:text-gray-400">
+            <nav id="bottom-nav" class="fixed z-50">
+                <div id="bottom-nav-grid" class="mx-auto grid max-w-xl grid-cols-5 items-center px-2 pt-2 text-[10px] sm:text-xs font-semibold text-gray-500 dark:text-gray-400">
                     <button id="bottom-transactions-btn" class="bottom-nav-btn flex flex-col items-center gap-1 py-1">
                         <span class="bottom-nav-icon flex h-9 w-9 items-center justify-center rounded-xl bg-gray-100 dark:bg-gray-700 transition">
                             <img src="https://cdn-icons-png.flaticon.com/512/3652/3652191.png" alt="History" class="bottom-nav-img" loading="eager" fetchpriority="high" decoding="async">
@@ -464,7 +464,7 @@ root.outerHTML = String.raw`
                         </span>
                         <span>Admin</span>
                     </button>
-                    <button id="bottom-task-btn" class="bottom-nav-btn hidden flex flex-col items-center gap-1 py-1">
+                    <button id="bottom-task-btn" class="bottom-nav-btn flex flex-col items-center gap-1 py-1">
                         <span class="bottom-nav-icon flex h-9 w-9 items-center justify-center rounded-xl bg-gray-100 dark:bg-gray-700 transition">
                             <img src="https://cdn-icons-png.flaticon.com/512/3176/3176366.png" alt="Task" class="bottom-nav-img" loading="eager" fetchpriority="high" decoding="async">
                         </span>

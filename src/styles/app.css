@@ -243,10 +243,12 @@ html,
         }
 
         .bottom-nav-btn {
+            height: 4.65rem;
             min-width: 0;
             line-height: 1;
             position: relative;
             isolation: isolate;
+            justify-content: center;
             transition: color 0.2s ease, transform 0.2s ease;
         }
 
@@ -292,6 +294,8 @@ html,
             bottom: calc(0.85rem + env(safe-area-inset-bottom));
             width: auto !important;
             max-width: 36rem;
+            min-height: 5.35rem;
+            max-height: 5.35rem;
             margin: 0 auto;
             border-radius: 1.75rem;
             background: linear-gradient(180deg, rgba(255, 255, 255, 0.94), #ffffff) !important;
@@ -299,6 +303,7 @@ html,
             border: 1px solid rgba(226, 232, 240, 0.95);
             box-shadow: 0 22px 60px rgba(15, 23, 42, 0.2), 0 8px 22px rgba(37, 99, 235, 0.1);
             backdrop-filter: blur(18px);
+            contain: layout paint;
             overflow: hidden;
         }
 
@@ -321,6 +326,7 @@ html,
         }
 
         #bottom-nav-grid {
+            height: 5.1rem;
             min-height: 5.1rem;
             position: relative;
             z-index: 1;
@@ -384,7 +390,7 @@ html,
         }
 
         #bottom-nav {
-            animation: navFloat 4.8s ease-in-out infinite;
+            animation: none;
         }
 
         @keyframes navBorderFlow {

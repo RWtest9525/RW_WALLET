@@ -3480,7 +3480,9 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                 return;
             }
             overlay.dataset.maintenanceSignature = signature;
-            const endText = endMillis ? new Date(endMillis).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' }) : 'In progress';
+            const endText = endMillis
+                ? new Date(endMillis).toLocaleString('en-IN', { day: '2-digit', month: 'short', hour: 'numeric', minute: '2-digit', hour12: true }).replace(/\s(am|pm)$/i, value => value.toUpperCase())
+                : 'In progress';
             overlay.innerHTML = `
                 <div class="maintenance-premium-bg min-h-[100dvh] px-4 py-6 text-white">
                     <div class="relative z-10 mx-auto flex min-h-[calc(100dvh-3rem)] w-full max-w-xl items-center justify-center">
@@ -3500,8 +3502,9 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                                 </div>
                             </div>
 
-                            <p class="mt-5 rounded-2xl bg-slate-100 px-4 py-3 text-sm font-semibold text-slate-600">
-                                Expected opening: <span class="font-extrabold text-slate-950">${escapeHtml(endText)}</span>
+                            <p class="mt-5 flex items-center justify-center gap-1.5 rounded-2xl bg-slate-100 px-3 py-3 text-[12px] font-semibold text-slate-600 sm:text-sm">
+                                <span class="shrink-0">Expected opening:</span>
+                                <span class="whitespace-nowrap font-extrabold text-slate-950">${escapeHtml(endText)}</span>
                             </p>
                         </section>
                     </div>
@@ -3868,23 +3871,54 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
 
         const showUserTaskPage = () => {
             if (!currentUser) return showNotification('Please login first.', true);
+            if (currentUser.uid === ADMIN_UID) return showAdminTaskPage();
             currentMainSection = 'task';
             const content = `
-                <header class="mb-4 flex items-center gap-3 bg-white dark:bg-gray-800 px-4 py-3 shadow-sm page-header-fixed">
-                    <h2 class="text-base font-black uppercase tracking-tight text-slate-950 dark:text-white">Task</h2>
+                <header class="mb-4 flex items-center justify-between bg-white dark:bg-gray-800 px-4 py-3 shadow-sm page-header-fixed">
+                    <h2 class="text-base font-extrabold uppercase text-slate-950 dark:text-white">Task Mission</h2>
+                    <span class="h-9 w-9 overflow-hidden rounded-full bg-slate-100 p-1 dark:bg-slate-700">
+                        <img src="${RW_LOGO_URL}" alt="REVIEWS WORLD" class="h-full w-full rounded-full object-cover">
+                    </span>
                 </header>
-                <div class="p-3 sm:p-4 pt-0 pb-28">
-                    <div class="mx-auto max-w-3xl">
-                        <section id="home-tasks-section">
-                            <div id="home-task-category-list" class="space-y-4"></div>
+                <div class="px-4 pt-1 pb-28">
+                    <div class="mx-auto max-w-xl space-y-4">
+                        <section class="rounded-[1.75rem] border border-slate-200 bg-white p-6 text-center shadow-sm dark:border-slate-700 dark:bg-gray-800">
+                            <div class="mx-auto flex h-16 w-16 items-center justify-center rounded-3xl bg-slate-950 p-3 shadow-lg">
+                                <img src="https://cdn-icons-png.flaticon.com/512/3176/3176366.png" alt="Tasks" class="h-full w-full object-contain">
+                            </div>
+                            <p class="mt-5 text-xs font-extrabold uppercase text-blue-600">Coming Soon</p>
+                            <h3 class="mt-2 text-2xl font-extrabold text-slate-950 dark:text-white">Live missions are being prepared</h3>
+                            <p class="mx-auto mt-2 max-w-sm text-sm font-semibold leading-6 text-slate-500 dark:text-slate-300">Task work will open here after admin makes it live.</p>
+                        </section>
+
+                        <section class="space-y-3 opacity-60">
+                            <div class="flex items-center justify-between px-1">
+                                <p class="text-xs font-extrabold uppercase text-slate-500 dark:text-slate-300">Live Missions</p>
+                                <span class="text-[11px] font-bold text-gray-400">0 available</span>
+                            </div>
+                            <label class="flex items-center gap-3 rounded-2xl border border-gray-200 bg-white px-4 py-3 shadow-sm dark:border-gray-700 dark:bg-gray-800">
+                                <svg class="h-4 w-4 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="m21 21-4.35-4.35M10 18a8 8 0 1 1 0-16 8 8 0 0 1 0 16z"></path></svg>
+                                <input type="search" disabled placeholder="Search app tasks..." class="min-w-0 flex-1 bg-transparent text-sm font-semibold outline-none placeholder:text-slate-500">
+                            </label>
+                            <div class="pointer-events-none rounded-2xl border border-slate-100 bg-slate-50 p-4 dark:border-slate-700 dark:bg-gray-900">
+                                <div class="flex items-center gap-3">
+                                    <span class="flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-slate-200 bg-white text-xs font-bold text-slate-400 dark:border-slate-700 dark:bg-gray-800">APP</span>
+                                    <span class="min-w-0 flex-1">
+                                        <span class="block text-sm font-extrabold text-slate-700 dark:text-slate-200">Sample Task</span>
+                                        <span class="mt-1 inline-flex rounded bg-slate-200 px-1.5 py-0.5 text-[9px] font-extrabold uppercase text-slate-500 dark:bg-slate-700 dark:text-slate-300">Instant</span>
+                                    </span>
+                                    <span class="text-right">
+                                        <span class="block text-[8px] font-extrabold uppercase text-slate-400">Reward</span>
+                                        <span class="block text-lg font-extrabold text-slate-400">₹--</span>
+                                    </span>
+                                </div>
+                            </div>
                         </section>
                     </div>
                 </div>
                 ${getPageFooter()}`;
             showPage(content, { returnTo: currentUser?.uid === ADMIN_UID ? 'admin' : 'home', keepBottomNav: true });
             setBottomNavActive('bottom-task-btn');
-            renderHomeTaskCategories();
-            initializePublicHomeRealtime();
         };
 
         const showUserTaskDetailsPage = (taskId) => {
@@ -4300,6 +4334,35 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             if (activeEl) activeEl.textContent = activeCount;
             if (draftEl) draftEl.textContent = draftCount;
 
+            if (!tasks.length && !allTasksCache.length) {
+                listEl.innerHTML = `
+                    <div class="space-y-3">
+                        <div class="rounded-2xl border border-blue-100 bg-blue-50 px-4 py-3 text-sm font-semibold text-blue-700 dark:border-blue-900/40 dark:bg-blue-900/20 dark:text-blue-100">
+                            No task added yet. The faded missions below are preview only and are not clickable.
+                        </div>
+                        ${[
+                            { title: 'PopClub', category: 'Active App Review', rate: '₹8', image: 'Pop' },
+                            { title: 'Map Review Work', category: 'Review Task', rate: '₹12', image: 'Map' },
+                            { title: 'App Install Mission', category: 'Instant Payment Task', rate: '₹10', image: 'App' }
+                        ].map(item => `
+                            <div class="pointer-events-none rounded-2xl border border-slate-100 bg-slate-50 p-4 opacity-55 dark:border-slate-700 dark:bg-gray-900">
+                                <div class="flex items-center gap-3">
+                                    <span class="flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-slate-200 bg-white text-xs font-bold text-slate-400 dark:border-slate-700 dark:bg-gray-800">${item.image}</span>
+                                    <span class="min-w-0 flex-1">
+                                        <span class="block truncate text-sm font-extrabold text-slate-700 dark:text-slate-200">${item.title}</span>
+                                        <span class="mt-1 inline-flex rounded bg-slate-200 px-1.5 py-0.5 text-[9px] font-extrabold uppercase text-slate-500 dark:bg-slate-700 dark:text-slate-300">${item.category}</span>
+                                    </span>
+                                    <span class="text-right">
+                                        <span class="block text-[8px] font-extrabold uppercase text-slate-400">Reward</span>
+                                        <span class="block text-lg font-extrabold text-slate-500 dark:text-slate-300">${item.rate}</span>
+                                    </span>
+                                </div>
+                            </div>
+                        `).join('')}
+                    </div>`;
+                return;
+            }
+
             listEl.innerHTML = tasks.length ? tasks.map(task => {
                 const status = task.status || 'active';
                 const statusClass = {
@@ -4333,7 +4396,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                             <button data-action="delete-admin-task" data-taskid="${task.id}" class="rounded-lg bg-red-50 px-3 py-2 text-xs font-black text-red-600 dark:bg-red-900/30 dark:text-red-200">Delete</button>
                         </div>
                     </div>`;
-            }).join('') : '<p class="text-center text-gray-500 dark:text-gray-400 py-8">No task found. Add your first task above.</p>';
+            }).join('') : '<p class="rounded-2xl border border-dashed border-gray-200 py-8 text-center text-sm font-semibold text-gray-500 dark:border-gray-700 dark:text-gray-400">No matching task found.</p>';
         };
 
         const showAdminAdsPage = () => {
@@ -12658,7 +12721,13 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             showHomeMainPage();
         });
         document.getElementById('bottom-admin-btn').addEventListener('click', showAdminMainPage);
-        document.getElementById('bottom-task-btn').addEventListener('click', showUserTaskPage);
+        document.getElementById('bottom-task-btn').addEventListener('click', () => {
+            if (currentUser?.uid === ADMIN_UID) {
+                showAdminTaskPage();
+                return;
+            }
+            showUserTaskPage();
+        });
         document.getElementById('bottom-transactions-btn').addEventListener('click', () => {
             showAllTransactionsPage();
             setBottomNavActive('bottom-transactions-btn');
