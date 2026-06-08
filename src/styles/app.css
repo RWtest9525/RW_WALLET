@@ -3,20 +3,64 @@ html,
             min-height: 100%;
             -webkit-text-size-adjust: 100%;
             touch-action: manipulation;
+            font-family: "Manrope", "Inter", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+            letter-spacing: 0;
+            text-rendering: optimizeLegibility;
         }
 
         body {
             display: flex;
             flex-direction: column;
+            font-size: 16px;
+            font-weight: 500;
+            line-height: 1.5;
             -webkit-font-smoothing: antialiased;
             -moz-osx-font-smoothing: grayscale;
             overflow-x: hidden;
             padding-bottom: 0;
         }
 
+        button,
+        input,
+        select,
+        textarea {
+            font: inherit;
+            letter-spacing: 0;
+        }
+
         #app {
             flex-grow: 1;
             min-height: 100%;
+        }
+
+        .maintenance-premium-bg {
+            position: relative;
+            isolation: isolate;
+            background:
+                linear-gradient(135deg, #06111f 0%, #0f2f68 48%, #047857 100%);
+        }
+
+        .maintenance-premium-bg::before {
+            content: "";
+            position: absolute;
+            inset: 0;
+            z-index: 0;
+            pointer-events: none;
+            background-image:
+                linear-gradient(rgba(255, 255, 255, 0.08) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(255, 255, 255, 0.08) 1px, transparent 1px);
+            background-size: 36px 36px;
+            mask-image: linear-gradient(to bottom, rgba(0, 0, 0, 0.9), transparent 78%);
+        }
+
+        .maintenance-premium-bg::after {
+            content: "";
+            position: absolute;
+            inset: 0;
+            z-index: 0;
+            pointer-events: none;
+            background:
+                linear-gradient(180deg, rgba(255, 255, 255, 0.14), transparent 34%, rgba(2, 6, 23, 0.35));
         }
 
         #main-content {

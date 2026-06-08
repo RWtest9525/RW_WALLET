@@ -3395,14 +3395,50 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             return !endMillis || endMillis > Date.now();
         };
 
-        const formatMaintenanceCountdown = (millis) => {
+        const getMaintenanceCountdownParts = (millis) => {
             const totalSeconds = Math.max(0, Math.floor(Number(millis || 0) / 1000));
-            const days = Math.floor(totalSeconds / 86400);
-            const hours = Math.floor((totalSeconds % 86400) / 3600);
+            const hours = Math.floor(totalSeconds / 3600);
             const minutes = Math.floor((totalSeconds % 3600) / 60);
             const seconds = totalSeconds % 60;
-            if (days > 0) return `${days}d ${String(hours).padStart(2, '0')}h ${String(minutes).padStart(2, '0')}m ${String(seconds).padStart(2, '0')}s`;
-            return `${String(hours).padStart(2, '0')}h ${String(minutes).padStart(2, '0')}m ${String(seconds).padStart(2, '0')}s`;
+            return { hours, minutes, seconds, totalSeconds };
+        };
+
+        const formatMaintenanceCountdown = (millis) => {
+            const { hours, minutes, seconds } = getMaintenanceCountdownParts(millis);
+            return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+        };
+
+        const formatMaintenanceDurationInput = (totalSeconds = 1800) => {
+            const safeSeconds = Math.min(4320 * 60, Math.max(60, Math.floor(Number(totalSeconds) || 1800)));
+            return formatMaintenanceCountdown(safeSeconds * 1000);
+        };
+
+        const parseMaintenanceDurationInput = (value) => {
+            const match = String(value || '').trim().match(/^(\d{1,2}):([0-5]?\d):([0-5]?\d)$/);
+            if (!match) return null;
+            const hours = Number(match[1]);
+            const minutes = Number(match[2]);
+            const seconds = Number(match[3]);
+            const totalSeconds = (hours * 3600) + (minutes * 60) + seconds;
+            if (!Number.isFinite(totalSeconds) || totalSeconds < 60 || totalSeconds > 4320 * 60) return null;
+            return totalSeconds;
+        };
+
+        const updateMaintenanceCountdownUi = (endMillis) => {
+            const countdown = endMillis ? formatMaintenanceCountdown(endMillis - Date.now()) : 'Updating now';
+            const countdownEl = document.getElementById('maintenance-countdown-text');
+            if (countdownEl) countdownEl.textContent = countdown;
+
+            const parts = endMillis ? getMaintenanceCountdownParts(endMillis - Date.now()) : null;
+            const boxes = [
+                ['maintenance-hours-box', parts ? String(parts.hours).padStart(2, '0') : '--'],
+                ['maintenance-minutes-box', parts ? String(parts.minutes).padStart(2, '0') : '--'],
+                ['maintenance-seconds-box', parts ? String(parts.seconds).padStart(2, '0') : '--']
+            ];
+            boxes.forEach(([id, text]) => {
+                const box = document.getElementById(id);
+                if (box) box.textContent = text;
+            });
         };
 
         const removeMaintenanceOverlay = () => {
@@ -3436,36 +3472,73 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
 
             const message = appConfigCache.maintenanceMessage || 'We are improving your wallet experience. Please wait until the maintenance window is complete.';
             const countdown = endMillis ? formatMaintenanceCountdown(endMillis - Date.now()) : 'Updating now';
-            if (overlay.dataset.maintenanceMessage === message) {
-                const countdownEl = document.getElementById('maintenance-countdown-text');
-                if (countdownEl) countdownEl.textContent = countdown;
+            const signature = `${message}|${endMillis || 0}`;
+            if (overlay.dataset.maintenanceSignature === signature) {
+                updateMaintenanceCountdownUi(endMillis);
                 if (!maintenanceCountdownTimer) {
                     maintenanceCountdownTimer = setInterval(renderMaintenanceOverlay, 1000);
                 }
                 return;
             }
-            overlay.dataset.maintenanceMessage = message;
+            overlay.dataset.maintenanceSignature = signature;
+            const endText = endMillis ? new Date(endMillis).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' }) : 'In progress';
             overlay.innerHTML = `
-                <div class="min-h-screen bg-gradient-to-br from-slate-950 via-blue-950 to-emerald-900 px-5 py-8 flex items-center justify-center">
-                    <div class="w-full max-w-md rounded-[2rem] border border-white/15 bg-white/10 p-6 text-center shadow-2xl backdrop-blur-xl">
-                        <div class="mx-auto flex h-20 w-20 items-center justify-center rounded-3xl bg-white shadow-xl">
-                            <img src="${RW_LOGO_URL}" alt="REVIEWS WORLD" class="h-16 w-16 rounded-2xl object-cover">
+                <div class="maintenance-premium-bg min-h-[100dvh] px-4 py-6 text-white">
+                    <div class="relative z-10 mx-auto flex min-h-[calc(100dvh-3rem)] w-full max-w-5xl items-center">
+                        <div class="grid w-full gap-5 lg:grid-cols-2 lg:items-center">
+                            <section class="rounded-[2rem] border border-white/15 bg-white/10 p-5 shadow-2xl backdrop-blur-xl sm:p-8">
+                                <div class="flex items-center gap-4">
+                                    <div class="flex h-16 w-16 shrink-0 items-center justify-center rounded-3xl bg-white p-2 shadow-xl sm:h-20 sm:w-20">
+                                        <img src="${RW_LOGO_URL}" alt="REVIEWS WORLD" class="h-full w-full rounded-2xl object-cover">
+                                    </div>
+                                    <div>
+                                        <p class="text-xs font-extrabold uppercase text-cyan-100/80">Reviews World</p>
+                                        <h1 class="mt-1 text-3xl font-extrabold leading-tight sm:text-4xl">We will be back soon</h1>
+                                    </div>
+                                </div>
+                                <div class="mt-7 rounded-3xl border border-white/15 bg-slate-950/35 p-5">
+                                    <p class="text-xs font-extrabold uppercase text-emerald-100/80">App Under Maintenance</p>
+                                    <p class="mt-3 text-base font-semibold leading-7 text-white/80">${escapeHtml(message)}</p>
+                                </div>
+                                <div class="mt-5 grid grid-cols-3 gap-2 text-center text-xs font-extrabold text-white/80">
+                                    <span class="rounded-2xl border border-white/10 bg-white/10 px-3 py-3">Secure</span>
+                                    <span class="rounded-2xl border border-white/10 bg-white/10 px-3 py-3">Faster</span>
+                                    <span class="rounded-2xl border border-white/10 bg-white/10 px-3 py-3">Stable</span>
+                                </div>
+                            </section>
+                            <section class="rounded-[2rem] border border-white/15 bg-white/95 p-5 text-slate-950 shadow-2xl sm:p-8">
+                                <div class="flex items-center justify-between gap-3">
+                                    <div>
+                                        <p class="text-xs font-extrabold uppercase text-blue-600">Time Remaining</p>
+                                        <p id="maintenance-countdown-text" class="mt-2 text-4xl font-extrabold tabular-nums sm:text-5xl">${escapeHtml(countdown)}</p>
+                                    </div>
+                                    <div class="rounded-2xl bg-emerald-50 px-4 py-3 text-right text-xs font-extrabold text-emerald-700">
+                                        <p>Ends</p>
+                                        <p class="mt-1 text-slate-900">${escapeHtml(endText)}</p>
+                                    </div>
+                                </div>
+                                <div class="mt-6 grid grid-cols-3 gap-3">
+                                    <div class="rounded-3xl border border-blue-100 bg-blue-50 p-4 text-center shadow-sm">
+                                        <p id="maintenance-hours-box" class="text-3xl font-extrabold tabular-nums">${endMillis ? String(getMaintenanceCountdownParts(endMillis - Date.now()).hours).padStart(2, '0') : '--'}</p>
+                                        <p class="mt-1 text-xs font-extrabold uppercase text-slate-500">Hours</p>
+                                    </div>
+                                    <div class="rounded-3xl border border-cyan-100 bg-cyan-50 p-4 text-center shadow-sm">
+                                        <p id="maintenance-minutes-box" class="text-3xl font-extrabold tabular-nums">${endMillis ? String(getMaintenanceCountdownParts(endMillis - Date.now()).minutes).padStart(2, '0') : '--'}</p>
+                                        <p class="mt-1 text-xs font-extrabold uppercase text-slate-500">Minutes</p>
+                                    </div>
+                                    <div class="rounded-3xl border border-emerald-100 bg-emerald-50 p-4 text-center shadow-sm">
+                                        <p id="maintenance-seconds-box" class="text-3xl font-extrabold tabular-nums">${endMillis ? String(getMaintenanceCountdownParts(endMillis - Date.now()).seconds).padStart(2, '0') : '--'}</p>
+                                        <p class="mt-1 text-xs font-extrabold uppercase text-slate-500">Seconds</p>
+                                    </div>
+                                </div>
+                                <p class="mt-6 rounded-2xl bg-slate-100 px-4 py-4 text-center text-sm font-semibold leading-6 text-slate-600">
+                                    The app will open automatically when maintenance is complete. Admin can turn it off anytime.
+                                </p>
+                            </section>
                         </div>
-                        <p class="mt-6 text-xs font-black uppercase tracking-[0.35em] text-cyan-200">App Under Maintenance</p>
-                        <h1 class="mt-3 text-3xl font-black leading-tight">We will be back soon</h1>
-                        <p class="mt-3 text-sm font-medium leading-6 text-white/75">${escapeHtml(message)}</p>
-                        <div class="mt-6 rounded-3xl border border-white/15 bg-slate-950/50 p-5 shadow-inner">
-                            <p class="text-xs font-black uppercase tracking-[0.25em] text-emerald-200">Time Remaining</p>
-                            <p id="maintenance-countdown-text" class="mt-2 text-3xl font-black tabular-nums">${escapeHtml(countdown)}</p>
-                        </div>
-                        <div class="mt-5 grid grid-cols-3 gap-2 text-xs font-bold text-white/70">
-                            <div class="rounded-2xl bg-white/10 px-3 py-3">Security</div>
-                            <div class="rounded-2xl bg-white/10 px-3 py-3">Speed</div>
-                            <div class="rounded-2xl bg-white/10 px-3 py-3">Stability</div>
-                        </div>
-                        <p class="mt-5 text-xs text-white/55">Please keep the app open. It will continue automatically when maintenance ends.</p>
                     </div>
                 </div>`;
+            updateMaintenanceCountdownUi(endMillis);
 
             if (!maintenanceCountdownTimer) {
                 maintenanceCountdownTimer = setInterval(renderMaintenanceOverlay, 1000);
@@ -3544,7 +3617,8 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             if (!currentUser || currentUser.uid !== ADMIN_UID) return showNotification('Admin access only.', true);
             const active = isMaintenanceConfigActive(appConfigCache);
             const endMillis = getMaintenanceEndMillis(appConfigCache);
-            const remainingMinutes = active && endMillis ? Math.max(1, Math.ceil((endMillis - Date.now()) / 60000)) : 30;
+            const remainingSeconds = active && endMillis ? Math.max(60, Math.ceil((endMillis - Date.now()) / 1000)) : 30 * 60;
+            const durationValue = formatMaintenanceDurationInput(remainingSeconds);
             const endText = active && endMillis ? new Date(endMillis).toLocaleString('en-IN') : 'Not scheduled';
             const message = appConfigCache.maintenanceMessage || 'We are improving your wallet experience. Please wait until the maintenance window is complete.';
 
@@ -3552,28 +3626,33 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                 ${getPageHeader('Maintenance Mode')}
                 <div class="max-w-lg mx-auto space-y-4">
                     <div class="rounded-3xl bg-gradient-to-br from-slate-950 via-blue-900 to-emerald-700 p-5 text-white shadow-xl">
-                        <p class="text-xs font-black uppercase tracking-[0.25em] text-white/65">Admin Control</p>
+                        <p class="text-xs font-extrabold uppercase text-white/70">Admin Control</p>
                         <div class="mt-4 flex items-center justify-between gap-3">
                             <div>
-                                <h3 class="text-2xl font-black">${active ? 'Maintenance is ON' : 'Maintenance is OFF'}</h3>
+                                <h3 class="text-2xl font-extrabold">${active ? 'Maintenance is ON' : 'Maintenance is OFF'}</h3>
                                 <p class="mt-1 text-sm text-white/70">${active ? `Ends: ${escapeHtml(endText)}` : 'Users can open the app normally.'}</p>
                             </div>
-                            <span class="rounded-2xl px-4 py-2 text-xs font-black ${active ? 'bg-red-500 text-white' : 'bg-emerald-400 text-slate-950'}">${active ? 'LIVE' : 'OPEN'}</span>
+                            <span class="rounded-2xl px-4 py-2 text-xs font-extrabold ${active ? 'bg-red-500 text-white' : 'bg-emerald-400 text-slate-950'}">${active ? 'LIVE' : 'OPEN'}</span>
+                        </div>
+                        <div class="mt-5 rounded-2xl border border-white/15 bg-white/10 px-4 py-3">
+                            <p class="text-xs font-extrabold uppercase text-cyan-100/75">Selected Duration</p>
+                            <p class="mt-1 text-3xl font-extrabold tabular-nums">${durationValue}</p>
                         </div>
                     </div>
                     <div class="rounded-2xl bg-white dark:bg-gray-800 p-5 shadow-md border border-gray-100 dark:border-gray-700 space-y-4">
                         <div>
-                            <label class="text-sm font-black text-gray-700 dark:text-gray-200">Timer in minutes</label>
-                            <input id="maintenance-minutes-input" type="number" min="1" max="4320" value="${remainingMinutes}" class="mt-2 w-full rounded-2xl bg-gray-100 dark:bg-gray-700 px-4 py-3 text-lg font-black focus:outline-none focus:ring-2 focus:ring-blue-500">
+                            <label class="text-sm font-extrabold text-gray-700 dark:text-gray-200">Maintenance time (HH:MM:SS)</label>
+                            <input id="maintenance-duration-input" type="text" inputmode="numeric" maxlength="8" value="${durationValue}" placeholder="00:30:00" class="mt-2 w-full rounded-2xl bg-gray-100 dark:bg-gray-700 px-4 py-3 text-2xl font-extrabold tabular-nums focus:outline-none focus:ring-2 focus:ring-blue-500">
+                            <p class="mt-2 text-xs font-semibold text-gray-500 dark:text-gray-400">Example: 01:30:00 for 1 hour 30 minutes. Maximum 72:00:00.</p>
                         </div>
                         <div class="grid grid-cols-4 gap-2">
-                            <button data-maintenance-minutes="15" class="maintenance-quick-btn rounded-xl bg-gray-100 dark:bg-gray-700 px-3 py-2 text-xs font-black">15m</button>
-                            <button data-maintenance-minutes="30" class="maintenance-quick-btn rounded-xl bg-gray-100 dark:bg-gray-700 px-3 py-2 text-xs font-black">30m</button>
-                            <button data-maintenance-minutes="60" class="maintenance-quick-btn rounded-xl bg-gray-100 dark:bg-gray-700 px-3 py-2 text-xs font-black">1h</button>
-                            <button data-maintenance-minutes="120" class="maintenance-quick-btn rounded-xl bg-gray-100 dark:bg-gray-700 px-3 py-2 text-xs font-black">2h</button>
+                            <button type="button" data-maintenance-duration="00:15:00" class="maintenance-quick-btn rounded-xl bg-gray-100 dark:bg-gray-700 px-3 py-2 text-xs font-extrabold">15m</button>
+                            <button type="button" data-maintenance-duration="00:30:00" class="maintenance-quick-btn rounded-xl bg-gray-100 dark:bg-gray-700 px-3 py-2 text-xs font-extrabold">30m</button>
+                            <button type="button" data-maintenance-duration="01:00:00" class="maintenance-quick-btn rounded-xl bg-gray-100 dark:bg-gray-700 px-3 py-2 text-xs font-extrabold">1h</button>
+                            <button type="button" data-maintenance-duration="02:00:00" class="maintenance-quick-btn rounded-xl bg-gray-100 dark:bg-gray-700 px-3 py-2 text-xs font-extrabold">2h</button>
                         </div>
                         <div>
-                            <label class="text-sm font-black text-gray-700 dark:text-gray-200">Message for users</label>
+                            <label class="text-sm font-extrabold text-gray-700 dark:text-gray-200">Message for users</label>
                             <textarea id="maintenance-message-input" rows="3" maxlength="180" class="mt-2 w-full rounded-2xl bg-gray-100 dark:bg-gray-700 px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500">${escapeHtml(message)}</textarea>
                         </div>
                         <div class="rounded-2xl bg-blue-50 dark:bg-blue-900/20 border border-blue-100 dark:border-blue-800 p-4 text-sm text-blue-800 dark:text-blue-100">
@@ -3581,16 +3660,21 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                         </div>
                     </div>
                     <div class="grid grid-cols-2 gap-3">
-                        <button id="maintenance-off-btn" class="rounded-2xl bg-gray-100 dark:bg-gray-700 px-4 py-4 font-black text-gray-700 dark:text-gray-100">Turn Off</button>
-                        <button id="maintenance-save-btn" class="rounded-2xl bg-blue-600 px-4 py-4 font-black text-white shadow-lg shadow-blue-200 dark:shadow-none">${active ? 'Update Timer' : 'Start Maintenance'}</button>
+                        <button id="maintenance-off-btn" class="rounded-2xl bg-gray-100 dark:bg-gray-700 px-4 py-4 font-extrabold text-gray-700 dark:text-gray-100">Turn Off</button>
+                        <button id="maintenance-save-btn" class="rounded-2xl bg-blue-600 px-4 py-4 font-extrabold text-white shadow-lg shadow-blue-200 dark:shadow-none">${active ? 'Update Timer' : 'Start Maintenance'}</button>
                     </div>
                 </div>
                 ${getPageFooter()}`, { returnTo: 'settings', keepBottomNav: true, onBack: showSettingsPage });
 
+            const durationInput = document.getElementById('maintenance-duration-input');
+            durationInput?.addEventListener('blur', () => {
+                const seconds = parseMaintenanceDurationInput(durationInput.value);
+                if (seconds) durationInput.value = formatMaintenanceDurationInput(seconds);
+            });
             document.querySelectorAll('.maintenance-quick-btn').forEach(button => {
                 button.addEventListener('click', () => {
-                    const input = document.getElementById('maintenance-minutes-input');
-                    if (input) input.value = button.dataset.maintenanceMinutes || '30';
+                    const input = document.getElementById('maintenance-duration-input');
+                    if (input) input.value = button.dataset.maintenanceDuration || '00:30:00';
                 });
             });
             document.getElementById('maintenance-off-btn')?.addEventListener('click', handleTurnOffMaintenance);
@@ -3600,21 +3684,22 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
         const handleSaveMaintenanceSettings = async () => {
             if (!currentUser || currentUser.uid !== ADMIN_UID) return showNotification('Admin access only.', true);
             const saveBtn = document.getElementById('maintenance-save-btn');
-            const minutes = Number(document.getElementById('maintenance-minutes-input')?.value || 0);
+            const durationSeconds = parseMaintenanceDurationInput(document.getElementById('maintenance-duration-input')?.value || '');
             const message = String(document.getElementById('maintenance-message-input')?.value || '').trim()
                 || 'We are improving your wallet experience. Please wait until the maintenance window is complete.';
-            if (!Number.isFinite(minutes) || minutes < 1 || minutes > 4320) {
-                return showNotification('Please enter timer between 1 minute and 4320 minutes.', true);
+            if (!durationSeconds) {
+                return showNotification('Please enter time as HH:MM:SS between 00:01:00 and 72:00:00.', true);
             }
             try {
                 if (saveBtn) {
                     saveBtn.disabled = true;
                     saveBtn.textContent = 'Saving...';
                 }
-                const endDate = new Date(Date.now() + minutes * 60 * 1000);
+                const endDate = new Date(Date.now() + durationSeconds * 1000);
                 await setDoc(doc(db, `artifacts/${appId}/settings`, 'app_config'), {
                     maintenanceEnabled: true,
                     maintenanceEndsAt: Timestamp.fromDate(endDate),
+                    maintenanceDurationSeconds: durationSeconds,
                     maintenanceMessage: message,
                     maintenanceUpdatedAt: serverTimestamp(),
                     maintenanceUpdatedBy: currentUser.uid
@@ -3624,6 +3709,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                     ...appConfigCache,
                     maintenanceEnabled: true,
                     maintenanceEndsAt: Timestamp.fromDate(endDate),
+                    maintenanceDurationSeconds: durationSeconds,
                     maintenanceMessage: message
                 };
                 applyMaintenanceMode();
