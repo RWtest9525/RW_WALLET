@@ -2930,11 +2930,13 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
 
         // --- FULL PAGE RENDERERS ---
 
-        const getPageHeader = (title) => `
+        const getPageHeader = (title, options = {}) => `
             <header class="flex items-center mb-6 p-4 bg-white dark:bg-gray-800 shadow-md page-header-fixed">
-                <button class="page-back-btn p-2 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700 mr-2">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5"></path><path d="M12 19l-7-7 7-7"></path></svg>
-                </button>
+                ${options.showBack === false ? '' : `
+                    <button class="page-back-btn p-2 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700 mr-2">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5"></path><path d="M12 19l-7-7 7-7"></path></svg>
+                    </button>
+                `}
                 <h2 class="text-xl font-bold">${title}</h2>
             </header>
             <div class="p-4 pt-0">`;
@@ -3338,7 +3340,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             const currentTheme = localStorage.getItem('theme') || 'light';
             const isAdmin = currentUser && currentUser.uid === ADMIN_UID;
             const content = `
-                ${getPageHeader('Setting')}
+                ${getPageHeader('Setting', { showBack: false })}
                 <div class="max-w-lg mx-auto space-y-4">
                     <div class="bg-white dark:bg-gray-800 p-5 rounded-2xl shadow-md border border-gray-100 dark:border-gray-700 space-y-3">
                         ${renderSettingAction('settings-profile-btn', 'My Profile', 'https://cdn-icons-png.flaticon.com/512/3135/3135715.png', 'blue')}
@@ -5896,7 +5898,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
 
         const showHelpSupportPage = () => {
             const content = `
-                ${getPageHeader('Help')}
+                ${getPageHeader('Help', { showBack: false })}
                 <div class="max-w-lg mx-auto space-y-4">
                     <button id="revy-ai-chat-card" class="w-full flex items-center gap-4 p-4 bg-white dark:bg-gray-800 border border-gray-100 dark:border-gray-700 rounded-2xl shadow-md text-left hover:bg-gray-50 dark:hover:bg-gray-700/50 transition">
                         ${getRevyBotLogo('h-14 w-14 shrink-0')}
@@ -6669,7 +6671,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             }
 
             const content = `
-                ${getPageHeader('All Transactions')}
+                ${getPageHeader('All Transactions', { showBack: false })}
                 <div class="max-w-2xl mx-auto bg-white dark:bg-gray-800 p-6 rounded-xl shadow-md">
                     
                     <div id="filter-bar" class="flex space-x-2 overflow-x-auto pb-2 mb-4">
