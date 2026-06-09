@@ -8384,6 +8384,33 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             });
         };
 
+        const isWithdrawalHistorySourceRecord = (record = {}) => {
+            const rawType = String(record.type || record.requestType || record.request_type || '').toLowerCase().replace(/\s+/g, '_');
+            const normalizedType = normalizeTransactionType(record);
+            const hasRechargeFields = !!(
+                record.mobileNumber ||
+                record.operator ||
+                record.planDetails ||
+                record.discountRate ||
+                rawType.includes('recharge') ||
+                normalizedType === 'mobile_recharge'
+            );
+            if (hasRechargeFields) return false;
+            if (normalizedType === 'withdrawal' || rawType.includes('withdraw')) return true;
+
+            // Compatibility for old withdrawal rows that stored only payout fields.
+            return !rawType && !!(
+                record.methodId ||
+                record.paymentMethod ||
+                record.paymentDetails ||
+                record.upiId ||
+                record.accountNumber ||
+                record.ifsc ||
+                record.bankName ||
+                record.giftCardType
+            );
+        };
+
         const normalizeWithdrawalHistoryRecord = (record = {}) => {
             const sourceType = normalizeTransactionType(record);
             const requestedAt = record.requestedAt || record.timestamp || record.createdAt || record.processedAt || Date.now();
@@ -8412,8 +8439,8 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             const merged = new Map();
             groups.flat().forEach((record, index) => {
                 if (!record) return;
+                if (!isWithdrawalHistorySourceRecord(record)) return;
                 const normalized = normalizeWithdrawalHistoryRecord(record);
-                if (normalizeTransactionType(normalized) !== 'withdrawal') return;
                 const key = normalized.requestId || normalized.request_id || normalized.transactionId || normalized.transaction_id || normalized.id || `withdrawal-${timestampToMillis(normalized.requestedAt)}-${normalized.amount}-${index}`;
                 const existing = merged.get(String(key)) || {};
                 const requestedAtCandidates = [existing.requestedAt, existing.requested_at, existing.timestamp, normalized.requestedAt, normalized.requested_at, normalized.timestamp]
