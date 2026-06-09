@@ -858,4 +858,139 @@ html,
             padding: 0;
             box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.18), 0 10px 22px rgba(0, 0, 0, 0.28);
         }
+
+        .admin-alert-badge,
+        .signup-old-pulse {
+            animation: rwSoftPulse 1.15s ease-in-out infinite;
+        }
+
+        @keyframes rwSoftPulse {
+            0%, 100% {
+                box-shadow: 0 0 0 0 rgba(220, 38, 38, 0.35);
+                transform: scale(1);
+            }
+
+            50% {
+                box-shadow: 0 0 0 5px rgba(220, 38, 38, 0);
+                transform: scale(1.06);
+            }
+        }
+
+        #bottom-nav {
+            left: max(0.75rem, env(safe-area-inset-left));
+            right: max(0.75rem, env(safe-area-inset-right));
+            bottom: calc(0.75rem + env(safe-area-inset-bottom));
+            max-width: 34rem;
+            min-height: 4.9rem;
+            max-height: 4.9rem;
+            border-radius: 1.45rem;
+            background: rgba(255, 255, 255, 0.96) !important;
+            border: 1px solid rgba(203, 213, 225, 0.9);
+            box-shadow: 0 14px 34px rgba(15, 23, 42, 0.14);
+            backdrop-filter: blur(14px);
+            overflow: hidden;
+        }
+
+        #bottom-nav::before,
+        #bottom-nav::after,
+        .bottom-nav-icon::after {
+            display: none !important;
+        }
+
+        #bottom-nav-grid {
+            height: 4.7rem;
+            min-height: 4.7rem;
+            padding-bottom: 0.1rem;
+        }
+
+        .bottom-nav-btn {
+            height: 4.35rem;
+            color: #64748b;
+            transform: none !important;
+            transition: color 0.16s ease;
+        }
+
+        .bottom-nav-btn::before {
+            inset: 0.25rem 0.18rem;
+            border-radius: 1rem;
+            background: rgba(37, 99, 235, 0.08);
+            transform: none;
+            transition: opacity 0.16s ease;
+        }
+
+        .bottom-nav-btn.active {
+            color: #2563eb;
+        }
+
+        .bottom-nav-btn.active .bottom-nav-icon {
+            background: #2563eb !important;
+            border-color: #2563eb;
+            box-shadow: 0 8px 18px rgba(37, 99, 235, 0.22);
+            transform: none !important;
+            animation: none !important;
+        }
+
+        .bottom-nav-btn:hover .bottom-nav-icon {
+            transform: none !important;
+        }
+
+        .bottom-nav-icon {
+            border-radius: 1rem;
+            border-color: rgba(203, 213, 225, 0.9);
+            box-shadow: none;
+            transition: background-color 0.16s ease, border-color 0.16s ease;
+        }
+
+        .bottom-nav-img {
+            width: 1.2rem;
+            height: 1.2rem;
+            filter: none;
+            transition: none;
+        }
+
+        .bottom-nav-btn.active .bottom-nav-img {
+            transform: none;
+            filter: brightness(0) invert(1);
+        }
+
+        .bottom-nav-btn>span:last-child {
+            margin-top: 0.08rem;
+            padding: 0;
+            background: transparent !important;
+            transform: none !important;
+        }
+
+        .bottom-nav-btn.active>span:last-child {
+            color: #2563eb;
+            background: transparent !important;
+        }
+
+        .dark #bottom-nav {
+            background: rgba(15, 23, 42, 0.96) !important;
+            border-color: rgba(71, 85, 105, 0.86) !important;
+            box-shadow: 0 14px 34px rgba(0, 0, 0, 0.32) !important;
+        }
+
+        .dark .bottom-nav-btn {
+            color: #94a3b8;
+        }
+
+        .dark .bottom-nav-icon {
+            background: #111827 !important;
+            border-color: rgba(71, 85, 105, 0.9);
+            box-shadow: none !important;
+        }
+
+        .dark .bottom-nav-btn.active {
+            color: #93c5fd;
+        }
+
+        .dark .bottom-nav-btn.active .bottom-nav-icon {
+            background: #2563eb !important;
+            border-color: #60a5fa !important;
+        }
+
+        .dark .bottom-nav-btn.active>span:last-child {
+            color: #93c5fd;
+        }
     

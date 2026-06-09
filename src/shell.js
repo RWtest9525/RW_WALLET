@@ -352,7 +352,7 @@ root.outerHTML = String.raw`
                             </button>
                             <button id="admin-signup-approvals-btn"
                                 class="relative flex flex-col items-center justify-center p-3 min-h-28 bg-amber-50 dark:bg-amber-900/20 rounded-2xl hover:bg-amber-100 dark:hover:bg-amber-900/30 transition border border-amber-200 dark:border-amber-800 shadow-sm">
-                                <span id="admin-signup-approval-badge" class="hidden absolute right-2 top-2 min-w-6 h-6 rounded-full bg-red-600 px-2 text-center text-xs font-black leading-6 text-white shadow"></span>
+                                <span id="admin-signup-approval-badge" class="admin-alert-badge hidden absolute right-2 top-2 min-w-6 h-6 rounded-full bg-red-600 px-2 text-center text-xs font-black leading-6 text-white shadow"></span>
                                 <span class="flex h-12 w-12 items-center justify-center rounded-2xl bg-white dark:bg-gray-800 shadow-sm mb-2">
                                     <img src="https://cdn-icons-png.flaticon.com/512/10613/10613685.png" class="h-8 w-8 object-contain" alt="Signup Approvals">
                                 </span>

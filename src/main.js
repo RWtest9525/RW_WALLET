@@ -1933,6 +1933,10 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                         signupApprovalStatus: 'pending',
                         accountStatus: 'pending_approval',
                         isApproved: false,
+                        signupSource: 'web',
+                        webAppBuild: WEB_APP_BUILD,
+                        webAppUpdatedOn: WEB_APP_UPDATE_DATE,
+                        webAppLastSeenAt: serverTimestamp(),
                         signupRequestedAt: serverTimestamp(),
                         createdAt: serverTimestamp()
                     };
@@ -4131,16 +4135,38 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             };
         };
 
+        const setAdminTaskPanel = (panel = 'manage') => {
+            const normalized = panel === 'add' ? 'add' : 'manage';
+            window.adminTaskPanel = normalized;
+            const addSection = document.getElementById('admin-task-add-section');
+            const manageSection = document.getElementById('admin-task-manage-section');
+            if (addSection) addSection.classList.toggle('hidden', normalized !== 'add');
+            if (manageSection) manageSection.classList.toggle('hidden', normalized !== 'manage');
+            document.querySelectorAll('[data-admin-task-panel]').forEach(button => {
+                const isActive = button.dataset.adminTaskPanel === normalized;
+                button.classList.toggle('bg-cyan-600', isActive);
+                button.classList.toggle('text-white', isActive);
+                button.classList.toggle('shadow-md', isActive);
+                button.classList.toggle('bg-white', !isActive);
+                button.classList.toggle('text-gray-700', !isActive);
+                button.classList.toggle('dark:bg-gray-800', !isActive);
+                button.classList.toggle('dark:text-gray-200', !isActive);
+            });
+        };
+
         const showAdminTaskPage = () => {
             if (!currentUser || currentUser.uid !== ADMIN_UID) return showNotification('Admin access only.', true);
             currentMainSection = 'admin';
             const content = `
-                <header class="mb-4 p-4 bg-white dark:bg-gray-800 shadow-md page-header-fixed">
-                    <h2 class="text-xl font-bold">Manage Task</h2>
-                </header>
-                <div class="p-3 sm:p-4 pt-0 pb-28">
+                ${getPageHeader('Manage Task')}
+                <div class="pb-24">
                 <div class="max-w-5xl mx-auto space-y-4 sm:space-y-5">
-                    <section class="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 p-4 sm:p-5">
+                    <div class="grid grid-cols-2 gap-2 rounded-2xl border border-gray-100 bg-gray-50 p-2 shadow-sm dark:border-gray-700 dark:bg-gray-900">
+                        <button type="button" data-admin-task-panel="manage" class="rounded-xl px-3 py-3 text-sm font-black transition">Managing Tasks</button>
+                        <button type="button" data-admin-task-panel="add" class="rounded-xl px-3 py-3 text-sm font-black transition">Add New Task</button>
+                    </div>
+
+                    <section id="admin-task-add-section" class="hidden bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 p-4 sm:p-5">
                         <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
                             <div>
                                 <h3 class="text-lg font-black text-gray-900 dark:text-white">Add New Task</h3>
@@ -4231,7 +4257,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                         </form>
                     </section>
 
-                    <section class="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 p-4 sm:p-5">
+                    <section id="admin-task-manage-section" class="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 p-4 sm:p-5">
                         <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
                             <h3 class="text-lg font-black text-gray-900 dark:text-white">Managing Tasks</h3>
                             <div class="flex gap-2">
@@ -4248,9 +4274,14 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                         <div id="admin-task-list" class="space-y-3 max-h-[72vh] overflow-y-auto"></div>
                     </section>
                 </div>
+                </div>
                 ${getPageFooter()}`;
             showPage(content, { returnTo: 'admin', keepBottomNav: true });
             setBottomNavActive('bottom-admin-btn');
+            document.querySelectorAll('[data-admin-task-panel]').forEach(button => {
+                button.addEventListener('click', () => setAdminTaskPanel(button.dataset.adminTaskPanel));
+            });
+            setAdminTaskPanel(window.adminTaskPanel || 'manage');
             document.getElementById('admin-task-form')?.addEventListener('submit', handleSaveAdminTask);
             document.getElementById('admin-task-reset-btn')?.addEventListener('click', resetAdminTaskForm);
             document.getElementById('admin-task-search')?.addEventListener('input', renderAdminTaskList);
@@ -4334,6 +4365,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                 }
                 resetAdminTaskForm();
                 renderAdminTaskList();
+                setAdminTaskPanel('manage');
             } catch (error) {
                 console.error('Task save failed:', error);
                 showNotification(`Could not save task: ${error.message}`, true);
@@ -4359,6 +4391,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             document.getElementById('admin-task-link').value = task.taskLink || '';
             document.getElementById('admin-task-instructions').value = task.instructions || '';
             document.getElementById('admin-task-save-btn').textContent = 'Update Task';
+            setAdminTaskPanel('add');
             document.getElementById('admin-task-title')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
         };
 
@@ -8243,9 +8276,20 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
         const getPendingSignupUsers = () =>
             allUsersCache.filter(u => !isAdminUserRecord(u) && isUserApprovalPending(u));
 
+        const isNewSignupUser = (user = {}) =>
+            user.signupSource === 'web' ||
+            user.signup_source === 'web' ||
+            user.webAppUpdatedOn === WEB_APP_UPDATE_DATE ||
+            user.web_app_updated_on === WEB_APP_UPDATE_DATE ||
+            !!(user.webAppBuild || user.web_app_build || user.webAppLastSeenAt || user.web_app_last_seen_at);
+
+        const getSignupUserCategory = (user = {}) => isNewSignupUser(user) ? 'New Web User' : 'Old User';
+
         const showAdminSignupApprovalsPage = () => {
             const pendingUsers = getPendingSignupUsers()
                 .sort((a, b) => timestampToMillis(b.signupRequestedAt || b.createdAt) - timestampToMillis(a.signupRequestedAt || a.createdAt));
+            const newPendingCount = pendingUsers.filter(isNewSignupUser).length;
+            const oldPendingCount = pendingUsers.length - newPendingCount;
             const content = `
                 ${getPageHeader('Approve User Signup')}
                 <div class="max-w-3xl mx-auto bg-white dark:bg-gray-800 p-4 sm:p-6 rounded-xl shadow-md border border-gray-100 dark:border-gray-700">
@@ -8256,25 +8300,41 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                         </div>
                         <button id="refresh-signup-approvals-btn" class="px-3 py-2 rounded-lg bg-gray-100 dark:bg-gray-700 text-xs font-bold">Refresh</button>
                     </div>
+                    <div class="mb-4 grid grid-cols-2 gap-2 text-xs font-black">
+                        <div class="rounded-2xl border border-emerald-100 bg-emerald-50 px-3 py-2 text-emerald-700 dark:border-emerald-800 dark:bg-emerald-900/20 dark:text-emerald-200">
+                            New Web Users: ${newPendingCount}
+                        </div>
+                        <div class="rounded-2xl border border-rose-100 bg-rose-50 px-3 py-2 text-rose-700 dark:border-rose-800 dark:bg-rose-900/20 dark:text-rose-200">
+                            Old Users: ${oldPendingCount}
+                        </div>
+                    </div>
                     <div id="signup-approvals-list" class="space-y-2 max-h-[70vh] overflow-y-auto">
-                        ${pendingUsers.length ? pendingUsers.map(user => `
+                        ${pendingUsers.length ? pendingUsers.map(user => {
+                            const category = getSignupUserCategory(user);
+                            const isOld = category === 'Old User';
+                            return `
                             <div class="rounded-xl border border-amber-100 dark:border-amber-800 bg-amber-50/60 dark:bg-amber-900/20 p-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-                                <div class="min-w-0">
+                                <div class="min-w-0 flex items-start gap-3">
+                                    <span class="${isOld ? 'signup-old-pulse bg-red-600' : 'bg-emerald-500'} mt-1 h-3 w-3 shrink-0 rounded-full shadow"></span>
+                                    <div class="min-w-0">
+                                    <span class="mb-1 inline-flex rounded-full px-2 py-0.5 text-[10px] font-black uppercase ${isOld ? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-200' : 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-200'}">${category}</span>
                                     <p class="font-bold text-gray-900 dark:text-gray-100 truncate">${escapeHtml(user.name || 'No Name')}</p>
                                     <p class="text-xs text-gray-600 dark:text-gray-300 truncate">${escapeHtml(user.email || '')}</p>
                                     <p class="text-xs text-gray-600 dark:text-gray-300 truncate">${escapeHtml(user.mobile || 'No Mobile')}</p>
                                     <p class="text-[10px] font-semibold text-amber-700 dark:text-amber-200 mt-1">Requested: ${formatDateDDMMYY(user.signupRequestedAt || user.createdAt || Date.now())}</p>
+                                    </div>
                                 </div>
                                 <div class="flex gap-2 shrink-0">
                                     <button data-action="approve-signup-user" data-userid="${user.id || user.uid}" class="px-3 py-2 rounded-lg bg-emerald-600 text-white text-xs font-black">Approve</button>
                                     <button data-action="cancel-signup-user" data-userid="${user.id || user.uid}" data-username="${escapeHtml(user.name || user.email || 'User')}" class="px-3 py-2 rounded-lg bg-red-600 text-white text-xs font-black">Cancel</button>
                                 </div>
                             </div>
-                        `).join('') : '<p class="text-center py-8 text-sm text-gray-500 dark:text-gray-400">No pending signup approval.</p>'}
+                        `;
+                        }).join('') : '<p class="text-center py-8 text-sm text-gray-500 dark:text-gray-400">No pending signup approval.</p>'}
                     </div>
                 </div>
                 ${getPageFooter()}`;
-            showPage(content);
+            showPage(content, { returnTo: 'admin', keepBottomNav: true });
             setBottomNavActive('bottom-admin-btn');
             document.getElementById('refresh-signup-approvals-btn')?.addEventListener('click', () => {
                 showAdminSignupApprovalsPage();
