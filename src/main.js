@@ -224,7 +224,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             const version = Number(request.requestVersion || request.loanApplicationVersion || request.latestLoanRequestVersion || 0);
             if (version >= LOAN_APPLICATION_VERSION) return true;
             const status = String(request.status || request.loanRequestStatus || '').trim().toLowerCase();
-            return status === 'pending' && hasSubmittedLoanDetails(request);
+            return ['pending', 'approved', 'rejected', 'cancelled', 'canceled', 'failed', 'denied'].includes(status) && hasSubmittedLoanDetails(request);
         };
         const hasModernLoanApproval = (user = currentUserData || {}) => {
             user = user || {};
@@ -9527,7 +9527,9 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
 
             let requests = [...allLoanRequestsCache].filter(r => getLoanRequestStatus(r) === filter && isModernLoanRequest(r));
             requests = requests.filter(r => !search || [r.name, r.fatherName, r.mobile, r.alternateMobile, r.dob, r.aadhaar].some(v => (v || '').toString().toLowerCase().includes(search)));
-            listEl.innerHTML = requests.length ? requests.map(r => `
+            listEl.innerHTML = requests.length ? requests.map(r => {
+                const status = getLoanRequestStatus(r);
+                return `
                 <div class="p-4 mb-3 bg-gray-50 dark:bg-gray-700/50 rounded-xl text-sm">
                     <div class="flex flex-col sm:flex-row justify-between gap-3">
                         <div class="space-y-1">
@@ -9542,14 +9544,21 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                                 ${r.documents?.selfie?.url ? `<button type="button" data-action="preview-loan-doc" data-requestid="${r.id}" data-doctype="selfie" class="rounded bg-emerald-100 px-2 py-1 text-[10px] font-black text-emerald-700">View Selfie</button>` : '<span class="rounded bg-gray-100 px-2 py-1 text-[10px] font-black text-gray-500">No selfie file</span>'}
                             </div>
                             ${r.maxLoanAmount ? `<p class="text-xs font-semibold text-indigo-600 dark:text-indigo-300">Approved Max: ${formatCurrency(r.maxLoanAmount)}</p>` : ''}
+                            ${status === 'rejected' && r.rejectionReason ? `<p class="text-xs font-semibold text-red-600 dark:text-red-300">Reason: ${escapeHtml(r.rejectionReason)}</p>` : ''}
                         </div>
-                        ${r.status === 'pending' ? `
+                        ${status === 'pending' ? `
                             <div class="flex sm:flex-col gap-2">
                                 <button data-action="approve-loan-request" data-requestid="${r.id}" data-userid="${r.userId}" class="px-3 py-1 text-xs bg-green-600 text-white rounded font-semibold">Approve</button>
                                 <button data-action="reject-loan-request" data-requestid="${r.id}" data-userid="${r.userId}" class="px-3 py-1 text-xs bg-red-600 text-white rounded font-semibold">Reject</button>
                             </div>` : ''}
+                        ${status === 'rejected' ? `
+                            <div class="flex flex-wrap sm:flex-col gap-2">
+                                <button data-action="approve-loan-request" data-requestid="${r.id}" data-userid="${r.userId}" class="px-3 py-1 text-xs bg-green-600 text-white rounded font-semibold" title="Approve rejected request">&#10003; Approve</button>
+                                <button data-action="give-loan-chance" data-requestid="${r.id}" data-userid="${r.userId}" class="px-3 py-1 text-xs bg-indigo-600 text-white rounded font-semibold">Give Chance</button>
+                            </div>` : ''}
                     </div>
-                </div>`).join('') : '<p class="text-center text-gray-500 py-6">No loan requests found.</p>';
+                </div>`;
+            }).join('') : '<p class="text-center text-gray-500 py-6">No loan requests found.</p>';
         };
 
         const showAdminLoanUserDetailsPage = (userId) => {
@@ -11506,13 +11515,36 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             }
         };
 
+        const showLoanActionConfirmModal = ({ title, message, confirmLabel = 'OK', confirmClass = 'bg-indigo-600', onConfirm }) => {
+            renderModal(title,
+                `<div class="space-y-3 text-sm">
+                    <div class="rounded-2xl bg-amber-50 dark:bg-amber-900/20 border border-amber-100 dark:border-amber-800 p-4 text-amber-800 dark:text-amber-200">
+                        <p class="font-black">Please confirm before continuing.</p>
+                        <p class="mt-1">${message}</p>
+                    </div>
+                    <p class="text-xs text-gray-500 dark:text-gray-400">Click OK only if this action is correct.</p>
+                </div>`,
+                `<button onclick="window.closeModal()" class="px-4 py-2 text-sm bg-gray-200 dark:bg-gray-600 rounded-lg">Cancel</button>
+                 <button id="confirm-loan-action-btn" class="px-4 py-2 text-sm ${confirmClass} text-white rounded-lg">${confirmLabel}</button>`,
+                'max-w-md');
+            document.getElementById('confirm-loan-action-btn').onclick = async () => {
+                const btn = document.getElementById('confirm-loan-action-btn');
+                btn.disabled = true;
+                btn.textContent = 'Working...';
+                window.closeModal();
+                await onConfirm?.();
+            };
+        };
+
         const showApproveLoanRequestModal = (userId, requestId) => {
             const request = allLoanRequestsCache.find(item => item.id === requestId) || {};
+            const requestStatus = getLoanRequestStatus(request);
             renderModal('Approve Loan Request',
                 `<div class="space-y-4">
                     <div class="rounded-xl bg-indigo-50 dark:bg-indigo-900/20 border border-indigo-100 dark:border-indigo-800 p-3 text-sm">
                         <p class="font-bold text-gray-900 dark:text-white">${escapeHtml(request.name || 'User')}</p>
                         <p class="text-xs text-gray-500 dark:text-gray-400">${escapeHtml(request.mobile || request.userEmail || '')}</p>
+                        ${requestStatus === 'rejected' ? '<p class="mt-2 inline-flex rounded-full bg-red-100 px-2 py-1 text-[10px] font-black uppercase text-red-600">Rejected request</p>' : ''}
                     </div>
                     <div>
                         <label class="text-sm font-medium text-gray-500 dark:text-gray-400">Maximum loan amount for this user</label>
@@ -11529,30 +11561,81 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                     return showNotification('Please enter a valid maximum loan amount.', true);
                 }
                 window.closeModal();
-                handleLoanRequestAction(userId, requestId, 'approved', maxLoanAmount);
+                showLoanActionConfirmModal({
+                    title: 'Confirm Loan Approval',
+                    message: `Approve ${escapeHtml(request.name || 'this user')} and set loan limit to ${formatCurrency(maxLoanAmount)}?`,
+                    confirmLabel: 'OK, Approve',
+                    confirmClass: 'bg-green-600',
+                    onConfirm: () => handleLoanRequestAction(userId, requestId, 'approved', maxLoanAmount)
+                });
             };
         };
 
-        const handleLoanRequestAction = async (userId, requestId, newStatus, maxLoanAmount = 0) => {
+        const showRejectLoanRequestConfirmModal = (userId, requestId) => {
+            const request = allLoanRequestsCache.find(item => item.id === requestId) || {};
+            renderModal('Reject Loan Request',
+                `<div class="space-y-4 text-sm">
+                    <div class="rounded-xl bg-red-50 dark:bg-red-900/20 border border-red-100 dark:border-red-800 p-3">
+                        <p class="font-black text-gray-900 dark:text-white">${escapeHtml(request.name || 'User')}</p>
+                        <p class="text-xs text-gray-500 dark:text-gray-400">${escapeHtml(request.mobile || request.userEmail || '')}</p>
+                        <p class="mt-2 font-semibold text-red-600 dark:text-red-300">Are you sure you want to reject this loan request?</p>
+                    </div>
+                    <textarea id="loan-rejection-reason-input" placeholder="Reason shown to user (optional)" class="w-full px-4 py-3 bg-gray-100 dark:bg-gray-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500" rows="3"></textarea>
+                </div>`,
+                `<button onclick="window.closeModal()" class="px-4 py-2 text-sm bg-gray-200 dark:bg-gray-600 rounded-lg">Cancel</button>
+                 <button id="confirm-reject-loan-btn" class="px-4 py-2 text-sm bg-red-600 text-white rounded-lg">OK, Reject</button>`,
+                'max-w-md');
+            document.getElementById('confirm-reject-loan-btn').onclick = () => {
+                const reason = document.getElementById('loan-rejection-reason-input')?.value.trim() || 'Loan request cancelled by admin.';
+                window.closeModal();
+                handleLoanRequestAction(userId, requestId, 'rejected', 0, reason);
+            };
+        };
+
+        const showGiveLoanChanceConfirmModal = (userId, requestId) => {
+            const request = allLoanRequestsCache.find(item => item.id === requestId) || {};
+            showLoanActionConfirmModal({
+                title: 'Give Loan Chance',
+                message: `Move ${escapeHtml(request.name || 'this user')} rejected loan request back to pending so it can be checked again?`,
+                confirmLabel: 'OK, Give Chance',
+                confirmClass: 'bg-indigo-600',
+                onConfirm: () => handleLoanGiveChanceAction(userId, requestId)
+            });
+        };
+
+        const handleLoanRequestAction = async (userId, requestId, newStatus, maxLoanAmount = 0, rejectionReason = 'Loan request cancelled by admin.') => {
             try {
                 if (newStatus === 'approved' && (!Number.isFinite(Number(maxLoanAmount)) || Number(maxLoanAmount) < 1)) {
                     return showApproveLoanRequestModal(userId, requestId);
                 }
                 const rejectedAt = newStatus === 'approved' ? null : new Date();
                 const reapplyAfter = rejectedAt ? addMonthsClamped(rejectedAt, LOAN_REAPPLY_WAIT_MONTHS) : null;
+                const cleanRejectionReason = String(rejectionReason || 'Loan request cancelled by admin.').trim();
                 const requestRef = doc(db, `artifacts/${appId}/public/data/loan_requests`, requestId);
                 const userRef = doc(db, `artifacts/${appId}/public/data/users`, userId);
                 await runTransaction(db, async (tx) => {
                     const requestDoc = await tx.get(requestRef);
-                    if (!requestDoc.exists() || requestDoc.data().status !== 'pending') throw new Error('Loan request not found or already processed.');
+                    if (!requestDoc.exists()) throw new Error('Loan request not found.');
+                    const requestData = requestDoc.data();
+                    const currentStatus = getLoanRequestStatus(requestData);
+                    const rejectedStatuses = ['rejected', 'cancelled', 'canceled', 'failed', 'denied'];
+                    if (newStatus === 'approved' && !['pending', ...rejectedStatuses].includes(currentStatus)) {
+                        throw new Error('Loan request is already processed.');
+                    }
+                    if (newStatus !== 'approved' && currentStatus !== 'pending') {
+                        throw new Error('Only pending loan requests can be rejected.');
+                    }
                     tx.update(requestRef, {
                         status: newStatus,
                         processedAt: serverTimestamp(),
                         processedBy: currentUser.uid,
-                        ...(reapplyAfter ? {
+                        ...(newStatus === 'approved' ? {
+                            reapplyAfter: deleteField(),
+                            rejectionReason: deleteField()
+                        } : {
                             reapplyAfter: Timestamp.fromDate(reapplyAfter),
-                            rejectionReason: 'Loan request cancelled by admin.'
-                        } : {})
+                            rejectionReason: cleanRejectionReason
+                        })
                     });
                     if (newStatus === 'approved') {
                         tx.update(userRef, {
@@ -11564,7 +11647,9 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                             loanApprovedAt: serverTimestamp(),
                             loanApprovedBy: currentUser.uid,
                             loanReapplyAfter: deleteField(),
-                            loanRejectionReason: deleteField()
+                            loanRejectionReason: deleteField(),
+                            loanProcessedAt: deleteField(),
+                            loanProcessedBy: deleteField()
                         });
                         tx.update(requestRef, {
                             maxLoanAmount: Number(maxLoanAmount),
@@ -11581,7 +11666,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                             loanProcessedAt: serverTimestamp(),
                             loanProcessedBy: currentUser.uid,
                             loanReapplyAfter: Timestamp.fromDate(reapplyAfter),
-                            loanRejectionReason: 'Loan request cancelled by admin.'
+                            loanRejectionReason: cleanRejectionReason
                         });
                     }
                 });
@@ -11589,6 +11674,49 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                 refreshAdminDashboardCaches().catch(error => console.error('Admin cache refresh failed:', error));
             } catch (e) {
                 console.error('Loan action failed:', e);
+                showNotification(`Error: ${e.message}`, true);
+            }
+        };
+
+        const handleLoanGiveChanceAction = async (userId, requestId) => {
+            try {
+                const requestRef = doc(db, `artifacts/${appId}/public/data/loan_requests`, requestId);
+                const userRef = doc(db, `artifacts/${appId}/public/data/users`, userId);
+                await runTransaction(db, async (tx) => {
+                    const requestDoc = await tx.get(requestRef);
+                    if (!requestDoc.exists()) throw new Error('Loan request not found.');
+                    const currentStatus = getLoanRequestStatus(requestDoc.data());
+                    if (!['rejected', 'cancelled', 'canceled', 'failed', 'denied'].includes(currentStatus)) {
+                        throw new Error('Only rejected loan requests can be given another chance.');
+                    }
+                    tx.update(requestRef, {
+                        status: 'pending',
+                        reopenedAt: serverTimestamp(),
+                        reopenedBy: currentUser.uid,
+                        processedAt: deleteField(),
+                        processedBy: deleteField(),
+                        reapplyAfter: deleteField(),
+                        rejectionReason: deleteField()
+                    });
+                    tx.update(userRef, {
+                        loanEligible: false,
+                        maxLoanAmount: 0,
+                        loanMaxAmount: 0,
+                        loanRequestStatus: 'pending',
+                        latestLoanRequestVersion: LOAN_APPLICATION_VERSION,
+                        loanApplicationVersion: LOAN_APPLICATION_VERSION,
+                        loanProcessedAt: deleteField(),
+                        loanProcessedBy: deleteField(),
+                        loanReapplyAfter: deleteField(),
+                        loanRejectionReason: deleteField()
+                    });
+                });
+                showNotification('Loan request moved back to pending.');
+                window.currentLoanFilter = 'pending';
+                refreshAdminDashboardCaches().catch(error => console.error('Admin cache refresh failed:', error));
+                renderAdminLoanPage();
+            } catch (e) {
+                console.error('Give loan chance failed:', e);
                 showNotification(`Error: ${e.message}`, true);
             }
         };
@@ -12797,7 +12925,11 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                     break;
 
                 case 'reject-loan-request':
-                    handleLoanRequestAction(userid, requestid, 'rejected');
+                    showRejectLoanRequestConfirmModal(userid, requestid);
+                    break;
+
+                case 'give-loan-chance':
+                    showGiveLoanChanceConfirmModal(userid, requestid);
                     break;
 
                 case 'copy-upi':
