@@ -448,38 +448,38 @@ root.outerHTML = String.raw`
                 <div id="bottom-nav-grid" class="mx-auto grid max-w-xl grid-cols-5 items-center px-2 pt-2 text-[10px] sm:text-xs font-semibold text-gray-500 dark:text-gray-400">
                     <button id="bottom-transactions-btn" class="bottom-nav-btn flex flex-col items-center gap-1 py-1">
                         <span class="bottom-nav-icon flex h-9 w-9 items-center justify-center rounded-xl bg-gray-100 dark:bg-gray-700 transition">
-                            <svg class="bottom-nav-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 3v3M17 3v3M4.5 9h15M6 5h12a2 2 0 0 1 2 2v11.5a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2Z"></path><path d="M8 13h3M8 17h6"></path></svg>
+                            <img src="https://cdn-icons-png.flaticon.com/512/3652/3652191.png" alt="History" class="bottom-nav-img" loading="eager" fetchpriority="high" decoding="async">
                         </span>
                         <span>History</span>
                     </button>
                     <button id="bottom-home-btn" class="bottom-nav-btn active flex flex-col items-center gap-1 py-1">
                         <span class="bottom-nav-icon flex h-10 w-10 items-center justify-center rounded-xl bg-gray-100 dark:bg-gray-700 transition">
-                            <svg class="bottom-nav-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 10.5 12 4l8 6.5"></path><path d="M6.5 9.5V20h5v-5h3v5h5V9.5"></path></svg>
+                            <img src="https://cdn-icons-png.flaticon.com/512/1946/1946436.png" alt="Home" class="bottom-nav-img" loading="eager" fetchpriority="high" decoding="async">
                         </span>
                         <span id="bottom-home-label">Home</span>
                     </button>
                     <button id="bottom-admin-btn" class="bottom-nav-btn hidden flex flex-col items-center gap-1 py-1">
                         <span class="bottom-nav-icon flex h-9 w-9 items-center justify-center rounded-xl bg-gray-100 dark:bg-gray-700 transition">
-                            <svg class="bottom-nav-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3.5 19 6v5.5c0 4.1-2.8 7.4-7 8.8-4.2-1.4-7-4.7-7-8.8V6l7-2.5Z"></path><path d="M9.4 12.2 11.3 14l3.3-4"></path></svg>
+                            <img src="https://cdn-icons-png.flaticon.com/512/3135/3135715.png" alt="Admin" class="bottom-nav-img" loading="eager" fetchpriority="high" decoding="async">
                         </span>
                         <span>Admin</span>
                     </button>
                     <button id="bottom-task-btn" class="bottom-nav-btn flex flex-col items-center gap-1 py-1">
                         <span class="bottom-nav-icon flex h-9 w-9 items-center justify-center rounded-xl bg-gray-100 dark:bg-gray-700 transition">
-                            <svg class="bottom-nav-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M8.5 5.5h7M9 3.5h6a1 1 0 0 1 1 1v1.8a1 1 0 0 1-1 1H9a1 1 0 0 1-1-1V4.5a1 1 0 0 1 1-1Z"></path><path d="M7 6H5.8A1.8 1.8 0 0 0 4 7.8v14.4h16V7.8A1.8 1.8 0 0 0 18.2 6H17"></path><path d="m8 14 2 2 4-5M15 15h2"></path></svg>
+                            <img src="https://cdn-icons-png.flaticon.com/512/3176/3176366.png" alt="Task" class="bottom-nav-img" loading="eager" fetchpriority="high" decoding="async">
                         </span>
                         <span>Task</span>
                     </button>
                     <button id="bottom-help-btn" class="bottom-nav-btn flex flex-col items-center gap-1 py-1">
                         <span class="bottom-nav-icon relative flex h-9 w-9 items-center justify-center rounded-xl bg-gray-100 dark:bg-gray-700 transition">
-                            <svg class="bottom-nav-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M4.5 6.8A3.3 3.3 0 0 1 7.8 3.5h8.4a3.3 3.3 0 0 1 3.3 3.3v5.7a3.3 3.3 0 0 1-3.3 3.3H11l-4.4 3.7v-3.7H7.8a3.3 3.3 0 0 1-3.3-3.3V6.8Z"></path><path d="M9 9.2h6M9 12.4h4"></path></svg>
+                            <img src="https://cdn-icons-png.flaticon.com/512/5962/5962463.png" alt="Help" class="bottom-nav-img" loading="eager" fetchpriority="high" decoding="async">
                             <span id="bottom-help-unread-badge" class="hidden absolute -right-1 -top-1 min-w-5 h-5 rounded-full bg-red-600 px-1 text-[10px] font-black leading-5 text-white shadow"></span>
                         </span>
                         <span>Help</span>
                     </button>
                     <button id="bottom-settings-btn" class="bottom-nav-btn flex flex-col items-center gap-1 py-1">
                         <span class="bottom-nav-icon flex h-9 w-9 items-center justify-center rounded-xl bg-gray-100 dark:bg-gray-700 transition">
-                            <svg class="bottom-nav-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 8.2a3.8 3.8 0 1 0 0 7.6 3.8 3.8 0 0 0 0-7.6Z"></path><path d="m19.4 13.3.1-1.3-.1-1.3 2-1.5-2-3.4-2.4 1a8 8 0 0 0-2.2-1.3L14.5 3h-4l-.4 2.5A8 8 0 0 0 8 6.8l-2.4-1-2 3.4 2 1.5-.1 1.3.1 1.3-2 1.5 2 3.4 2.4-1a8 8 0 0 0 2.2 1.3l.4 2.5h4l.4-2.5a8 8 0 0 0 2.2-1.3l2.4 1 2-3.4-2.2-1.5Z"></path></svg>
+                            <img src="https://cdn-icons-png.flaticon.com/512/3524/3524659.png" alt="Settings" class="bottom-nav-img" loading="eager" fetchpriority="high" decoding="async">
                         </span>
                         <span>Settings</span>
                     </button>

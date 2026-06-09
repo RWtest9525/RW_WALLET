@@ -923,10 +923,10 @@ html,
         }
 
         .bottom-nav-btn.active .bottom-nav-icon {
-            background: #2563eb !important;
+            background: #eaf2ff !important;
             border-color: #2563eb;
-            color: #ffffff;
-            box-shadow: 0 8px 18px rgba(37, 99, 235, 0.22);
+            color: #2563eb;
+            box-shadow: 0 8px 18px rgba(37, 99, 235, 0.16);
             transform: none !important;
             animation: none !important;
         }
@@ -957,19 +957,21 @@ html,
         }
 
         .bottom-nav-img {
-            width: 1.38rem !important;
-            height: 1.38rem !important;
+            width: 1.45rem !important;
+            height: 1.45rem !important;
             padding: 0 !important;
             border-radius: 0 !important;
             background: transparent !important;
             box-shadow: none !important;
             filter: none;
             transition: none;
+            object-fit: contain;
+            flex-shrink: 0;
         }
 
         .bottom-nav-btn.active .bottom-nav-img {
             transform: none;
-            filter: brightness(0) invert(1);
+            filter: drop-shadow(0 3px 5px rgba(37, 99, 235, 0.16));
         }
 
         .bottom-nav-btn>span:last-child {
@@ -1002,12 +1004,15 @@ html,
         }
 
         .dark #bottom-nav .bottom-nav-img {
-            width: 1.38rem !important;
-            height: 1.38rem !important;
+            width: 1.45rem !important;
+            height: 1.45rem !important;
             padding: 0 !important;
             border-radius: 0 !important;
             background: transparent !important;
             box-shadow: none !important;
+            filter: none;
+            object-fit: contain;
+            flex-shrink: 0;
         }
 
         .dark .bottom-nav-btn.active {
@@ -1015,9 +1020,9 @@ html,
         }
 
         .dark .bottom-nav-btn.active .bottom-nav-icon {
-            background: #2563eb !important;
+            background: rgba(59, 130, 246, 0.22) !important;
             border-color: #60a5fa !important;
-            color: #ffffff !important;
+            color: #bfdbfe !important;
         }
 
         .dark .bottom-nav-btn.active>span:last-child {
