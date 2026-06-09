@@ -1675,13 +1675,13 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             const backButton = pageContainer.querySelector('.page-back-btn');
             if (backButton) {
                 backButton.onclick = options.onBack || (() => {
-                    if (returnSection === 'settings' && !options.keepBottomNav) {
+                    if (returnSection === 'settings') {
                         showSettingsPage();
-                    } else if (returnSection === 'transactions' && !options.keepBottomNav) {
+                    } else if (returnSection === 'transactions') {
                         showAllTransactionsPage();
-                    } else if (returnSection === 'help' && !options.keepBottomNav) {
+                    } else if (returnSection === 'help') {
                         showHelpSupportPage();
-                    } else if (returnSection === 'admin' && !options.keepBottomNav) {
+                    } else if (returnSection === 'admin') {
                         showAdminMainPage();
                     } else {
                         hidePage();
@@ -3588,6 +3588,8 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
 
         const showMaintenanceSettingsPage = () => {
             if (!currentUser || currentUser.uid !== ADMIN_UID) return showNotification('Admin access only.', true);
+            const parentSection = currentMainSection === 'admin' ? 'admin' : 'settings';
+            const handleBack = parentSection === 'admin' ? showAdminMainPage : showSettingsPage;
             const active = isMaintenanceConfigActive(appConfigCache);
             const endMillis = getMaintenanceEndMillis(appConfigCache);
             const remainingSeconds = active && endMillis ? Math.max(60, Math.ceil((endMillis - Date.now()) / 1000)) : 30 * 60;
@@ -3637,7 +3639,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                         <button id="maintenance-save-btn" class="rounded-2xl bg-blue-600 px-4 py-4 font-extrabold text-white shadow-lg shadow-blue-200 dark:shadow-none">${active ? 'Update Timer' : 'Start Maintenance'}</button>
                     </div>
                 </div>
-                ${getPageFooter()}`, { returnTo: 'settings', keepBottomNav: true, onBack: showSettingsPage });
+                ${getPageFooter()}`, { returnTo: parentSection, keepBottomNav: true, onBack: handleBack });
 
             const durationInput = document.getElementById('maintenance-duration-input');
             durationInput?.addEventListener('blur', () => {
@@ -3729,6 +3731,8 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
 
         const showWhatsNewSettingsPage = () => {
             if (!currentUser || currentUser.uid !== ADMIN_UID) return showNotification('Admin access only.', true);
+            const parentSection = currentMainSection === 'admin' ? 'admin' : 'settings';
+            const handleBack = parentSection === 'admin' ? showAdminMainPage : showSettingsPage;
             const enabled = appConfigCache.whatsNewEnabled !== false && appConfigCache.whats_new_enabled !== false;
             const title = appConfigCache.whatsNewTitle || appConfigCache.whats_new_title || "What's New";
             const message = appConfigCache.whatsNewMessage || appConfigCache.whats_new_message || '';
@@ -3763,7 +3767,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                         <button id="whats-new-save-btn" class="rounded-2xl bg-indigo-600 px-4 py-4 font-black text-white shadow-lg shadow-indigo-200 dark:shadow-none">Save & Show</button>
                     </div>
                 </div>
-                ${getPageFooter()}`, { returnTo: 'settings', keepBottomNav: true, onBack: showSettingsPage });
+                ${getPageFooter()}`, { returnTo: parentSection, keepBottomNav: true, onBack: handleBack });
 
             document.getElementById('whats-new-save-btn')?.addEventListener('click', handleSaveWhatsNewSettings);
             document.getElementById('whats-new-disable-btn')?.addEventListener('click', handleDisableWhatsNew);
@@ -8812,7 +8816,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                     </div>
                 </div>
                 ${getPageFooter()}`;
-            showPage(content, { returnTo: 'admin' });
+            showPage(content, { returnTo: 'admin', onBack: showAdminUsersPage });
             window.adminUserTxFilter = 'all';
             document.getElementById('admin-user-tx-filters').addEventListener('click', (event) => {
                 const btn = event.target.closest('[data-admin-user-tx-filter]');
@@ -9463,7 +9467,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                         ${loanRows}
                     </div>
                 </div>
-                ${getPageFooter()}`);
+                ${getPageFooter()}`, { returnTo: 'admin', onBack: showAdminLoanPage });
             setBottomNavActive('bottom-admin-btn');
         };
 
@@ -9682,7 +9686,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                     </div>
                     <div class="space-y-3">${cards}</div>
                 </div>
-                ${getPageFooter()}`);
+                ${getPageFooter()}`, { returnTo: 'admin', onBack: showAdminInvestmentsPage });
             setBottomNavActive('bottom-admin-btn');
         };
 
