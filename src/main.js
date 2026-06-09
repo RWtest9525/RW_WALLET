@@ -143,6 +143,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
         let notificationTimeout;
         let appConfigCache = {};
         let maintenanceCountdownTimer = null;
+        let maintenanceGateActive = false;
         let whatsNewPopupVisible = false;
 
         const unsubscribers = [];
@@ -270,6 +271,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
         const getHistoryCacheKey = (userId) => `rw_wallet_history_cache_${userId}`;
         const getHistoryDataCacheKey = (userId) => `rw_wallet_history_data_cache_${userId}`;
         const ADMIN_USERS_CACHE_KEY = 'rw_admin_users_cache_v2';
+        const APP_CONFIG_CACHE_KEY = 'rw_wallet_app_config_cache_v2';
 
         const readJsonCache = (key) => {
             try {
@@ -293,8 +295,51 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             if (typeof timestamp.toMillis === 'function') return timestamp.toMillis();
             if (typeof timestamp.toDate === 'function') return timestamp.toDate().getTime();
             if (typeof timestamp === 'number') return timestamp;
+            if (typeof timestamp === 'object' && Number.isFinite(Number(timestamp.seconds))) {
+                return (Number(timestamp.seconds) * 1000) + Math.floor(Number(timestamp.nanoseconds || 0) / 1000000);
+            }
             const parsed = new Date(timestamp).getTime();
             return Number.isNaN(parsed) ? 0 : parsed;
+        };
+
+        const normalizeAppConfigForCache = (config = {}) => {
+            const normalized = { ...(config || {}) };
+            const maintenanceEndMillis = timestampToMillis(
+                normalized.maintenanceEndsAt || normalized.maintenance_ends_at || normalized.maintenanceEndAt || normalized.maintenanceEndsAtMillis || 0
+            );
+            const whatsNewUpdatedMillis = timestampToMillis(
+                normalized.whatsNewUpdatedAt || normalized.whats_new_updated_at || normalized.whatsNewUpdatedAtMillis || 0
+            );
+            if (maintenanceEndMillis) normalized.maintenanceEndsAtMillis = maintenanceEndMillis;
+            if (whatsNewUpdatedMillis) normalized.whatsNewUpdatedAtMillis = whatsNewUpdatedMillis;
+            normalized.cachedAt = Date.now();
+            return normalized;
+        };
+
+        const rememberAppConfig = (config = {}) => {
+            const normalized = normalizeAppConfigForCache(config);
+            writeJsonCache(APP_CONFIG_CACHE_KEY, normalized);
+            return normalized;
+        };
+
+        const applyCachedAppConfigForStartup = () => {
+            const cached = readJsonCache(APP_CONFIG_CACHE_KEY);
+            if (!cached || typeof cached !== 'object') return false;
+            appConfigCache = { ...(appConfigCache || {}), ...cached };
+            return true;
+        };
+
+        const loadAppConfigForStartup = async () => {
+            applyCachedAppConfigForStartup();
+            try {
+                const snapshot = await getDoc(doc(db, `artifacts/${appId}/settings`, 'app_config'));
+                if (snapshot.exists()) {
+                    appConfigCache = rememberAppConfig(snapshot.data());
+                }
+            } catch (error) {
+                console.warn('Initial app config load skipped:', error);
+            }
+            return appConfigCache;
         };
 
         const reviveCachedTimestamp = (value) => {
@@ -2240,10 +2285,13 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                 localStorage.setItem('lastLoggedInUser', user.uid);
                 if (user.uid !== ADMIN_UID && localSignupApprovalInProgress) return;
 
-                // Hide loading overlay if shown
+                const isAdmin = user.uid === ADMIN_UID;
+                await loadAppConfigForStartup();
+                const maintenanceActiveForUser = !isAdmin && isMaintenanceConfigActive(appConfigCache);
+
+                // Hide loading overlay only after maintenance status is known.
                 hideLoading();
 
-                const isAdmin = user.uid === ADMIN_UID;
                 applyAdminBottomChrome(isAdmin);
                 applyMaintenanceMode();
                 showWhatsNewPopupIfNeeded();
@@ -2274,7 +2322,11 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                 preloadNotificationsForUser(user.uid).catch(e => console.warn('Initial notification preload skipped:', e));
                 startNotificationAutoRefresh(user.uid);
                 applyAdminBottomChrome(isAdmin);
-                if (!shouldPreserveOpenPage) {
+                if (maintenanceActiveForUser) {
+                    maintenanceGateActive = true;
+                    currentMainSection = 'home';
+                    setMainChrome(false);
+                } else if (!shouldPreserveOpenPage) {
                     currentMainSection = 'home';
                     switchTab('user-panel');
                     setBottomNavActive('bottom-home-btn');
@@ -2284,7 +2336,14 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                 // Show main content after admin/user chrome is already ready.
                 document.getElementById('auth-screen').classList.add('hidden');
                 document.getElementById('main-content').classList.remove('hidden');
-                if (shouldPreserveOpenPage) {
+                if (maintenanceActiveForUser) {
+                    document.getElementById('dashboard-content').classList.add('hidden');
+                    const pageContainer = document.getElementById('page-container');
+                    pageContainer.classList.add('hidden');
+                    pageContainer.innerHTML = '';
+                    pageContainer.style.overflowY = 'auto';
+                    applyMaintenanceMode();
+                } else if (shouldPreserveOpenPage) {
                     document.getElementById('dashboard-content').classList.add('hidden');
                     document.getElementById('page-container').classList.remove('hidden');
                 } else {
@@ -3388,7 +3447,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
         };
 
         const getMaintenanceEndMillis = (config = appConfigCache) =>
-            timestampToMillis(config.maintenanceEndsAt || config.maintenance_ends_at || config.maintenanceEndAt || 0);
+            timestampToMillis(config.maintenanceEndsAtMillis || config.maintenance_ends_at_millis || config.maintenanceEndsAt || config.maintenance_ends_at || config.maintenanceEndAt || 0);
 
         const isMaintenanceConfigActive = (config = appConfigCache) => {
             const enabled = !!(config.maintenanceEnabled || config.maintenance_enabled);
@@ -3518,14 +3577,36 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             }
         };
 
+        const restoreDashboardAfterMaintenanceIfNeeded = () => {
+            if (!maintenanceGateActive || !currentUser || currentUser.uid === ADMIN_UID || isMaintenanceConfigActive(appConfigCache)) return;
+            maintenanceGateActive = false;
+            if (currentUserData && (currentUserData.isFlagged || isUserApprovalPending(currentUserData) || isUserApprovalRejected(currentUserData))) return;
+            const dashboard = document.getElementById('dashboard-content');
+            const pageContainer = document.getElementById('page-container');
+            currentMainSection = 'home';
+            switchTab('user-panel');
+            setBottomNavActive('bottom-home-btn');
+            setMainChrome(true);
+            document.getElementById('auth-screen')?.classList.add('hidden');
+            document.getElementById('main-content')?.classList.remove('hidden');
+            dashboard?.classList.remove('hidden');
+            if (pageContainer) {
+                pageContainer.classList.add('hidden');
+                pageContainer.innerHTML = '';
+                pageContainer.style.overflowY = 'auto';
+            }
+            document.getElementById('app-footer')?.classList.add('app-footer-hidden');
+        };
+
         const applyMaintenanceMode = () => {
             renderMaintenanceOverlay();
+            restoreDashboardAfterMaintenanceIfNeeded();
         };
 
         const getWhatsNewId = (config = appConfigCache) => {
             const explicit = String(config.whatsNewId || config.whats_new_id || '').trim();
             if (explicit) return explicit;
-            const updatedMillis = timestampToMillis(config.whatsNewUpdatedAt || config.whats_new_updated_at || 0);
+            const updatedMillis = timestampToMillis(config.whatsNewUpdatedAtMillis || config.whats_new_updated_at_millis || config.whatsNewUpdatedAt || config.whats_new_updated_at || 0);
             if (updatedMillis) return String(updatedMillis);
             const message = String(config.whatsNewMessage || config.whats_new_message || '').trim();
             return message ? `msg-${message.length}-${message.slice(0, 32)}` : '';
@@ -3684,9 +3765,11 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                     ...appConfigCache,
                     maintenanceEnabled: true,
                     maintenanceEndsAt: Timestamp.fromDate(endDate),
+                    maintenanceEndsAtMillis: endDate.getTime(),
                     maintenanceDurationSeconds: durationSeconds,
                     maintenanceMessage: message
                 };
+                rememberAppConfig(appConfigCache);
                 applyMaintenanceMode();
                 showMaintenanceSettingsPage();
             } catch (error) {
@@ -3714,7 +3797,8 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                     maintenanceUpdatedAt: serverTimestamp(),
                     maintenanceUpdatedBy: currentUser.uid
                 }, { merge: true });
-                appConfigCache = { ...appConfigCache, maintenanceEnabled: false, maintenanceEndsAt: null };
+                appConfigCache = { ...appConfigCache, maintenanceEnabled: false, maintenanceEndsAt: null, maintenanceEndsAtMillis: 0 };
+                rememberAppConfig(appConfigCache);
                 applyMaintenanceMode();
                 showNotification('Maintenance mode turned off.');
                 showMaintenanceSettingsPage();
@@ -12942,7 +13026,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
         };
 
         const applyAppConfig = (config = {}) => {
-            appConfigCache = { ...(appConfigCache || {}), ...(config || {}) };
+            appConfigCache = rememberAppConfig({ ...(appConfigCache || {}), ...(config || {}) });
             applyWithdrawalConfig(appConfigCache);
             applyMaintenanceMode();
             showWhatsNewPopupIfNeeded();
