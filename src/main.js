@@ -3871,7 +3871,6 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
 
         const showUserTaskPage = () => {
             if (!currentUser) return showNotification('Please login first.', true);
-            if (currentUser.uid === ADMIN_UID) return showAdminTaskPage();
             currentMainSection = 'task';
             const content = `
                 <header class="mb-4 flex items-center justify-between bg-white dark:bg-gray-800 px-4 py-3 shadow-sm page-header-fixed">
@@ -4161,7 +4160,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                 </div>
                 ${getPageFooter()}`;
             showPage(content, { returnTo: 'admin', keepBottomNav: true });
-            setBottomNavActive('bottom-task-btn');
+            setBottomNavActive('bottom-admin-btn');
             document.getElementById('admin-task-form')?.addEventListener('submit', handleSaveAdminTask);
             document.getElementById('admin-task-reset-btn')?.addEventListener('click', resetAdminTaskForm);
             document.getElementById('admin-task-search')?.addEventListener('input', renderAdminTaskList);
@@ -12721,13 +12720,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             showHomeMainPage();
         });
         document.getElementById('bottom-admin-btn').addEventListener('click', showAdminMainPage);
-        document.getElementById('bottom-task-btn').addEventListener('click', () => {
-            if (currentUser?.uid === ADMIN_UID) {
-                showAdminTaskPage();
-                return;
-            }
-            showUserTaskPage();
-        });
+        document.getElementById('bottom-task-btn').addEventListener('click', showUserTaskPage);
         document.getElementById('bottom-transactions-btn').addEventListener('click', () => {
             showAllTransactionsPage();
             setBottomNavActive('bottom-transactions-btn');
