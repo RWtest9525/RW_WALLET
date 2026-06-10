@@ -4045,120 +4045,77 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             currentMainSection = 'task';
             const taskCategories = [
                 {
-                    label: 'App Review Task',
-                    meta: 'Install, review, upload proof',
+                    label: 'App Review',
                     accent: 'task-accent-blue',
+                    logo: 'https://cdn-icons-png.flaticon.com/512/3176/3176366.png',
                     items: [
-                        { title: 'PopClub Review', reward: 'Rs 8', tag: 'Instant' },
-                        { title: 'Wallet App Rating', reward: 'Rs 10', tag: 'Review' },
-                        { title: 'Signup Proof', reward: 'Rs 12', tag: 'Proof' }
+                        { title: 'App Review', reward: 'Rs 8' },
+                        { title: 'App Review', reward: 'Rs 10' },
+                        { title: 'App Review', reward: 'Rs 12' }
                     ]
                 },
                 {
                     label: 'Map Review',
-                    meta: 'Place rating and local review',
                     accent: 'task-accent-emerald',
+                    logo: 'https://cdn-icons-png.flaticon.com/512/854/854878.png',
                     items: [
-                        { title: 'Business Rating', reward: 'Rs 15', tag: 'Maps' },
-                        { title: 'Photo Review', reward: 'Rs 20', tag: 'Local' },
-                        { title: 'Direction Check', reward: 'Rs 10', tag: 'Map' }
+                        { title: 'Map Review', reward: 'Rs 15' },
+                        { title: 'Map Review', reward: 'Rs 20' },
+                        { title: 'Map Review', reward: 'Rs 10' }
                     ]
                 },
                 {
                     label: 'Social Media Task',
-                    meta: 'Like, comment, follow, share',
                     accent: 'task-accent-rose',
+                    logo: 'https://cdn-icons-png.flaticon.com/512/4187/4187336.png',
                     items: [
-                        { title: 'Follow Page', reward: 'Rs 5', tag: 'Social' },
-                        { title: 'Video Comment', reward: 'Rs 8', tag: 'Media' },
-                        { title: 'Share Post', reward: 'Rs 7', tag: 'Share' }
+                        { title: 'Social Task', reward: 'Rs 5' },
+                        { title: 'Social Task', reward: 'Rs 8' },
+                        { title: 'Social Task', reward: 'Rs 7' }
                     ]
                 }
             ];
-            const renderTaskCard = (task, index) => `
+            const renderTaskCard = (category, task, index) => `
                 <article class="task-preview-card" style="--task-card-delay:${index * 90}ms" aria-disabled="true">
-                    <div class="relative z-10 flex h-full flex-col justify-between">
-                        <div>
-                            <div class="mb-3 flex items-center justify-between gap-2">
-                                <span class="task-preview-tag">${escapeHtml(task.tag)}</span>
-                                <span class="rounded-full bg-white/90 px-2 py-1 text-[10px] font-black text-slate-600 shadow-sm dark:bg-slate-950/70 dark:text-slate-200">Soon</span>
-                            </div>
-                            <h4 class="text-base font-black leading-tight text-slate-950 dark:text-white">${escapeHtml(task.title)}</h4>
-                            <p class="mt-2 text-xs font-bold leading-5 text-slate-500 dark:text-slate-300">New work opening soon.</p>
-                        </div>
-                        <div class="mt-4 flex items-end justify-between">
-                            <div>
-                                <p class="text-[10px] font-black uppercase text-slate-400">Reward</p>
-                                <p class="text-lg font-black text-slate-950 dark:text-white">${escapeHtml(task.reward)}</p>
-                            </div>
-                            <span class="rounded-2xl border border-slate-200 bg-white/80 px-3 py-2 text-[10px] font-black uppercase text-slate-500 shadow-sm dark:border-slate-700 dark:bg-slate-900/80 dark:text-slate-300">Coming Soon</span>
-                        </div>
+                    <div class="task-card-main">
+                        <span class="task-card-logo">
+                            <img src="${escapeHtml(category.logo)}" alt="${escapeHtml(category.label)}" loading="lazy" decoding="async">
+                        </span>
+                        <span class="task-rate-pill">${escapeHtml(task.reward)}</span>
+                        <h4>${escapeHtml(task.title)}</h4>
                     </div>
+                    <div class="task-card-coming">Coming Soon</div>
                 </article>`;
             const renderCategory = (category) => `
                 <section class="task-category-block ${category.accent}">
-                    <div class="mb-3 flex items-end justify-between gap-3 px-1">
-                        <div class="min-w-0">
-                            <h3 class="text-base font-black text-slate-950 dark:text-white">${escapeHtml(category.label)}</h3>
-                            <p class="mt-0.5 text-xs font-bold text-slate-500 dark:text-slate-300">${escapeHtml(category.meta)}</p>
-                        </div>
-                        <span class="shrink-0 rounded-full bg-slate-100 px-3 py-1 text-[10px] font-black uppercase text-slate-500 dark:bg-slate-800 dark:text-slate-300">Preview</span>
+                    <div class="task-category-title">
+                        <span class="task-category-mark"></span>
+                        <h3>${escapeHtml(category.label)}</h3>
                     </div>
                     <div class="task-preview-rail">
-                        ${category.items.map(renderTaskCard).join('')}
+                        ${category.items.map((task, index) => renderTaskCard(category, task, index)).join('')}
                     </div>
                 </section>`;
             const content = `
                 <header class="mb-4 bg-white/95 px-4 py-3 shadow-sm backdrop-blur page-header-fixed dark:bg-gray-900/95">
                     <div class="flex items-center justify-between gap-3">
                         <div class="min-w-0">
-                            <p class="text-[10px] font-black uppercase text-cyan-600 dark:text-cyan-300">RW Task Hub</p>
-                            <h2 class="text-xl font-black text-slate-950 dark:text-white">Task Mission</h2>
+                            <p class="text-lg font-black uppercase text-slate-950 dark:text-white">RW TASK</p>
                         </div>
-                        <span class="shrink-0 rounded-full border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-black text-slate-600 shadow-sm dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200">Coming Soon</span>
+                        <div class="task-header-actions">
+                            <button type="button" data-action="task-coming-soon" class="task-mini-action">
+                                <img src="https://cdn-icons-png.flaticon.com/512/2659/2659360.png" alt="Ads" loading="eager" decoding="async">
+                                <span>Ads</span>
+                            </button>
+                            <button type="button" data-action="task-coming-soon" class="task-mini-action">
+                                <img src="https://cdn-icons-png.flaticon.com/512/2611/2611152.png" alt="Bonus" loading="eager" decoding="async">
+                                <span>Bonus</span>
+                            </button>
+                        </div>
                     </div>
                 </header>
                 <div class="task-page-shell px-4 pt-1 pb-28">
-                    <div class="mx-auto max-w-4xl space-y-5">
-                        <section class="task-hero-panel">
-                            <div class="relative z-10">
-                                <p class="text-[10px] font-black uppercase text-white/70">Mission Board</p>
-                                <div class="mt-2 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-                                    <div>
-                                        <h3 class="text-3xl font-black leading-tight text-white">Earn with simple tasks</h3>
-                                        <p class="mt-2 max-w-xl text-sm font-semibold leading-6 text-white/75">Fresh earning missions will appear here soon.</p>
-                                    </div>
-                                    <div class="grid grid-cols-2 gap-2 sm:w-72">
-                                        <button type="button" data-action="task-coming-soon" class="task-hero-action">
-                                            <span class="text-lg">AD</span>
-                                            <span>Watch Ads & Earn</span>
-                                        </button>
-                                        <button type="button" data-action="task-coming-soon" class="task-hero-action">
-                                            <span class="text-lg">DB</span>
-                                            <span>Daily Bonus</span>
-                                        </button>
-                                    </div>
-                                </div>
-                            </div>
-                        </section>
-
-                        <section class="grid grid-cols-2 gap-3">
-                            <button type="button" data-action="task-coming-soon" class="task-quick-tile task-quick-tile-warm">
-                                <span class="task-quick-icon">AD</span>
-                                <span class="text-left">
-                                    <span class="block text-sm font-black">Watch Ads & Earn</span>
-                                    <span class="text-[11px] font-bold opacity-70">Coming soon</span>
-                                </span>
-                            </button>
-                            <button type="button" data-action="task-coming-soon" class="task-quick-tile task-quick-tile-cool">
-                                <span class="task-quick-icon">DB</span>
-                                <span class="text-left">
-                                    <span class="block text-sm font-black">Daily Bonus</span>
-                                    <span class="text-[11px] font-bold opacity-70">Coming soon</span>
-                                </span>
-                            </button>
-                        </section>
-
+                    <div class="mx-auto max-w-4xl space-y-4">
                         ${taskCategories.map(renderCategory).join('')}
                     </div>
                 </div>
