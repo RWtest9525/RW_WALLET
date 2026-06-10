@@ -6984,7 +6984,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             }
 
             const content = `
-                ${getPageHeader('All Transactions', { showBack: false })}
+                ${getPageHeader('Transaction History')}
                 <div class="max-w-2xl mx-auto bg-white dark:bg-gray-800 p-6 rounded-xl shadow-md">
                     
                     <div id="filter-bar" class="flex space-x-2 overflow-x-auto pb-2 mb-4">
