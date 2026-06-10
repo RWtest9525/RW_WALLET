@@ -455,7 +455,13 @@ root.outerHTML = String.raw`
             </div>
 
             <nav id="bottom-nav" class="fixed z-50">
-                <div id="bottom-nav-grid" class="mx-auto grid w-full max-w-xl grid-cols-4 items-center px-2 pt-2 text-[10px] sm:text-xs font-semibold text-gray-500 dark:text-gray-400" style="--bottom-nav-count: 4;">
+                <div id="bottom-nav-grid" class="mx-auto grid w-full max-w-xl grid-cols-5 items-center px-2 pt-2 text-[10px] sm:text-xs font-semibold text-gray-500 dark:text-gray-400" style="--bottom-nav-count: 5;">
+                    <button id="bottom-refer-btn" class="bottom-nav-btn flex flex-col items-center gap-1 py-1">
+                        <span class="bottom-nav-icon flex h-10 w-10 items-center justify-center rounded-xl bg-gray-100 dark:bg-gray-700 transition">
+                            <img src="https://cdn-icons-png.flaticon.com/512/929/929610.png" alt="Refer" class="bottom-nav-img" loading="eager" fetchpriority="high" decoding="async">
+                        </span>
+                        <span>Refer</span>
+                    </button>
                     <button id="bottom-home-btn" class="bottom-nav-btn active flex flex-col items-center gap-1 py-1">
                         <span class="bottom-nav-icon flex h-10 w-10 items-center justify-center rounded-xl bg-gray-100 dark:bg-gray-700 transition">
                             <img src="https://cdn-icons-png.flaticon.com/512/1946/1946436.png" alt="Home" class="bottom-nav-img" loading="eager" fetchpriority="high" decoding="async">

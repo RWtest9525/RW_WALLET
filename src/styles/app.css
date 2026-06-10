@@ -339,7 +339,7 @@ html,
 
         #bottom-nav-grid {
             width: 100%;
-            grid-template-columns: repeat(var(--bottom-nav-count, 4), minmax(0, 1fr)) !important;
+            grid-template-columns: repeat(var(--bottom-nav-count, 5), minmax(0, 1fr)) !important;
             height: 5.1rem;
             min-height: 5.1rem;
             position: relative;
@@ -1142,7 +1142,7 @@ html,
 
         #bottom-nav-grid {
             width: 100%;
-            grid-template-columns: repeat(var(--bottom-nav-count, 4), minmax(0, 1fr)) !important;
+            grid-template-columns: repeat(var(--bottom-nav-count, 5), minmax(0, 1fr)) !important;
             height: 4.7rem;
             min-height: 4.7rem;
             padding-bottom: 0.1rem;
@@ -1272,5 +1272,110 @@ html,
 
         .dark .bottom-nav-btn.active>span:last-child {
             color: #93c5fd;
+        }
+
+        .refer-page-shell {
+            min-height: calc(100dvh - 11.5rem);
+            display: flex;
+            align-items: center;
+        }
+
+        .refer-hero-card {
+            position: relative;
+            width: 100%;
+            overflow: hidden;
+            border-radius: 2rem;
+            padding: 2rem 1.25rem;
+            text-align: center;
+            background:
+                radial-gradient(circle at 18% 18%, rgba(255, 255, 255, 0.2), transparent 28%),
+                linear-gradient(145deg, #0f766e 0%, #2563eb 55%, #111827 100%);
+            box-shadow: 0 28px 70px rgba(15, 23, 42, 0.28);
+        }
+
+        .refer-glow {
+            position: absolute;
+            border-radius: 999px;
+            filter: blur(2px);
+            opacity: 0.7;
+            pointer-events: none;
+        }
+
+        .refer-glow-one {
+            width: 11rem;
+            height: 11rem;
+            right: -4rem;
+            top: -4rem;
+            background: rgba(16, 185, 129, 0.38);
+            animation: referFloat 6s ease-in-out infinite;
+        }
+
+        .refer-glow-two {
+            width: 8rem;
+            height: 8rem;
+            left: -3rem;
+            bottom: -3rem;
+            background: rgba(59, 130, 246, 0.36);
+            animation: referFloat 7s ease-in-out infinite reverse;
+        }
+
+        .refer-coin {
+            position: absolute;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border: 1px solid rgba(255, 255, 255, 0.26);
+            border-radius: 999px;
+            background: rgba(255, 255, 255, 0.13);
+            color: rgba(255, 255, 255, 0.86);
+            font-size: 0.72rem;
+            font-weight: 900;
+            backdrop-filter: blur(10px);
+            animation: referCoinDrift 5.5s ease-in-out infinite;
+        }
+
+        .refer-coin-one {
+            width: 2.7rem;
+            height: 2.7rem;
+            left: 1.35rem;
+            top: 1.35rem;
+        }
+
+        .refer-coin-two {
+            width: 2.35rem;
+            height: 2.35rem;
+            right: 1.25rem;
+            bottom: 8rem;
+            animation-delay: 0.6s;
+        }
+
+        .refer-step-pill {
+            border-radius: 999px;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            background: rgba(255, 255, 255, 0.12);
+            padding: 0.65rem 0.35rem;
+            color: rgba(255, 255, 255, 0.9);
+            font-size: 0.72rem;
+            font-weight: 900;
+        }
+
+        @keyframes referFloat {
+            0%, 100% {
+                transform: translate3d(0, 0, 0) scale(1);
+            }
+
+            50% {
+                transform: translate3d(-0.6rem, 0.55rem, 0) scale(1.06);
+            }
+        }
+
+        @keyframes referCoinDrift {
+            0%, 100% {
+                transform: translateY(0) rotate(0deg);
+            }
+
+            50% {
+                transform: translateY(-0.55rem) rotate(7deg);
+            }
         }
     

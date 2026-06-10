@@ -67,6 +67,13 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
         ];
         const BACKEND_BASE_URL = 'https://rw-wallet.onrender.com';
         const RW_LOGO_URL = 'https://i.ibb.co/x8YBYwGG/6233389803554672153.jpg';
+        const REFER_ICON_URL = 'https://cdn-icons-png.flaticon.com/512/929/929610.png';
+        const WALLET_ICON_URL = 'https://cdn-icons-png.flaticon.com/512/1946/1946436.png';
+        const ADMIN_ICON_URL = 'https://cdn-icons-png.flaticon.com/512/3135/3135715.png';
+        const TASK_ICON_URL = 'https://cdn-icons-png.flaticon.com/512/3176/3176366.png';
+        const CHAT_ICON_URL = 'https://cdn-icons-png.flaticon.com/512/5962/5962463.png';
+        const SETTINGS_ICON_URL = 'https://cdn-icons-png.flaticon.com/512/3524/3524659.png';
+        const NOTIFICATION_ICON_URL = 'https://cdn-icons-png.flaticon.com/512/1827/1827370.png';
 
         const app = initializeApp(firebaseConfig);
         const auth = getAuth(app);
@@ -1524,8 +1531,8 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             if (bottomHomeLabel) bottomHomeLabel.textContent = 'Wallet';
             const bottomGrid = document.getElementById('bottom-nav-grid');
             if (bottomGrid) {
-                bottomGrid.style.setProperty('--bottom-nav-count', isAdmin ? '5' : '4');
-                bottomGrid.className = `mx-auto grid w-full max-w-xl ${isAdmin ? 'grid-cols-5' : 'grid-cols-4'} items-center px-2 pt-2 text-[10px] sm:text-xs font-semibold text-gray-500 dark:text-gray-400`;
+                bottomGrid.style.setProperty('--bottom-nav-count', isAdmin ? '6' : '5');
+                bottomGrid.className = `mx-auto grid w-full max-w-xl ${isAdmin ? 'grid-cols-6' : 'grid-cols-5'} items-center px-2 pt-2 text-[10px] sm:text-xs font-semibold text-gray-500 dark:text-gray-400`;
             }
         };
 
@@ -3414,10 +3421,21 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             };
         };
 
+        const getReferralRewardAmount = () => {
+            const amount = Number(
+                appConfigCache.referralRewardAmount ??
+                appConfigCache.referral_reward_amount ??
+                appConfigCache.referralPrice ??
+                appConfigCache.referPrice ??
+                25
+            );
+            return Number.isFinite(amount) && amount >= 0 ? amount : 25;
+        };
+
         const renderSettingAction = (id, label, iconUrl, tone = 'gray') => `
             <button id="${id}" class="flex items-center w-full gap-3 p-4 bg-${tone}-50 dark:bg-${tone}-900/20 hover:bg-${tone}-100 dark:hover:bg-${tone}-900/30 border border-${tone}-100 dark:border-${tone}-800 rounded-xl transition text-left">
                 <span class="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-white dark:bg-gray-800 shadow-sm">
-                    <img src="${iconUrl}" alt="${label}" class="h-7 w-7 object-contain">
+                    <img src="${iconUrl}" alt="${label}" class="h-7 w-7 object-contain" loading="eager" fetchpriority="high" decoding="async">
                 </span>
                 <span class="font-semibold text-gray-900 dark:text-white">${label}</span>
             </button>`;
@@ -3448,6 +3466,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                         ${renderSettingAction('settings-admin-gift-codes', 'Gift Codes', 'https://cdn-icons-png.flaticon.com/512/2611/2611152.png', 'purple')}
                         ${renderSettingAction('settings-admin-history', 'Withdrawal History', 'https://cdn-icons-png.flaticon.com/512/3652/3652191.png', 'yellow')}
                         ${renderSettingAction('settings-admin-chat', 'Manage Chat', 'https://cdn-icons-png.flaticon.com/512/5962/5962463.png', 'rose')}
+                        ${renderSettingAction('settings-admin-referral', 'Referral Price', REFER_ICON_URL, 'emerald')}
                         ${renderSettingAction('settings-admin-maintenance', 'Maintenance Mode', 'https://cdn-icons-png.flaticon.com/512/2099/2099058.png', 'red')}
                         ${renderSettingAction('settings-admin-whats-new', "What's New Popup", 'https://cdn-icons-png.flaticon.com/512/1828/1828884.png', 'blue')}
                     </div>` : ''}
@@ -3468,6 +3487,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                 document.getElementById('settings-admin-gift-codes').onclick = showAdminGiftCodesPage;
                 document.getElementById('settings-admin-history').onclick = showWithdrawalHistoryPage;
                 document.getElementById('settings-admin-chat').onclick = showAdminChatsPage;
+                document.getElementById('settings-admin-referral').onclick = showReferralSettingsPage;
                 document.getElementById('settings-admin-maintenance').onclick = showMaintenanceSettingsPage;
                 document.getElementById('settings-admin-whats-new').onclick = showWhatsNewSettingsPage;
             }
@@ -3954,6 +3974,72 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             }
         };
 
+        const showReferralSettingsPage = () => {
+            if (!currentUser || currentUser.uid !== ADMIN_UID) return showNotification('Admin access only.', true);
+            const parentSection = currentMainSection === 'admin' ? 'admin' : 'settings';
+            const handleBack = parentSection === 'admin' ? showAdminMainPage : showSettingsPage;
+            const reward = getReferralRewardAmount();
+            showPage(`
+                ${getPageHeader('Referral Price')}
+                <div class="mx-auto max-w-lg space-y-4">
+                    <section class="relative overflow-hidden rounded-3xl bg-gradient-to-br from-emerald-500 via-teal-600 to-blue-700 p-5 text-white shadow-xl">
+                        <div class="absolute -right-10 -top-10 h-32 w-32 rounded-full border border-white/20"></div>
+                        <div class="absolute right-5 bottom-5 h-14 w-14 rounded-2xl bg-white/10"></div>
+                        <p class="relative text-xs font-black uppercase tracking-[0.25em] text-white/70">Refer & Earn</p>
+                        <h3 class="relative mt-2 text-3xl font-black">${formatCurrency(reward).replace('.00', '')}</h3>
+                        <p class="relative mt-1 text-sm font-semibold text-white/75">This amount will show on the user referral page.</p>
+                    </section>
+                    <section class="rounded-2xl border border-gray-100 bg-white p-5 shadow-md dark:border-gray-700 dark:bg-gray-800">
+                        <label class="text-sm font-black text-gray-700 dark:text-gray-200">Referral reward amount</label>
+                        <div class="mt-2 flex items-center gap-3 rounded-2xl bg-gray-100 px-4 py-3 focus-within:ring-2 focus-within:ring-emerald-500 dark:bg-gray-700">
+                            <span class="text-xl font-black text-gray-500 dark:text-gray-300">&#8377;</span>
+                            <input id="referral-price-input" type="number" min="0" step="1" value="${reward}" class="min-w-0 flex-1 bg-transparent text-2xl font-black text-gray-950 outline-none dark:text-white">
+                        </div>
+                        <p class="mt-3 text-xs font-semibold text-gray-500 dark:text-gray-400">The referral link itself is still marked Coming Soon for users.</p>
+                    </section>
+                    <button id="referral-price-save-btn" class="w-full rounded-2xl bg-emerald-600 px-4 py-4 font-black text-white shadow-lg shadow-emerald-200 transition active:scale-[0.99] dark:shadow-none">Save Referral Price</button>
+                </div>
+                ${getPageFooter()}`, { returnTo: parentSection, keepBottomNav: true, onBack: handleBack });
+
+            document.getElementById('referral-price-save-btn')?.addEventListener('click', handleSaveReferralSettings);
+        };
+
+        const handleSaveReferralSettings = async () => {
+            if (!currentUser || currentUser.uid !== ADMIN_UID) return showNotification('Admin access only.', true);
+            const saveBtn = document.getElementById('referral-price-save-btn');
+            const reward = Number(document.getElementById('referral-price-input')?.value || 0);
+            if (!Number.isFinite(reward) || reward < 0) {
+                return showNotification('Please enter a valid referral amount.', true);
+            }
+            try {
+                if (saveBtn) {
+                    saveBtn.disabled = true;
+                    saveBtn.textContent = 'Saving...';
+                }
+                await setDoc(doc(db, `artifacts/${appId}/settings`, 'app_config'), {
+                    referralRewardAmount: reward,
+                    referralRewardUpdatedAt: serverTimestamp(),
+                    referralRewardUpdatedBy: currentUser.uid
+                }, { merge: true });
+                appConfigCache = {
+                    ...appConfigCache,
+                    referralRewardAmount: reward,
+                    referralRewardUpdatedAt: Date.now()
+                };
+                rememberAppConfig(appConfigCache);
+                showNotification('Referral price updated.');
+                showReferralSettingsPage();
+            } catch (error) {
+                console.error('Referral settings save failed:', error);
+                showNotification('Could not save referral price. Please try again.', true);
+            } finally {
+                if (saveBtn) {
+                    saveBtn.disabled = false;
+                    saveBtn.textContent = 'Save Referral Price';
+                }
+            }
+        };
+
         const showHomeMainPage = () => {
             if (activeChatUnsubscribe) {
                 activeChatUnsubscribe();
@@ -3984,6 +4070,52 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             switchTab('admin-panel');
             setBottomNavActive('bottom-admin-btn');
             updateAdminLoanRequestBadge();
+        };
+
+        const showReferEarnPage = () => {
+            if (!currentUser) return showNotification('Please login first.', true);
+            if (activeChatUnsubscribe) {
+                activeChatUnsubscribe();
+                activeChatUnsubscribe = null;
+            }
+            const reward = getReferralRewardAmount();
+            const content = `
+                ${getPageHeader('Refer & Earn', { showBack: false })}
+                <div class="refer-page-shell mx-auto max-w-md pb-24">
+                    <section class="refer-hero-card">
+                        <span class="refer-glow refer-glow-one"></span>
+                        <span class="refer-glow refer-glow-two"></span>
+                        <div class="refer-coin refer-coin-one">RW</div>
+                        <div class="refer-coin refer-coin-two">&#8377;</div>
+                        <div class="relative z-10">
+                            <div class="mx-auto flex h-20 w-20 items-center justify-center rounded-[1.8rem] border border-white/25 bg-white/15 p-4 shadow-2xl">
+                                <img src="${REFER_ICON_URL}" alt="Refer" class="h-full w-full object-contain" loading="eager" fetchpriority="high" decoding="async">
+                            </div>
+                            <p class="mt-5 text-[11px] font-black uppercase tracking-[0.35em] text-emerald-100">Invite Friends</p>
+                            <h3 class="mt-2 text-4xl font-black leading-none text-white">${formatCurrency(reward).replace('.00', '')}</h3>
+                            <p class="mt-2 text-sm font-bold text-white/75">Earn reward after your friend joins and becomes eligible.</p>
+                            <div class="mt-6 grid grid-cols-3 gap-2 text-center">
+                                <span class="refer-step-pill">Invite</span>
+                                <span class="refer-step-pill">Verify</span>
+                                <span class="refer-step-pill">Earn</span>
+                            </div>
+                            <div class="mt-5 rounded-3xl border border-white/20 bg-white/14 p-4 text-left shadow-inner backdrop-blur">
+                                <div class="flex items-center gap-3">
+                                    <span class="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-white text-lg font-black text-emerald-600">+</span>
+                                    <div class="min-w-0">
+                                        <p class="text-sm font-black text-white">Referral link</p>
+                                        <p class="text-xs font-bold text-white/65">Coming Soon</p>
+                                    </div>
+                                    <span class="ml-auto rounded-full bg-amber-300 px-3 py-1 text-[10px] font-black uppercase text-slate-950">Soon</span>
+                                </div>
+                            </div>
+                        </div>
+                    </section>
+                </div>
+                ${getPageFooter()}`;
+            showPage(content, { keepBottomNav: true, returnTo: currentUser?.uid === ADMIN_UID ? 'admin' : 'home' });
+            currentMainSection = 'refer';
+            setBottomNavActive('bottom-refer-btn');
         };
 
         const showUserTaskPageLegacy = () => {
@@ -13259,6 +13391,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
         document.getElementById('bottom-home-btn').addEventListener('click', () => {
             showHomeMainPage();
         });
+        document.getElementById('bottom-refer-btn').addEventListener('click', showReferEarnPage);
         document.getElementById('bottom-admin-btn').addEventListener('click', showAdminMainPage);
         document.getElementById('bottom-task-btn').addEventListener('click', showUserTaskPage);
         document.getElementById('bottom-help-btn').addEventListener('click', showHelpSupportPage);
@@ -13350,11 +13483,25 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
 
         // Preload logo images to prevent loading flicker
         const preloadLogoImages = () => {
-            const logoUrls = [
-                'https://i.ibb.co/x8YBYwGG/6233389803554672153.jpg',
-                'https://cdn-icons-png.flaticon.com/512/1827/1827370.png',
-                CHATBOT_ICON_URL
-            ];
+            const logoUrls = [...new Set([
+                RW_LOGO_URL,
+                REFER_ICON_URL,
+                WALLET_ICON_URL,
+                ADMIN_ICON_URL,
+                TASK_ICON_URL,
+                CHAT_ICON_URL,
+                SETTINGS_ICON_URL,
+                NOTIFICATION_ICON_URL,
+                CHATBOT_ICON_URL,
+                'https://cdn-icons-png.flaticon.com/512/12449/12449036.png',
+                'https://cdn-icons-png.flaticon.com/512/3652/3652191.png',
+                'https://cdn-icons-png.flaticon.com/512/7939/7939990.png',
+                'https://cdn-icons-png.flaticon.com/512/2611/2611152.png',
+                'https://cdn-icons-png.flaticon.com/512/33/33308.png',
+                'https://cdn-icons-png.flaticon.com/512/4108/4108841.png',
+                'https://cdn-icons-png.flaticon.com/512/9197/9197103.png',
+                PARTNER_ICON_URL
+            ])];
 
             logoUrls.forEach((logoUrl) => {
                 const img = new Image();
@@ -13379,6 +13526,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             preloadLogoImages();
             // Check if user was previously logged in
             const savedUser = localStorage.getItem('lastLoggedInUser');
+            applyAdminBottomChrome(savedUser === ADMIN_UID);
             if (savedUser) {
                 console.log('Found saved user, waiting for Firebase auth...');
                 // Firebase will handle auto-login via onAuthStateChanged
