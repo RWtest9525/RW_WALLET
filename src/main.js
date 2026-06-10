@@ -96,6 +96,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
         let allRechargeRequestsCache = [];
         let fundRequestsImportedFromFirebase = false;
         let allLoanRequestsCache = [];
+        let adminLoanRequestsLoaded = false;
         let allLoansCache = [];
         let allGiftCodesCache = [];
         let allInvestmentsCache = [];
@@ -298,6 +299,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
         const getHistoryCacheKey = (userId) => `rw_wallet_history_cache_${userId}`;
         const getHistoryDataCacheKey = (userId) => `rw_wallet_history_data_cache_${userId}`;
         const ADMIN_USERS_CACHE_KEY = 'rw_admin_users_cache_v2';
+        const ADMIN_DASHBOARD_METRICS_CACHE_KEY = 'rw_admin_dashboard_metrics_cache_v1';
         const APP_CONFIG_CACHE_KEY = 'rw_wallet_app_config_cache_v2';
 
         const readJsonCache = (key) => {
@@ -897,6 +899,54 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             if (document.getElementById('admin-recharge-requests-list-page')) renderAdminRechargeRequests(allRechargeRequestsCache);
         };
 
+        const readAdminDashboardMetricsCache = () => {
+            const cached = readJsonCache(ADMIN_DASHBOARD_METRICS_CACHE_KEY);
+            return cached && typeof cached === 'object' ? cached : {};
+        };
+
+        const rememberAdminDashboardMetrics = (partial = {}) => {
+            const next = { ...readAdminDashboardMetricsCache(), ...partial, cachedAt: Date.now() };
+            writeJsonCache(ADMIN_DASHBOARD_METRICS_CACHE_KEY, next);
+            return next;
+        };
+
+        const applyAdminDashboardMetrics = (metrics = {}) => {
+            if (!metrics || typeof metrics !== 'object') return;
+            const setText = (id, value) => {
+                if (value === undefined || value === null) return;
+                const el = document.getElementById(id);
+                if (el) el.textContent = String(value);
+            };
+            setText('analytics-total-users', metrics.totalUsers);
+            setText('analytics-total-funds', metrics.totalFunds);
+            setText('analytics-new-members', metrics.newMembers);
+            setText('analytics-minus-balance-users', metrics.minusBalanceUsers);
+            setText('analytics-minus-balance-total', metrics.minusBalanceTotal);
+            setText('analytics-pending-reqs', metrics.pendingWithdrawals);
+            setText('analytics-pending-amount', metrics.pendingWithdrawalAmount);
+            setText('analytics-gift-cards', metrics.giftCardsRedeemed);
+            const adminPendingEl = document.getElementById('admin-pending-withdrawals');
+            if (adminPendingEl && metrics.pendingWithdrawals !== undefined && metrics.pendingWithdrawalAmount !== undefined) {
+                adminPendingEl.innerHTML = `${metrics.pendingWithdrawals}<br><span class="text-sm font-normal">${metrics.pendingWithdrawalAmount}</span>`;
+            }
+            const withdrawalBadge = document.getElementById('admin-withdrawal-request-badge');
+            if (withdrawalBadge && metrics.pendingWithdrawals !== undefined) {
+                const count = Number(metrics.pendingWithdrawals || 0);
+                withdrawalBadge.textContent = count > 99 ? '99+' : String(count || '');
+                withdrawalBadge.classList.toggle('hidden', count <= 0);
+            }
+            const loanBadge = document.getElementById('admin-loan-request-badge');
+            if (loanBadge && metrics.pendingLoans !== undefined) {
+                const count = Number(metrics.pendingLoans || 0);
+                loanBadge.textContent = count > 99 ? '99+' : String(count || '');
+                loanBadge.classList.toggle('hidden', count <= 0);
+            }
+        };
+
+        const hydrateAdminDashboardMetricsFromCache = () => {
+            applyAdminDashboardMetrics(readAdminDashboardMetricsCache());
+        };
+
         const updateAdminPendingRequestSummary = () => {
             const totalPendingAmount = allFundRequestsCache.reduce((total, req) => total + (req.amount || 0), 0);
             const pendingElement = document.getElementById('admin-pending-withdrawals');
@@ -917,6 +967,10 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             if (analyticsPendingAmountElement) {
                 analyticsPendingAmountElement.textContent = formatCurrency(totalPendingAmount);
             }
+            rememberAdminDashboardMetrics({
+                pendingWithdrawals: allFundRequestsCache.length,
+                pendingWithdrawalAmount: formatCurrency(totalPendingAmount)
+            });
         };
 
         const syncRecentTransactionsToCloud = async (userId = currentUser?.uid) => {
@@ -2307,6 +2361,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             allRechargeRequestsCache = [];
             fundRequestsImportedFromFirebase = false;
             allLoanRequestsCache = [];
+            adminLoanRequestsLoaded = false;
             allLoansCache = [];
             allInvestmentsCache = [];
             allTasksCache = [];
@@ -2669,9 +2724,71 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
 
         const refreshAdminDashboardCaches = async () => {
             const usersQuery = query(collection(db, `artifacts/${appId}/public/data/users`));
-            const usersSnap = await getDocs(usersQuery);
-            applyAdminUsersCache(usersSnap.docs.map(d => ({ id: d.id, ...d.data() })));
-            await refreshAdminSecondaryCaches();
+            const codesQuery = query(collection(db, `artifacts/${appId}/public/data/gift_codes`));
+            const loanRequestsQuery = query(collection(db, `artifacts/${appId}/public/data/loan_requests`), orderBy("requestedAt", "desc"));
+            const loansQuery = query(collection(db, `artifacts/${appId}/public/data/loans`), orderBy("createdAt", "desc"));
+            const investmentsQuery = query(collection(db, `artifacts/${appId}/public/data/partner_investments`), orderBy("createdAt", "desc"));
+            const tasksQuery = query(collection(db, `artifacts/${appId}/public/data/tasks`), orderBy("createdAt", "desc"));
+            const adsQuery = query(collection(db, `artifacts/${appId}/public/data/ads`), orderBy("createdAt", "desc"));
+
+            const [
+                usersResult,
+                fundResult,
+                codesResult,
+                loanRequestsResult,
+                loansResult,
+                investmentsResult,
+                tasksResult,
+                adsResult
+            ] = await Promise.allSettled([
+                getDocs(usersQuery),
+                refreshAdminFundRequestsFromCloud(),
+                getDocs(codesQuery),
+                getDocs(loanRequestsQuery),
+                getDocs(loansQuery),
+                getDocs(investmentsQuery),
+                getDocs(tasksQuery),
+                getDocs(adsQuery)
+            ]);
+
+            if (usersResult.status === 'fulfilled') {
+                applyAdminUsersCache(usersResult.value.docs.map(d => ({ id: d.id, ...d.data() })));
+            } else {
+                console.warn('Admin users refresh skipped:', usersResult.reason);
+            }
+            if (fundResult.status === 'rejected') {
+                console.warn('Admin fund request refresh skipped:', fundResult.reason);
+            }
+            if (codesResult.status === 'fulfilled') {
+                applyAdminGiftCodesSnapshot(codesResult.value.docs);
+            } else {
+                console.warn('Admin gift code refresh skipped:', codesResult.reason);
+            }
+            if (loanRequestsResult.status === 'fulfilled') {
+                applyAdminLoanRequestsSnapshot(loanRequestsResult.value.docs);
+            } else {
+                console.warn('Admin loan request refresh skipped:', loanRequestsResult.reason);
+            }
+            if (loansResult.status === 'fulfilled') {
+                applyAdminLoansSnapshot(loansResult.value.docs);
+            } else {
+                console.warn('Admin loans refresh skipped:', loansResult.reason);
+            }
+            if (investmentsResult.status === 'fulfilled') {
+                applyAdminInvestmentsSnapshot(investmentsResult.value.docs);
+            } else {
+                console.warn('Admin investments refresh skipped:', investmentsResult.reason);
+            }
+            if (tasksResult.status === 'fulfilled') {
+                applyAdminTasksSnapshot(tasksResult.value.docs);
+            } else {
+                console.warn('Admin tasks refresh skipped:', tasksResult.reason);
+            }
+            if (adsResult.status === 'fulfilled') {
+                applyAdsSnapshot(adsResult.value.docs);
+            } else {
+                console.warn('Admin ads refresh skipped:', adsResult.reason);
+            }
         };
 
         const applyAdminUsersCache = (users = []) => {
@@ -2721,6 +2838,13 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             const minusTotalEl = document.getElementById('analytics-minus-balance-total');
             if (minusCountEl) minusCountEl.textContent = minusBalanceCount;
             if (minusTotalEl) minusTotalEl.textContent = `Total minus: ${formatCurrency(minusBalanceTotal)}`;
+            rememberAdminDashboardMetrics({
+                totalUsers: otherUsers.length,
+                totalFunds: formatCompactBalance(totalFunds),
+                newMembers: newMembersCount,
+                minusBalanceUsers: minusBalanceCount,
+                minusBalanceTotal: `Total minus: ${formatCurrency(minusBalanceTotal)}`
+            });
             const pendingSignupCount = otherUsers.filter(isUserApprovalPending).length;
             const signupBadge = document.getElementById('admin-signup-approval-badge');
             if (signupBadge) {
@@ -2791,24 +2915,33 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             const totalRedeemed = docs.reduce((acc, doc) => acc + (doc.data().timesUsed || 0), 0);
             const giftCardsEl = document.getElementById('analytics-gift-cards');
             if (giftCardsEl) giftCardsEl.textContent = totalRedeemed;
+            rememberAdminDashboardMetrics({ giftCardsRedeemed: totalRedeemed });
             if (document.getElementById('gift-codes-list-page')) {
                 renderAdminGiftCodesList(docs);
             }
         };
 
         const updateAdminLoanRequestBadge = () => {
-            const badge = document.getElementById('admin-loan-request-badge');
-            if (!badge) return;
+            if (!adminLoanRequestsLoaded && !allLoanRequestsCache.length) {
+                applyAdminDashboardMetrics(readAdminDashboardMetricsCache());
+                return;
+            }
             const pendingCount = allLoanRequestsCache.filter(request =>
                 isModernLoanRequest(request) &&
                 String(request.status || request.loanRequestStatus || '').trim().toLowerCase() === 'pending'
             ).length;
+            if (adminLoanRequestsLoaded) {
+                rememberAdminDashboardMetrics({ pendingLoans: pendingCount });
+            }
+            const badge = document.getElementById('admin-loan-request-badge');
+            if (!badge) return;
             badge.textContent = pendingCount > 99 ? '99+' : String(pendingCount || '');
             badge.classList.toggle('hidden', pendingCount <= 0);
         };
 
         const applyAdminLoanRequestsSnapshot = (docs = []) => {
             allLoanRequestsCache = docs.map(doc => ({ id: doc.id, ...doc.data() }));
+            adminLoanRequestsLoaded = true;
             updateAdminLoanRequestBadge();
             if (document.getElementById('admin-loan-page')) {
                 renderAdminLoanPage();
@@ -3061,8 +3194,29 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             applyAdsSnapshot(adsSnap.docs);
         };
 
+        const refreshAdminLoanCaches = async () => {
+            if (currentUser?.uid !== ADMIN_UID) return;
+            const loanRequestsQuery = query(collection(db, `artifacts/${appId}/public/data/loan_requests`), orderBy("requestedAt", "desc"));
+            const loansQuery = query(collection(db, `artifacts/${appId}/public/data/loans`), orderBy("createdAt", "desc"));
+            const [loanRequestsResult, loansResult] = await Promise.allSettled([
+                getDocs(loanRequestsQuery),
+                getDocs(loansQuery)
+            ]);
+            if (loanRequestsResult.status === 'fulfilled') {
+                applyAdminLoanRequestsSnapshot(loanRequestsResult.value.docs);
+            } else {
+                console.warn('Admin loan requests quick refresh skipped:', loanRequestsResult.reason);
+            }
+            if (loansResult.status === 'fulfilled') {
+                applyAdminLoansSnapshot(loansResult.value.docs);
+            } else {
+                console.warn('Admin loans quick refresh skipped:', loansResult.reason);
+            }
+        };
+
         let initializeAdminListeners = () => {
             console.log("Initializing admin data...");
+            hydrateAdminDashboardMetricsFromCache();
             hydrateAdminUsersFromCache();
             initializeAdminUsersRealtime();
             initializeAdminFundRequestsRealtime();
@@ -9918,6 +10072,15 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             });
             document.getElementById('loan-admin-search').addEventListener('input', renderAdminLoanPage);
             renderAdminLoanPage();
+            if (currentUser?.uid === ADMIN_UID && (!allLoanRequestsCache.length || !allLoansCache.length)) {
+                const listEl = document.getElementById('admin-loan-list');
+                if (listEl && !allLoanRequestsCache.length && !allLoansCache.length) {
+                    listEl.innerHTML = '<p class="text-center text-gray-500 py-6">Loading loan data...</p>';
+                }
+                refreshAdminLoanCaches()
+                    .then(renderAdminLoanPage)
+                    .catch(error => console.warn('Admin loan quick refresh failed:', error));
+            }
         };
 
         const renderAdminLoanPage = () => {
@@ -13719,6 +13882,10 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             // Check if user was previously logged in
             const savedUser = localStorage.getItem('lastLoggedInUser');
             applyAdminBottomChrome(savedUser === ADMIN_UID);
+            if (savedUser === ADMIN_UID) {
+                hydrateAdminDashboardMetricsFromCache();
+                hydrateAdminUsersFromCache();
+            }
             if (savedUser) {
                 console.log('Found saved user, waiting for Firebase auth...');
                 // Firebase will handle auto-login via onAuthStateChanged
