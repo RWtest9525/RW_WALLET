@@ -606,6 +606,19 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             }
         };
 
+        const isExpectedBackgroundAbort = (error) => {
+            const message = String(error?.message || error || '');
+            return error?.name === 'AbortError' || /aborted|signal is aborted/i.test(message);
+        };
+
+        const logBackgroundSkip = (label, error) => {
+            if (isExpectedBackgroundAbort(error)) {
+                console.debug(`${label}: timed out`);
+                return;
+            }
+            console.warn(`${label}:`, error);
+        };
+
         const fetchCloudTransactionHistory = async (userId, limit = 100) => {
             const token = await getBackendAuthToken();
             const response = await fetchWithTimeout(`${BACKEND_BASE_URL}/api/transactions/${encodeURIComponent(userId)}?limit=${limit}`, {
@@ -1349,6 +1362,32 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             notificationTimeout = setTimeout(() => {
                 toast.classList.remove('show');
             }, 3000);
+        };
+
+        const getCachedSessionUserId = () => localStorage.getItem('lastLoggedInUser') || '';
+        const hasCachedLoginSession = () => !!getCachedSessionUserId();
+        const hasCachedAdminSession = () => getCachedSessionUserId() === ADMIN_UID;
+        const hasAdminSessionReadyOrCached = () => currentUser?.uid === ADMIN_UID || hasCachedAdminSession();
+
+        const ensureUserSessionReady = () => {
+            if (currentUser) return true;
+            if (hasCachedLoginSession()) {
+                showNotification('App is opening. Please wait a moment.', true, false);
+                return false;
+            }
+            showNotification('Please login first.', true);
+            return false;
+        };
+
+        const ensureAdminSessionReady = () => {
+            if (currentUser?.uid === ADMIN_UID) return true;
+            if (hasCachedAdminSession()) {
+                showAdminMainPage();
+                showNotification('Admin data is opening. Please wait a moment.', true, false);
+                return false;
+            }
+            showNotification(currentUser ? 'Admin access only.' : 'Please login first.', true);
+            return false;
         };
 
         const renderModal = (title, content, actions, size = 'max-w-md', colorfulBorder = false) => {
@@ -2357,7 +2396,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                 }
                 notificationsCache = readNotificationsCache(user.uid);
                 refreshNotificationUnreadCount(notificationsCache);
-                preloadNotificationsForUser(user.uid).catch(e => console.warn('Initial notification preload skipped:', e));
+                preloadNotificationsForUser(user.uid).catch(e => logBackgroundSkip('Initial notification preload skipped', e));
                 startNotificationAutoRefresh(user.uid);
                 applyAdminBottomChrome(isAdmin);
                 if (maintenanceActiveForUser) {
@@ -2493,9 +2532,9 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                     updateDollarBalanceDisplay(data.balance);
                     currentUserData = { id: userId, uid: userId, ...data };
                     writeJsonCache(getUserCacheKey(userId), sanitizeUserForCache(data, userId));
-                    getBackendAuthToken().catch(e => console.error('Backend session warmup failed:', e));
-                    preloadSupportChatForUser(userId).catch(e => console.warn('Support chat preload skipped:', e));
-                    preloadNotificationsForUser(userId).catch(e => console.warn('Notification preload skipped:', e));
+                    getBackendAuthToken().catch(e => logBackgroundSkip('Backend session warmup skipped', e));
+                    preloadSupportChatForUser(userId).catch(e => logBackgroundSkip('Support chat preload skipped', e));
+                    preloadNotificationsForUser(userId).catch(e => logBackgroundSkip('Notification preload skipped', e));
                     const now = Date.now();
                     if (now - lastAutoProcessCheckAt > 60000) {
                         lastAutoProcessCheckAt = now;
@@ -3029,7 +3068,9 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             initializeAdminFundRequestsRealtime();
             initializeAdminSecondaryRealtime();
             refreshAdminDashboardCaches().catch(error => console.error("Admin data refresh failed:", error));
-            loadAdminChatsFromBackend({ silent: true }).catch(error => console.error("Admin: Error loading Cloudflare support chats:", error));
+            setTimeout(() => {
+                loadAdminChatsFromBackend({ silent: true }).catch(error => console.warn("Admin: Cloudflare support chat warmup skipped:", error));
+            }, 1200);
         };
 
         // --- FULL PAGE RENDERERS ---
@@ -3452,6 +3493,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             </button>`;
 
         const showSettingsPage = () => {
+            if (!ensureUserSessionReady()) return;
             const currentTheme = localStorage.getItem('theme') || 'light';
             const isAdmin = currentUser && currentUser.uid === ADMIN_UID;
             const content = `
@@ -4067,7 +4109,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
         };
 
         const showAdminMainPage = () => {
-            if (!currentUser || currentUser.uid !== ADMIN_UID) return showNotification('Admin access only.', true);
+            if (!hasAdminSessionReadyOrCached()) return showNotification(currentUser ? 'Admin access only.' : 'Please login first.', true);
             if (activeChatUnsubscribe) {
                 activeChatUnsubscribe();
                 activeChatUnsubscribe = null;
@@ -4084,7 +4126,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
         };
 
         const showReferEarnPage = () => {
-            if (!currentUser) return showNotification('Please login first.', true);
+            if (!ensureUserSessionReady()) return;
             if (activeChatUnsubscribe) {
                 activeChatUnsubscribe();
                 activeChatUnsubscribe = null;
@@ -4186,7 +4228,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
         };
 
         const showUserTaskPageLegacy = () => {
-            if (!currentUser) return showNotification('Please login first.', true);
+            if (!ensureUserSessionReady()) return;
             currentMainSection = 'task';
             const content = `
                 <header class="mb-4 flex items-center justify-between bg-white dark:bg-gray-800 px-4 py-3 shadow-sm page-header-fixed">
@@ -4237,7 +4279,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
         };
 
         const showUserTaskPage = () => {
-            if (!currentUser) return showNotification('Please login first.', true);
+            if (!ensureUserSessionReady()) return;
             currentMainSection = 'task';
             const taskCategories = [
                 {
@@ -5910,32 +5952,49 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                 renderSupportMessages(activeSupportMessages, viewerRole);
             };
             let socket = null;
-            try {
-                socket = await getSupportSocket({ timeoutMs: 5000 });
-                socket.on('chat_history', handleHistory);
-                socket.on('new_message', handleNewMessage);
-                socket.on('chat_read', handleReadReceipt);
-                socket.emit('join_room', { roomId: activeSupportRoomId, limit: 200, markRead: true }, (response) => {
+            let realtimeAttached = false;
+            const roomIdAtOpen = activeSupportRoomId;
+            const attachSupportRealtime = (nextSocket) => {
+                if (!nextSocket || activeSupportRoomId !== roomIdAtOpen || !document.getElementById('support-chat-messages')) return;
+                if (socket && socket !== nextSocket && realtimeAttached) {
+                    socket.off('chat_history', handleHistory);
+                    socket.off('new_message', handleNewMessage);
+                    socket.off('chat_read', handleReadReceipt);
+                }
+                socket = nextSocket;
+                if (!realtimeAttached) {
+                    socket.on('chat_history', handleHistory);
+                    socket.on('new_message', handleNewMessage);
+                    socket.on('chat_read', handleReadReceipt);
+                    realtimeAttached = true;
+                }
+                socket.emit('join_room', { roomId: roomIdAtOpen, limit: 200, markRead: true }, (response) => {
                     if (!response?.ok) {
                         console.warn('Join support room failed:', response?.error);
                     }
                 });
-            } catch (error) {
-                console.warn('Support chat realtime is not ready:', error?.message || error);
-            }
+            };
+            const startSupportRealtime = (timeoutMs = 1800) => {
+                getSupportSocket({ timeoutMs })
+                    .then(attachSupportRealtime)
+                    .catch((error) => console.warn('Support chat realtime is not ready:', error?.message || error));
+            };
+            startSupportRealtime();
             activeChatUnsubscribe = () => {
                 if (keyboardCleanup) keyboardCleanup();
-                if (socket) {
+                if (socket && realtimeAttached) {
                     socket.off('chat_history', handleHistory);
                     socket.off('new_message', handleNewMessage);
                     socket.off('chat_read', handleReadReceipt);
-                    socket.emit('leave_room', { roomId: activeSupportRoomId });
+                    socket.emit('leave_room', { roomId: roomIdAtOpen });
                 }
+                realtimeAttached = false;
             };
 
             const sendMessage = async () => {
                 const input = document.getElementById('support-message-input');
                 const sendBtn = document.getElementById('support-send-btn');
+                if (!input) return;
                 const text = input.value.trim();
                 if (!text) return;
                 const now = Date.now();
@@ -5966,11 +6025,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                 };
                 if (!socket?.connected) {
                     try {
-                        socket = await getSupportSocket({ timeoutMs: 5000 });
-                        socket.on('chat_history', handleHistory);
-                        socket.on('new_message', handleNewMessage);
-                        socket.on('chat_read', handleReadReceipt);
-                        socket.emit('join_room', { roomId: activeSupportRoomId, limit: 200, markRead: true });
+                        attachSupportRealtime(await getSupportSocket({ timeoutMs: 2500 }));
                     } catch (error) {
                         unlockSend();
                         input.value = text;
@@ -6010,24 +6065,27 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                 }
             };
 
-            document.getElementById('support-send-btn').onclick = sendMessage;
-            document.getElementById('support-message-input').addEventListener('keydown', (e) => {
+            const supportSendButton = document.getElementById('support-send-btn');
+            const supportMessageInput = document.getElementById('support-message-input');
+            const emojiToggleButton = document.getElementById('emoji-toggle-btn');
+            const emojiPanel = document.getElementById('emoji-panel');
+            if (!supportSendButton || !supportMessageInput || !emojiToggleButton) return;
+            supportSendButton.onclick = sendMessage;
+            supportMessageInput.addEventListener('keydown', (e) => {
                 if (e.key === 'Enter') sendMessage();
             });
-            document.getElementById('emoji-toggle-btn').onclick = () => {
-                document.getElementById('emoji-panel').classList.toggle('hidden');
-                document.getElementById('support-message-input').focus();
+            emojiToggleButton.onclick = () => {
+                emojiPanel?.classList.toggle('hidden');
+                supportMessageInput.focus();
             };
             document.querySelectorAll('.emoji-choice').forEach(btn => {
                 btn.onclick = () => {
-                    const input = document.getElementById('support-message-input');
-                    input.value += btn.textContent;
-                    input.focus();
+                    supportMessageInput.value += btn.textContent;
+                    supportMessageInput.focus();
                 };
             });
             if (initialMessage) {
-                const input = document.getElementById('support-message-input');
-                input.value = initialMessage;
+                supportMessageInput.value = initialMessage;
                 sendMessage();
             }
         };
@@ -6367,6 +6425,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
         };
 
         const showHelpSupportPage = () => {
+            if (!ensureUserSessionReady()) return;
             const content = `
                 ${getPageHeader('Help', { showBack: false })}
                 <div class="max-w-lg mx-auto space-y-4">
@@ -6550,7 +6609,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             setBottomNavActive('bottom-settings-btn');
             document.getElementById('admin-chat-search').addEventListener('input', renderAdminChatsList);
             renderAdminChatsList();
-            loadAdminChatsFromBackend({ silent: false, subscribeRealtime: true });
+            loadAdminChatsFromBackend({ silent: false, subscribeRealtime: false });
             ensureAdminChatUsersLoaded().then(renderAdminChatsList);
         };
 
@@ -13487,6 +13546,10 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
         document.getElementById('tabs-container').addEventListener('click', (e) => {
             if (e.target.matches('.tab-button')) {
                 const tabId = e.target.dataset.tab;
+                if (tabId === 'admin-panel' && !hasAdminSessionReadyOrCached()) {
+                    showNotification(currentUser ? 'Admin access only.' : 'App is opening. Please wait a moment.', true, false);
+                    return;
+                }
                 currentMainSection = tabId === 'admin-panel' ? 'admin' : 'home';
                 switchTab(tabId);
                 setBottomNavActive(tabId === 'admin-panel' ? 'bottom-admin-btn' : 'bottom-home-btn');
@@ -13502,17 +13565,32 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
         document.getElementById('bottom-settings-btn').addEventListener('click', showSettingsPage);
         document.getElementById('notification-header-btn').addEventListener('click', showNotificationsPage);
 
-        document.getElementById('manage-admin-wallet-btn').addEventListener('click', showManageAdminWalletModal);
-        document.getElementById('admin-manage-tasks-btn')?.addEventListener('click', showAdminTaskPage);
-        document.getElementById('admin-manage-tasks-secondary-btn')?.addEventListener('click', showAdminTaskPage);
+        document.getElementById('manage-admin-wallet-btn').addEventListener('click', () => openAdminQuickAction(showManageAdminWalletModal));
+        document.getElementById('admin-manage-tasks-btn')?.addEventListener('click', () => openAdminQuickAction(showAdminTaskPage));
+        document.getElementById('admin-manage-tasks-secondary-btn')?.addEventListener('click', () => openAdminQuickAction(showAdminTaskPage));
 
         const openAdminQuickAction = (handler) => {
+            if (!ensureAdminSessionReady()) return null;
             currentMainSection = 'admin';
             setBottomNavActive('bottom-admin-btn');
-            handler();
+            try {
+                const result = handler();
+                if (result?.catch) {
+                    result.catch(error => {
+                        console.error('Admin quick action failed:', error);
+                        showNotification('This admin page could not open. Please try again.', true);
+                    });
+                }
+                return result;
+            } catch (error) {
+                console.error('Admin quick action failed:', error);
+                showNotification('This admin page could not open. Please try again.', true);
+                return null;
+            }
         };
 
         const openUserQuickAction = (handler) => {
+            if (!ensureUserSessionReady()) return null;
             currentMainSection = 'home';
             setBottomNavActive('bottom-home-btn');
             try {
@@ -13564,7 +13642,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
         document.getElementById('admin-loans-btn').addEventListener('click', () => openAdminQuickAction(showAdminLoanPage));
         document.getElementById('admin-investments-btn').addEventListener('click', () => openAdminQuickAction(showAdminInvestmentsPage));
         document.getElementById('admin-chats-btn').addEventListener('click', () => openAdminQuickAction(showAdminChatsPage));
-        document.getElementById('admin-tasks-btn').addEventListener('click', showAdminTaskPage);
+        document.getElementById('admin-tasks-btn').addEventListener('click', () => openAdminQuickAction(showAdminTaskPage));
         document.getElementById('admin-ads-btn')?.addEventListener('click', () => openAdminQuickAction(showAdminAdsPage));
 
         // Withdraw Fund Button - Now opens full page
