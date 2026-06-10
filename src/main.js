@@ -3421,9 +3421,9 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                 appConfigCache.referral_reward_amount ??
                 appConfigCache.referralPrice ??
                 appConfigCache.referPrice ??
-                25
+                5
             );
-            return Number.isFinite(amount) && amount >= 0 ? amount : 25;
+            return Number.isFinite(amount) && amount >= 0 ? amount : 5;
         };
 
         const renderSettingAction = (id, label, iconUrl, tone = 'gray') => `
@@ -4073,32 +4073,69 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                 activeChatUnsubscribe = null;
             }
             const reward = getReferralRewardAmount();
+            const rewardText = formatCurrency(reward).replace('.00', '');
             const content = `
                 ${getPageHeader('Refer & Earn', { showBack: false })}
-                <div class="refer-page-shell mx-auto max-w-md pb-24">
+                <div class="refer-page-shell mx-auto max-w-md px-1 pb-24">
                     <section class="refer-hero-card">
                         <span class="refer-glow refer-glow-one"></span>
                         <span class="refer-glow refer-glow-two"></span>
-                        <div class="refer-coin refer-coin-one">RW</div>
-                        <div class="refer-coin refer-coin-two">&#8377;</div>
+                        <span class="refer-grid-shine"></span>
+                        <div class="refer-float-icon refer-float-logo">
+                            <img src="${RW_LOGO_URL}" alt="Reviews World" loading="eager" decoding="async">
+                        </div>
+                        <div class="refer-float-icon refer-float-wallet">
+                            <img src="${WALLET_ICON_URL}" alt="Wallet" loading="lazy" decoding="async">
+                        </div>
+                        <div class="refer-float-icon refer-float-withdraw">
+                            <img src="https://cdn-icons-png.flaticon.com/512/7939/7939990.png" alt="Withdraw" loading="lazy" decoding="async">
+                        </div>
                         <div class="relative z-10">
-                            <div class="mx-auto flex h-20 w-20 items-center justify-center rounded-[1.8rem] border border-white/25 bg-white/15 p-4 shadow-2xl">
+                            <div class="refer-brand-pill">
+                                <span>RW Referral Network</span>
+                            </div>
+                            <div class="refer-main-orb mx-auto">
                                 <img src="${REFER_ICON_URL}" alt="Refer" class="h-full w-full object-contain" loading="eager" fetchpriority="high" decoding="async">
                             </div>
-                            <p class="mt-5 text-[11px] font-black uppercase tracking-[0.35em] text-emerald-100">Invite Friends</p>
-                            <h3 class="mt-2 text-4xl font-black leading-none text-white">${formatCurrency(reward).replace('.00', '')}</h3>
-                            <p class="mt-2 text-sm font-bold text-white/75">Earn reward after your friend joins and becomes eligible.</p>
-                            <div class="mt-6 grid grid-cols-3 gap-2 text-center">
-                                <span class="refer-step-pill">Invite</span>
-                                <span class="refer-step-pill">Verify</span>
+                            <p class="mt-4 text-[11px] font-black uppercase tracking-[0.35em] text-emerald-100">Refer & Earn</p>
+                            <h3 class="mt-2 text-3xl font-black leading-tight text-white">You and your friend both get <span class="text-amber-200">${rewardText}</span></h3>
+                            <p class="mx-auto mt-2 max-w-xs text-sm font-bold leading-6 text-white/75">Reward unlocks after your friend completes the first withdrawal.</p>
+                            <div class="refer-reward-grid">
+                                <div class="refer-reward-card">
+                                    <img src="${REFER_ICON_URL}" alt="Your reward" loading="lazy" decoding="async">
+                                    <p>You get</p>
+                                    <h4>${rewardText}</h4>
+                                </div>
+                                <div class="refer-reward-card">
+                                    <img src="https://cdn-icons-png.flaticon.com/512/681/681494.png" alt="Friend reward" loading="lazy" decoding="async">
+                                    <p>Friend gets</p>
+                                    <h4>${rewardText}</h4>
+                                </div>
+                            </div>
+                            <div class="refer-lifetime-band">
+                                <span class="refer-band-icon">
+                                    <img src="${PARTNER_ICON_URL}" alt="Lifetime income" loading="lazy" decoding="async">
+                                </span>
+                                <div>
+                                    <p class="text-sm font-black text-white">Lifetime income</p>
+                                    <p class="text-xs font-bold leading-5 text-white/70">Earn 1% from every friend withdrawal for lifetime.</p>
+                                </div>
+                            </div>
+                            <div class="refer-flow-row">
+                                <span class="refer-step-pill">Share</span>
+                                <span class="refer-step-line"></span>
+                                <span class="refer-step-pill">First Withdraw</span>
+                                <span class="refer-step-line"></span>
                                 <span class="refer-step-pill">Earn</span>
                             </div>
-                            <div class="mt-5 rounded-3xl border border-white/20 bg-white/14 p-4 text-left shadow-inner backdrop-blur">
+                            <div class="refer-coming-banner">
                                 <div class="flex items-center gap-3">
-                                    <span class="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-white text-lg font-black text-emerald-600">+</span>
+                                    <span class="refer-coming-icon">
+                                        <img src="${CHAT_ICON_URL}" alt="Coming soon" loading="lazy" decoding="async">
+                                    </span>
                                     <div class="min-w-0">
                                         <p class="text-sm font-black text-white">Referral link</p>
-                                        <p class="text-xs font-bold text-white/65">Coming Soon</p>
+                                        <p class="text-xs font-bold text-white/65">Coming Soon. Link and invite code will be announced soon.</p>
                                     </div>
                                     <span class="ml-auto rounded-full bg-amber-300 px-3 py-1 text-[10px] font-black uppercase text-slate-950">Soon</span>
                                 </div>

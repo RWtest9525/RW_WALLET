@@ -1285,18 +1285,20 @@ html,
             width: 100%;
             overflow: hidden;
             border-radius: 2rem;
-            padding: 2rem 1.25rem;
+            padding: 1.45rem 1.05rem;
             text-align: center;
             background:
-                radial-gradient(circle at 18% 18%, rgba(255, 255, 255, 0.2), transparent 28%),
-                linear-gradient(145deg, #0f766e 0%, #2563eb 55%, #111827 100%);
-            box-shadow: 0 28px 70px rgba(15, 23, 42, 0.28);
+                radial-gradient(circle at 18% 12%, rgba(255, 255, 255, 0.24), transparent 26%),
+                radial-gradient(circle at 90% 20%, rgba(250, 204, 21, 0.2), transparent 28%),
+                linear-gradient(145deg, #052e2b 0%, #0f766e 35%, #2563eb 70%, #111827 100%);
+            box-shadow: 0 26px 70px rgba(15, 23, 42, 0.28);
+            isolation: isolate;
         }
 
         .refer-glow {
             position: absolute;
             border-radius: 999px;
-            filter: blur(2px);
+            filter: blur(3px);
             opacity: 0.7;
             pointer-events: none;
         }
@@ -1319,44 +1321,209 @@ html,
             animation: referFloat 7s ease-in-out infinite reverse;
         }
 
-        .refer-coin {
+        .refer-grid-shine {
             position: absolute;
+            inset: 0;
+            z-index: 0;
+            pointer-events: none;
+            background-image:
+                linear-gradient(rgba(255, 255, 255, 0.06) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(255, 255, 255, 0.06) 1px, transparent 1px);
+            background-size: 2.8rem 2.8rem;
+            mask-image: radial-gradient(circle at center, black, transparent 72%);
+            animation: referGridMove 10s linear infinite;
+        }
+
+        .refer-brand-pill {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            border: 1px solid rgba(255, 255, 255, 0.18);
+            border-radius: 999px;
+            background: rgba(255, 255, 255, 0.12);
+            padding: 0.45rem 0.8rem;
+            color: rgba(255, 255, 255, 0.86);
+            font-size: 0.68rem;
+            font-weight: 900;
+            letter-spacing: 0.16em;
+            text-transform: uppercase;
+            backdrop-filter: blur(12px);
+        }
+
+        .refer-main-orb {
+            position: relative;
+            width: 5rem;
+            height: 5rem;
+            margin-top: 0.9rem;
+            border: 1px solid rgba(255, 255, 255, 0.24);
+            border-radius: 1.8rem;
+            background: linear-gradient(145deg, rgba(255, 255, 255, 0.24), rgba(255, 255, 255, 0.1));
+            padding: 1rem;
+            box-shadow: 0 20px 42px rgba(2, 6, 23, 0.22), inset 0 1px 0 rgba(255, 255, 255, 0.4);
+            animation: referMainPulse 3.8s ease-in-out infinite;
+        }
+
+        .refer-main-orb::after {
+            content: "";
+            position: absolute;
+            inset: -0.45rem;
+            z-index: -1;
+            border-radius: 2.2rem;
+            border: 1px solid rgba(255, 255, 255, 0.12);
+            animation: referRingPulse 3.8s ease-in-out infinite;
+        }
+
+        .refer-float-icon {
+            position: absolute;
+            z-index: 1;
             display: flex;
             align-items: center;
             justify-content: center;
-            border: 1px solid rgba(255, 255, 255, 0.26);
-            border-radius: 999px;
-            background: rgba(255, 255, 255, 0.13);
-            color: rgba(255, 255, 255, 0.86);
-            font-size: 0.72rem;
-            font-weight: 900;
+            width: 2.75rem;
+            height: 2.75rem;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 1.1rem;
+            background: rgba(255, 255, 255, 0.14);
+            padding: 0.45rem;
+            box-shadow: 0 14px 32px rgba(2, 6, 23, 0.18);
             backdrop-filter: blur(10px);
             animation: referCoinDrift 5.5s ease-in-out infinite;
         }
 
-        .refer-coin-one {
-            width: 2.7rem;
-            height: 2.7rem;
-            left: 1.35rem;
-            top: 1.35rem;
+        .refer-float-icon img {
+            width: 100%;
+            height: 100%;
+            border-radius: 0.75rem;
+            object-fit: contain;
         }
 
-        .refer-coin-two {
-            width: 2.35rem;
-            height: 2.35rem;
-            right: 1.25rem;
-            bottom: 8rem;
-            animation-delay: 0.6s;
+        .refer-float-logo {
+            left: 1.05rem;
+            top: 1.15rem;
+        }
+
+        .refer-float-wallet {
+            right: 1.05rem;
+            top: 5.25rem;
+            animation-delay: 0.5s;
+        }
+
+        .refer-float-withdraw {
+            left: 1.35rem;
+            bottom: 8.5rem;
+            animation-delay: 0.9s;
+        }
+
+        .refer-reward-grid {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 0.65rem;
+            margin-top: 1rem;
+        }
+
+        .refer-reward-card {
+            border: 1px solid rgba(255, 255, 255, 0.18);
+            border-radius: 1.35rem;
+            background: rgba(255, 255, 255, 0.13);
+            padding: 0.85rem 0.55rem;
+            backdrop-filter: blur(14px);
+            box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.18);
+        }
+
+        .refer-reward-card img {
+            width: 1.65rem;
+            height: 1.65rem;
+            margin: 0 auto 0.45rem;
+            object-fit: contain;
+        }
+
+        .refer-reward-card p {
+            color: rgba(255, 255, 255, 0.68);
+            font-size: 0.68rem;
+            font-weight: 900;
+            text-transform: uppercase;
+        }
+
+        .refer-reward-card h4 {
+            color: #fef3c7;
+            font-size: 1.35rem;
+            font-weight: 1000;
+            line-height: 1.1;
+        }
+
+        .refer-lifetime-band,
+        .refer-coming-banner {
+            margin-top: 0.75rem;
+            border: 1px solid rgba(255, 255, 255, 0.18);
+            border-radius: 1.45rem;
+            background: rgba(255, 255, 255, 0.13);
+            padding: 0.82rem;
+            text-align: left;
+            backdrop-filter: blur(14px);
+        }
+
+        .refer-lifetime-band {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+        }
+
+        .refer-band-icon,
+        .refer-coming-icon {
+            display: flex;
+            width: 2.55rem;
+            height: 2.55rem;
+            flex-shrink: 0;
+            align-items: center;
+            justify-content: center;
+            border-radius: 1rem;
+            background: rgba(255, 255, 255, 0.92);
+            padding: 0.5rem;
+            box-shadow: 0 12px 28px rgba(2, 6, 23, 0.16);
+        }
+
+        .refer-band-icon img,
+        .refer-coming-icon img {
+            width: 100%;
+            height: 100%;
+            object-fit: contain;
         }
 
         .refer-step-pill {
             border-radius: 999px;
             border: 1px solid rgba(255, 255, 255, 0.2);
             background: rgba(255, 255, 255, 0.12);
-            padding: 0.65rem 0.35rem;
+            padding: 0.55rem 0.55rem;
             color: rgba(255, 255, 255, 0.9);
-            font-size: 0.72rem;
+            font-size: 0.64rem;
             font-weight: 900;
+            white-space: nowrap;
+        }
+
+        .refer-flow-row {
+            display: grid;
+            grid-template-columns: auto 1fr auto 1fr auto;
+            align-items: center;
+            gap: 0.35rem;
+            margin-top: 0.8rem;
+        }
+
+        .refer-step-line {
+            height: 2px;
+            min-width: 0.9rem;
+            border-radius: 999px;
+            background: linear-gradient(90deg, rgba(255, 255, 255, 0.28), rgba(250, 204, 21, 0.8));
+            overflow: hidden;
+        }
+
+        .refer-step-line::after {
+            content: "";
+            display: block;
+            width: 38%;
+            height: 100%;
+            border-radius: inherit;
+            background: rgba(255, 255, 255, 0.9);
+            animation: referLineScan 2.8s ease-in-out infinite;
         }
 
         @keyframes referFloat {
@@ -1369,6 +1536,38 @@ html,
             }
         }
 
+        @keyframes referGridMove {
+            from {
+                background-position: 0 0, 0 0;
+            }
+
+            to {
+                background-position: 2.8rem 2.8rem, 2.8rem 2.8rem;
+            }
+        }
+
+        @keyframes referMainPulse {
+            0%, 100% {
+                transform: translateY(0) scale(1);
+            }
+
+            50% {
+                transform: translateY(-0.22rem) scale(1.04);
+            }
+        }
+
+        @keyframes referRingPulse {
+            0%, 100% {
+                opacity: 0.35;
+                transform: scale(0.94);
+            }
+
+            50% {
+                opacity: 0.85;
+                transform: scale(1.06);
+            }
+        }
+
         @keyframes referCoinDrift {
             0%, 100% {
                 transform: translateY(0) rotate(0deg);
@@ -1376,6 +1575,16 @@ html,
 
             50% {
                 transform: translateY(-0.55rem) rotate(7deg);
+            }
+        }
+
+        @keyframes referLineScan {
+            0%, 100% {
+                transform: translateX(-115%);
+            }
+
+            50% {
+                transform: translateX(260%);
             }
         }
     
