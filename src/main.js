@@ -1660,6 +1660,13 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                     };
                 }
 
+                const isTouchPhone = window.matchMedia?.('(pointer: coarse) and (max-width: 768px)')?.matches;
+                if (isTouchPhone && document.activeElement === input && focusStartedAt) {
+                    const fallbackHeight = lastKnownKeyboardHeight || Math.round(focusBaseHeight * 0.43);
+                    const fallbackTop = Math.max(0, focusBaseHeight - fallbackHeight);
+                    return { height: fallbackHeight, top: fallbackTop, layoutHeight: focusBaseHeight };
+                }
+
                 return { height: 0, top: focusBaseHeight, layoutHeight: focusBaseHeight };
             };
 
@@ -1723,6 +1730,8 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                 setTimeout(requestKeepTypingVisible, 180);
                 setTimeout(requestKeepTypingVisible, 360);
                 setTimeout(requestKeepTypingVisible, 700);
+                setTimeout(requestKeepTypingVisible, 1200);
+                setTimeout(requestKeepTypingVisible, 1800);
             };
             const refreshTypingVisible = () => {
                 scheduleKeepTypingVisible();
