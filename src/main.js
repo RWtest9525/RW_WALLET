@@ -800,7 +800,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
         const loadUserPendingWithdrawalsMerged = async (userId) => {
             if (!userId) return [];
             const [cloudRequests, firebaseRequests] = await Promise.all([
-                loadCloudFundRequests({ status: 'pending', type: 'withdrawal', userId, limit: 200 }).catch(error => {
+                loadCloudFundRequests({ status: 'pending', type: 'withdrawal', userId, limit: 200, timeoutMs: 2500 }).catch(error => {
                     console.warn('User cloud pending withdrawals skipped:', error);
                     return [];
                 }),
@@ -2241,11 +2241,21 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
         onAuthStateChanged(auth, async (user) => {
             console.log("Auth state changed, user:", user ? user.uid : 'null');
             const pageContainerAtAuth = document.getElementById('page-container');
+            const mainContentAtAuth = document.getElementById('main-content');
+            const dashboardAtAuth = document.getElementById('dashboard-content');
             const shouldPreserveOpenPage = !!(
                 user &&
                 pageContainerAtAuth &&
                 !pageContainerAtAuth.classList.contains('hidden') &&
                 pageContainerAtAuth.innerHTML.trim()
+            );
+            const shouldPreserveHydratedDashboard = !!(
+                user &&
+                !shouldPreserveOpenPage &&
+                mainContentAtAuth &&
+                dashboardAtAuth &&
+                !mainContentAtAuth.classList.contains('hidden') &&
+                !dashboardAtAuth.classList.contains('hidden')
             );
 
             // Clean up previous listeners
@@ -2356,8 +2366,11 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                     setMainChrome(false);
                 } else if (!shouldPreserveOpenPage) {
                     currentMainSection = 'home';
-                    switchTab('user-panel');
-                    setBottomNavActive('bottom-home-btn');
+                    if (!shouldPreserveHydratedDashboard) {
+                        switchTab('user-panel');
+                    }
+                    const selectedTabId = document.querySelector('.tab-button[aria-selected="true"]')?.dataset.tab || 'user-panel';
+                    setBottomNavActive(selectedTabId === 'admin-panel' ? 'bottom-admin-btn' : 'bottom-home-btn');
                     setMainChrome(true);
                 }
 
@@ -2374,10 +2387,14 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                 } else if (shouldPreserveOpenPage) {
                     document.getElementById('dashboard-content').classList.add('hidden');
                     document.getElementById('page-container').classList.remove('hidden');
-                } else {
+                } else if (!shouldPreserveHydratedDashboard) {
                     document.getElementById('dashboard-content').classList.remove('hidden');
                     document.getElementById('page-container').classList.add('hidden');
                     document.getElementById('page-container').innerHTML = '';
+                    document.getElementById('page-container').style.overflowY = 'auto';
+                } else {
+                    document.getElementById('dashboard-content').classList.remove('hidden');
+                    document.getElementById('page-container').classList.add('hidden');
                     document.getElementById('page-container').style.overflowY = 'auto';
                 }
                 document.getElementById('app-footer')?.classList.add('app-footer-hidden');
@@ -7476,51 +7493,80 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             let methodDetails = '';
             switch (method) {
                 case 'upi':
-                    methodDetails = currentUserData.paymentDetails?.upiId || 'Not set';
+                    methodDetails = getProfilePaymentDetails(method).upiId || 'Not set';
                     break;
                 case 'bank':
-                    methodDetails = `A/C: ${currentUserData.paymentDetails?.accountNumber || 'Not set'}, ${currentUserData.paymentDetails?.bankName || 'Not set'}`;
+                    const bankDetails = getProfilePaymentDetails(method);
+                    methodDetails = `A/C: ${bankDetails.accountNumber || 'Not set'}, ${bankDetails.bankName || 'Not set'}`;
                     break;
                 default:
-                    methodDetails = currentUserData.paymentDetails?.email || 'Not set';
+                    methodDetails = getProfilePaymentDetails(method).email || 'Not set';
             }
+            const walletBalance = Number(currentUserData?.balance || 0);
+            const spendableBalance = getSpendableWalletBalance(currentUserData);
+            const balanceAfter = spendableBalance - amount;
 
-            renderModal('Confirm Withdrawal',
-                `<div class="space-y-4">
-                    <div class="text-center">
-                        <p class="text-lg font-semibold">Confirm Withdrawal Request</p>
-                        <p class="text-sm text-gray-500 dark:text-gray-400 mt-1">Transaction ID will be generated after approval</p>
+            renderModal('Withdrawal Request',
+                `<div class="withdraw-confirm-shell">
+                    <div class="withdraw-confirm-hero">
+                        <span class="withdraw-confirm-icon">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-7 w-7" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M12 3v12"></path>
+                                <path d="m7 10 5 5 5-5"></path>
+                                <path d="M5 21h14"></path>
+                            </svg>
+                        </span>
+                        <p class="withdraw-confirm-kicker">Admin approval required</p>
+                        <h4>Confirm withdrawal</h4>
+                        <span>Transaction ID will be generated after approval.</span>
                     </div>
-                    <div class="bg-gray-100 dark:bg-gray-700 p-4 rounded-lg">
-                        <div class="flex justify-between mb-2">
-                            <span class="text-gray-600 dark:text-gray-300">Amount:</span>
-                            <span class="font-semibold">${formatCurrency(amount)}</span>
+                    <div class="withdraw-confirm-amount">
+                        <span>Amount</span>
+                        <strong>${formatCurrency(amount)}</strong>
+                    </div>
+                    <div class="withdraw-confirm-details">
+                        <div>
+                            <span>Method</span>
+                            <strong>${escapeHtml(methodName)}</strong>
                         </div>
-                        <div class="flex justify-between mb-2">
-                            <span class="text-gray-600 dark:text-gray-300">Method:</span>
-                            <span class="font-semibold">${methodName}</span>
+                        <div>
+                            <span>Payout details</span>
+                            <strong class="break-words text-right">${escapeHtml(methodDetails)}</strong>
                         </div>
-                        <div class="flex justify-between mb-2">
-                            <span class="text-gray-600 dark:text-gray-300">Details:</span>
-                            <span class="font-semibold text-sm">${methodDetails}</span>
+                        <div>
+                            <span>Wallet balance</span>
+                            <strong>${formatCurrency(walletBalance)}</strong>
                         </div>
-                        <div class="flex justify-between">
-                            <span class="text-gray-600 dark:text-gray-300">Current Balance:</span>
-                            <span class="font-semibold">${formatCurrency(getSpendableWalletBalance(currentUserData))}</span>
+                        <div>
+                            <span>Available balance</span>
+                            <strong>${formatCurrency(spendableBalance)}</strong>
                         </div>
-                        <div class="flex justify-between mt-2 pt-2 border-t border-gray-300 dark:border-gray-600">
-                            <span class="text-gray-600 dark:text-gray-300">Balance After:</span>
-                            <span class="font-semibold">${formatCurrency(getSpendableWalletBalance(currentUserData) - amount)}</span>
+                        <div class="withdraw-confirm-balance-after">
+                            <span>Balance after</span>
+                            <strong>${formatCurrency(balanceAfter)}</strong>
                         </div>
                     </div>
-                    <p class="text-sm text-gray-500 dark:text-gray-400 text-center">Your withdrawal request will be sent for admin approval. You can only have one pending withdrawal at a time.</p>
+                    <p class="withdraw-confirm-note">Your request will be sent to admin. Only one pending withdrawal is allowed at a time.</p>
                 </div>`,
-                `<button onclick="window.closeModal()" class="px-4 py-2 text-sm bg-gray-200 dark:bg-gray-600 rounded-lg">Cancel</button>
-                 <button id="final-withdraw-btn" class="px-4 py-2 text-sm bg-yellow-600 text-white rounded-lg">Confirm Withdrawal</button>`,
+                `<button onclick="window.closeModal()" class="withdraw-cancel-btn">Cancel</button>
+                 <button id="final-withdraw-btn" class="withdraw-submit-btn">Confirm</button>`,
                 'max-w-md', true
             );
-            document.getElementById('final-withdraw-btn').onclick = () => {
-                handleWithdrawRequest(amount, method, methodName);
+            document.getElementById('final-withdraw-btn').onclick = async () => {
+                const btn = document.getElementById('final-withdraw-btn');
+                if (!btn || btn.disabled) return;
+                const originalText = btn.textContent;
+                btn.disabled = true;
+                btn.textContent = 'Processing...';
+                try {
+                    await handleWithdrawRequest(amount, method, methodName);
+                } finally {
+                    const liveBtn = document.getElementById('final-withdraw-btn');
+                    if (liveBtn) {
+                        liveBtn.disabled = false;
+                        liveBtn.textContent = originalText;
+                    }
+                }
             };
         };
 
@@ -11346,14 +11392,22 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                     });
                 });
 
-                await upsertCloudFundRequest(requestPayload);
-                await syncRecentTransactionsToCloud(currentUser.uid);
-                showNotification('Withdrawal Request Submitted and balance deducted!', false, true);
+                upsertCloudFundRequest(requestPayload).catch(error => {
+                    console.warn('Withdrawal cloud request background sync skipped:', error);
+                });
+                syncRecentTransactionsToCloud(currentUser.uid).catch(error => {
+                    console.warn('Withdrawal transaction background sync skipped:', error);
+                });
+                showNotification('Withdrawal request sent to admin.', false, true);
                 window.closeModal();
                 hidePage();
             } catch (e) {
                 console.error("Withdraw request failed: ", e);
-                showFriendlyError('Could not submit withdrawal request. Please try again.');
+                const message = String(e?.message || '');
+                const userMessage = /insufficient|pending|not found|minimum|flagged|blocked/i.test(message)
+                    ? message
+                    : 'Could not submit withdrawal request. Please try again.';
+                showNotification(userMessage, true);
             }
         };
 
@@ -13770,7 +13824,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
         const originalHandleWithdrawRequest = handleWithdrawRequest;
         handleWithdrawRequest = async function (amount, method, methodName) {
             // Prevent duplicate request
-            if (!preventDuplicateRequest('withdrawal')) {
+            if (!preventDuplicateRequest('withdrawal', 15000)) {
                 return;
             }
 
