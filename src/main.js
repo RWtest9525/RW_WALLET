@@ -1595,15 +1595,23 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                 console.warn('Virtual keyboard overlay setup skipped:', error);
             }
 
-            const resetTypingPosition = () => {
-                shell.style.position = '';
-                shell.style.left = '';
-                shell.style.top = '';
-                shell.style.width = '';
+            let scheduledFrame = 0;
+            let baseViewportHeight = Math.max(
+                window.innerHeight || 0,
+                document.documentElement.clientHeight || 0,
+                window.visualViewport?.height || 0
+            );
+
+            const getCurrentLayoutHeight = () => Math.max(
+                window.innerHeight || 0,
+                document.documentElement.clientHeight || 0,
+                window.visualViewport?.height || 0
+            );
+
+            const clearChatViewport = () => {
                 shell.style.height = '';
                 shell.style.maxHeight = '';
-                shell.style.zIndex = '';
-                shell.style.transform = '';
+                shell.style.minHeight = '';
                 shell.classList.remove('chat-keyboard-active');
                 composer.style.position = '';
                 composer.style.left = '';
@@ -1619,105 +1627,39 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                 if (pageContainer) pageContainer.style.overflowY = 'hidden';
             };
 
-            let focusStartedAt = 0;
-            let focusBaseHeight = Math.max(window.innerHeight || 0, document.documentElement.clientHeight || 0, window.visualViewport?.height || 0);
-            let lastKnownKeyboardHeight = 0;
-            let lastKnownKeyboardTop = 0;
-            let scheduledFrame = 0;
-            let keyboardClosedForFocus = false;
-
-            const getLayoutHeight = () => Math.max(
-                window.innerHeight || 0,
-                document.documentElement.clientHeight || 0,
-                window.visualViewport?.height || 0
-            );
-
-            const getKeyboardMetrics = () => {
+            const getVisibleChatHeight = () => {
                 const viewport = window.visualViewport;
-                const currentLayoutHeight = getLayoutHeight();
-                focusBaseHeight = Math.max(focusBaseHeight, currentLayoutHeight);
-                const visualBottom = viewport ? viewport.height + viewport.offsetTop : currentLayoutHeight;
+                const layoutHeight = getCurrentLayoutHeight();
+                baseViewportHeight = Math.max(baseViewportHeight, layoutHeight);
                 const vkRect = navigator.virtualKeyboard?.boundingRect;
                 const virtualKeyboardHeight = Number(vkRect?.height || 0);
-                const virtualKeyboardTop = Number(vkRect?.y || 0);
-                const viewportKeyboardHeight = viewport ? Math.max(0, focusBaseHeight - visualBottom) : 0;
-                const resizedKeyboardHeight = Math.max(0, focusBaseHeight - currentLayoutHeight);
-                const keyboardHeight = Math.max(virtualKeyboardHeight, viewportKeyboardHeight, resizedKeyboardHeight);
-                const hasViewportKeyboard = visualBottom < focusBaseHeight - 48 || currentLayoutHeight < focusBaseHeight - 48;
-                const keyboardTop = virtualKeyboardHeight >= 60 && virtualKeyboardTop > 0
-                    ? virtualKeyboardTop
-                    : Math.max(0, focusBaseHeight - keyboardHeight);
-
-                if (keyboardHeight >= 60) {
-                    keyboardClosedForFocus = false;
-                    lastKnownKeyboardHeight = keyboardHeight;
-                    lastKnownKeyboardTop = keyboardTop;
-                    return { height: keyboardHeight, top: keyboardTop, layoutHeight: focusBaseHeight };
+                if (virtualKeyboardHeight >= 60) {
+                    return Math.max(260, baseViewportHeight - virtualKeyboardHeight);
                 }
-
-                if (lastKnownKeyboardHeight && hasViewportKeyboard) {
-                    return {
-                        height: lastKnownKeyboardHeight,
-                        top: lastKnownKeyboardTop || Math.max(0, focusBaseHeight - lastKnownKeyboardHeight),
-                        layoutHeight: focusBaseHeight
-                    };
+                if (viewport && viewport.height > 0 && viewport.height < baseViewportHeight - 60) {
+                    return Math.max(260, viewport.height + Math.max(0, viewport.offsetTop || 0));
                 }
-
-                if (lastKnownKeyboardHeight && !hasViewportKeyboard) {
-                    lastKnownKeyboardHeight = 0;
-                    lastKnownKeyboardTop = 0;
-                    keyboardClosedForFocus = true;
-                    return { height: 0, top: focusBaseHeight, layoutHeight: focusBaseHeight };
-                }
-
-                const isTouchPhone = window.matchMedia?.('(pointer: coarse) and (max-width: 768px)')?.matches;
-                if (isTouchPhone && document.activeElement === input && focusStartedAt && !keyboardClosedForFocus) {
-                    const fallbackHeight = lastKnownKeyboardHeight || Math.round(focusBaseHeight * 0.43);
-                    const fallbackTop = Math.max(0, focusBaseHeight - fallbackHeight);
-                    return { height: fallbackHeight, top: fallbackTop, layoutHeight: focusBaseHeight };
-                }
-
-                return { height: 0, top: focusBaseHeight, layoutHeight: focusBaseHeight };
+                return Math.max(260, layoutHeight);
             };
 
-            const keepTypingVisible = () => {
-                if (document.activeElement !== input) {
-                    resetTypingPosition();
-                    return;
-                }
-
-                const keyboard = getKeyboardMetrics();
-                if (keyboard.height < 60) {
-                    resetTypingPosition();
-                    return;
-                }
-
-                const layoutHeight = Math.max(keyboard.layoutHeight, getLayoutHeight());
-                const width = Math.min(window.innerWidth || 0, 576);
-                const left = Math.max(0, ((window.innerWidth || width) - width) / 2);
-                const lockedHeight = Math.max(240, layoutHeight - 1);
-                shell.style.position = 'fixed';
-                shell.style.left = `${left}px`;
-                shell.style.top = '0px';
-                shell.style.width = `${width}px`;
-                shell.style.height = `${lockedHeight}px`;
-                shell.style.maxHeight = `${lockedHeight}px`;
-                shell.style.zIndex = '80';
-                shell.classList.add('chat-keyboard-active');
-
-                const composerHeight = composer.offsetHeight || 64;
-                const composerTop = Math.max(0, Math.round(keyboard.top - composerHeight));
-                composer.style.position = 'fixed';
-                composer.style.left = `${left}px`;
-                composer.style.width = `${width}px`;
-                composer.style.top = `${composerTop}px`;
+            const syncChatViewport = () => {
+                const visibleHeight = getVisibleChatHeight();
+                const keyboardOpen = visibleHeight < baseViewportHeight - 60;
+                shell.style.height = `${visibleHeight}px`;
+                shell.style.maxHeight = `${visibleHeight}px`;
+                shell.style.minHeight = `${visibleHeight}px`;
+                shell.classList.toggle('chat-keyboard-active', keyboardOpen);
+                composer.style.position = '';
+                composer.style.left = '';
+                composer.style.width = '';
+                composer.style.top = '';
                 composer.style.bottom = '';
-                composer.style.paddingBottom = '0.75rem';
-                composer.style.zIndex = '120';
-                composer.style.boxShadow = '0 -10px 28px rgba(15, 23, 42, 0.14)';
-                composer.style.transform = 'translateZ(0)';
-                composer.classList.add('chat-composer-floating');
-                messages.style.paddingBottom = `${Math.max(composerHeight + 16, layoutHeight - composerTop + 16)}px`;
+                composer.style.paddingBottom = '';
+                composer.style.zIndex = '';
+                composer.style.boxShadow = '';
+                composer.style.transform = '';
+                composer.classList.toggle('chat-composer-floating', keyboardOpen);
+                messages.style.paddingBottom = '';
                 if (pageContainer) pageContainer.style.overflowY = 'hidden';
 
                 requestAnimationFrame(() => {
@@ -1725,54 +1667,44 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                 });
             };
 
-            const requestKeepTypingVisible = () => {
+            const requestSyncChatViewport = () => {
                 if (scheduledFrame) cancelAnimationFrame(scheduledFrame);
                 scheduledFrame = requestAnimationFrame(() => {
                     scheduledFrame = 0;
-                    keepTypingVisible();
+                    syncChatViewport();
                 });
             };
 
-            const scheduleKeepTypingVisible = () => {
-                if (!focusStartedAt) focusStartedAt = Date.now();
-                requestKeepTypingVisible();
-                setTimeout(requestKeepTypingVisible, 80);
-                setTimeout(requestKeepTypingVisible, 180);
-                setTimeout(requestKeepTypingVisible, 360);
-                setTimeout(requestKeepTypingVisible, 700);
-                setTimeout(requestKeepTypingVisible, 1200);
-                setTimeout(requestKeepTypingVisible, 1800);
+            const scheduleSyncChatViewport = () => {
+                requestSyncChatViewport();
+                setTimeout(requestSyncChatViewport, 80);
+                setTimeout(requestSyncChatViewport, 180);
+                setTimeout(requestSyncChatViewport, 360);
+                setTimeout(requestSyncChatViewport, 700);
             };
+
             const refreshTypingVisible = () => {
-                scheduleKeepTypingVisible();
+                scheduleSyncChatViewport();
             };
             const handleFocus = () => {
-                focusStartedAt = Date.now();
-                focusBaseHeight = Math.max(focusBaseHeight, getLayoutHeight());
-                lastKnownKeyboardHeight = 0;
-                lastKnownKeyboardTop = 0;
-                keyboardClosedForFocus = false;
-                scheduleKeepTypingVisible();
+                baseViewportHeight = Math.max(baseViewportHeight, getCurrentLayoutHeight());
+                scheduleSyncChatViewport();
             };
             const handleBlur = () => {
-                focusStartedAt = 0;
-                lastKnownKeyboardHeight = 0;
-                lastKnownKeyboardTop = 0;
-                keyboardClosedForFocus = false;
-                setTimeout(resetTypingPosition, 24);
+                setTimeout(clearChatViewport, 60);
             };
             const handlePointerDown = (event) => {
-                if (event.target === input) {
-                    keyboardClosedForFocus = false;
-                    scheduleKeepTypingVisible();
-                    return;
-                }
+                if (event.target === input) return;
                 if (composer.contains(event.target)) return;
                 input.blur();
-                resetTypingPosition();
+                clearChatViewport();
             };
             const handleViewportChange = () => {
-                scheduleKeepTypingVisible();
+                if (document.activeElement === input) {
+                    scheduleSyncChatViewport();
+                } else {
+                    clearChatViewport();
+                }
             };
 
             input.addEventListener('focus', handleFocus);
@@ -1793,7 +1725,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                 window.visualViewport?.removeEventListener('scroll', handleViewportChange);
                 navigator.virtualKeyboard?.removeEventListener?.('geometrychange', handleViewportChange);
                 window.removeEventListener('orientationchange', handleViewportChange);
-                resetTypingPosition();
+                clearChatViewport();
             };
         };
 
