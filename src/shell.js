@@ -234,11 +234,11 @@ root.outerHTML = String.raw`
                                 <div class="mb-4 flex items-center justify-between gap-3">
                                     <h3 class="text-lg font-semibold">Actions</h3>
                                     <button id="wallet-history-action-btn"
-                                        class="inline-flex shrink-0 items-center gap-2 rounded-2xl border border-blue-100 bg-blue-50 px-3 py-2 text-xs font-black text-blue-700 shadow-sm transition hover:bg-blue-100 dark:border-blue-800 dark:bg-blue-900/20 dark:text-blue-200 dark:hover:bg-blue-900/35">
-                                        <span class="flex h-8 w-8 items-center justify-center rounded-xl bg-white p-1.5 shadow-sm dark:bg-gray-800">
+                                        class="inline-flex w-auto min-w-fit shrink-0 items-center gap-2 whitespace-nowrap rounded-2xl border border-blue-100 bg-blue-50 px-2.5 py-2 text-[11px] font-black text-blue-700 shadow-sm transition hover:bg-blue-100 dark:border-blue-800 dark:bg-blue-900/20 dark:text-blue-200 dark:hover:bg-blue-900/35">
+                                        <span class="flex h-7 w-7 items-center justify-center rounded-xl bg-white p-1.5 shadow-sm dark:bg-gray-800">
                                             <img src="https://cdn-icons-png.flaticon.com/512/3652/3652191.png" alt="History" class="h-full w-full object-contain" loading="eager" fetchpriority="high" decoding="async">
                                         </span>
-                                        <span>History</span>
+                                        <span>Transaction History</span>
                                     </button>
                                 </div>
                                 <div class="grid grid-cols-3 gap-2 sm:gap-3">
@@ -455,14 +455,14 @@ root.outerHTML = String.raw`
             </div>
 
             <nav id="bottom-nav" class="fixed z-50">
-                <div id="bottom-nav-grid" class="mx-auto grid max-w-xl grid-cols-4 items-center px-2 pt-2 text-[10px] sm:text-xs font-semibold text-gray-500 dark:text-gray-400">
+                <div id="bottom-nav-grid" class="mx-auto grid w-full max-w-xl grid-cols-4 items-center px-2 pt-2 text-[10px] sm:text-xs font-semibold text-gray-500 dark:text-gray-400" style="--bottom-nav-count: 4;">
                     <button id="bottom-home-btn" class="bottom-nav-btn active flex flex-col items-center gap-1 py-1">
                         <span class="bottom-nav-icon flex h-10 w-10 items-center justify-center rounded-xl bg-gray-100 dark:bg-gray-700 transition">
                             <img src="https://cdn-icons-png.flaticon.com/512/1946/1946436.png" alt="Home" class="bottom-nav-img" loading="eager" fetchpriority="high" decoding="async">
                         </span>
                         <span id="bottom-home-label">Wallet</span>
                     </button>
-                    <button id="bottom-admin-btn" class="bottom-nav-btn hidden flex flex-col items-center gap-1 py-1">
+                    <button id="bottom-admin-btn" hidden class="bottom-nav-btn hidden flex flex-col items-center gap-1 py-1">
                         <span class="bottom-nav-icon flex h-9 w-9 items-center justify-center rounded-xl bg-gray-100 dark:bg-gray-700 transition">
                             <img src="https://cdn-icons-png.flaticon.com/512/3135/3135715.png" alt="Admin" class="bottom-nav-img" loading="eager" fetchpriority="high" decoding="async">
                         </span>

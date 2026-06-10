@@ -326,6 +326,8 @@ html,
         }
 
         #bottom-nav-grid {
+            width: 100%;
+            grid-template-columns: repeat(var(--bottom-nav-count, 4), minmax(0, 1fr)) !important;
             height: 5.1rem;
             min-height: 5.1rem;
             position: relative;
@@ -1127,6 +1129,8 @@ html,
         }
 
         #bottom-nav-grid {
+            width: 100%;
+            grid-template-columns: repeat(var(--bottom-nav-count, 4), minmax(0, 1fr)) !important;
             height: 4.7rem;
             min-height: 4.7rem;
             padding-bottom: 0.1rem;

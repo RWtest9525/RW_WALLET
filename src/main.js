@@ -1514,13 +1514,18 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
 
         const applyAdminBottomChrome = (isAdmin) => {
             document.getElementById('admin-tab-button')?.classList.toggle('hidden', !isAdmin);
-            document.getElementById('bottom-admin-btn')?.classList.toggle('hidden', !isAdmin);
+            const bottomAdminButton = document.getElementById('bottom-admin-btn');
+            if (bottomAdminButton) {
+                bottomAdminButton.hidden = !isAdmin;
+                bottomAdminButton.classList.toggle('hidden', !isAdmin);
+            }
             document.getElementById('bottom-task-btn')?.classList.remove('hidden');
             const bottomHomeLabel = document.getElementById('bottom-home-label');
             if (bottomHomeLabel) bottomHomeLabel.textContent = 'Wallet';
             const bottomGrid = document.getElementById('bottom-nav-grid');
             if (bottomGrid) {
-                bottomGrid.className = `mx-auto grid max-w-xl ${isAdmin ? 'grid-cols-5' : 'grid-cols-4'} items-center px-2 pt-2 text-[10px] sm:text-xs font-semibold text-gray-500 dark:text-gray-400`;
+                bottomGrid.style.setProperty('--bottom-nav-count', isAdmin ? '5' : '4');
+                bottomGrid.className = `mx-auto grid w-full max-w-xl ${isAdmin ? 'grid-cols-5' : 'grid-cols-4'} items-center px-2 pt-2 text-[10px] sm:text-xs font-semibold text-gray-500 dark:text-gray-400`;
             }
         };
 
