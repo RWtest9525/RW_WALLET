@@ -208,28 +208,46 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             user = user || {};
             return Math.max(0, Number(user.maxLoanAmount || user.loanMaxAmount || user.creditLimit || user.loanCreditLimit || 0));
         };
+        const hasLoanDocumentFile = (documentInfo = null) => {
+            if (!documentInfo) return false;
+            if (typeof documentInfo === 'string') return !!documentInfo.trim();
+            return !!(documentInfo.url || documentInfo.downloadURL || documentInfo.path || documentInfo.storage || documentInfo.name);
+        };
+        const hasSubmittedLoanDocuments = (request = {}) => {
+            request = request || {};
+            if (request.loanDocumentsSubmitted === true || request.loanDocumentsVerified === true || request.loanDocumentsApproved === true) return true;
+            const aadhaarDocument = request.documents?.aadhaar || request.aadhaarDocument || request.aadhaarDoc || request.aadhaarFile;
+            const selfieDocument = request.documents?.selfie || request.selfieDocument || request.selfiePhoto || request.selfieFile;
+            return hasLoanDocumentFile(aadhaarDocument) && hasLoanDocumentFile(selfieDocument);
+        };
         const hasSubmittedLoanDetails = (request = {}) => {
             request = request || {};
-            return !!(
+            const hasPersonalDetails = !!(
                 request.personalDetails ||
-                request.documents?.aadhaar ||
-                request.documents?.selfie ||
                 request.fatherName ||
                 request.aadhaar ||
                 request.aadhaarNumber
             );
+            return hasPersonalDetails && hasSubmittedLoanDocuments(request);
         };
         const isModernLoanRequest = (request = {}) => {
             request = request || {};
             const version = Number(request.requestVersion || request.loanApplicationVersion || request.latestLoanRequestVersion || 0);
-            if (version >= LOAN_APPLICATION_VERSION) return true;
+            if (version >= LOAN_APPLICATION_VERSION) return hasSubmittedLoanDetails(request);
             const status = String(request.status || request.loanRequestStatus || '').trim().toLowerCase();
             return ['pending', 'approved', 'rejected', 'cancelled', 'canceled', 'failed', 'denied'].includes(status) && hasSubmittedLoanDetails(request);
         };
+        const isApprovedModernLoanRequest = (request = {}) => isModernLoanRequest(request) && String(request.status || request.loanRequestStatus || '').trim().toLowerCase() === 'approved';
         const hasModernLoanApproval = (user = currentUserData || {}) => {
             user = user || {};
             return getLoanLimitAmount(user) > 0 && Number(user.loanApplicationVersion || user.loanRequestVersion || 0) >= LOAN_APPLICATION_VERSION;
         };
+        const hasDocumentedModernLoanApproval = (user = currentUserData || {}, requests = []) =>
+            hasModernLoanApproval(user) && (
+                user.loanDocumentsVerified === true ||
+                user.loanDocumentsApproved === true ||
+                requests.some(isApprovedModernLoanRequest)
+            );
         const isModernLoanRecord = (loan = {}) => {
             loan = loan || {};
             return Number(loan.loanApplicationVersion || loan.loanRequestVersion || loan.requestVersion || loan.latestLoanRequestVersion || 0) >= LOAN_APPLICATION_VERSION;
@@ -7480,7 +7498,14 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                 latestLoanRequestVersion: user.latestLoanRequestVersion || user.loanRequestVersion || user.loanApplicationVersion || 0,
                 reapplyAfter: user.loanReapplyAfter || user.reapplyAfter || null,
                 processedAt: user.loanProcessedAt || user.processedAt || null,
-                rejectionReason: user.loanRejectionReason || user.loanRequestRejectionReason || user.rejectionReason || ''
+                rejectionReason: user.loanRejectionReason || user.loanRequestRejectionReason || user.rejectionReason || '',
+                loanDocumentsSubmitted: user.loanDocumentsSubmitted === true,
+                loanDocumentsVerified: user.loanDocumentsVerified === true,
+                loanDocumentsApproved: user.loanDocumentsApproved === true,
+                personalDetails: (user.loanDocumentsSubmitted === true || user.loanDocumentsVerified === true || user.loanDocumentsApproved === true) ? {
+                    name: user.name || '',
+                    mobile: getUserMobileValue(user) || ''
+                } : null
             };
         };
 
@@ -7783,7 +7808,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                 const latestModernRequest = getLatestModernLoanRequest(currentUser.uid, requests);
                 const userLoanMarker = getUserLoanRequestMarker(currentUserData);
                 const activeLoans = loans.filter(isActiveLoanRecord);
-                if (activeLoans.length || hasModernLoanApproval(currentUserData)) {
+                if (activeLoans.length || hasDocumentedModernLoanApproval(currentUserData, requests)) {
                     showLoanCreditDashboardPage(loans);
                     return;
                 }
@@ -10295,13 +10320,15 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                         selfie: selfieDocument,
                         aadhaarSelfieMatchStatus: 'pending_admin_review'
                     },
+                    loanDocumentsSubmitted: true,
                     status: 'pending',
                     requestedAt: serverTimestamp()
                 }), 15000, 'Could not save loan request. Please try again.');
                 await updateDoc(doc(db, `artifacts/${appId}/public/data/users`, currentUser.uid), {
                     latestLoanRequestVersion: LOAN_APPLICATION_VERSION,
                     loanRequestStatus: 'pending',
-                    loanRequestedAt: serverTimestamp()
+                    loanRequestedAt: serverTimestamp(),
+                    loanDocumentsSubmitted: true
                 }).catch(error => console.warn('Loan request user marker skipped:', error));
 
                 renderModal('Loan Request Submitted',
@@ -10347,6 +10374,21 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                 if (takeLoanBtn) {
                     takeLoanBtn.disabled = true;
                     takeLoanBtn.textContent = 'Processing...';
+                }
+                const hasDocumentedApprovalFlag = currentUserData.loanDocumentsVerified === true || currentUserData.loanDocumentsApproved === true;
+                const documentedApprovalSnap = hasDocumentedApprovalFlag ? null : await withTimeout(
+                    getDocs(query(
+                        collection(db, `artifacts/${appId}/public/data/loan_requests`),
+                        where("userId", "==", currentUser.uid)
+                    )),
+                    12000,
+                    'Could not verify your updated loan documents. Please try again.'
+                );
+                const hasDocumentedApprovalRequest = documentedApprovalSnap
+                    ? documentedApprovalSnap.docs.map(docItem => ({ id: docItem.id, ...docItem.data() })).some(isApprovedModernLoanRequest)
+                    : true;
+                if (!hasDocumentedApprovalRequest) {
+                    throw new Error('Please submit Aadhaar and selfie details again, then wait for admin approval.');
                 }
                 const activeLoanSnap = await getDocs(query(
                     collection(db, `artifacts/${appId}/public/data/loans`),
@@ -11686,6 +11728,9 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                             loanRequestStatus: 'approved',
                             loanApprovedAt: serverTimestamp(),
                             loanApprovedBy: currentUser.uid,
+                            loanDocumentsSubmitted: true,
+                            loanDocumentsVerified: true,
+                            loanDocumentsApprovedAt: serverTimestamp(),
                             loanReapplyAfter: deleteField(),
                             loanRejectionReason: deleteField(),
                             loanProcessedAt: deleteField(),
@@ -11693,7 +11738,10 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                         });
                         tx.update(requestRef, {
                             maxLoanAmount: Number(maxLoanAmount),
-                            loanApplicationVersion: LOAN_APPLICATION_VERSION
+                            loanApplicationVersion: LOAN_APPLICATION_VERSION,
+                            loanDocumentsSubmitted: true,
+                            loanDocumentsVerified: true,
+                            loanDocumentsApproved: true
                         });
                     } else {
                         tx.update(userRef, {
@@ -11706,7 +11754,8 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                             loanProcessedAt: serverTimestamp(),
                             loanProcessedBy: currentUser.uid,
                             loanReapplyAfter: Timestamp.fromDate(reapplyAfter),
-                            loanRejectionReason: cleanRejectionReason
+                            loanRejectionReason: cleanRejectionReason,
+                            loanDocumentsVerified: false
                         });
                     }
                 });
@@ -11745,6 +11794,8 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                         loanRequestStatus: 'pending',
                         latestLoanRequestVersion: LOAN_APPLICATION_VERSION,
                         loanApplicationVersion: LOAN_APPLICATION_VERSION,
+                        loanDocumentsSubmitted: true,
+                        loanDocumentsVerified: false,
                         loanProcessedAt: deleteField(),
                         loanProcessedBy: deleteField(),
                         loanReapplyAfter: deleteField(),
