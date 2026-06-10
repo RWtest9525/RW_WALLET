@@ -1620,29 +1620,47 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             };
 
             let focusStartedAt = 0;
+            let focusBaseHeight = Math.max(window.innerHeight || 0, document.documentElement.clientHeight || 0, window.visualViewport?.height || 0);
             let lastKnownKeyboardHeight = 0;
+            let lastKnownKeyboardTop = 0;
+            let scheduledFrame = 0;
 
-            const getKeyboardHeight = () => {
+            const getLayoutHeight = () => Math.max(
+                window.innerHeight || 0,
+                document.documentElement.clientHeight || 0,
+                window.visualViewport?.height || 0
+            );
+
+            const getKeyboardMetrics = () => {
                 const viewport = window.visualViewport;
-                const layoutHeight = Math.max(window.innerHeight || 0, document.documentElement.clientHeight || 0);
-                const visualBottom = viewport ? viewport.height + viewport.offsetTop : layoutHeight;
-                const virtualKeyboardHeight = Number(navigator.virtualKeyboard?.boundingRect?.height || 0);
-                const viewportKeyboardHeight = viewport ? Math.max(0, layoutHeight - visualBottom) : 0;
-                return Math.max(virtualKeyboardHeight, viewportKeyboardHeight);
-            };
+                const currentLayoutHeight = getLayoutHeight();
+                focusBaseHeight = Math.max(focusBaseHeight, currentLayoutHeight);
+                const visualBottom = viewport ? viewport.height + viewport.offsetTop : currentLayoutHeight;
+                const vkRect = navigator.virtualKeyboard?.boundingRect;
+                const virtualKeyboardHeight = Number(vkRect?.height || 0);
+                const virtualKeyboardTop = Number(vkRect?.y || 0);
+                const viewportKeyboardHeight = viewport ? Math.max(0, focusBaseHeight - visualBottom) : 0;
+                const resizedKeyboardHeight = Math.max(0, focusBaseHeight - currentLayoutHeight);
+                const keyboardHeight = Math.max(virtualKeyboardHeight, viewportKeyboardHeight, resizedKeyboardHeight);
+                const keyboardTop = virtualKeyboardHeight >= 60 && virtualKeyboardTop > 0
+                    ? virtualKeyboardTop
+                    : Math.max(0, focusBaseHeight - keyboardHeight);
 
-            const getKeyboardLift = () => {
-                const layoutHeight = Math.max(window.innerHeight || 0, document.documentElement.clientHeight || 0);
-                const keyboardHeight = getKeyboardHeight();
-                if (keyboardHeight >= 80) {
+                if (keyboardHeight >= 60) {
                     lastKnownKeyboardHeight = keyboardHeight;
-                    return keyboardHeight;
+                    lastKnownKeyboardTop = keyboardTop;
+                    return { height: keyboardHeight, top: keyboardTop, layoutHeight: focusBaseHeight };
                 }
-                const isTouchPhone = window.matchMedia?.('(pointer: coarse) and (max-width: 768px)')?.matches;
-                if (isTouchPhone && Date.now() - focusStartedAt < 1400) {
-                    return lastKnownKeyboardHeight || Math.round(layoutHeight * 0.43);
+
+                if (lastKnownKeyboardHeight && visualBottom < focusBaseHeight - 48) {
+                    return {
+                        height: lastKnownKeyboardHeight,
+                        top: lastKnownKeyboardTop || Math.max(0, focusBaseHeight - lastKnownKeyboardHeight),
+                        layoutHeight: focusBaseHeight
+                    };
                 }
-                return lastKnownKeyboardHeight || 0;
+
+                return { height: 0, top: focusBaseHeight, layoutHeight: focusBaseHeight };
             };
 
             const keepTypingVisible = () => {
@@ -1651,8 +1669,13 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                     return;
                 }
 
-                const layoutHeight = Math.max(window.innerHeight || 0, document.documentElement.clientHeight || 0);
-                const keyboardLift = getKeyboardLift();
+                const keyboard = getKeyboardMetrics();
+                if (keyboard.height < 60) {
+                    resetTypingPosition();
+                    return;
+                }
+
+                const layoutHeight = Math.max(keyboard.layoutHeight, getLayoutHeight());
                 const width = Math.min(window.innerWidth || 0, 576);
                 const left = Math.max(0, ((window.innerWidth || width) - width) / 2);
                 const lockedHeight = Math.max(240, layoutHeight - 1);
@@ -1666,17 +1689,18 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                 shell.classList.add('chat-keyboard-active');
 
                 const composerHeight = composer.offsetHeight || 64;
+                const composerTop = Math.max(0, Math.round(keyboard.top - composerHeight));
                 composer.style.position = 'fixed';
                 composer.style.left = `${left}px`;
                 composer.style.width = `${width}px`;
-                composer.style.top = '';
-                composer.style.bottom = `${Math.max(0, keyboardLift)}px`;
+                composer.style.top = `${composerTop}px`;
+                composer.style.bottom = '';
                 composer.style.paddingBottom = '0.75rem';
                 composer.style.zIndex = '120';
                 composer.style.boxShadow = '0 -10px 28px rgba(15, 23, 42, 0.14)';
                 composer.style.transform = 'translateZ(0)';
                 composer.classList.add('chat-composer-floating');
-                messages.style.paddingBottom = `${composerHeight + Math.max(0, keyboardLift) + 16}px`;
+                messages.style.paddingBottom = `${Math.max(composerHeight + 16, layoutHeight - composerTop + 16)}px`;
                 if (pageContainer) pageContainer.style.overflowY = 'hidden';
 
                 requestAnimationFrame(() => {
@@ -1684,27 +1708,37 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                 });
             };
 
+            const requestKeepTypingVisible = () => {
+                if (scheduledFrame) cancelAnimationFrame(scheduledFrame);
+                scheduledFrame = requestAnimationFrame(() => {
+                    scheduledFrame = 0;
+                    keepTypingVisible();
+                });
+            };
+
             const scheduleKeepTypingVisible = () => {
                 if (!focusStartedAt) focusStartedAt = Date.now();
-                keepTypingVisible();
-                setTimeout(keepTypingVisible, 120);
-                setTimeout(keepTypingVisible, 320);
-                setTimeout(keepTypingVisible, 900);
-                setTimeout(keepTypingVisible, 1500);
+                requestKeepTypingVisible();
+                setTimeout(requestKeepTypingVisible, 80);
+                setTimeout(requestKeepTypingVisible, 180);
+                setTimeout(requestKeepTypingVisible, 360);
+                setTimeout(requestKeepTypingVisible, 700);
             };
             const refreshTypingVisible = () => {
-                focusStartedAt = Date.now();
                 scheduleKeepTypingVisible();
             };
             const handleFocus = () => {
                 focusStartedAt = Date.now();
+                focusBaseHeight = Math.max(focusBaseHeight, getLayoutHeight());
                 lastKnownKeyboardHeight = 0;
+                lastKnownKeyboardTop = 0;
                 scheduleKeepTypingVisible();
             };
             const handleBlur = () => {
                 focusStartedAt = 0;
                 lastKnownKeyboardHeight = 0;
-                setTimeout(resetTypingPosition, 80);
+                lastKnownKeyboardTop = 0;
+                setTimeout(resetTypingPosition, 24);
             };
             const handlePointerDown = (event) => {
                 if (event.target === input || composer.contains(event.target)) return;
@@ -6095,7 +6129,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             const content = `
                 <div id="revy-chat-shell" class="max-w-xl mx-auto bg-gray-100 dark:bg-gray-900 h-[100dvh] flex flex-col">
                     <div class="bg-white dark:bg-gray-800 border border-gray-100 dark:border-gray-700 rounded-xl shadow-sm overflow-hidden flex flex-col h-full min-h-0">
-                        <div class="flex items-center gap-3 p-3 border-b border-gray-100 dark:border-gray-700">
+                        <div class="flex items-center gap-3 px-3 pb-3 pt-[calc(1.85rem+env(safe-area-inset-top))] border-b border-gray-100 dark:border-gray-700">
                             <button id="revy-back-btn" class="h-10 w-10 shrink-0 rounded-full bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 flex items-center justify-center">
                                 <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5"></path><path d="M12 19l-7-7 7-7"></path></svg>
                             </button>

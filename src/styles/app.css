@@ -127,6 +127,18 @@ html,
             contain: layout paint;
         }
 
+        .chat-composer-floating {
+            margin: 0 !important;
+            border-radius: 0 !important;
+            will-change: top;
+            transition: none !important;
+            touch-action: manipulation;
+        }
+
+        .chat-keyboard-active {
+            overscroll-behavior: contain;
+        }
+
         /* Fixed Header for Pages */
         .page-header-fixed {
             position: sticky;
