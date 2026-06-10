@@ -4103,11 +4103,11 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                             <p class="text-lg font-black uppercase text-slate-950 dark:text-white">RW TASK</p>
                         </div>
                         <div class="task-header-actions">
-                            <button type="button" data-action="task-coming-soon" class="task-mini-action">
+                            <button type="button" data-action="open-task-ads-page" class="task-mini-action">
                                 <img src="https://cdn-icons-png.flaticon.com/512/2659/2659360.png" alt="Ads" loading="eager" decoding="async">
                                 <span>Ads</span>
                             </button>
-                            <button type="button" data-action="task-coming-soon" class="task-mini-action">
+                            <button type="button" data-action="open-task-bonus-page" class="task-mini-action">
                                 <img src="https://cdn-icons-png.flaticon.com/512/2611/2611152.png" alt="Bonus" loading="eager" decoding="async">
                                 <span>Bonus</span>
                             </button>
@@ -4121,6 +4121,34 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                 </div>
                 ${getPageFooter()}`;
             showPage(content, { returnTo: currentUser?.uid === ADMIN_UID ? 'admin' : 'home', keepBottomNav: true });
+            setBottomNavActive('bottom-task-btn');
+        };
+
+        const showTaskFeatureComingSoonPage = (feature = 'ads') => {
+            const isAds = feature === 'ads';
+            const title = isAds ? 'Watch Ads & Earn' : 'Daily Bonus';
+            const icon = isAds
+                ? 'https://cdn-icons-png.flaticon.com/512/2659/2659360.png'
+                : 'https://cdn-icons-png.flaticon.com/512/2611/2611152.png';
+            const headline = isAds
+                ? 'Earn from watching banner Ads, videos ads.'
+                : 'Claim daily bonus, spin wheel and earn money upto 5 rupees.';
+            const content = `
+                ${getPageHeader(title)}
+                <div class="mx-auto max-w-md pb-24">
+                    <section class="relative overflow-hidden rounded-3xl border border-slate-100 bg-white p-5 text-center shadow-xl dark:border-slate-700 dark:bg-gray-800">
+                        <div class="mx-auto flex h-20 w-20 items-center justify-center rounded-3xl bg-slate-50 shadow-inner dark:bg-gray-900">
+                            <img src="${icon}" alt="${title}" class="h-12 w-12 object-contain" loading="eager" decoding="async">
+                        </div>
+                        <p class="mt-5 text-[10px] font-black uppercase text-blue-600 dark:text-blue-300">Coming Soon</p>
+                        <h3 class="mt-2 text-2xl font-black leading-tight text-slate-950 dark:text-white">${headline}</h3>
+                        <div class="mt-5 rounded-2xl bg-blue-50 px-4 py-4 text-sm font-bold leading-6 text-blue-800 dark:bg-blue-900/20 dark:text-blue-100">
+                            This feature is not available yet. It will be announced soon...
+                        </div>
+                    </section>
+                </div>
+                ${getPageFooter()}`;
+            showPage(content, { returnTo: 'task', keepBottomNav: true, onBack: showUserTaskPage });
             setBottomNavActive('bottom-task-btn');
         };
 
@@ -13168,6 +13196,14 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
 
                 case 'task-coming-soon':
                     showNotification('Coming soon.');
+                    break;
+
+                case 'open-task-ads-page':
+                    showTaskFeatureComingSoonPage('ads');
+                    break;
+
+                case 'open-task-bonus-page':
+                    showTaskFeatureComingSoonPage('bonus');
                     break;
 
                 case 'edit-admin-ad':
