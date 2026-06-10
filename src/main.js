@@ -885,7 +885,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             if (analyticsPendingElement) {
                 analyticsPendingElement.textContent = allFundRequestsCache.length;
             }
-            ['admin-withdrawal-request-badge', 'analytics-pending-withdrawal-badge'].forEach((id) => {
+            ['admin-withdrawal-request-badge'].forEach((id) => {
                 const badge = document.getElementById(id);
                 if (!badge) return;
                 badge.textContent = allFundRequestsCache.length > 99 ? '99+' : String(allFundRequestsCache.length || '');
@@ -3987,7 +3987,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             updateAdminLoanRequestBadge();
         };
 
-        const showUserTaskPage = () => {
+        const showUserTaskPageLegacy = () => {
             if (!currentUser) return showNotification('Please login first.', true);
             currentMainSection = 'task';
             const content = `
@@ -4031,6 +4031,133 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                                 </div>
                             </div>
                         </section>
+                    </div>
+                </div>
+                ${getPageFooter()}`;
+            showPage(content, { returnTo: currentUser?.uid === ADMIN_UID ? 'admin' : 'home', keepBottomNav: true });
+            setBottomNavActive('bottom-task-btn');
+        };
+
+        const showUserTaskPage = () => {
+            if (!currentUser) return showNotification('Please login first.', true);
+            currentMainSection = 'task';
+            const taskCategories = [
+                {
+                    label: 'App Review Task',
+                    meta: 'Install, review, upload proof',
+                    accent: 'task-accent-blue',
+                    items: [
+                        { title: 'PopClub Review', reward: 'Rs 8', tag: 'Instant' },
+                        { title: 'Wallet App Rating', reward: 'Rs 10', tag: 'Review' },
+                        { title: 'Signup Proof', reward: 'Rs 12', tag: 'Proof' }
+                    ]
+                },
+                {
+                    label: 'Map Review',
+                    meta: 'Place rating and local review',
+                    accent: 'task-accent-emerald',
+                    items: [
+                        { title: 'Business Rating', reward: 'Rs 15', tag: 'Maps' },
+                        { title: 'Photo Review', reward: 'Rs 20', tag: 'Local' },
+                        { title: 'Direction Check', reward: 'Rs 10', tag: 'Map' }
+                    ]
+                },
+                {
+                    label: 'Social Media Task',
+                    meta: 'Like, comment, follow, share',
+                    accent: 'task-accent-rose',
+                    items: [
+                        { title: 'Follow Page', reward: 'Rs 5', tag: 'Social' },
+                        { title: 'Video Comment', reward: 'Rs 8', tag: 'Media' },
+                        { title: 'Share Post', reward: 'Rs 7', tag: 'Share' }
+                    ]
+                }
+            ];
+            const renderTaskCard = (task, index) => `
+                <article class="task-preview-card" style="--task-card-delay:${index * 90}ms" aria-disabled="true">
+                    <div class="relative z-10 flex h-full flex-col justify-between">
+                        <div>
+                            <div class="mb-3 flex items-center justify-between gap-2">
+                                <span class="task-preview-tag">${escapeHtml(task.tag)}</span>
+                                <span class="rounded-full bg-white/90 px-2 py-1 text-[10px] font-black text-slate-600 shadow-sm dark:bg-slate-950/70 dark:text-slate-200">Soon</span>
+                            </div>
+                            <h4 class="text-base font-black leading-tight text-slate-950 dark:text-white">${escapeHtml(task.title)}</h4>
+                            <p class="mt-2 text-xs font-bold leading-5 text-slate-500 dark:text-slate-300">New work opening soon.</p>
+                        </div>
+                        <div class="mt-4 flex items-end justify-between">
+                            <div>
+                                <p class="text-[10px] font-black uppercase text-slate-400">Reward</p>
+                                <p class="text-lg font-black text-slate-950 dark:text-white">${escapeHtml(task.reward)}</p>
+                            </div>
+                            <span class="rounded-2xl border border-slate-200 bg-white/80 px-3 py-2 text-[10px] font-black uppercase text-slate-500 shadow-sm dark:border-slate-700 dark:bg-slate-900/80 dark:text-slate-300">Coming Soon</span>
+                        </div>
+                    </div>
+                </article>`;
+            const renderCategory = (category) => `
+                <section class="task-category-block ${category.accent}">
+                    <div class="mb-3 flex items-end justify-between gap-3 px-1">
+                        <div class="min-w-0">
+                            <h3 class="text-base font-black text-slate-950 dark:text-white">${escapeHtml(category.label)}</h3>
+                            <p class="mt-0.5 text-xs font-bold text-slate-500 dark:text-slate-300">${escapeHtml(category.meta)}</p>
+                        </div>
+                        <span class="shrink-0 rounded-full bg-slate-100 px-3 py-1 text-[10px] font-black uppercase text-slate-500 dark:bg-slate-800 dark:text-slate-300">Preview</span>
+                    </div>
+                    <div class="task-preview-rail">
+                        ${category.items.map(renderTaskCard).join('')}
+                    </div>
+                </section>`;
+            const content = `
+                <header class="mb-4 bg-white/95 px-4 py-3 shadow-sm backdrop-blur page-header-fixed dark:bg-gray-900/95">
+                    <div class="flex items-center justify-between gap-3">
+                        <div class="min-w-0">
+                            <p class="text-[10px] font-black uppercase text-cyan-600 dark:text-cyan-300">RW Task Hub</p>
+                            <h2 class="text-xl font-black text-slate-950 dark:text-white">Task Mission</h2>
+                        </div>
+                        <span class="shrink-0 rounded-full border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-black text-slate-600 shadow-sm dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200">Coming Soon</span>
+                    </div>
+                </header>
+                <div class="task-page-shell px-4 pt-1 pb-28">
+                    <div class="mx-auto max-w-4xl space-y-5">
+                        <section class="task-hero-panel">
+                            <div class="relative z-10">
+                                <p class="text-[10px] font-black uppercase text-white/70">Mission Board</p>
+                                <div class="mt-2 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+                                    <div>
+                                        <h3 class="text-3xl font-black leading-tight text-white">Earn with simple tasks</h3>
+                                        <p class="mt-2 max-w-xl text-sm font-semibold leading-6 text-white/75">Fresh earning missions will appear here soon.</p>
+                                    </div>
+                                    <div class="grid grid-cols-2 gap-2 sm:w-72">
+                                        <button type="button" data-action="task-coming-soon" class="task-hero-action">
+                                            <span class="text-lg">AD</span>
+                                            <span>Watch Ads & Earn</span>
+                                        </button>
+                                        <button type="button" data-action="task-coming-soon" class="task-hero-action">
+                                            <span class="text-lg">DB</span>
+                                            <span>Daily Bonus</span>
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </section>
+
+                        <section class="grid grid-cols-2 gap-3">
+                            <button type="button" data-action="task-coming-soon" class="task-quick-tile task-quick-tile-warm">
+                                <span class="task-quick-icon">AD</span>
+                                <span class="text-left">
+                                    <span class="block text-sm font-black">Watch Ads & Earn</span>
+                                    <span class="text-[11px] font-bold opacity-70">Coming soon</span>
+                                </span>
+                            </button>
+                            <button type="button" data-action="task-coming-soon" class="task-quick-tile task-quick-tile-cool">
+                                <span class="task-quick-icon">DB</span>
+                                <span class="text-left">
+                                    <span class="block text-sm font-black">Daily Bonus</span>
+                                    <span class="text-[11px] font-bold opacity-70">Coming soon</span>
+                                </span>
+                            </button>
+                        </section>
+
+                        ${taskCategories.map(renderCategory).join('')}
                     </div>
                 </div>
                 ${getPageFooter()}`;
@@ -4185,7 +4312,31 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                 ${getPageHeader('Manage Task')}
                 <div class="pb-24">
                 <div class="max-w-5xl mx-auto space-y-4 sm:space-y-5">
-                    <div class="grid grid-cols-2 gap-2 rounded-2xl border border-gray-100 bg-gray-50 p-2 shadow-sm dark:border-gray-700 dark:bg-gray-900">
+                    <section class="overflow-hidden rounded-3xl bg-gradient-to-br from-slate-950 via-cyan-900 to-emerald-700 p-5 text-white shadow-xl">
+                        <p class="text-[10px] font-black uppercase text-white/60">Admin Control</p>
+                        <div class="mt-2 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+                            <div>
+                                <h3 class="text-2xl font-black">Manage Task Board</h3>
+                                <p class="mt-1 max-w-2xl text-sm font-semibold leading-6 text-white/70">Add task, choose category, rate, proof type, status and limit from here only. User Task page stays separate.</p>
+                            </div>
+                            <div class="grid grid-cols-3 gap-2 text-center text-xs">
+                                <div class="rounded-2xl bg-white/12 px-4 py-3">
+                                    <p class="font-black text-white" id="admin-task-total-count">0</p>
+                                    <p class="text-white/60">Total</p>
+                                </div>
+                                <div class="rounded-2xl bg-white/12 px-4 py-3">
+                                    <p class="font-black text-emerald-200" id="admin-task-active-count">0</p>
+                                    <p class="text-white/60">Active</p>
+                                </div>
+                                <div class="rounded-2xl bg-white/12 px-4 py-3">
+                                    <p class="font-black text-amber-200" id="admin-task-draft-count">0</p>
+                                    <p class="text-white/60">Draft</p>
+                                </div>
+                            </div>
+                        </div>
+                    </section>
+
+                    <div class="grid grid-cols-2 gap-2 rounded-2xl border border-gray-100 bg-white p-2 shadow-sm dark:border-gray-700 dark:bg-gray-900">
                         <button type="button" data-admin-task-panel="manage" class="rounded-xl px-3 py-3 text-sm font-black transition">Managing Tasks</button>
                         <button type="button" data-admin-task-panel="add" class="rounded-xl px-3 py-3 text-sm font-black transition">Add New Task</button>
                     </div>
@@ -4195,20 +4346,6 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                             <div>
                                 <h3 class="text-lg font-black text-gray-900 dark:text-white">Add New Task</h3>
                                 <p class="text-xs text-gray-500 dark:text-gray-400">Create earning tasks with category, rate, proof, and status.</p>
-                            </div>
-                            <div class="grid grid-cols-3 gap-2 text-center text-xs">
-                                <div class="rounded-xl bg-cyan-50 dark:bg-cyan-900/20 px-3 py-2">
-                                    <p class="font-black text-cyan-700 dark:text-cyan-200" id="admin-task-total-count">0</p>
-                                    <p class="text-gray-500 dark:text-gray-400">Total</p>
-                                </div>
-                                <div class="rounded-xl bg-emerald-50 dark:bg-emerald-900/20 px-3 py-2">
-                                    <p class="font-black text-emerald-700 dark:text-emerald-200" id="admin-task-active-count">0</p>
-                                    <p class="text-gray-500 dark:text-gray-400">Active</p>
-                                </div>
-                                <div class="rounded-xl bg-amber-50 dark:bg-amber-900/20 px-3 py-2">
-                                    <p class="font-black text-amber-700 dark:text-amber-200" id="admin-task-draft-count">0</p>
-                                    <p class="text-gray-500 dark:text-gray-400">Draft</p>
-                                </div>
                             </div>
                         </div>
 
@@ -4221,6 +4358,11 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                             <div>
                                 <label class="text-xs font-black uppercase text-gray-400">Category</label>
                                 <select id="admin-task-category" class="mt-1 w-full px-4 py-3 bg-gray-100 dark:bg-gray-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-cyan-500">
+                                    <option value="App Review Task">App Review Task</option>
+                                    <option value="Map Review">Map Review</option>
+                                    <option value="Social Media Task">Social Media Task</option>
+                                    <option value="Watch Ads & Earn">Watch Ads & Earn</option>
+                                    <option value="Daily Bonus">Daily Bonus</option>
                                     <option value="Instant Payment Task">Instant Payment Task</option>
                                     <option value="Review Task">Review Task</option>
                                     <option value="App Install">App Install</option>
@@ -5056,9 +5198,9 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                 </div>
             </div>`;
         const getRevyBotLogo = (sizeClass = 'h-14 w-14') => `
-            ${getPremiumLogoFrame(`<img src="${CHATBOT_ICON_URL}" alt="REVY AI" class="max-h-full max-w-full rounded-full object-contain">`, sizeClass)}`;
+            ${getPremiumLogoFrame(`<img src="${CHATBOT_ICON_URL}" alt="REVY AI" class="max-h-full max-w-full rounded-full object-contain" loading="eager" fetchpriority="high" decoding="async">`, sizeClass)}`;
         const getSupportLogoFrame = (sizeClass = 'h-14 w-14', extraClass = '') => `
-            ${getPremiumLogoFrame(`<img src="${getSupportLogo()}" alt="REVIEWS WORLD" class="h-full w-full rounded-full object-cover">`, sizeClass, extraClass)}`;
+            ${getPremiumLogoFrame(`<img src="${getSupportLogo()}" alt="REVIEWS WORLD" class="h-full w-full rounded-full object-cover" loading="eager" fetchpriority="high" decoding="async">`, sizeClass, extraClass)}`;
         const getSupportAdminEmail = () => {
             const adminProfile = allUsersCache.find(u => u.id === ADMIN_UID) || {};
             return adminProfile.email || 'reviewsworld01@gmail.com';
@@ -13063,6 +13205,10 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                     handleDeleteAdminTask(taskid);
                     break;
 
+                case 'task-coming-soon':
+                    showNotification('Coming soon.');
+                    break;
+
                 case 'edit-admin-ad':
                     editAdminAd(adid);
                     break;
@@ -13214,13 +13360,15 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
         const preloadLogoImages = () => {
             const logoUrls = [
                 'https://i.ibb.co/x8YBYwGG/6233389803554672153.jpg',
-                'https://cdn-icons-png.flaticon.com/512/1827/1827370.png'
+                'https://cdn-icons-png.flaticon.com/512/1827/1827370.png',
+                CHATBOT_ICON_URL
             ];
 
             logoUrls.forEach((logoUrl) => {
                 const img = new Image();
                 img.decoding = 'async';
-                img.loading = 'lazy';
+                img.loading = 'eager';
+                img.fetchPriority = 'high';
                 img.src = logoUrl;
                 img.onload = function () {
                     document.querySelectorAll(`img[src="${logoUrl}"]`).forEach(logo => {

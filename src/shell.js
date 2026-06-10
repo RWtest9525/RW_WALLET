@@ -21,7 +21,7 @@ root.outerHTML = String.raw`
                             RW
                         </div>
                         <img src="https://i.ibb.co/x8YBYwGG/6233389803554672153.jpg" alt="Reviews World Logo"
-                            class="w-12 h-12 rounded-full mr-4 hidden" loading="eager" decoding="async" width="48"
+                            class="w-12 h-12 rounded-full mr-4 hidden" loading="eager" fetchpriority="high" decoding="async" width="48"
                             height="48" id="auth-logo"
                             onload="this.classList.remove('hidden'); this.classList.add('loaded'); document.getElementById('auth-logo-fallback')?.classList.add('hidden');"
                             onerror="this.classList.add('hidden'); document.getElementById('auth-logo-fallback')?.classList.remove('hidden');">
@@ -310,8 +310,7 @@ root.outerHTML = String.raw`
                             <p id="analytics-new-members" class="text-2xl sm:text-3xl font-black mt-1 text-blue-500">0</p>
                             <p class="mt-1 text-[10px] font-bold uppercase text-blue-400">15 days</p>
                         </button>
-                        <button id="analytics-pending-withdrawals-card" class="relative text-left bg-white dark:bg-gray-800 p-4 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 hover:-translate-y-0.5 hover:shadow-md hover:bg-amber-50 dark:hover:bg-amber-900/20 transition">
-                            <span id="analytics-pending-withdrawal-badge" class="admin-alert-badge hidden absolute right-2 top-2 min-w-6 h-6 rounded-full bg-red-600 px-2 text-center text-xs font-black leading-6 text-white shadow"></span>
+                        <button id="analytics-pending-withdrawals-card" class="text-left bg-white dark:bg-gray-800 p-4 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 hover:-translate-y-0.5 hover:shadow-md hover:bg-amber-50 dark:hover:bg-amber-900/20 transition">
                             <h4 class="text-xs sm:text-sm text-gray-500 dark:text-gray-400 font-semibold">Pending Withdrawals</h4>
                             <p id="analytics-pending-reqs" class="text-2xl sm:text-3xl font-black mt-1">0</p>
                             <p id="analytics-pending-amount" class="mt-1 text-xs font-bold text-gray-600 dark:text-gray-300">&#8377;0.00</p>
