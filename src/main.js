@@ -1624,6 +1624,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             let lastKnownKeyboardHeight = 0;
             let lastKnownKeyboardTop = 0;
             let scheduledFrame = 0;
+            let keyboardClosedForFocus = false;
 
             const getLayoutHeight = () => Math.max(
                 window.innerHeight || 0,
@@ -1642,17 +1643,19 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                 const viewportKeyboardHeight = viewport ? Math.max(0, focusBaseHeight - visualBottom) : 0;
                 const resizedKeyboardHeight = Math.max(0, focusBaseHeight - currentLayoutHeight);
                 const keyboardHeight = Math.max(virtualKeyboardHeight, viewportKeyboardHeight, resizedKeyboardHeight);
+                const hasViewportKeyboard = visualBottom < focusBaseHeight - 48 || currentLayoutHeight < focusBaseHeight - 48;
                 const keyboardTop = virtualKeyboardHeight >= 60 && virtualKeyboardTop > 0
                     ? virtualKeyboardTop
                     : Math.max(0, focusBaseHeight - keyboardHeight);
 
                 if (keyboardHeight >= 60) {
+                    keyboardClosedForFocus = false;
                     lastKnownKeyboardHeight = keyboardHeight;
                     lastKnownKeyboardTop = keyboardTop;
                     return { height: keyboardHeight, top: keyboardTop, layoutHeight: focusBaseHeight };
                 }
 
-                if (lastKnownKeyboardHeight && visualBottom < focusBaseHeight - 48) {
+                if (lastKnownKeyboardHeight && hasViewportKeyboard) {
                     return {
                         height: lastKnownKeyboardHeight,
                         top: lastKnownKeyboardTop || Math.max(0, focusBaseHeight - lastKnownKeyboardHeight),
@@ -1660,8 +1663,15 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                     };
                 }
 
+                if (lastKnownKeyboardHeight && !hasViewportKeyboard) {
+                    lastKnownKeyboardHeight = 0;
+                    lastKnownKeyboardTop = 0;
+                    keyboardClosedForFocus = true;
+                    return { height: 0, top: focusBaseHeight, layoutHeight: focusBaseHeight };
+                }
+
                 const isTouchPhone = window.matchMedia?.('(pointer: coarse) and (max-width: 768px)')?.matches;
-                if (isTouchPhone && document.activeElement === input && focusStartedAt) {
+                if (isTouchPhone && document.activeElement === input && focusStartedAt && !keyboardClosedForFocus) {
                     const fallbackHeight = lastKnownKeyboardHeight || Math.round(focusBaseHeight * 0.43);
                     const fallbackTop = Math.max(0, focusBaseHeight - fallbackHeight);
                     return { height: fallbackHeight, top: fallbackTop, layoutHeight: focusBaseHeight };
@@ -1741,16 +1751,23 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                 focusBaseHeight = Math.max(focusBaseHeight, getLayoutHeight());
                 lastKnownKeyboardHeight = 0;
                 lastKnownKeyboardTop = 0;
+                keyboardClosedForFocus = false;
                 scheduleKeepTypingVisible();
             };
             const handleBlur = () => {
                 focusStartedAt = 0;
                 lastKnownKeyboardHeight = 0;
                 lastKnownKeyboardTop = 0;
+                keyboardClosedForFocus = false;
                 setTimeout(resetTypingPosition, 24);
             };
             const handlePointerDown = (event) => {
-                if (event.target === input || composer.contains(event.target)) return;
+                if (event.target === input) {
+                    keyboardClosedForFocus = false;
+                    scheduleKeepTypingVisible();
+                    return;
+                }
+                if (composer.contains(event.target)) return;
                 input.blur();
                 resetTypingPosition();
             };
