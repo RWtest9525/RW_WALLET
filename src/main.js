@@ -1517,10 +1517,10 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             document.getElementById('bottom-admin-btn')?.classList.toggle('hidden', !isAdmin);
             document.getElementById('bottom-task-btn')?.classList.remove('hidden');
             const bottomHomeLabel = document.getElementById('bottom-home-label');
-            if (bottomHomeLabel) bottomHomeLabel.textContent = isAdmin ? 'Wallet' : 'Home';
+            if (bottomHomeLabel) bottomHomeLabel.textContent = 'Wallet';
             const bottomGrid = document.getElementById('bottom-nav-grid');
             if (bottomGrid) {
-                bottomGrid.className = `mx-auto grid max-w-xl ${isAdmin ? 'grid-cols-6' : 'grid-cols-5'} items-center px-2 pt-2 text-[10px] sm:text-xs font-semibold text-gray-500 dark:text-gray-400`;
+                bottomGrid.className = `mx-auto grid max-w-xl ${isAdmin ? 'grid-cols-5' : 'grid-cols-4'} items-center px-2 pt-2 text-[10px] sm:text-xs font-semibold text-gray-500 dark:text-gray-400`;
             }
         };
 
@@ -6962,7 +6962,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                 ${getPageFooter()}`;
             showPage(content, { keepBottomNav: true });
             currentMainSection = 'transactions';
-            setBottomNavActive('bottom-transactions-btn');
+            setBottomNavActive('bottom-home-btn');
             const pageContainer = document.getElementById('page-container');
 
             // Initial render of all transactions
@@ -13264,10 +13264,6 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
         });
         document.getElementById('bottom-admin-btn').addEventListener('click', showAdminMainPage);
         document.getElementById('bottom-task-btn').addEventListener('click', showUserTaskPage);
-        document.getElementById('bottom-transactions-btn').addEventListener('click', () => {
-            showAllTransactionsPage();
-            setBottomNavActive('bottom-transactions-btn');
-        });
         document.getElementById('bottom-help-btn').addEventListener('click', showHelpSupportPage);
         document.getElementById('bottom-settings-btn').addEventListener('click', showSettingsPage);
         document.getElementById('notification-header-btn').addEventListener('click', showNotificationsPage);
@@ -13300,6 +13296,8 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                 return null;
             }
         };
+
+        document.getElementById('wallet-history-action-btn')?.addEventListener('click', () => openUserQuickAction(showAllTransactionsPage));
 
         let loanPageOpening = false;
         const openLoanQuickAction = () => {

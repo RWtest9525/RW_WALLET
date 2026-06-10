@@ -231,7 +231,16 @@ root.outerHTML = String.raw`
                                 </div>
                             </div>
                             <div class="bg-white dark:bg-gray-800 p-5 rounded-2xl shadow-md border border-gray-100 dark:border-gray-700">
-                                <h3 class="text-lg font-semibold mb-4">Actions</h3>
+                                <div class="mb-4 flex items-center justify-between gap-3">
+                                    <h3 class="text-lg font-semibold">Actions</h3>
+                                    <button id="wallet-history-action-btn"
+                                        class="inline-flex shrink-0 items-center gap-2 rounded-2xl border border-blue-100 bg-blue-50 px-3 py-2 text-xs font-black text-blue-700 shadow-sm transition hover:bg-blue-100 dark:border-blue-800 dark:bg-blue-900/20 dark:text-blue-200 dark:hover:bg-blue-900/35">
+                                        <span class="flex h-8 w-8 items-center justify-center rounded-xl bg-white p-1.5 shadow-sm dark:bg-gray-800">
+                                            <img src="https://cdn-icons-png.flaticon.com/512/3652/3652191.png" alt="History" class="h-full w-full object-contain" loading="eager" fetchpriority="high" decoding="async">
+                                        </span>
+                                        <span>History</span>
+                                    </button>
+                                </div>
                                 <div class="grid grid-cols-3 gap-2 sm:gap-3">
                                 <button id="withdraw-fund-btn"
                                     class="relative group w-full min-h-28 flex flex-col items-center justify-between gap-2 bg-yellow-50 dark:bg-yellow-900/20 text-yellow-700 dark:text-yellow-200 font-semibold p-3 rounded-xl hover:bg-yellow-100 dark:hover:bg-yellow-900/30 transition border border-yellow-200 dark:border-yellow-800 text-center">
@@ -446,18 +455,12 @@ root.outerHTML = String.raw`
             </div>
 
             <nav id="bottom-nav" class="fixed z-50">
-                <div id="bottom-nav-grid" class="mx-auto grid max-w-xl grid-cols-5 items-center px-2 pt-2 text-[10px] sm:text-xs font-semibold text-gray-500 dark:text-gray-400">
-                    <button id="bottom-transactions-btn" class="bottom-nav-btn flex flex-col items-center gap-1 py-1">
-                        <span class="bottom-nav-icon flex h-9 w-9 items-center justify-center rounded-xl bg-gray-100 dark:bg-gray-700 transition">
-                            <img src="https://cdn-icons-png.flaticon.com/512/3652/3652191.png" alt="History" class="bottom-nav-img" loading="eager" fetchpriority="high" decoding="async">
-                        </span>
-                        <span>History</span>
-                    </button>
+                <div id="bottom-nav-grid" class="mx-auto grid max-w-xl grid-cols-4 items-center px-2 pt-2 text-[10px] sm:text-xs font-semibold text-gray-500 dark:text-gray-400">
                     <button id="bottom-home-btn" class="bottom-nav-btn active flex flex-col items-center gap-1 py-1">
                         <span class="bottom-nav-icon flex h-10 w-10 items-center justify-center rounded-xl bg-gray-100 dark:bg-gray-700 transition">
                             <img src="https://cdn-icons-png.flaticon.com/512/1946/1946436.png" alt="Home" class="bottom-nav-img" loading="eager" fetchpriority="high" decoding="async">
                         </span>
-                        <span id="bottom-home-label">Home</span>
+                        <span id="bottom-home-label">Wallet</span>
                     </button>
                     <button id="bottom-admin-btn" class="bottom-nav-btn hidden flex flex-col items-center gap-1 py-1">
                         <span class="bottom-nav-icon flex h-9 w-9 items-center justify-center rounded-xl bg-gray-100 dark:bg-gray-700 transition">
@@ -476,7 +479,7 @@ root.outerHTML = String.raw`
                             <img src="https://cdn-icons-png.flaticon.com/512/5962/5962463.png" alt="Help" class="bottom-nav-img" loading="eager" fetchpriority="high" decoding="async">
                             <span id="bottom-help-unread-badge" class="hidden absolute -right-1 -top-1 min-w-5 h-5 rounded-full bg-red-600 px-1 text-[10px] font-black leading-5 text-white shadow"></span>
                         </span>
-                        <span>Help</span>
+                        <span>Chat</span>
                     </button>
                     <button id="bottom-settings-btn" class="bottom-nav-btn flex flex-col items-center gap-1 py-1">
                         <span class="bottom-nav-icon flex h-9 w-9 items-center justify-center rounded-xl bg-gray-100 dark:bg-gray-700 transition">
