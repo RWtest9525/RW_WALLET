@@ -234,11 +234,11 @@ root.outerHTML = String.raw`
                                 <div class="mb-4 flex items-center justify-between gap-3">
                                     <h3 class="text-lg font-semibold">Actions</h3>
                                     <button id="wallet-history-action-btn"
-                                        class="inline-flex w-auto min-w-fit shrink-0 items-center gap-2 whitespace-nowrap rounded-2xl border border-blue-100 bg-blue-50 px-2.5 py-2 text-[11px] font-black text-blue-700 shadow-sm transition hover:bg-blue-100 dark:border-blue-800 dark:bg-blue-900/20 dark:text-blue-200 dark:hover:bg-blue-900/35">
+                                        class="inline-flex w-[8.1rem] shrink-0 items-center justify-start gap-2 rounded-2xl border border-blue-100 bg-blue-50 px-2.5 py-2 text-xs font-black text-blue-700 shadow-sm transition hover:bg-blue-100 dark:border-blue-800 dark:bg-blue-900/20 dark:text-blue-200 dark:hover:bg-blue-900/35">
                                         <span class="flex h-7 w-7 items-center justify-center rounded-xl bg-white p-1.5 shadow-sm dark:bg-gray-800">
                                             <img src="https://cdn-icons-png.flaticon.com/512/3652/3652191.png" alt="History" class="h-full w-full object-contain" loading="eager" fetchpriority="high" decoding="async">
                                         </span>
-                                        <span>Transaction History</span>
+                                        <span class="leading-tight text-left">Transaction History</span>
                                     </button>
                                 </div>
                                 <div class="grid grid-cols-3 gap-2 sm:gap-3">
