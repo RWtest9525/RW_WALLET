@@ -4089,13 +4089,10 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                 ${getPageHeader('Refer & Earn', { showBack: false })}
                 <div class="refer-page-shell mx-auto max-w-md px-1 pb-24">
                     <section class="refer-poster-card">
-                        <div class="refer-photo-banner">
-                            <img src="https://images.unsplash.com/photo-1521791136064-7986c2920216?auto=format&fit=crop&w=900&q=70" alt="Friends earning referral rewards" loading="lazy" decoding="async">
-                            <div class="refer-photo-overlay">
-                                <span>Refer & Earn</span>
-                                <h3>Grow together</h3>
-                                <p>Invite a friend and both unlock rewards.</p>
-                            </div>
+                        <div class="refer-text-head">
+                            <span>Refer & Earn</span>
+                            <h3>Invite friends. Earn together.</h3>
+                            <p>You and your friend both get rewards after the first withdrawal.</p>
                         </div>
                         <div class="refer-offer-strip">
                             <div>
