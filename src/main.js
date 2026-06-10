@@ -733,14 +733,14 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             }
         };
 
-        const loadCloudFundRequests = async ({ status = 'pending', type = '', userId = '', limit = 300 } = {}) => {
+        const loadCloudFundRequests = async ({ status = 'pending', type = '', userId = '', limit = 300, timeoutMs = 8000 } = {}) => {
             const token = await getBackendAuthToken();
             const params = new URLSearchParams({ status, limit: String(limit) });
             if (type) params.set('type', type);
             if (userId) params.set('userId', userId);
             const response = await fetchWithTimeout(`${BACKEND_BASE_URL}/api/fund-requests?${params.toString()}`, {
                 headers: { Authorization: `Bearer ${token}` }
-            }, 8000);
+            }, timeoutMs);
             const data = await response.json().catch(() => ({}));
             if (!response.ok || !data.ok) throw new Error(data.error || 'Cloudflare fund request load failed');
             return (data.requests || []).map(normalizeCloudFundRequest);
@@ -867,6 +867,12 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             if (analyticsPendingElement) {
                 analyticsPendingElement.textContent = allFundRequestsCache.length;
             }
+            ['admin-withdrawal-request-badge', 'analytics-pending-withdrawal-badge'].forEach((id) => {
+                const badge = document.getElementById(id);
+                if (!badge) return;
+                badge.textContent = allFundRequestsCache.length > 99 ? '99+' : String(allFundRequestsCache.length || '');
+                badge.classList.toggle('hidden', allFundRequestsCache.length <= 0);
+            });
             const analyticsPendingAmountElement = document.getElementById('analytics-pending-amount');
             if (analyticsPendingAmountElement) {
                 analyticsPendingAmountElement.textContent = formatCurrency(totalPendingAmount);
@@ -8631,21 +8637,25 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
         const loadWithdrawalHistory = async (filter = 'today', fromDate = null, toDate = null) => {
             activeWithdrawalHistoryFilter = { filter, fromDate, toDate };
             try {
-                // Merge current requests, Cloudflare archive, and old transaction-only withdrawal records.
+                const needsDeepHistoryScan = filter === 'all' || filter === 'custom';
+                const historyLimit = needsDeepHistoryScan ? 1200 : 450;
                 const withdrawalQuery = query(
                     collection(db, `artifacts/${appId}/public/data/fund_requests`),
-                    orderBy("requestedAt", "desc")
+                    orderBy("requestedAt", "desc"),
+                    firestoreLimit(historyLimit)
                 );
 
-                const snap = await getDocs(withdrawalQuery);
+                const [snap, cloudRequests, legacyWithdrawals] = await Promise.all([
+                    getDocs(withdrawalQuery),
+                    loadCloudFundRequests({ status: 'all', type: 'withdrawal', limit: historyLimit, timeoutMs: needsDeepHistoryScan ? 8000 : 3000 }).catch(error => {
+                        console.warn('Cloud withdrawal history load skipped:', error);
+                        return [];
+                    }),
+                    needsDeepHistoryScan
+                        ? loadLegacyWithdrawalTransactionsForAdmin()
+                        : Promise.resolve([])
+                ]);
                 const firebaseRequests = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-                let cloudRequests = [];
-                try {
-                    cloudRequests = await loadCloudFundRequests({ status: 'all', type: 'withdrawal', limit: 500 });
-                } catch (error) {
-                    console.warn('Cloud withdrawal history load skipped:', error);
-                }
-                const legacyWithdrawals = await loadLegacyWithdrawalTransactionsForAdmin();
                 let withdrawals = mergeWithdrawalHistoryRecords(firebaseRequests, cloudRequests, legacyWithdrawals);
 
                 // Apply filters
@@ -9175,6 +9185,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                 const methodId = normalizeWithdrawalMethodId(r);
                 const methodName = getWithdrawalDisplayMethodName(r, 'N/A');
                 const detailText = getWithdrawalDetailText({ ...r, methodId });
+                const needsBalanceCut = shouldDeductLegacyWithdrawal(r);
                 const isGiftOrEmailMethod = ['play_store', 'amazon_gift', 'flipkart_gift', 'paypal'].includes(methodId);
                 const isGenericGiftCard = String(r.method || r.paymentMethod || '').toLowerCase().replace(/[\s-]+/g, '_') === 'gift_card';
                 const payoutDetailLabel = methodId === 'upi' ? 'UPI' : methodId === 'bank' ? 'Bank Details' : (isGiftOrEmailMethod || isGenericGiftCard) ? 'Email / Gift Card Details' : 'Payment Details';
@@ -9188,12 +9199,13 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                     </select>
                 ` : '';
                 return `
-                <div class="p-3 mb-2 bg-gray-50 dark:bg-gray-700/50 rounded-lg border border-gray-100 dark:border-gray-700">
+                <div class="relative p-3 pl-5 mb-2 bg-gray-50 dark:bg-gray-700/50 rounded-lg border ${needsBalanceCut ? 'border-red-200 dark:border-red-900/50' : 'border-gray-100 dark:border-gray-700'}">
+                    ${needsBalanceCut ? '<span class="signup-old-pulse absolute left-2 top-5 h-2.5 w-2.5 rounded-full bg-red-600 shadow" title="Old wallet, balance cut pending"></span>' : ''}
                     <div class="flex flex-col sm:flex-row justify-between sm:items-start">
                         <div class="text-sm flex-grow mb-3 sm:mb-0">
                             <div class="flex flex-wrap items-center gap-2">
                                 <p class="font-semibold capitalize text-yellow-600">Withdrawal of ${formatCurrency(r.amount)}</p>
-                                ${shouldDeductLegacyWithdrawal(r) ? '<span class="rounded-full bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-200 px-2 py-0.5 text-[10px] font-black uppercase">Needs balance cut</span>' : '<span class="rounded-full bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-200 px-2 py-0.5 text-[10px] font-black uppercase">Balance cut done</span>'}
+                                ${needsBalanceCut ? '<span class="rounded-full bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-200 px-2 py-0.5 text-[10px] font-black uppercase">Old wallet: balance cut pending</span>' : ''}
                             </div>
                             <p class="font-semibold text-gray-700 dark:text-gray-200">${r.userName || 'No Name'}</p>
                             <p class="text-xs text-gray-500 dark:text-gray-400">${r.userEmail || 'No Email'}</p>
@@ -9204,7 +9216,12 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                                     ${giftTypeControl}
                                     <p class="text-xs font-mono bg-indigo-100 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-200 px-2 py-1 rounded w-fit">${escapeHtml(payoutDetailLabel)}: ${escapedDetail}</p>
                                     ${detailText && detailText !== 'N/A' ? `
-                                        <button data-action="copy-text" data-text="${escapedDetail}" class="px-2 py-1 text-[10px] font-bold rounded bg-indigo-600 text-white hover:bg-indigo-700">Copy Detail</button>
+                                        <button data-action="copy-text" data-text="${escapedDetail}" class="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-indigo-600 text-white hover:bg-indigo-700" title="Copy payout detail" aria-label="Copy payout detail">
+                                            <svg class="h-4 w-4 pointer-events-none" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                                <rect x="9" y="9" width="11" height="11" rx="2"></rect>
+                                                <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                                            </svg>
+                                        </button>
                                     ` : ''}
                                 </div>
                             </div>
@@ -9525,7 +9542,30 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                 return;
             }
 
-            let requests = [...allLoanRequestsCache].filter(r => getLoanRequestStatus(r) === filter && isModernLoanRequest(r));
+            const getLoanAdminRequestTime = (request = {}) => Math.max(
+                timestampToMillis(request.reopenedAt || request.reopened_at),
+                timestampToMillis(request.processedAt || request.processed_at),
+                timestampToMillis(request.requestedAt || request.requested_at || request.createdAt || request.timestamp)
+            );
+            const getLoanAdminRequestKey = (request = {}) => String(
+                request.userId ||
+                request.uid ||
+                request.userEmail ||
+                request.mobile ||
+                request.aadhaar ||
+                request.id ||
+                ''
+            ).trim().toLowerCase();
+            const latestRequestByUser = new Map();
+            [...allLoanRequestsCache]
+                .filter(isModernLoanRequest)
+                .sort((a, b) => getLoanAdminRequestTime(b) - getLoanAdminRequestTime(a))
+                .forEach((request) => {
+                    const key = getLoanAdminRequestKey(request);
+                    if (!key || latestRequestByUser.has(key)) return;
+                    latestRequestByUser.set(key, request);
+                });
+            let requests = Array.from(latestRequestByUser.values()).filter(r => getLoanRequestStatus(r) === filter);
             requests = requests.filter(r => !search || [r.name, r.fatherName, r.mobile, r.alternateMobile, r.dob, r.aadhaar].some(v => (v || '').toString().toLowerCase().includes(search)));
             listEl.innerHTML = requests.length ? requests.map(r => {
                 const status = getLoanRequestStatus(r);

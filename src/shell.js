@@ -310,7 +310,8 @@ root.outerHTML = String.raw`
                             <p id="analytics-new-members" class="text-2xl sm:text-3xl font-black mt-1 text-blue-500">0</p>
                             <p class="mt-1 text-[10px] font-bold uppercase text-blue-400">15 days</p>
                         </button>
-                        <button id="analytics-pending-withdrawals-card" class="text-left bg-white dark:bg-gray-800 p-4 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 hover:-translate-y-0.5 hover:shadow-md hover:bg-amber-50 dark:hover:bg-amber-900/20 transition">
+                        <button id="analytics-pending-withdrawals-card" class="relative text-left bg-white dark:bg-gray-800 p-4 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 hover:-translate-y-0.5 hover:shadow-md hover:bg-amber-50 dark:hover:bg-amber-900/20 transition">
+                            <span id="analytics-pending-withdrawal-badge" class="admin-alert-badge hidden absolute right-2 top-2 min-w-6 h-6 rounded-full bg-red-600 px-2 text-center text-xs font-black leading-6 text-white shadow"></span>
                             <h4 class="text-xs sm:text-sm text-gray-500 dark:text-gray-400 font-semibold">Pending Withdrawals</h4>
                             <p id="analytics-pending-reqs" class="text-2xl sm:text-3xl font-black mt-1">0</p>
                             <p id="analytics-pending-amount" class="mt-1 text-xs font-bold text-gray-600 dark:text-gray-300">&#8377;0.00</p>
@@ -337,7 +338,8 @@ root.outerHTML = String.raw`
                         <h3 class="text-lg font-semibold mb-4">Quick Actions</h3>
                         <div class="grid grid-cols-3 lg:grid-cols-4 gap-3">
                             <button id="admin-withdrawals-btn"
-                                class="flex flex-col items-center justify-center p-3 min-h-28 bg-blue-50 dark:bg-blue-900/20 rounded-2xl hover:bg-blue-100 dark:hover:bg-blue-900/30 transition border border-blue-200 dark:border-blue-800 shadow-sm">
+                                class="relative flex flex-col items-center justify-center p-3 min-h-28 bg-blue-50 dark:bg-blue-900/20 rounded-2xl hover:bg-blue-100 dark:hover:bg-blue-900/30 transition border border-blue-200 dark:border-blue-800 shadow-sm">
+                                <span id="admin-withdrawal-request-badge" class="admin-alert-badge hidden absolute right-2 top-2 min-w-6 h-6 rounded-full bg-red-600 px-2 text-center text-xs font-black leading-6 text-white shadow"></span>
                                 <span class="flex h-12 w-12 items-center justify-center rounded-2xl bg-white dark:bg-gray-800 shadow-sm mb-2">
                                     <img src="https://cdn-icons-png.flaticon.com/512/7939/7939990.png" class="h-8 w-8 object-contain" alt="Withdrawals">
                                 </span>
