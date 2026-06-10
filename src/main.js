@@ -1594,20 +1594,17 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             const messages = document.getElementById(messagesId);
             const pageContainer = document.getElementById('page-container');
             if (!shell || !composer || !input || !messages) return null;
-            try {
-                if ('virtualKeyboard' in navigator) {
-                    navigator.virtualKeyboard.overlaysContent = true;
-                }
-            } catch (error) {
-                console.warn('Virtual keyboard overlay setup skipped:', error);
-            }
 
             let scheduledFrame = 0;
+            let keyboardFallbackActive = false;
             let baseViewportHeight = Math.max(
                 window.innerHeight || 0,
                 document.documentElement.clientHeight || 0,
                 window.visualViewport?.height || 0
             );
+            const isSmallTouchScreen = () =>
+                window.matchMedia?.('(pointer: coarse)')?.matches ||
+                Math.min(window.innerWidth || 0, window.innerHeight || 0) <= 768;
 
             const getCurrentLayoutHeight = () => Math.max(
                 window.innerHeight || 0,
@@ -1616,57 +1613,47 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             );
 
             const clearChatViewport = () => {
+                keyboardFallbackActive = false;
                 shell.style.height = '';
                 shell.style.maxHeight = '';
                 shell.style.minHeight = '';
                 shell.classList.remove('chat-keyboard-active');
-                composer.style.position = '';
-                composer.style.left = '';
-                composer.style.width = '';
-                composer.style.top = '';
-                composer.style.bottom = '';
-                composer.style.paddingBottom = '';
-                composer.style.zIndex = '';
-                composer.style.boxShadow = '';
-                composer.style.transform = '';
                 composer.classList.remove('chat-composer-floating');
                 messages.style.paddingBottom = '';
                 if (pageContainer) pageContainer.style.overflowY = 'hidden';
             };
 
-            const getVisibleChatHeight = () => {
+            const getKeyboardHeight = () => {
                 const viewport = window.visualViewport;
                 const layoutHeight = getCurrentLayoutHeight();
                 baseViewportHeight = Math.max(baseViewportHeight, layoutHeight);
                 const vkRect = navigator.virtualKeyboard?.boundingRect;
                 const virtualKeyboardHeight = Number(vkRect?.height || 0);
                 if (virtualKeyboardHeight >= 60) {
-                    return Math.max(260, baseViewportHeight - virtualKeyboardHeight);
+                    return Math.min(virtualKeyboardHeight, Math.round(baseViewportHeight * 0.58));
                 }
                 if (viewport && viewport.height > 0 && viewport.height < baseViewportHeight - 60) {
-                    return Math.max(260, viewport.height + Math.max(0, viewport.offsetTop || 0));
+                    const visualHeight = baseViewportHeight - viewport.height - Math.max(0, viewport.offsetTop || 0);
+                    return Math.min(Math.max(0, visualHeight), Math.round(baseViewportHeight * 0.58));
                 }
-                return Math.max(260, layoutHeight);
+                if (document.activeElement === input && keyboardFallbackActive && isSmallTouchScreen()) {
+                    return Math.round(Math.min(360, Math.max(260, baseViewportHeight * 0.42)));
+                }
+                return 0;
             };
 
             const syncChatViewport = () => {
-                const visibleHeight = getVisibleChatHeight();
-                const keyboardOpen = visibleHeight < baseViewportHeight - 60;
+                const keyboardHeight = getKeyboardHeight();
+                const keyboardOpen = keyboardHeight >= 60;
+                const visibleHeight = keyboardOpen
+                    ? Math.max(300, baseViewportHeight - keyboardHeight)
+                    : Math.max(300, getCurrentLayoutHeight());
                 shell.style.height = `${visibleHeight}px`;
                 shell.style.maxHeight = `${visibleHeight}px`;
                 shell.style.minHeight = `${visibleHeight}px`;
                 shell.classList.toggle('chat-keyboard-active', keyboardOpen);
-                composer.style.position = '';
-                composer.style.left = '';
-                composer.style.width = '';
-                composer.style.top = '';
-                composer.style.bottom = '';
-                composer.style.paddingBottom = '';
-                composer.style.zIndex = '';
-                composer.style.boxShadow = '';
-                composer.style.transform = '';
                 composer.classList.toggle('chat-composer-floating', keyboardOpen);
-                messages.style.paddingBottom = '';
+                messages.style.paddingBottom = keyboardOpen ? '0.5rem' : '';
                 if (pageContainer) pageContainer.style.overflowY = 'hidden';
 
                 requestAnimationFrame(() => {
@@ -1696,6 +1683,13 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             const handleFocus = () => {
                 baseViewportHeight = Math.max(baseViewportHeight, getCurrentLayoutHeight());
                 scheduleSyncChatViewport();
+                setTimeout(() => {
+                    if (document.activeElement !== input) return;
+                    if (getKeyboardHeight() < 60) {
+                        keyboardFallbackActive = true;
+                        scheduleSyncChatViewport();
+                    }
+                }, 320);
             };
             const handleBlur = () => {
                 setTimeout(clearChatViewport, 60);
@@ -13483,8 +13477,11 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
 
         // Preload logo images to prevent loading flicker
         const preloadLogoImages = () => {
-            const logoUrls = [...new Set([
+            const criticalLogoUrls = [...new Set([
                 RW_LOGO_URL,
+                CHATBOT_ICON_URL
+            ])];
+            const idleLogoUrls = [...new Set([
                 REFER_ICON_URL,
                 WALLET_ICON_URL,
                 ADMIN_ICON_URL,
@@ -13492,7 +13489,6 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                 CHAT_ICON_URL,
                 SETTINGS_ICON_URL,
                 NOTIFICATION_ICON_URL,
-                CHATBOT_ICON_URL,
                 'https://cdn-icons-png.flaticon.com/512/12449/12449036.png',
                 'https://cdn-icons-png.flaticon.com/512/3652/3652191.png',
                 'https://cdn-icons-png.flaticon.com/512/7939/7939990.png',
@@ -13503,11 +13499,11 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                 PARTNER_ICON_URL
             ])];
 
-            logoUrls.forEach((logoUrl) => {
+            const preloadImage = (logoUrl, priority = 'low') => {
                 const img = new Image();
                 img.decoding = 'async';
                 img.loading = 'eager';
-                img.fetchPriority = 'high';
+                img.fetchPriority = priority;
                 img.src = logoUrl;
                 img.onload = function () {
                     document.querySelectorAll(`img[src="${logoUrl}"]`).forEach(logo => {
@@ -13515,7 +13511,15 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                         logo.style.opacity = '1';
                     });
                 };
-            });
+            };
+
+            criticalLogoUrls.forEach((logoUrl) => preloadImage(logoUrl, 'high'));
+            const loadIdleImages = () => idleLogoUrls.forEach((logoUrl) => preloadImage(logoUrl, 'low'));
+            if ('requestIdleCallback' in window) {
+                window.requestIdleCallback(loadIdleImages, { timeout: 2500 });
+            } else {
+                setTimeout(loadIdleImages, 1200);
+            }
         };
 
         // Initialize the app when DOM is loaded
