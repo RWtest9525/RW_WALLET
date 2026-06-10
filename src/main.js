@@ -175,6 +175,8 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
         };
         const getLoanReservedAmount = (user = currentUserData || {}) => {
             if (Number(user.activeLoanVersion || 0) < LOAN_APPLICATION_VERSION) return 0;
+            const dueAt = timestampToMillis(user.activeLoanDueDate || user.loanDueDate || user.loan_due_date || 0);
+            if (!dueAt || dueAt > Date.now()) return 0;
             const explicit = Number(user.loanLockedAmount ?? user.loan_locked_amount ?? 0);
             const activeRepayable = Number(user.activeLoanRepayable ?? user.active_loan_repayable ?? 0);
             const rawReserve = Number.isFinite(explicit) && explicit > 0 ? explicit : activeRepayable;
@@ -8214,7 +8216,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                 `<div class="space-y-3 text-sm text-gray-600 dark:text-gray-300">
                     <p><strong>Credit limit:</strong> Admin approves your maximum loan limit. You may choose any amount within that limit when no active loan is open.</p>
                     <p><strong>Repayment:</strong> Loan repayment is due on the same date next month. If that date does not exist, the nearest last date is used.</p>
-                    <p><strong>Security reserve:</strong> Wallet funds may be reserved for the active loan repayment and cannot be used for withdrawal, transfer, recharge, or investment until the loan is repaid.</p>
+                    <p><strong>Security reserve:</strong> Loan money credited to your wallet remains usable. After the repayment due date, available wallet funds may be reserved or auto-debited for the active loan repayment.</p>
                     <p><strong>Missed due date:</strong> If repayment is due and wallet balance is insufficient, the account can be blocked until admin reviews and unlocks it.</p>
                 </div>`,
                 `<button onclick="window.closeModal()" class="px-4 py-2 text-sm bg-indigo-600 text-white rounded-lg">I Understand</button>`,
@@ -10573,7 +10575,8 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                         activeLoanRepayable: totalRepayable,
                         activeLoanDueDate: Timestamp.fromDate(dueDate),
                         activeLoanCreatedAt: serverTimestamp(),
-                        loanLockedAmount: totalRepayable
+                        loanLockedAmount: 0,
+                        loanReserveStartsAt: Timestamp.fromDate(dueDate)
                     });
                     tx.set(loanRef, {
                         loanApplicationVersion: LOAN_APPLICATION_VERSION,
@@ -10584,7 +10587,8 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                         amount,
                         interest,
                         totalRepayable,
-                        lockedAmount: totalRepayable,
+                        lockedAmount: 0,
+                        reserveStartsAt: Timestamp.fromDate(dueDate),
                         creditLimitAtBorrow: approvedMaxLoan,
                         dueDate: Timestamp.fromDate(dueDate),
                         status: 'active',
