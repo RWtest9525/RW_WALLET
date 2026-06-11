@@ -183,6 +183,11 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
         };
         const getLoanReservedAmount = (user = currentUserData || {}) => {
             if (Number(user.activeLoanVersion || 0) < LOAN_APPLICATION_VERSION) return 0;
+            const reserveStartValue = user.loanReserveStartsAt || user.activeLoanDueDate || user.loanDueDate;
+            const reserveStartsAt = reserveStartValue?.toDate ? reserveStartValue.toDate() : reserveStartValue ? new Date(reserveStartValue) : null;
+            const repaymentBasis = String(user.activeLoanRepaymentBasis || user.loanRepaymentBasis || '').toLowerCase();
+            if (reserveStartsAt && reserveStartsAt > new Date()) return 0;
+            if (!reserveStartsAt && repaymentBasis.includes('withdrawal')) return 0;
             const explicit = Number(user.loanLockedAmount ?? user.loan_locked_amount ?? 0);
             const rawReserve = Number.isFinite(explicit) && explicit > 0 ? explicit : 0;
             return Math.max(0, Math.min(Number(user.balance || 0), rawReserve));
@@ -8410,6 +8415,73 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
         };
 
         const toDate = (value) => value?.toDate ? value.toDate() : value ? new Date(value) : null;
+        const getLoanDueDateText = (loan = {}) => {
+            const dueDate = toDate(loan.dueDate || loan.activeLoanDueDate || loan.loanDueDate);
+            if (dueDate) return dueDate.toLocaleDateString('en-IN');
+            const basis = String(loan.repaymentBasis || loan.activeLoanRepaymentBasis || loan.repaymentStatus || '').toLowerCase();
+            if (basis.includes('withdrawal') || basis.includes('waiting')) return 'After withdrawal approval';
+            return 'N/A';
+        };
+
+        const startLoanRepaymentAfterWithdrawalApproval = async (userId, processedAtValue = Date.now()) => {
+            if (!userId) return;
+            const processedAtMillis = timestampToMillis(processedAtValue) || Date.now();
+            const repaymentStartDate = new Date(processedAtMillis);
+            const dueDate = getNextMonthRepaymentDate(repaymentStartDate);
+            const loansSnap = await getDocs(query(
+                collection(db, `artifacts/${appId}/public/data/loans`),
+                where("userId", "==", userId),
+                where("status", "==", "active")
+            ));
+            const activeLoans = loansSnap.docs
+                .map(docItem => ({ id: docItem.id, ...docItem.data() }))
+                .filter(loan => isModernLoanRecord(loan) && isActiveLoanRecord(loan))
+                .filter(loan => {
+                    const basis = String(loan.repaymentBasis || loan.repaymentStatus || '').toLowerCase();
+                    return !timestampToMillis(loan.repaymentStartedAt) || !basis.includes('withdrawal');
+                });
+            if (!activeLoans.length) return;
+
+            await Promise.all(activeLoans.map(loan => updateDoc(doc(db, `artifacts/${appId}/public/data/loans`, loan.id), {
+                repaymentStartedAt: Timestamp.fromDate(repaymentStartDate),
+                repaymentBasis: 'withdrawal_processed',
+                repaymentStatus: 'running',
+                dueDate: Timestamp.fromDate(dueDate),
+                lockedAmount: Number(loan.totalRepayable || 0),
+                reserveStartsAt: Timestamp.fromDate(dueDate),
+                updatedAt: serverTimestamp()
+            })));
+
+            const firstLoan = activeLoans[0];
+            const totalFutureReserve = Number(activeLoans.reduce((sum, loan) => sum + Number(loan.totalRepayable || 0), 0).toFixed(2));
+            const userMarkerUpdate = {
+                activeLoanDueDate: Timestamp.fromDate(dueDate),
+                activeLoanRepaymentStartedAt: Timestamp.fromDate(repaymentStartDate),
+                activeLoanRepaymentBasis: 'withdrawal_processed',
+                loanLockedAmount: totalFutureReserve,
+                loanReserveStartsAt: Timestamp.fromDate(dueDate)
+            };
+            await updateDoc(doc(db, `artifacts/${appId}/public/data/users`, userId), userMarkerUpdate);
+
+            allLoansCache = allLoansCache.map(loan => activeLoans.some(activeLoan => activeLoan.id === loan.id)
+                ? {
+                    ...loan,
+                    repaymentStartedAt: repaymentStartDate.getTime(),
+                    repaymentBasis: 'withdrawal_processed',
+                    repaymentStatus: 'running',
+                    dueDate: dueDate.getTime(),
+                    lockedAmount: Number(loan.totalRepayable || 0),
+                    reserveStartsAt: dueDate.getTime()
+                }
+                : loan);
+            if (currentUser?.uid === userId && currentUserData) {
+                currentUserData = {
+                    ...currentUserData,
+                    ...userMarkerUpdate,
+                    activeLoanId: currentUserData.activeLoanId || firstLoan.id
+                };
+            }
+        };
 
         const getLoanRequestStatus = (request = {}) => {
             request = request || {};
@@ -8478,6 +8550,8 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                 totalRepayable,
                 lockedAmount: totalRepayable,
                 dueDate: user.activeLoanDueDate || user.loanDueDate || null,
+                repaymentStartedAt: user.activeLoanRepaymentStartedAt || user.loanRepaymentStartedAt || null,
+                repaymentBasis: user.activeLoanRepaymentBasis || user.loanRepaymentBasis || '',
                 status: 'active',
                 loanApplicationVersion: LOAN_APPLICATION_VERSION,
                 loanRequestVersion: LOAN_APPLICATION_VERSION,
@@ -8662,7 +8736,6 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             const activeLoan = summary.activeLoans[0] || null;
             const canTakeLoan = hasModernLoanApproval(currentUserData) && summary.activeLoans.length === 0 && summary.availableAmount > 0;
             const historyCards = summary.loans.length ? summary.loans.map(loan => {
-                const dueDate = toDate(loan.dueDate);
                 const createdAt = toDate(loan.createdAt);
                 const isActive = isActiveLoanRecord(loan);
                 return `
@@ -8670,7 +8743,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                         <div class="flex justify-between gap-3">
                             <div>
                                 <p class="text-sm font-black text-gray-900 dark:text-white">${formatCurrency(loan.amount || 0)}</p>
-                                <p class="text-xs text-gray-500 dark:text-gray-400">${createdAt ? createdAt.toLocaleDateString('en-IN') : 'Loan date N/A'} | Due ${dueDate ? dueDate.toLocaleDateString('en-IN') : 'N/A'}</p>
+                                <p class="text-xs text-gray-500 dark:text-gray-400">${createdAt ? createdAt.toLocaleDateString('en-IN') : 'Loan date N/A'} | Due ${getLoanDueDateText(loan)}</p>
                             </div>
                             <span class="h-fit rounded-full px-3 py-1 text-[10px] font-black uppercase ${isActive ? 'bg-indigo-100 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-200' : 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-200'}">${escapeHtml(loan.status || 'active')}</span>
                         </div>
@@ -8974,14 +9047,13 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                 showLoanApplicationPage(1);
                 return;
             }
-            const dueDate = getNextMonthRepaymentDate();
             const maxLoanAmount = Math.max(1, getLoanLimitAmount(currentUserData));
             const content = `
                 ${getPageHeader('Take Loan')}
                 <div class="max-w-md mx-auto bg-white dark:bg-gray-800 p-6 rounded-xl shadow-md space-y-5">
                     <div class="text-center">
                         <h3 class="text-lg font-semibold">Choose Loan Amount</h3>
-                        <p class="text-sm text-gray-500 dark:text-gray-400 mt-1">Amount between 1 and your approved limit. Interest is 2% for 1 month.</p>
+                        <p class="text-sm text-gray-500 dark:text-gray-400 mt-1">Amount between 1 and your approved limit. Repayment starts after withdrawal approval.</p>
                     </div>
                     <div class="rounded-xl bg-indigo-50 dark:bg-indigo-900/20 border border-indigo-100 dark:border-indigo-800 p-4">
                         <div class="flex justify-between text-sm">
@@ -9006,7 +9078,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                 amountInput.placeholder = `Enter amount up to ${formatCurrency(maxLoanAmount)}`;
             }
             const loanHelpText = amountInput?.closest('.space-y-5')?.querySelector('.text-center p');
-            if (loanHelpText) loanHelpText.textContent = `Amount between 1 and ${formatCurrency(maxLoanAmount)}. Interest is 2% for 1 month.`;
+            if (loanHelpText) loanHelpText.textContent = `Amount between 1 and ${formatCurrency(maxLoanAmount)}. Repayment starts after withdrawal approval.`;
             const updateSummary = () => {
                 const amount = parseFloat(document.getElementById('loan-amount-input').value) || 0;
                 const interest = Number((amount * 0.02).toFixed(2));
@@ -9014,7 +9086,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                     <div class="flex justify-between"><span>Loan Amount</span><span>${formatCurrency(amount)}</span></div>
                     <div class="flex justify-between"><span>2% Interest</span><span>${formatCurrency(interest)}</span></div>
                     <div class="flex justify-between font-bold pt-2 border-t border-indigo-200 dark:border-indigo-800"><span>Total Repay</span><span>${formatCurrency(amount + interest)}</span></div>
-                    <div class="flex justify-between"><span>Due Date</span><span>${dueDate.toLocaleDateString('en-IN')}</span></div>`;
+                    <div class="flex justify-between"><span>Due Date</span><span>After withdrawal approval</span></div>`;
             };
             updateSummary();
             document.getElementById('loan-amount-input').addEventListener('input', updateSummary);
@@ -9026,7 +9098,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             renderModal('Loan Agreement',
                 `<div class="space-y-3 text-sm text-gray-600 dark:text-gray-300">
                     <p><strong>Credit limit:</strong> Admin approves your maximum loan limit. You may choose any amount within that limit when no active loan is open.</p>
-                    <p><strong>Repayment:</strong> Loan repayment is due on the same date next month. If that date does not exist, the nearest last date is used.</p>
+                    <p><strong>Repayment:</strong> Loan repayment starts when admin approves/processes your withdrawal payout. The due date will be the same date next month; if that date does not exist, the nearest last date is used.</p>
                     <p><strong>Security reserve:</strong> Loan money credited to your wallet remains usable. After the repayment due date, available wallet funds may be reserved or auto-debited for the active loan repayment.</p>
                     <p><strong>Missed due date:</strong> If repayment is due and wallet balance is insufficient, the account can be blocked until admin reviews and unlocks it.</p>
                 </div>`,
@@ -9035,7 +9107,8 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
         };
 
         const showActiveLoanPage = (loan) => {
-            const dueDate = loan.dueDate?.toDate ? loan.dueDate.toDate() : new Date(loan.dueDate);
+            const dueDate = toDate(loan.dueDate);
+            const dueDateText = dueDate ? dueDate.toLocaleDateString('en-IN') : 'After withdrawal approval';
             showPage(`
                 ${getPageHeader('Loan Repayment')}
                 <div class="max-w-md mx-auto bg-white dark:bg-gray-800 p-6 rounded-xl shadow-md space-y-4">
@@ -9046,9 +9119,9 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                         <div class="flex justify-between font-bold"><span>Total Payable</span><span>${formatCurrency(loan.totalRepayable)}</span></div>
                         <div class="flex justify-between"><span>Reserved Wallet Fund</span><span>${formatCurrency(getLoanReservedAmount(currentUserData))}</span></div>
                         <div class="flex justify-between"><span>Available Balance</span><span>${formatCurrency(getSpendableWalletBalance(currentUserData))}</span></div>
-                        <div class="flex justify-between"><span>Due Date</span><span>${dueDate.toLocaleDateString('en-IN')}</span></div>
+                        <div class="flex justify-between gap-3"><span>Due Date</span><span class="text-right">${escapeHtml(dueDateText)}</span></div>
                     </div>
-                    <p class="text-xs text-gray-500 dark:text-gray-400">Repayment option: pay all amount on the same date in next month.</p>
+                    <p class="text-xs text-gray-500 dark:text-gray-400">${dueDate ? 'Repayment option: pay all amount on the due date.' : 'Your repayment date will start after admin processes your withdrawal payout.'}</p>
                     <button id="repay-loan-btn" class="w-full bg-green-600 text-white font-semibold py-3 rounded-lg hover:bg-green-700 transition">Repay Full Loan</button>
                 </div>
                 ${getPageFooter()}`);
@@ -9088,7 +9161,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                         <div class="flex justify-between gap-3"><span>Status</span><span class="font-bold text-right">${escapeHtml(loan.status || 'active')}</span></div>
                         <div class="flex justify-between gap-3"><span>Credit Limit</span><span class="font-bold text-right">${formatCurrency(loan.creditLimitAtBorrow || getLoanLimitAmount(currentUserData))}</span></div>
                         <div class="flex justify-between gap-3"><span>Created</span><span class="font-bold text-right">${createdAt ? createdAt.toLocaleDateString('en-IN') : 'N/A'}</span></div>
-                        <div class="flex justify-between gap-3"><span>Due Date</span><span class="font-bold text-right">${dueDate ? dueDate.toLocaleDateString('en-IN') : 'N/A'}</span></div>
+                        <div class="flex justify-between gap-3"><span>Due Date</span><span class="font-bold text-right">${escapeHtml(getLoanDueDateText(loan))}</span></div>
                         ${paidAt ? `<div class="flex justify-between gap-3"><span>Paid At</span><span class="font-bold text-right">${paidAt.toLocaleDateString('en-IN')}</span></div>` : ''}
                     </div>
                 </div>`,
@@ -10581,7 +10654,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                         <div class="flex justify-between gap-3">
                             <div>
                                 <p class="font-black">${formatCurrency(loan.amount || 0)} <span class="text-[10px] uppercase text-gray-500">${escapeHtml(loan.status || 'active')}</span></p>
-                                <p class="text-xs text-gray-500">${createdAt ? createdAt.toLocaleDateString('en-IN') : 'N/A'} | Due ${dueDate ? dueDate.toLocaleDateString('en-IN') : 'N/A'}</p>
+                                <p class="text-xs text-gray-500">${createdAt ? createdAt.toLocaleDateString('en-IN') : 'N/A'} | Due ${getLoanDueDateText(loan)}</p>
                             </div>
                             <div class="text-right">
                                 <p class="font-black">${formatCurrency(loan.totalRepayable || 0)}</p>
@@ -10680,7 +10753,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                         <div class="flex justify-between gap-3"><span>Total Repay</span><span class="font-black">${formatCurrency(loan.totalRepayable || 0)}</span></div>
                         <div class="flex justify-between gap-3"><span>Credit Limit</span><span class="font-black">${formatCurrency(loan.creditLimitAtBorrow || 0)}</span></div>
                         <div class="flex justify-between gap-3"><span>Created</span><span class="font-black">${createdAt ? createdAt.toLocaleDateString('en-IN') : 'N/A'}</span></div>
-                        <div class="flex justify-between gap-3"><span>Due Date</span><span class="font-black">${dueDate ? dueDate.toLocaleDateString('en-IN') : 'N/A'}</span></div>
+                        <div class="flex justify-between gap-3"><span>Due Date</span><span class="font-black text-right">${escapeHtml(getLoanDueDateText(loan))}</span></div>
                         ${paidAt ? `<div class="flex justify-between gap-3"><span>Paid</span><span class="font-black">${paidAt.toLocaleDateString('en-IN')}</span></div>` : ''}
                     </div>
                 </div>`,
@@ -11328,7 +11401,6 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             }
             const interest = Number((amount * 0.02).toFixed(2));
             const totalRepayable = Number((amount + interest).toFixed(2));
-            const dueDate = getNextMonthRepaymentDate();
 
             try {
                 if (takeLoanBtn) {
@@ -11389,10 +11461,12 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                         activeLoanAmount: amount,
                         activeLoanInterest: interest,
                         activeLoanRepayable: totalRepayable,
-                        activeLoanDueDate: Timestamp.fromDate(dueDate),
+                        activeLoanDueDate: null,
                         activeLoanCreatedAt: serverTimestamp(),
+                        activeLoanRepaymentStartedAt: null,
+                        activeLoanRepaymentBasis: 'withdrawal_processed_pending',
                         loanLockedAmount: 0,
-                        loanReserveStartsAt: Timestamp.fromDate(dueDate)
+                        loanReserveStartsAt: null
                     });
                     tx.set(loanRef, {
                         loanApplicationVersion: LOAN_APPLICATION_VERSION,
@@ -11404,9 +11478,12 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                         interest,
                         totalRepayable,
                         lockedAmount: 0,
-                        reserveStartsAt: Timestamp.fromDate(dueDate),
+                        reserveStartsAt: null,
                         creditLimitAtBorrow: approvedMaxLoan,
-                        dueDate: Timestamp.fromDate(dueDate),
+                        dueDate: null,
+                        repaymentStartedAt: null,
+                        repaymentBasis: 'withdrawal_processed_pending',
+                        repaymentStatus: 'waiting_withdrawal_processing',
                         status: 'active',
                         createdAt: serverTimestamp()
                     });
@@ -11459,7 +11536,10 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                         activeLoanRepayable: deleteField(),
                         activeLoanDueDate: deleteField(),
                         activeLoanCreatedAt: deleteField(),
-                        loanLockedAmount: deleteField()
+                        activeLoanRepaymentStartedAt: deleteField(),
+                        activeLoanRepaymentBasis: deleteField(),
+                        loanLockedAmount: deleteField(),
+                        loanReserveStartsAt: deleteField()
                     });
                     tx.update(loanRef, {
                         status: 'paid',
@@ -11701,7 +11781,10 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                     activeLoanRepayable: deleteField(),
                     activeLoanDueDate: deleteField(),
                     activeLoanCreatedAt: deleteField(),
-                    loanLockedAmount: deleteField()
+                    activeLoanRepaymentStartedAt: deleteField(),
+                    activeLoanRepaymentBasis: deleteField(),
+                    loanLockedAmount: deleteField(),
+                    loanReserveStartsAt: deleteField()
                 });
                 tx.update(loanRef, {
                     status: 'paid',
@@ -13057,6 +13140,10 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                     }
                 }
                 await setDoc(doc(collection(userRef, 'transactions'), getSafeTransactionDocId(`withdrawal-${requestId}`)), transactionPayload, { merge: true });
+                if (newStatus === 'completed') {
+                    startLoanRepaymentAfterWithdrawalApproval(userId, processedAt)
+                        .catch(error => console.warn('Loan repayment start update skipped:', error));
+                }
 
                 allFundRequestsCache = allFundRequestsCache.filter(req => req.id !== requestId);
                 renderAdminFundRequests(allFundRequestsCache);
