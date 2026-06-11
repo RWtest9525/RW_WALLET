@@ -67,6 +67,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
         ];
         const BACKEND_BASE_URL = 'https://rw-wallet.onrender.com';
         const RW_LOGO_URL = 'https://i.ibb.co/x8YBYwGG/6233389803554672153.jpg';
+        const PLAY_STORE_LOGO_URL = 'https://upload.wikimedia.org/wikipedia/commons/d/d0/Google_Play_Arrow_logo.svg';
         const REFER_ICON_URL = 'https://cdn-icons-png.flaticon.com/512/929/929610.png';
         const WALLET_ICON_URL = 'https://cdn-icons-png.flaticon.com/512/1946/1946436.png';
         const ADMIN_ICON_URL = 'https://cdn-icons-png.flaticon.com/512/3135/3135715.png';
@@ -3856,7 +3857,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                         ${renderSettingAction('settings-admin-gift-codes', 'Gift Codes', 'https://cdn-icons-png.flaticon.com/512/2611/2611152.png', 'purple')}
                         ${renderSettingAction('settings-admin-history', 'Withdrawal History', 'https://cdn-icons-png.flaticon.com/512/3652/3652191.png', 'yellow')}
                         ${renderSettingAction('settings-admin-chat', 'Manage Chat', 'https://cdn-icons-png.flaticon.com/512/5962/5962463.png', 'rose')}
-                        ${renderSettingAction('settings-admin-referral', 'Referral Price', REFER_ICON_URL, 'emerald')}
+                        ${renderSettingAction('settings-admin-rates', 'Rate Settings', 'https://cdn-icons-png.flaticon.com/512/3524/3524659.png', 'emerald')}
                         ${renderSettingAction('settings-admin-maintenance', 'Maintenance Mode', 'https://cdn-icons-png.flaticon.com/512/2099/2099058.png', 'red')}
                         ${renderSettingAction('settings-admin-whats-new', "What's New Popup", 'https://cdn-icons-png.flaticon.com/512/1828/1828884.png', 'blue')}
                     </div>` : ''}
@@ -3877,7 +3878,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                 document.getElementById('settings-admin-gift-codes').onclick = showAdminGiftCodesPage;
                 document.getElementById('settings-admin-history').onclick = showWithdrawalHistoryPage;
                 document.getElementById('settings-admin-chat').onclick = showAdminChatsPage;
-                document.getElementById('settings-admin-referral').onclick = showReferralSettingsPage;
+                document.getElementById('settings-admin-rates').onclick = showAdminWithdrawSettingsModal;
                 document.getElementById('settings-admin-maintenance').onclick = showMaintenanceSettingsPage;
                 document.getElementById('settings-admin-whats-new').onclick = showWhatsNewSettingsPage;
             }
@@ -4624,7 +4625,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                 {
                     label: 'App Review',
                     accent: 'task-accent-blue',
-                    logo: 'https://cdn-icons-png.flaticon.com/512/3176/3176366.png',
+                    logo: PLAY_STORE_LOGO_URL,
                     items: [
                         { title: 'App Review', reward: 'Rs 8' },
                         { title: 'App Review', reward: 'Rs 10' },
@@ -4736,7 +4737,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             const reward = task.rate || task.reward || 0;
             const taskTitle = task.title || 'Task Mission';
             const appName = task.appName || taskTitle;
-            const reviewText = task.reviewText || task.copyText || task.instructions || 'good app';
+            const reviewText = task.reviewComment || task.commentToCopy || task.reviewText || task.copyText || 'good app';
             const taskLink = task.taskLink || task.link || task.url || '';
             const image = task.imageUrl || task.logoUrl || task.iconUrl || 'https://cdn-icons-png.flaticon.com/512/3176/3176366.png';
             const content = `
@@ -4852,7 +4853,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
         };
 
         const ADMIN_TASK_REVIEW_TYPES = [
-            { value: 'app_review', label: 'App Review', logo: 'https://cdn-icons-png.flaticon.com/512/3176/3176366.png' },
+            { value: 'app_review', label: 'App Review', logo: PLAY_STORE_LOGO_URL },
             { value: 'map_review', label: 'Map Review', logo: 'https://cdn-icons-png.flaticon.com/512/854/854878.png' },
             { value: 'trustpilot_review', label: 'Trustpilot Review', logo: 'https://cdn-icons-png.flaticon.com/512/5968/5968919.png' },
             { value: 'website_review', label: 'Website Review', logo: 'https://cdn-icons-png.flaticon.com/512/1006/1006771.png' }
@@ -4921,6 +4922,32 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             const days = Number(task.paymentDelayDays || task.paymentDays || 0);
             if (mode === 'days' && days > 0) return `${days}${days === 1 ? 'st' : days === 2 ? 'nd' : days === 3 ? 'rd' : 'th'} day payment`;
             return 'Instant payment';
+        };
+        const getDefaultAdminTaskInstructions = (family = 'review', subtype = 'app_review') => {
+            const defaults = {
+                app_review: '1. Open the app link.\n2. Install or open the app.\n3. Copy the review comment from this task.\n4. Submit the review on Play Store.\n5. Upload a clear screenshot proof.',
+                map_review: '1. Open the map/place link.\n2. Visit the review section.\n3. Copy the review comment from this task.\n4. Submit the review.\n5. Upload a clear screenshot proof.',
+                trustpilot_review: '1. Open the Trustpilot review link.\n2. Copy the review comment from this task.\n3. Submit the review correctly.\n4. Upload a clear screenshot proof.',
+                website_review: '1. Open the website link.\n2. Check the page properly.\n3. Copy the review comment from this task.\n4. Submit the review where requested.\n5. Upload a clear screenshot proof.',
+                instagram_task: '1. Open the Instagram link.\n2. Complete the required action.\n3. Keep your profile/action visible until verification.\n4. Upload a clear screenshot proof.',
+                youtube_task: '1. Open the YouTube link.\n2. Complete the required action.\n3. Keep the action active until verification.\n4. Upload a clear screenshot proof.',
+                app_download_task: '1. Open the app download link.\n2. Install the app.\n3. Open it once after install.\n4. Upload a clear screenshot proof.',
+                facebook_task: '1. Open the Facebook link.\n2. Complete the required action.\n3. Keep the action active until verification.\n4. Upload a clear screenshot proof.',
+                telegram_task: '1. Open the Telegram link.\n2. Join or complete the required action.\n3. Keep it active until verification.\n4. Upload a clear screenshot proof.'
+            };
+            return defaults[subtype] || (family === 'social'
+                ? '1. Open the task link.\n2. Complete the required social action.\n3. Upload a clear screenshot proof.'
+                : '1. Open the review link.\n2. Copy the review comment from this task.\n3. Submit the review.\n4. Upload a clear screenshot proof.');
+        };
+        const applyDefaultAdminTaskInstructions = (force = false) => {
+            const instructionsInput = document.getElementById('admin-task-instructions');
+            if (!instructionsInput) return;
+            const family = document.getElementById('admin-task-family')?.value || 'review';
+            const subtype = document.getElementById('admin-task-subtype')?.value || getAdminTaskTypes(family)[0].value;
+            if (force || !instructionsInput.value.trim() || instructionsInput.dataset.autoDefault === 'true') {
+                instructionsInput.value = getDefaultAdminTaskInstructions(family, subtype);
+                instructionsInput.dataset.autoDefault = 'true';
+            }
         };
         const renderAdminTaskSubtypeOptions = (family = 'review', selected = '') => getAdminTaskTypes(family).map(item => `
             <option value="${item.value}" ${item.value === selected ? 'selected' : ''}>${escapeHtml(item.label)}</option>
@@ -4997,7 +5024,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                         <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
                             <div>
                                 <h3 class="text-lg font-black text-gray-900 dark:text-white">Add New Task</h3>
-                                <p class="text-xs text-gray-500 dark:text-gray-400">Choose task type, add link, reward, payment timing, and review comment if needed.</p>
+                                <p class="text-xs text-gray-500 dark:text-gray-400">Choose task type, add link, reward, and payment timing. Instructions are prefilled.</p>
                             </div>
                         </div>
 
@@ -5048,10 +5075,6 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                                 <label class="text-xs font-black uppercase text-gray-400">Payment Day</label>
                                 <input id="admin-task-payment-days" type="number" min="1" step="1" placeholder="2 / 3 / 7" class="mt-1 w-full px-4 py-3 bg-gray-100 dark:bg-gray-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-cyan-500">
                             </div>
-                            <div id="admin-task-review-comment-wrap" class="sm:col-span-2">
-                                <label class="text-xs font-black uppercase text-gray-400">Review Comment</label>
-                                <textarea id="admin-task-review-comment" rows="3" placeholder="Comment user will copy for review..." class="mt-1 w-full px-4 py-3 bg-gray-100 dark:bg-gray-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-cyan-500"></textarea>
-                            </div>
                             <div class="sm:col-span-2">
                                 <label class="text-xs font-black uppercase text-gray-400">Instructions</label>
                                 <textarea id="admin-task-instructions" rows="4" placeholder="Write exact steps users must follow..." class="mt-1 w-full px-4 py-3 bg-gray-100 dark:bg-gray-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-cyan-500"></textarea>
@@ -5093,6 +5116,9 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             document.getElementById('admin-task-subtype')?.addEventListener('change', () => updateAdminTaskDynamicFields());
             document.getElementById('admin-task-payment-mode')?.addEventListener('change', () => updateAdminTaskDynamicFields());
             document.getElementById('admin-task-link')?.addEventListener('input', () => updateAdminTaskLogoPreview());
+            document.getElementById('admin-task-instructions')?.addEventListener('input', (event) => {
+                event.currentTarget.dataset.autoDefault = 'false';
+            });
             document.getElementById('admin-task-search')?.addEventListener('input', renderAdminTaskList);
             document.getElementById('admin-task-filter')?.addEventListener('change', renderAdminTaskList);
             updateAdminTaskDynamicFields();
@@ -5127,11 +5153,10 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             subtypeInput.innerHTML = renderAdminTaskSubtypeOptions(family, selectedSubtype);
             subtypeInput.value = selectedSubtype;
 
-            const isReview = family === 'review';
-            document.getElementById('admin-task-review-comment-wrap')?.classList.toggle('hidden', !isReview);
             const paymentMode = document.getElementById('admin-task-payment-mode')?.value || 'instant';
             document.getElementById('admin-task-payment-days-wrap')?.classList.toggle('hidden', paymentMode !== 'days');
             updateAdminTaskLogoPreview();
+            applyDefaultAdminTaskInstructions(false);
         };
 
         const getAdminTaskFormData = (existingTask = null) => {
@@ -5146,6 +5171,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             const paymentDays = paymentMode === 'days' ? Number(document.getElementById('admin-task-payment-days')?.value || 0) : 0;
             const logoUrl = getTaskLogoFromLink(family, subtype, taskLink);
             const status = existingTask ? (existingTask.status || 'draft') : 'draft';
+            const preservedReviewComment = family === 'review' && existingTask ? (existingTask.reviewComment || existingTask.commentToCopy || '') : '';
             return {
                 title,
                 taskFamily: family,
@@ -5165,7 +5191,8 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                 logoUrl,
                 imageUrl: logoUrl,
                 iconUrl: logoUrl,
-                reviewComment: family === 'review' ? (document.getElementById('admin-task-review-comment')?.value.trim() || '') : '',
+                reviewComment: preservedReviewComment,
+                commentToCopy: preservedReviewComment,
                 paymentMode,
                 paymentDelayDays: Number.isFinite(paymentDays) && paymentDays > 0 ? paymentDays : 0,
                 paymentLabel: paymentMode === 'days' && paymentDays > 0 ? `${paymentDays} day payment` : 'Instant payment',
@@ -5182,6 +5209,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             const saveBtn = document.getElementById('admin-task-save-btn');
             if (saveBtn) saveBtn.textContent = 'Add Task';
             updateAdminTaskDynamicFields('app_review');
+            applyDefaultAdminTaskInstructions(true);
         };
 
         const handleSaveAdminTask = async (event) => {
@@ -5195,7 +5223,6 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             if (!Number.isFinite(payload.rate) || payload.rate <= 0) return showNotification('Please enter a valid task rate.', true);
             if (!payload.taskLink) return showNotification('Please add task link.', true);
             if (payload.taskLink && !/^https?:\/\//i.test(payload.taskLink)) return showNotification('Task link must start with http:// or https://', true);
-            if (payload.taskFamily === 'review' && !payload.reviewComment) return showNotification('Please add review comment for this review task.', true);
             if (payload.paymentMode === 'days' && (!Number.isFinite(payload.paymentDelayDays) || payload.paymentDelayDays <= 0)) return showNotification('Please enter payment day.', true);
             if (!payload.instructions) return showNotification('Please add task instructions.', true);
 
@@ -5259,10 +5286,13 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             document.getElementById('admin-task-rate').value = task.rate || task.reward || '';
             document.getElementById('admin-task-limit').value = task.limit || '';
             document.getElementById('admin-task-link').value = task.taskLink || '';
-            document.getElementById('admin-task-review-comment').value = task.reviewComment || task.commentToCopy || '';
             document.getElementById('admin-task-payment-mode').value = (task.paymentMode || (Number(task.paymentDelayDays || 0) > 0 ? 'days' : 'instant')) === 'days' ? 'days' : 'instant';
             document.getElementById('admin-task-payment-days').value = task.paymentDelayDays || task.paymentDays || '';
-            document.getElementById('admin-task-instructions').value = task.instructions || '';
+            const instructionsInput = document.getElementById('admin-task-instructions');
+            if (instructionsInput) {
+                instructionsInput.value = task.instructions || '';
+                instructionsInput.dataset.autoDefault = task.instructions ? 'false' : 'true';
+            }
             document.getElementById('admin-task-save-btn').textContent = 'Update Task';
             updateAdminTaskDynamicFields(subtype);
             setAdminTaskPanel('add');
@@ -13220,11 +13250,17 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
 
         const showAdminWithdrawSettingsModal = async () => {
             await loadWithdrawalSettingsOnce(true);
+            const referralReward = getReferralRewardAmount();
             const content = `
                 <div class="space-y-4">
-                    <p class="text-sm text-gray-500 dark:text-gray-400">Configure withdrawal limits and rules for all users.</p>
+                    <p class="text-sm text-gray-500 dark:text-gray-400">Configure withdrawal limits and user reward rates from one place.</p>
                     
                     <div class="space-y-3">
+                        <div>
+                            <label class="block text-xs font-semibold text-gray-500 uppercase mb-1">Referral Reward Amount</label>
+                            <input type="number" id="setting-referral-reward" value="${referralReward}" min="0" step="1" class="w-full px-4 py-2 bg-gray-100 dark:bg-gray-700 rounded-lg">
+                            <p class="text-[10px] text-gray-400 mt-1">This amount is shown on the Refer & Earn page.</p>
+                        </div>
                         <div>
                             <label class="block text-xs font-semibold text-gray-500 uppercase mb-1">Min. Withdrawal (UPI)</label>
                             <input type="number" id="setting-min-upi" value="${minWithdrawalUpi}" class="w-full px-4 py-2 bg-gray-100 dark:bg-gray-700 rounded-lg">
@@ -13251,24 +13287,28 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             const actions = `
                 <button onclick="window.closeModal()" class="px-4 py-2 text-sm bg-gray-200 dark:bg-gray-600 rounded-lg">Cancel</button>
                 <button id="modal-save-settings-btn" class="px-4 py-2 text-sm bg-purple-600 text-white rounded-lg">Save Settings</button>`;
-            renderModal('Withdrawal Settings', content, actions);
+            renderModal('Rate Settings', content, actions);
             document.getElementById('modal-save-settings-btn').onclick = handleSaveWithdrawSettings;
         };
 
         const handleSaveWithdrawSettings = async () => {
+            const referralReward = parseInt(document.getElementById('setting-referral-reward')?.value || '0');
             const minUpi = parseInt(document.getElementById('setting-min-upi').value);
             const minBank = parseInt(document.getElementById('setting-min-bank').value);
             const minRedeem = parseInt(document.getElementById('setting-min-redeem').value);
             const maxDay = parseInt(document.getElementById('setting-max-day').value);
             const maxPending = parseInt(document.getElementById('setting-max-pending').value);
 
-            if (isNaN(minUpi) || isNaN(minBank) || isNaN(minRedeem) || isNaN(maxDay) || isNaN(maxPending)) {
+            if (isNaN(referralReward) || referralReward < 0 || isNaN(minUpi) || isNaN(minBank) || isNaN(minRedeem) || isNaN(maxDay) || isNaN(maxPending)) {
                 return showNotification('Please enter valid numbers for all settings.', true);
             }
 
             try {
                 const configRef = doc(db, `artifacts/${appId}/settings`, 'app_config');
-                await setDoc(configRef, {
+                const updatedConfig = {
+                    referralRewardAmount: referralReward,
+                    referralRewardUpdatedAt: serverTimestamp(),
+                    referralRewardUpdatedBy: currentUser.uid,
                     min_withdrawal_upi: minUpi,
                     min_withdrawal_bank: minBank,
                     min_withdrawal_redeem: minRedeem,
@@ -13276,19 +13316,23 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                     max_withdrawal_per_day: maxDay,
                     max_pending_withdrawals: maxPending,
                     updatedAt: serverTimestamp()
-                }, { merge: true });
+                };
+                await setDoc(configRef, updatedConfig, { merge: true });
 
-                applyWithdrawalConfig({
+                const localConfig = {
+                    referralRewardAmount: referralReward,
+                    referralRewardUpdatedAt: Date.now(),
                     min_withdrawal_upi: minUpi,
                     min_withdrawal_bank: minBank,
                     min_withdrawal_redeem: minRedeem,
                     min_withdrawal_amount: Math.min(minUpi, minBank, minRedeem),
                     max_withdrawal_per_day: maxDay,
                     max_pending_withdrawals: maxPending
-                });
+                };
+                applyAppConfig(localConfig);
                 withdrawalSettingsLoadedAt = Date.now();
 
-                showNotification('Withdrawal settings saved successfully!');
+                showNotification('Rate settings saved successfully!');
                 window.closeModal();
             } catch (e) {
                 console.error("Save settings failed:", e);
@@ -14441,6 +14485,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                 CHAT_ICON_URL,
                 SETTINGS_ICON_URL,
                 NOTIFICATION_ICON_URL,
+                PLAY_STORE_LOGO_URL,
                 'https://cdn-icons-png.flaticon.com/512/12449/12449036.png',
                 'https://cdn-icons-png.flaticon.com/512/3652/3652191.png',
                 'https://cdn-icons-png.flaticon.com/512/7939/7939990.png',

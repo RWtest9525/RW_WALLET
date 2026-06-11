@@ -386,9 +386,9 @@ root.outerHTML = String.raw`
                             <button id="admin-withdraw-settings-btn"
                                 class="flex flex-col items-center justify-center p-3 min-h-28 bg-purple-50 dark:bg-purple-900/20 rounded-2xl hover:bg-purple-100 dark:hover:bg-purple-900/30 transition border border-purple-200 dark:border-purple-800 shadow-sm">
                                 <span class="flex h-12 w-12 items-center justify-center rounded-2xl bg-white dark:bg-gray-800 shadow-sm mb-2">
-                                    <img src="https://cdn-icons-png.flaticon.com/512/3524/3524659.png" class="h-8 w-8 object-contain" alt="Withdrawal Settings">
+                                    <img src="https://cdn-icons-png.flaticon.com/512/3524/3524659.png" class="h-8 w-8 object-contain" alt="Rate Settings">
                                 </span>
-                                <span class="text-sm font-medium text-purple-700 dark:text-purple-300">Withdrawal
+                                <span class="text-sm font-medium text-purple-700 dark:text-purple-300">Rate
                                     Settings</span>
                             </button>
                             <button id="admin-maintenance-btn"
