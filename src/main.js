@@ -12129,6 +12129,12 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                 document.getElementById('modal-confirm-btn').onclick = () => {
                     const txnId = document.getElementById('admin-tx-id-input').value.trim();
                     if (!txnId) return showNotification('Transaction ID is required.', true);
+                    const btn = document.getElementById('modal-confirm-btn');
+                    if (btn) {
+                        btn.disabled = true;
+                        btn.textContent = 'Approving...';
+                    }
+                    window.closeModal();
                     proceedWithRequestAction(userId, requestId, newStatus, txnId, reqData);
                 };
             } else if (newStatus === 'rejected') {
@@ -12150,6 +12156,12 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                     if (!rejectionReason) {
                         return showNotification('Please provide a rejection reason.', true);
                     }
+                    const btn = document.getElementById('confirm-action-btn');
+                    if (btn) {
+                        btn.disabled = true;
+                        btn.textContent = 'Rejecting...';
+                    }
+                    window.closeModal();
                     proceedWithRequestAction(userId, requestId, newStatus, null, null, rejectionReason);
                 };
             }
@@ -12295,11 +12307,23 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                 const reapplyAfter = rejectedAt ? addMonthsClamped(rejectedAt, LOAN_REAPPLY_WAIT_MONTHS) : null;
                 const cleanRejectionReason = String(rejectionReason || 'Loan request cancelled by admin.').trim();
                 const requestRef = doc(db, `artifacts/${appId}/public/data/loan_requests`, requestId);
-                const userRef = doc(db, `artifacts/${appId}/public/data/users`, userId);
+                let resolvedUserId = String(userId || '').trim();
+                const isValidResolvedUserId = (value) => value && !['undefined', 'null', 'false'].includes(String(value).toLowerCase());
+                const adminActorId = currentUser?.uid || ADMIN_UID;
                 await runTransaction(db, async (tx) => {
                     const requestDoc = await tx.get(requestRef);
                     if (!requestDoc.exists()) throw new Error('Loan request not found.');
                     const requestData = requestDoc.data();
+                    resolvedUserId = isValidResolvedUserId(resolvedUserId) ? resolvedUserId : String(requestData.userId || requestData.uid || '').trim();
+                    const canUpdateUser = isValidResolvedUserId(resolvedUserId);
+                    if (newStatus === 'approved' && !canUpdateUser) {
+                        throw new Error('Loan request user account is missing. Reject it or ask user to apply again.');
+                    }
+                    const userRef = canUpdateUser ? doc(db, `artifacts/${appId}/public/data/users`, resolvedUserId) : null;
+                    const userDoc = userRef ? await tx.get(userRef) : null;
+                    if (newStatus === 'approved' && (!userDoc || !userDoc.exists())) {
+                        throw new Error('User account not found for this loan request.');
+                    }
                     const currentStatus = getLoanRequestStatus(requestData);
                     const rejectedStatuses = ['rejected', 'cancelled', 'canceled', 'failed', 'denied'];
                     if (newStatus === 'approved' && !['pending', ...rejectedStatuses].includes(currentStatus)) {
@@ -12311,7 +12335,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                     tx.update(requestRef, {
                         status: newStatus,
                         processedAt: serverTimestamp(),
-                        processedBy: currentUser.uid,
+                        processedBy: adminActorId,
                         ...(newStatus === 'approved' ? {
                             reapplyAfter: deleteField(),
                             rejectionReason: deleteField()
@@ -12328,7 +12352,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                             loanApplicationVersion: LOAN_APPLICATION_VERSION,
                             loanRequestStatus: 'approved',
                             loanApprovedAt: serverTimestamp(),
-                            loanApprovedBy: currentUser.uid,
+                            loanApprovedBy: adminActorId,
                             loanDocumentsSubmitted: true,
                             loanDocumentsVerified: true,
                             loanDocumentsApprovedAt: serverTimestamp(),
@@ -12344,7 +12368,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                             loanDocumentsVerified: true,
                             loanDocumentsApproved: true
                         });
-                    } else {
+                    } else if (userRef && userDoc?.exists()) {
                         tx.update(userRef, {
                             loanEligible: false,
                             maxLoanAmount: 0,
@@ -12353,13 +12377,68 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                             latestLoanRequestVersion: LOAN_APPLICATION_VERSION,
                             loanApplicationVersion: LOAN_APPLICATION_VERSION,
                             loanProcessedAt: serverTimestamp(),
-                            loanProcessedBy: currentUser.uid,
+                            loanProcessedBy: adminActorId,
                             loanReapplyAfter: Timestamp.fromDate(reapplyAfter),
                             loanRejectionReason: cleanRejectionReason,
                             loanDocumentsVerified: false
                         });
                     }
                 });
+                const processedAt = Date.now();
+                const localRequestUpdate = newStatus === 'approved'
+                    ? {
+                        status: 'approved',
+                        processedAt,
+                        processedBy: currentUser?.uid || ADMIN_UID,
+                        maxLoanAmount: Number(maxLoanAmount),
+                        loanApplicationVersion: LOAN_APPLICATION_VERSION,
+                        loanDocumentsSubmitted: true,
+                        loanDocumentsVerified: true,
+                        loanDocumentsApproved: true,
+                        reapplyAfter: null,
+                        rejectionReason: ''
+                    }
+                    : {
+                        status: newStatus,
+                        processedAt,
+                        processedBy: currentUser?.uid || ADMIN_UID,
+                        reapplyAfter: reapplyAfter?.getTime?.() || null,
+                        rejectionReason: cleanRejectionReason
+                    };
+                allLoanRequestsCache = allLoanRequestsCache.map(request => request.id === requestId ? { ...request, ...localRequestUpdate } : request);
+                if (isValidResolvedUserId(resolvedUserId)) {
+                    allUsersCache = allUsersCache.map(user => {
+                        const cacheUserId = user.id || user.uid;
+                        if (cacheUserId !== resolvedUserId) return user;
+                        return newStatus === 'approved'
+                            ? {
+                                ...user,
+                                loanEligible: true,
+                                maxLoanAmount: Number(maxLoanAmount),
+                                loanMaxAmount: Number(maxLoanAmount),
+                                loanApplicationVersion: LOAN_APPLICATION_VERSION,
+                                loanRequestStatus: 'approved',
+                                loanDocumentsSubmitted: true,
+                                loanDocumentsVerified: true,
+                                loanReapplyAfter: null,
+                                loanRejectionReason: ''
+                            }
+                            : {
+                                ...user,
+                                loanEligible: false,
+                                maxLoanAmount: 0,
+                                loanMaxAmount: 0,
+                                loanRequestStatus: newStatus,
+                                latestLoanRequestVersion: LOAN_APPLICATION_VERSION,
+                                loanApplicationVersion: LOAN_APPLICATION_VERSION,
+                                loanReapplyAfter: reapplyAfter?.getTime?.() || null,
+                                loanRejectionReason: cleanRejectionReason,
+                                loanDocumentsVerified: false
+                            };
+                    });
+                }
+                renderAdminLoanPage();
+                updateAdminLoanRequestBadge();
                 showNotification(`Loan request ${newStatus}.`);
                 refreshAdminDashboardCaches().catch(error => console.error('Admin cache refresh failed:', error));
             } catch (e) {
@@ -12566,7 +12645,12 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                 }
                 await setDoc(doc(collection(userRef, 'transactions'), getSafeTransactionDocId(`withdrawal-${requestId}`)), transactionPayload, { merge: true });
 
-                await updateCloudFundRequestStatus(requestId, newStatus, {
+                allFundRequestsCache = allFundRequestsCache.filter(req => req.id !== requestId);
+                renderAdminFundRequests(allFundRequestsCache);
+                updateAdminPendingRequestSummary();
+                showNotification(`Success! Request has been ${newStatus}.`);
+
+                updateCloudFundRequestStatus(requestId, newStatus, {
                     ...(requestData || {}),
                     status: newStatus,
                     adminTransactionId: txnId || '',
@@ -12577,6 +12661,8 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                     ...(transactionBalanceBefore !== null ? { balanceBefore: transactionBalanceBefore } : {}),
                     ...(transactionBalanceAfter !== null ? { balanceAfter: transactionBalanceAfter } : {}),
                     balanceDeducted: balanceWasDeducted
+                }).catch(error => {
+                    console.warn('Withdrawal cloud status background sync skipped:', error);
                 });
                 syncRecentTransactionsToCloud(userId).catch(error => console.warn('Withdraw transaction background sync skipped:', error));
                 if (currentUser?.uid && currentUser.uid !== userId) {
@@ -12591,11 +12677,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                     rejectionReason,
                     processedAt
                 });
-                allFundRequestsCache = allFundRequestsCache.filter(req => req.id !== requestId);
-                renderAdminFundRequests(allFundRequestsCache);
-                updateAdminPendingRequestSummary();
                 refreshAdminFundRequestsFromCloud().catch(error => console.warn('Pending withdrawal refresh skipped:', error));
-                showNotification(`Success! Request has been ${newStatus}.`);
                 window.closeModal();
             } catch (e) {
                 console.error("Request action failed:", e);
