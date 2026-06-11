@@ -258,6 +258,27 @@ async function initSchema(d1) {
   `);
 
   await d1.query(`
+    CREATE TABLE IF NOT EXISTS loan_requests (
+      request_id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      status TEXT NOT NULL,
+      requested_at INTEGER NOT NULL,
+      processed_at INTEGER,
+      details_json TEXT
+    )
+  `);
+
+  await d1.query(`
+    CREATE INDEX IF NOT EXISTS idx_loan_requests_status_time
+    ON loan_requests (status, requested_at DESC)
+  `);
+
+  await d1.query(`
+    CREATE INDEX IF NOT EXISTS idx_loan_requests_user_status
+    ON loan_requests (user_id, status)
+  `);
+
+  await d1.query(`
     CREATE TABLE IF NOT EXISTS notifications (
       id TEXT PRIMARY KEY,
       title TEXT,
@@ -602,6 +623,73 @@ async function updateFundRequestStatus(d1, { requestId, status, processedAt = no
 
   await d1.query(
     `UPDATE fund_requests
+     SET status = ?, processed_at = ?, details_json = ?
+     WHERE request_id = ?`,
+    [status, processedAt, JSON.stringify({ ...currentDetails, ...(details || {}) }), requestId]
+  );
+}
+
+async function saveLoanRequest(d1, { requestId, userId, status = 'pending', requestedAt = nowMs(), processedAt = null, details = {} }) {
+  await d1.query(
+    `INSERT INTO loan_requests (request_id, user_id, status, requested_at, processed_at, details_json)
+     VALUES (?, ?, ?, ?, ?, ?)
+     ON CONFLICT(request_id) DO UPDATE SET
+       user_id = excluded.user_id,
+       status = excluded.status,
+       requested_at = excluded.requested_at,
+       processed_at = excluded.processed_at,
+       details_json = excluded.details_json`,
+    [requestId, userId, status, requestedAt, processedAt, JSON.stringify(details || {})]
+  );
+}
+
+async function listLoanRequests(d1, { status = 'pending', userId = null, limit = 300 } = {}) {
+  const conditions = [];
+  const params = [];
+  if (status) {
+    conditions.push('status = ?');
+    params.push(status);
+  }
+  if (userId) {
+    conditions.push('user_id = ?');
+    params.push(userId);
+  }
+  params.push(limit);
+
+  const rows = await d1.all(
+    `SELECT request_id, user_id, status, requested_at, processed_at, details_json
+     FROM loan_requests
+     ${conditions.length ? `WHERE ${conditions.join(' AND ')}` : ''}
+     ORDER BY requested_at DESC
+     LIMIT ?`,
+    params
+  );
+
+  return rows.map((row) => {
+    let details = {};
+    try {
+      details = row.details_json ? JSON.parse(row.details_json) : {};
+    } catch {
+      details = {};
+    }
+    return { ...details, ...row, details_json: undefined };
+  });
+}
+
+async function updateLoanRequestStatus(d1, { requestId, status, processedAt = nowMs(), details = {} }) {
+  const existing = await d1.first(
+    `SELECT details_json FROM loan_requests WHERE request_id = ? LIMIT 1`,
+    [requestId]
+  );
+  let currentDetails = {};
+  try {
+    currentDetails = existing?.details_json ? JSON.parse(existing.details_json) : {};
+  } catch {
+    currentDetails = {};
+  }
+
+  await d1.query(
+    `UPDATE loan_requests
      SET status = ?, processed_at = ?, details_json = ?
      WHERE request_id = ?`,
     [status, processedAt, JSON.stringify({ ...currentDetails, ...(details || {}) }), requestId]
@@ -1020,6 +1108,55 @@ function registerRoutes(app, { d1, r2 }) {
     res.json({ ok: true });
   });
 
+  app.get('/api/loan-requests', requireHttpAuth, async (req, res) => {
+    const userId = req.query.userId ? String(req.query.userId) : null;
+    if (userId && req.auth.sub !== userId && !req.auth.isAdmin) {
+      return res.status(403).json({ ok: false, error: 'FORBIDDEN' });
+    }
+    if (!userId && !req.auth.isAdmin) {
+      return res.status(403).json({ ok: false, error: 'ADMIN_REQUIRED' });
+    }
+
+    const requestedStatus = req.query.status ? String(req.query.status) : 'pending';
+    const requests = await listLoanRequests(d1, {
+      status: requestedStatus === 'all' ? null : requestedStatus,
+      userId,
+      limit: Math.min(Number(req.query.limit || 300), 800)
+    });
+    res.json({ ok: true, requests });
+  });
+
+  app.post('/api/loan-requests', requireHttpAuth, async (req, res) => {
+    if (req.auth.sub !== req.body.userId && !req.auth.isAdmin) {
+      return res.status(403).json({ ok: false, error: 'FORBIDDEN' });
+    }
+    await saveLoanRequest(d1, req.body);
+    res.json({ ok: true });
+  });
+
+  app.post('/api/loan-requests/import', requireHttpAuth, async (req, res) => {
+    if (!req.auth.isAdmin) {
+      return res.status(403).json({ ok: false, error: 'ADMIN_REQUIRED' });
+    }
+    const requests = Array.isArray(req.body.requests) ? req.body.requests.slice(0, 800) : [];
+    for (const request of requests) {
+      await saveLoanRequest(d1, request);
+    }
+    res.json({ ok: true, imported: requests.length });
+  });
+
+  app.patch('/api/loan-requests/:requestId', requireHttpAuth, async (req, res) => {
+    if (!req.auth.isAdmin) {
+      return res.status(403).json({ ok: false, error: 'ADMIN_REQUIRED' });
+    }
+    await updateLoanRequestStatus(d1, {
+      requestId: req.params.requestId,
+      status: req.body.status,
+      details: req.body.details || {}
+    });
+    res.json({ ok: true });
+  });
+
   app.post('/api/uploads/loan-document', requireHttpAuth, async (req, res) => {
     try {
       if (!r2 || !process.env.CLOUDFLARE_R2_BUCKET) {
@@ -1366,6 +1503,8 @@ async function createCloudflareWalletService() {
     getTransactionHistory: (userId, options) => getTransactionHistory(d1, userId, options),
     saveFundRequest: (request) => saveFundRequest(d1, request),
     listFundRequests: (options) => listFundRequests(d1, options),
+    saveLoanRequest: (request) => saveLoanRequest(d1, request),
+    listLoanRequests: (options) => listLoanRequests(d1, options),
     listChatRooms: (options) => listChatRooms(d1, options),
     putInvoice: (userId, invoiceId, data) =>
       putR2Object(r2, `invoices/${userId}/${invoiceId}.json`, JSON.stringify(data, null, 2)),
@@ -1384,5 +1523,8 @@ module.exports = {
   getTransactionHistory,
   saveFundRequest,
   listFundRequests,
+  saveLoanRequest,
+  listLoanRequests,
+  updateLoanRequestStatus,
   listChatRooms
 };

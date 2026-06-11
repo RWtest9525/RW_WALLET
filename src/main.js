@@ -810,6 +810,151 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             }
         };
 
+        const getLoanRequestRecordId = (request = {}) => String(request.requestId || request.id || '').trim();
+        const getRawLoanRequestStatus = (request = {}) => String(request.status || request.loanRequestStatus || '').trim().toLowerCase();
+        const getLoanRequestRecordTime = (request = {}) => Math.max(
+            timestampToMillis(request.reopenedAt || request.reopened_at),
+            timestampToMillis(request.processedAt || request.processed_at),
+            timestampToMillis(request.requestedAt || request.requested_at || request.createdAt || request.timestamp)
+        );
+        const preferLoanRequestRecord = (current, next) => {
+            if (!current) return next;
+            const currentStatus = getRawLoanRequestStatus(current);
+            const nextStatus = getRawLoanRequestStatus(next);
+            const currentFinal = currentStatus && currentStatus !== 'pending';
+            const nextFinal = nextStatus && nextStatus !== 'pending';
+            if (nextFinal && !currentFinal) return next;
+            if (currentFinal && !nextFinal) return current;
+            return getLoanRequestRecordTime(next) >= getLoanRequestRecordTime(current) ? next : current;
+        };
+        const mergeLoanRequestRecords = (...sources) => {
+            const merged = new Map();
+            sources.flat().filter(Boolean).forEach((request) => {
+                const id = getLoanRequestRecordId(request);
+                if (!id) return;
+                merged.set(id, preferLoanRequestRecord(merged.get(id), request));
+            });
+            return Array.from(merged.values()).sort((a, b) => getLoanRequestRecordTime(b) - getLoanRequestRecordTime(a));
+        };
+        const getLoanApplicantKey = (request = {}) => String(
+            request.userId ||
+            request.uid ||
+            request.userEmail ||
+            request.email ||
+            request.mobile ||
+            request.aadhaar ||
+            request.id ||
+            ''
+        ).trim().toLowerCase();
+        const getLatestLoanRequestsByApplicant = (requests = []) => {
+            const latestByApplicant = new Map();
+            [...requests]
+                .filter(isModernLoanRequest)
+                .sort((a, b) => getLoanRequestRecordTime(b) - getLoanRequestRecordTime(a))
+                .forEach((request) => {
+                    const key = getLoanApplicantKey(request);
+                    if (!key || latestByApplicant.has(key)) return;
+                    latestByApplicant.set(key, request);
+                });
+            return Array.from(latestByApplicant.values());
+        };
+
+        const serializeCloudLoanRequest = (request = {}) => {
+            const requestedAt = timestampToMillis(request.requestedAt || request.timestamp || request.createdAt) || Date.now();
+            const processedAt = request.processedAt ? timestampToMillis(request.processedAt) : null;
+            const requestId = String(request.requestId || request.id || `loan-${request.userId || currentUser?.uid || 'user'}-${requestedAt}`);
+            return {
+                requestId,
+                userId: request.userId || currentUser?.uid || '',
+                status: request.status || request.loanRequestStatus || 'pending',
+                requestedAt,
+                processedAt,
+                details: {
+                    ...stripUndefinedFields({ ...request, id: requestId, requestId, requestedAt, processedAt })
+                }
+            };
+        };
+
+        const normalizeCloudLoanRequest = (request = {}) => {
+            const details = request.details && typeof request.details === 'object' ? request.details : {};
+            return {
+                ...details,
+                ...request,
+                id: request.request_id || request.requestId || request.id || details.id || details.requestId,
+                requestId: request.request_id || request.requestId || request.id || details.id || details.requestId,
+                userId: request.user_id || request.userId || details.userId,
+                requestedAt: Number(request.requested_at || request.requestedAt || details.requestedAt || Date.now()),
+                processedAt: request.processed_at || request.processedAt || details.processedAt || null,
+                status: request.status || details.status || 'pending'
+            };
+        };
+
+        const upsertCloudLoanRequest = async (request) => {
+            try {
+                const token = await getBackendAuthToken();
+                await fetchWithTimeout(`${BACKEND_BASE_URL}/api/loan-requests`, {
+                    method: 'POST',
+                    headers: {
+                        Authorization: `Bearer ${token}`,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(serializeCloudLoanRequest(request))
+                }, 6000);
+                return true;
+            } catch (error) {
+                console.warn('Cloudflare loan request save failed:', error);
+                return false;
+            }
+        };
+
+        const importCloudLoanRequests = async (requests = []) => {
+            if (!requests.length || currentUser?.uid !== ADMIN_UID) return;
+            try {
+                const token = await getBackendAuthToken();
+                await fetchWithTimeout(`${BACKEND_BASE_URL}/api/loan-requests/import`, {
+                    method: 'POST',
+                    headers: {
+                        Authorization: `Bearer ${token}`,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ requests: requests.map(serializeCloudLoanRequest) })
+                }, 8000);
+            } catch (error) {
+                console.warn('Cloudflare loan request import failed:', error);
+            }
+        };
+
+        const loadCloudLoanRequests = async ({ status = 'all', userId = '', limit = 500, timeoutMs = 8000 } = {}) => {
+            const token = await getBackendAuthToken();
+            const params = new URLSearchParams({ status, limit: String(limit) });
+            if (userId) params.set('userId', userId);
+            const response = await fetchWithTimeout(`${BACKEND_BASE_URL}/api/loan-requests?${params.toString()}`, {
+                headers: { Authorization: `Bearer ${token}` }
+            }, timeoutMs);
+            const data = await response.json().catch(() => ({}));
+            if (!response.ok || !data.ok) throw new Error(data.error || 'Cloudflare loan request load failed');
+            return (data.requests || []).map(normalizeCloudLoanRequest);
+        };
+
+        const updateCloudLoanRequestStatus = async (requestId, status, details = {}) => {
+            if (!requestId) return false;
+            try {
+                const token = await getBackendAuthToken();
+                await fetchWithTimeout(`${BACKEND_BASE_URL}/api/loan-requests/${encodeURIComponent(requestId)}`, {
+                    method: 'PATCH',
+                    headers: {
+                        Authorization: `Bearer ${token}`,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ status, details: stripUndefinedFields(details) })
+                }, 6000);
+                return true;
+            } catch (error) {
+                console.warn('Cloudflare loan request update failed:', error);
+                return false;
+            }
+        };
+
         const loadFirebasePendingFundRequests = async (userId = '') => {
             const conditions = [where("status", "==", "pending")];
             if (userId) conditions.push(where("userId", "==", userId));
@@ -2728,10 +2873,37 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                 });
         };
 
+        const loadFirebaseLoanRequestsForAdmin = async () => {
+            const loanRequestsQuery = query(collection(db, `artifacts/${appId}/public/data/loan_requests`), orderBy("requestedAt", "desc"));
+            const snap = await getDocs(loanRequestsQuery);
+            return snap.docs.map(doc => ({ id: doc.id, requestId: doc.id, ...doc.data() }));
+        };
+
+        const loadCloudLoanRequestsForAdmin = () =>
+            loadCloudLoanRequests({ status: 'all', limit: 800, timeoutMs: 9000 });
+
+        const loadAdminLoanRequestsMerged = async () => {
+            const [cloudResult, firebaseResult] = await Promise.allSettled([
+                loadCloudLoanRequestsForAdmin(),
+                loadFirebaseLoanRequestsForAdmin()
+            ]);
+            const cloudRequests = cloudResult.status === 'fulfilled' ? cloudResult.value : [];
+            const firebaseRequests = firebaseResult.status === 'fulfilled' ? firebaseResult.value : [];
+            if (cloudResult.status === 'rejected') {
+                console.warn('Cloudflare loan request load skipped:', cloudResult.reason);
+            }
+            if (firebaseResult.status === 'rejected') {
+                console.warn('Firebase loan request fallback skipped:', firebaseResult.reason);
+            }
+            if (firebaseRequests.length) {
+                importCloudLoanRequests(firebaseRequests).catch(error => console.warn('Cloud loan migration skipped:', error));
+            }
+            return mergeLoanRequestRecords(firebaseRequests, cloudRequests);
+        };
+
         const refreshAdminDashboardCaches = async () => {
             const usersQuery = query(collection(db, `artifacts/${appId}/public/data/users`));
             const codesQuery = query(collection(db, `artifacts/${appId}/public/data/gift_codes`));
-            const loanRequestsQuery = query(collection(db, `artifacts/${appId}/public/data/loan_requests`), orderBy("requestedAt", "desc"));
             const loansQuery = query(collection(db, `artifacts/${appId}/public/data/loans`), orderBy("createdAt", "desc"));
             const investmentsQuery = query(collection(db, `artifacts/${appId}/public/data/partner_investments`), orderBy("createdAt", "desc"));
             const tasksQuery = query(collection(db, `artifacts/${appId}/public/data/tasks`), orderBy("createdAt", "desc"));
@@ -2750,7 +2922,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                 getDocs(usersQuery),
                 refreshAdminFundRequestsFromCloud(),
                 getDocs(codesQuery),
-                getDocs(loanRequestsQuery),
+                loadAdminLoanRequestsMerged(),
                 getDocs(loansQuery),
                 getDocs(investmentsQuery),
                 getDocs(tasksQuery),
@@ -2771,7 +2943,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                 console.warn('Admin gift code refresh skipped:', codesResult.reason);
             }
             if (loanRequestsResult.status === 'fulfilled') {
-                applyAdminLoanRequestsSnapshot(loanRequestsResult.value.docs);
+                applyAdminLoanRequestsList(loanRequestsResult.value, { replace: true });
             } else {
                 console.warn('Admin loan request refresh skipped:', loanRequestsResult.reason);
             }
@@ -2932,10 +3104,9 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                 applyAdminDashboardMetrics(readAdminDashboardMetricsCache());
                 return;
             }
-            const pendingCount = allLoanRequestsCache.filter(request =>
-                isModernLoanRequest(request) &&
-                String(request.status || request.loanRequestStatus || '').trim().toLowerCase() === 'pending'
-            ).length;
+            const pendingCount = getLatestLoanRequestsByApplicant(allLoanRequestsCache)
+                .filter(request => getRawLoanRequestStatus(request) === 'pending')
+                .length;
             if (adminLoanRequestsLoaded) {
                 rememberAdminDashboardMetrics({ pendingLoans: pendingCount });
             }
@@ -2945,13 +3116,17 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             badge.classList.toggle('hidden', pendingCount <= 0);
         };
 
-        const applyAdminLoanRequestsSnapshot = (docs = []) => {
-            allLoanRequestsCache = docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        const applyAdminLoanRequestsList = (requests = [], { replace = false } = {}) => {
+            allLoanRequestsCache = mergeLoanRequestRecords(replace ? [] : allLoanRequestsCache, requests);
             adminLoanRequestsLoaded = true;
             updateAdminLoanRequestBadge();
             if (document.getElementById('admin-loan-page')) {
                 renderAdminLoanPage();
             }
+        };
+
+        const applyAdminLoanRequestsSnapshot = (docs = []) => {
+            applyAdminLoanRequestsList(docs.map(doc => ({ id: doc.id, requestId: doc.id, ...doc.data() })));
         };
 
         const applyAdminLoansSnapshot = (docs = []) => {
@@ -3179,9 +3354,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
 
             await refreshAdminFundRequestsFromCloud();
 
-            const loanRequestsQuery = query(collection(db, `artifacts/${appId}/public/data/loan_requests`), orderBy("requestedAt", "desc"));
-            const loanRequestsSnap = await getDocs(loanRequestsQuery);
-            applyAdminLoanRequestsSnapshot(loanRequestsSnap.docs);
+            applyAdminLoanRequestsList(await loadAdminLoanRequestsMerged(), { replace: true });
 
             const loansQuery = query(collection(db, `artifacts/${appId}/public/data/loans`), orderBy("createdAt", "desc"));
             const loansSnap = await getDocs(loansQuery);
@@ -3202,14 +3375,13 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
 
         const refreshAdminLoanCaches = async () => {
             if (currentUser?.uid !== ADMIN_UID) return;
-            const loanRequestsQuery = query(collection(db, `artifacts/${appId}/public/data/loan_requests`), orderBy("requestedAt", "desc"));
             const loansQuery = query(collection(db, `artifacts/${appId}/public/data/loans`), orderBy("createdAt", "desc"));
             const [loanRequestsResult, loansResult] = await Promise.allSettled([
-                getDocs(loanRequestsQuery),
+                loadAdminLoanRequestsMerged(),
                 getDocs(loansQuery)
             ]);
             if (loanRequestsResult.status === 'fulfilled') {
-                applyAdminLoanRequestsSnapshot(loanRequestsResult.value.docs);
+                applyAdminLoanRequestsList(loanRequestsResult.value, { replace: true });
             } else {
                 console.warn('Admin loan requests quick refresh skipped:', loanRequestsResult.reason);
             }
@@ -8415,18 +8587,19 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                 renderLoanState(userLoans, userLoanRequests);
 
                 try {
-                    const [freshUserSnap, loanSnap, loanReqSnap] = await Promise.all([
+                    const [freshUserSnap, loanSnap, loanReqSnap, cloudLoanReqResult] = await Promise.allSettled([
                         getDoc(doc(db, `artifacts/${appId}/public/data/users`, currentUser.uid)),
                         getDocs(query(collection(db, `artifacts/${appId}/public/data/loans`), where("userId", "==", currentUser.uid))),
-                        getDocs(query(collection(db, `artifacts/${appId}/public/data/loan_requests`), where("userId", "==", currentUser.uid)))
+                        getDocs(query(collection(db, `artifacts/${appId}/public/data/loan_requests`), where("userId", "==", currentUser.uid))),
+                        loadCloudLoanRequests({ status: 'all', userId: currentUser.uid, limit: 50, timeoutMs: 7000 })
                     ]);
-                    if (freshUserSnap.exists()) {
-                        currentUserData = { ...currentUserData, ...freshUserSnap.data(), id: currentUser.uid, uid: currentUser.uid };
+                    if (freshUserSnap.status === 'fulfilled' && freshUserSnap.value.exists()) {
+                        currentUserData = { ...currentUserData, ...freshUserSnap.value.data(), id: currentUser.uid, uid: currentUser.uid };
                         writeCache(getUserCacheKey(currentUser.uid), currentUserData);
                     }
-                    userLoans = loanSnap.docs.map(d => ({ id: d.id, ...d.data() }))
+                    userLoans = loanSnap.status === 'fulfilled' ? loanSnap.value.docs.map(d => ({ id: d.id, ...d.data() }))
                         .filter(isModernLoanRecord)
-                        .sort((a, b) => timestampToMillis(b.createdAt || b.paidAt) - timestampToMillis(a.createdAt || a.paidAt));
+                        .sort((a, b) => timestampToMillis(b.createdAt || b.paidAt) - timestampToMillis(a.createdAt || a.paidAt)) : [];
                     const freshMarkerLoan = getActiveLoanFromUserMarker(currentUserData);
                     if (freshMarkerLoan && !userLoans.some(loan => loan.id === freshMarkerLoan.id)) {
                         userLoans = [freshMarkerLoan, ...userLoans];
@@ -8435,10 +8608,13 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                         ...allLoansCache.filter(loan => loan && loan.userId !== currentUser.uid),
                         ...userLoans
                     ];
-                    userLoanRequests = loanReqSnap.docs
-                        .map(d => ({ id: d.id, ...d.data() }))
+                    const firebaseLoanRequests = loanReqSnap.status === 'fulfilled'
+                        ? loanReqSnap.value.docs.map(d => ({ id: d.id, requestId: d.id, ...d.data() }))
+                        : [];
+                    const cloudLoanRequests = cloudLoanReqResult.status === 'fulfilled' ? cloudLoanReqResult.value : [];
+                    userLoanRequests = mergeLoanRequestRecords(firebaseLoanRequests, cloudLoanRequests)
                         .filter(isModernLoanRequest)
-                        .sort((a, b) => timestampToMillis(b.requestedAt || b.processedAt) - timestampToMillis(a.requestedAt || a.processedAt));
+                        .sort((a, b) => getLoanRequestRecordTime(b) - getLoanRequestRecordTime(a));
                     const freshMarkerRequest = getUserLoanRequestMarker(currentUserData);
                     if (isModernLoanRequest(freshMarkerRequest) && !userLoanRequests.some(request => request.id && request.id === freshMarkerRequest.id)) {
                         userLoanRequests = [freshMarkerRequest, ...userLoanRequests];
@@ -10151,30 +10327,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                 return;
             }
 
-            const getLoanAdminRequestTime = (request = {}) => Math.max(
-                timestampToMillis(request.reopenedAt || request.reopened_at),
-                timestampToMillis(request.processedAt || request.processed_at),
-                timestampToMillis(request.requestedAt || request.requested_at || request.createdAt || request.timestamp)
-            );
-            const getLoanAdminRequestKey = (request = {}) => String(
-                request.userId ||
-                request.uid ||
-                request.userEmail ||
-                request.mobile ||
-                request.aadhaar ||
-                request.id ||
-                ''
-            ).trim().toLowerCase();
-            const latestRequestByUser = new Map();
-            [...allLoanRequestsCache]
-                .filter(isModernLoanRequest)
-                .sort((a, b) => getLoanAdminRequestTime(b) - getLoanAdminRequestTime(a))
-                .forEach((request) => {
-                    const key = getLoanAdminRequestKey(request);
-                    if (!key || latestRequestByUser.has(key)) return;
-                    latestRequestByUser.set(key, request);
-                });
-            let requests = Array.from(latestRequestByUser.values()).filter(r => getLoanRequestStatus(r) === filter);
+            let requests = getLatestLoanRequestsByApplicant(allLoanRequestsCache).filter(r => getLoanRequestStatus(r) === filter);
             requests = requests.filter(r => !search || [r.name, r.fatherName, r.mobile, r.alternateMobile, r.dob, r.aadhaar].some(v => (v || '').toString().toLowerCase().includes(search)));
             listEl.innerHTML = requests.length ? requests.map(r => {
                 const status = getLoanRequestStatus(r);
@@ -10855,18 +11008,27 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                     btn.disabled = true;
                     btn.textContent = 'Checking...';
                 }
-                const existingRequestSnap = await withTimeout(
-                    getDocs(query(
-                        collection(db, `artifacts/${appId}/public/data/loan_requests`),
-                        where("userId", "==", currentUser.uid)
-                    )),
-                    15000,
-                    'Could not check your loan request status. Please try again.'
-                );
-                const existingModernRequests = existingRequestSnap.docs
-                    .map(d => ({ id: d.id, ...d.data() }))
+                const [existingRequestResult, existingCloudResult] = await Promise.allSettled([
+                    withTimeout(
+                        getDocs(query(
+                            collection(db, `artifacts/${appId}/public/data/loan_requests`),
+                            where("userId", "==", currentUser.uid)
+                        )),
+                        15000,
+                        'Could not check your loan request status. Please try again.'
+                    ),
+                    loadCloudLoanRequests({ status: 'all', userId: currentUser.uid, limit: 50, timeoutMs: 7000 })
+                ]);
+                if (existingRequestResult.status === 'rejected' && existingCloudResult.status === 'rejected') {
+                    throw existingRequestResult.reason || existingCloudResult.reason;
+                }
+                const firebaseExistingRequests = existingRequestResult.status === 'fulfilled'
+                    ? existingRequestResult.value.docs.map(d => ({ id: d.id, requestId: d.id, ...d.data() }))
+                    : [];
+                const cloudExistingRequests = existingCloudResult.status === 'fulfilled' ? existingCloudResult.value : [];
+                const existingModernRequests = mergeLoanRequestRecords(firebaseExistingRequests, cloudExistingRequests)
                     .filter(isModernLoanRequest)
-                    .sort((a, b) => timestampToMillis(b.requestedAt || b.processedAt) - timestampToMillis(a.requestedAt || a.processedAt));
+                    .sort((a, b) => getLoanRequestRecordTime(b) - getLoanRequestRecordTime(a));
                 const pendingModernRequest = existingModernRequests.find(isPendingModernLoanRequest);
                 const userLoanMarker = getUserLoanRequestMarker(currentUserData);
                 if (pendingModernRequest || isPendingModernLoanRequest(userLoanMarker)) {
@@ -10887,7 +11049,11 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                     if (btn) btn.textContent = `Selfie ${percent}%`;
                 });
                 if (btn) btn.textContent = 'Submitting...';
-                await withTimeout(addDoc(collection(db, `artifacts/${appId}/public/data/loan_requests`), {
+                const loanRequestRef = doc(collection(db, `artifacts/${appId}/public/data/loan_requests`));
+                const requestedAt = Date.now();
+                const loanRequestPayload = {
+                    id: loanRequestRef.id,
+                    requestId: loanRequestRef.id,
                     requestVersion: LOAN_APPLICATION_VERSION,
                     loanApplicationVersion: LOAN_APPLICATION_VERSION,
                     userId: currentUser.uid,
@@ -10906,14 +11072,20 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                     },
                     loanDocumentsSubmitted: true,
                     status: 'pending',
+                    requestedAt
+                };
+                await withTimeout(setDoc(loanRequestRef, {
+                    ...loanRequestPayload,
                     requestedAt: serverTimestamp()
                 }), 15000, 'Could not save loan request. Please try again.');
+                upsertCloudLoanRequest(loanRequestPayload).catch(error => console.warn('Cloud loan request background save skipped:', error));
                 await updateDoc(doc(db, `artifacts/${appId}/public/data/users`, currentUser.uid), {
                     latestLoanRequestVersion: LOAN_APPLICATION_VERSION,
                     loanRequestStatus: 'pending',
                     loanRequestedAt: serverTimestamp(),
                     loanDocumentsSubmitted: true
                 }).catch(error => console.warn('Loan request user marker skipped:', error));
+                allLoanRequestsCache = mergeLoanRequestRecords(allLoanRequestsCache, [loanRequestPayload]);
 
                 renderModal('Loan Request Submitted',
                     `<div class="text-center space-y-3">
@@ -12312,10 +12484,12 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                 let resolvedUserId = String(userId || '').trim();
                 const isValidResolvedUserId = (value) => value && !['undefined', 'null', 'false'].includes(String(value).toLowerCase());
                 const adminActorId = currentUser?.uid || ADMIN_UID;
+                let requestSnapshotForCloud = {};
                 await runTransaction(db, async (tx) => {
                     const requestDoc = await tx.get(requestRef);
                     if (!requestDoc.exists()) throw new Error('Loan request not found.');
                     const requestData = requestDoc.data();
+                    requestSnapshotForCloud = { id: requestDoc.id, requestId: requestDoc.id, ...requestData };
                     resolvedUserId = isValidResolvedUserId(resolvedUserId) ? resolvedUserId : String(requestData.userId || requestData.uid || '').trim();
                     const canUpdateUser = isValidResolvedUserId(resolvedUserId);
                     if (newStatus === 'approved' && !canUpdateUser) {
@@ -12439,6 +12613,15 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                             };
                     });
                 }
+                upsertCloudLoanRequest({
+                    ...requestSnapshotForCloud,
+                    ...localRequestUpdate,
+                    id: requestId,
+                    requestId,
+                    userId: resolvedUserId || requestSnapshotForCloud.userId || userId,
+                    status: newStatus,
+                    processedAt
+                }).catch(error => console.warn('Cloud loan request status sync skipped:', error));
                 renderAdminLoanPage();
                 updateAdminLoanRequestBadge();
                 showNotification(`Loan request ${newStatus}.`);
@@ -12453,9 +12636,11 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             try {
                 const requestRef = doc(db, `artifacts/${appId}/public/data/loan_requests`, requestId);
                 const userRef = doc(db, `artifacts/${appId}/public/data/users`, userId);
+                let requestSnapshotForCloud = {};
                 await runTransaction(db, async (tx) => {
                     const requestDoc = await tx.get(requestRef);
                     if (!requestDoc.exists()) throw new Error('Loan request not found.');
+                    requestSnapshotForCloud = { id: requestDoc.id, requestId: requestDoc.id, ...requestDoc.data() };
                     const currentStatus = getLoanRequestStatus(requestDoc.data());
                     if (!['rejected', 'cancelled', 'canceled', 'failed', 'denied'].includes(currentStatus)) {
                         throw new Error('Only rejected loan requests can be given another chance.');
@@ -12486,6 +12671,28 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                 });
                 showNotification('Loan request moved back to pending.');
                 window.currentLoanFilter = 'pending';
+                const reopenedAt = Date.now();
+                allLoanRequestsCache = allLoanRequestsCache.map(request => request.id === requestId ? {
+                    ...request,
+                    status: 'pending',
+                    reopenedAt,
+                    reopenedBy: currentUser?.uid || ADMIN_UID,
+                    processedAt: null,
+                    processedBy: '',
+                    reapplyAfter: null,
+                    rejectionReason: ''
+                } : request);
+                upsertCloudLoanRequest({
+                    ...requestSnapshotForCloud,
+                    id: requestId,
+                    requestId,
+                    userId,
+                    status: 'pending',
+                    reopenedAt,
+                    processedAt: null,
+                    reapplyAfter: null,
+                    rejectionReason: ''
+                }).catch(error => console.warn('Cloud loan chance sync skipped:', error));
                 refreshAdminDashboardCaches().catch(error => console.error('Admin cache refresh failed:', error));
                 renderAdminLoanPage();
             } catch (e) {
