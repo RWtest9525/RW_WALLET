@@ -922,20 +922,20 @@ html,
 
         .withdraw-confirm-shell {
             display: grid;
-            gap: 0.9rem;
+            gap: 0.65rem;
         }
 
         .withdraw-confirm-hero {
             position: relative;
             overflow: hidden;
             border: 1px solid rgba(245, 158, 11, 0.18);
-            border-radius: 1.35rem;
+            border-radius: 1.05rem;
             background:
                 radial-gradient(circle at 100% 0%, rgba(245, 158, 11, 0.16), transparent 38%),
                 linear-gradient(135deg, #fff7ed, #fffbeb 52%, #f8fafc);
-            padding: 1rem;
+            padding: 0.7rem 0.8rem;
             text-align: center;
-            box-shadow: 0 16px 34px rgba(180, 83, 9, 0.12);
+            box-shadow: 0 10px 22px rgba(180, 83, 9, 0.1);
         }
 
         .dark .withdraw-confirm-hero {
@@ -948,22 +948,27 @@ html,
 
         .withdraw-confirm-icon {
             display: inline-flex;
-            width: 3.1rem;
-            height: 3.1rem;
+            width: 2.55rem;
+            height: 2.55rem;
             align-items: center;
             justify-content: center;
-            border-radius: 1.15rem;
+            border-radius: 0.9rem;
             background: linear-gradient(135deg, #f59e0b, #f97316);
             color: white;
-            box-shadow: 0 12px 24px rgba(245, 158, 11, 0.24);
+            box-shadow: 0 8px 18px rgba(245, 158, 11, 0.22);
+        }
+
+        .withdraw-confirm-icon svg {
+            width: 1.45rem;
+            height: 1.45rem;
         }
 
         .withdraw-confirm-kicker {
-            margin-top: 0.7rem;
+            margin-top: 0.45rem;
             color: #b45309;
-            font-size: 0.68rem;
+            font-size: 0.62rem;
             font-weight: 1000;
-            letter-spacing: 0.16em;
+            letter-spacing: 0.14em;
             text-transform: uppercase;
         }
 
@@ -972,9 +977,9 @@ html,
         }
 
         .withdraw-confirm-hero h4 {
-            margin-top: 0.25rem;
+            margin-top: 0.15rem;
             color: #111827;
-            font-size: 1.35rem;
+            font-size: 1.18rem;
             font-weight: 1000;
             line-height: 1.15;
         }
@@ -985,11 +990,11 @@ html,
 
         .withdraw-confirm-hero > span:not(.withdraw-confirm-icon) {
             display: block;
-            margin-top: 0.3rem;
+            margin-top: 0.15rem;
             color: #64748b;
-            font-size: 0.8rem;
+            font-size: 0.72rem;
             font-weight: 700;
-            line-height: 1.35;
+            line-height: 1.2;
         }
 
         .dark .withdraw-confirm-hero > span:not(.withdraw-confirm-icon) {
@@ -1000,11 +1005,11 @@ html,
             display: flex;
             align-items: center;
             justify-content: space-between;
-            border-radius: 1.2rem;
+            border-radius: 1rem;
             background: #111827;
-            padding: 0.85rem 1rem;
+            padding: 0.65rem 0.85rem;
             color: white;
-            box-shadow: 0 14px 30px rgba(15, 23, 42, 0.16);
+            box-shadow: 0 10px 22px rgba(15, 23, 42, 0.14);
         }
 
         .dark .withdraw-confirm-amount {
@@ -1022,17 +1027,17 @@ html,
         }
 
         .withdraw-confirm-amount strong {
-            font-size: 1.35rem;
+            font-size: 1.18rem;
             font-weight: 1000;
         }
 
         .withdraw-confirm-details {
             display: grid;
-            gap: 0.55rem;
+            gap: 0.42rem;
             border: 1px solid rgba(226, 232, 240, 0.9);
-            border-radius: 1.2rem;
+            border-radius: 1rem;
             background: #f8fafc;
-            padding: 0.9rem;
+            padding: 0.72rem 0.85rem;
         }
 
         .dark .withdraw-confirm-details {
@@ -1044,9 +1049,10 @@ html,
             display: flex;
             align-items: flex-start;
             justify-content: space-between;
-            gap: 0.85rem;
+            gap: 0.75rem;
             color: #475569;
-            font-size: 0.9rem;
+            font-size: 0.82rem;
+            line-height: 1.2;
         }
 
         .dark .withdraw-confirm-details > div {
@@ -1071,9 +1077,9 @@ html,
         }
 
         .withdraw-confirm-balance-after {
-            margin-top: 0.2rem;
+            margin-top: 0.1rem;
             border-top: 1px solid rgba(203, 213, 225, 0.9);
-            padding-top: 0.7rem;
+            padding-top: 0.5rem;
         }
 
         .dark .withdraw-confirm-balance-after {
@@ -1098,10 +1104,10 @@ html,
 
         .withdraw-cancel-btn,
         .withdraw-submit-btn {
-            min-height: 3rem;
+            min-height: 2.8rem;
             flex: 1 1 0;
-            border-radius: 1rem;
-            padding: 0.75rem 1rem;
+            border-radius: 0.9rem;
+            padding: 0.68rem 0.9rem;
             font-size: 0.9rem;
             font-weight: 1000;
             transition: transform 0.15s ease, opacity 0.15s ease, box-shadow 0.15s ease;
@@ -1132,6 +1138,54 @@ html,
             cursor: wait;
             opacity: 0.72;
             box-shadow: none;
+        }
+
+        @media (max-height: 720px) {
+            .withdraw-confirm-shell {
+                gap: 0.5rem;
+            }
+
+            .withdraw-confirm-hero {
+                padding: 0.55rem 0.7rem;
+            }
+
+            .withdraw-confirm-icon {
+                width: 2.2rem;
+                height: 2.2rem;
+                border-radius: 0.8rem;
+            }
+
+            .withdraw-confirm-icon svg {
+                width: 1.2rem;
+                height: 1.2rem;
+            }
+
+            .withdraw-confirm-kicker,
+            .withdraw-confirm-hero > span:not(.withdraw-confirm-icon) {
+                display: none;
+            }
+
+            .withdraw-confirm-hero h4 {
+                margin-top: 0.35rem;
+                font-size: 1.05rem;
+            }
+
+            .withdraw-confirm-amount {
+                padding: 0.55rem 0.75rem;
+            }
+
+            .withdraw-confirm-amount strong {
+                font-size: 1.05rem;
+            }
+
+            .withdraw-confirm-details {
+                gap: 0.35rem;
+                padding: 0.62rem 0.75rem;
+            }
+
+            .withdraw-confirm-details > div {
+                font-size: 0.78rem;
+            }
         }
 
         /* Transaction ID badge */

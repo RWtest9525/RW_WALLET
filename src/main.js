@@ -7884,16 +7884,19 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             }
 
             let methodDetails = '';
+            const missingDetailText = 'Update payout details';
             switch (method) {
                 case 'upi':
-                    methodDetails = getProfilePaymentDetails(method).upiId || 'Not set';
+                    methodDetails = getProfilePaymentDetails(method).upiId || missingDetailText;
                     break;
                 case 'bank':
                     const bankDetails = getProfilePaymentDetails(method);
-                    methodDetails = `A/C: ${bankDetails.accountNumber || 'Not set'}, ${bankDetails.bankName || 'Not set'}`;
+                    methodDetails = bankDetails.accountNumber || bankDetails.bankName
+                        ? `A/C: ${bankDetails.accountNumber || missingDetailText}, ${bankDetails.bankName || missingDetailText}`
+                        : missingDetailText;
                     break;
                 default:
-                    methodDetails = getProfilePaymentDetails(method).email || 'Not set';
+                    methodDetails = getProfilePaymentDetails(method).email || missingDetailText;
             }
             const walletBalance = Number(currentUserData?.balance || 0);
             const spendableBalance = getSpendableWalletBalance(currentUserData);
@@ -7911,7 +7914,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                         </span>
                         <p class="withdraw-confirm-kicker">Admin approval required</p>
                         <h4>Confirm withdrawal</h4>
-                        <span>Transaction ID will be generated after approval.</span>
+                        <span>Txn ID after approval.</span>
                     </div>
                     <div class="withdraw-confirm-amount">
                         <span>Amount</span>
@@ -7939,7 +7942,6 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                             <strong>${formatCurrency(balanceAfter)}</strong>
                         </div>
                     </div>
-                    <p class="withdraw-confirm-note">Your request will be sent to admin. Only one pending withdrawal is allowed at a time.</p>
                 </div>`,
                 `<button onclick="window.closeModal()" class="withdraw-cancel-btn">Cancel</button>
                  <button id="final-withdraw-btn" class="withdraw-submit-btn">Confirm</button>`,
