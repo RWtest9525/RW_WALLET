@@ -3221,7 +3221,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             const container = document.getElementById('home-task-category-list');
             if (!container) return;
             const activeTasks = allTasksCache
-                .filter(task => (task.status || 'active') === 'active')
+                .filter(task => getAdminTaskEffectiveStatus(task) === 'active')
                 .sort((a, b) => timestampToMillis(b.createdAt) - timestampToMillis(a.createdAt));
             if (!activeTasks.length) {
                 container.innerHTML = '<p class="rounded-2xl border border-dashed border-gray-200 dark:border-gray-700 p-6 text-center text-sm font-bold text-gray-500 dark:text-gray-400">No live missions right now.</p>';
@@ -4727,6 +4727,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
         const showUserTaskDetailsPage = (taskId) => {
             const task = allTasksCache.find(item => item.id === taskId);
             if (!task) return showNotification('Task not found. Please refresh tasks.', true);
+            if (getAdminTaskEffectiveStatus(task) !== 'active') return showNotification('This task is closed.', true);
             const reward = task.rate || task.reward || 0;
             const taskTitle = task.title || 'Task Mission';
             const appName = task.appName || taskTitle;
@@ -4845,6 +4846,93 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             };
         };
 
+        const ADMIN_TASK_REVIEW_TYPES = [
+            { value: 'app_review', label: 'App Review', logo: 'https://cdn-icons-png.flaticon.com/512/3176/3176366.png' },
+            { value: 'map_review', label: 'Map Review', logo: 'https://cdn-icons-png.flaticon.com/512/854/854878.png' },
+            { value: 'trustpilot_review', label: 'Trustpilot Review', logo: 'https://cdn-icons-png.flaticon.com/512/5968/5968919.png' },
+            { value: 'website_review', label: 'Website Review', logo: 'https://cdn-icons-png.flaticon.com/512/1006/1006771.png' }
+        ];
+
+        const ADMIN_TASK_SOCIAL_TYPES = [
+            { value: 'instagram_task', label: 'Instagram Task', logo: 'https://cdn-icons-png.flaticon.com/512/2111/2111463.png' },
+            { value: 'youtube_task', label: 'YouTube Task', logo: 'https://cdn-icons-png.flaticon.com/512/1384/1384060.png' },
+            { value: 'app_download_task', label: 'App Download Task', logo: 'https://cdn-icons-png.flaticon.com/512/2991/2991148.png' },
+            { value: 'facebook_task', label: 'Facebook Task', logo: 'https://cdn-icons-png.flaticon.com/512/5968/5968764.png' },
+            { value: 'telegram_task', label: 'Telegram Task', logo: 'https://cdn-icons-png.flaticon.com/512/2111/2111646.png' }
+        ];
+
+        const getAdminTaskTypes = (family = 'review') => family === 'social' ? ADMIN_TASK_SOCIAL_TYPES : ADMIN_TASK_REVIEW_TYPES;
+        const getAdminTaskFamilyLabel = (family = 'review') => family === 'social' ? 'Social Task' : 'Review Task';
+        const getAdminTaskSubtypeMeta = (family = 'review', subtype = '') => {
+            const options = getAdminTaskTypes(family);
+            return options.find(item => item.value === subtype) || options[0];
+        };
+        const getAdminTaskFamily = (task = {}) => {
+            const raw = String(task.taskFamily || task.taskType || task.family || '').toLowerCase();
+            if (raw.includes('social')) return 'social';
+            if (raw.includes('review')) return 'review';
+            const text = [task.category, task.title, task.taskSubtype].join(' ').toLowerCase();
+            return text.includes('instagram') || text.includes('youtube') || text.includes('download') || text.includes('social') ? 'social' : 'review';
+        };
+        const getAdminTaskSubtype = (task = {}) => {
+            const family = getAdminTaskFamily(task);
+            const subtype = String(task.taskSubtype || task.subtype || '').trim();
+            if (getAdminTaskTypes(family).some(item => item.value === subtype)) return subtype;
+            const text = [task.category, task.title].join(' ').toLowerCase();
+            if (family === 'social') {
+                if (text.includes('youtube')) return 'youtube_task';
+                if (text.includes('download') || text.includes('install')) return 'app_download_task';
+                if (text.includes('facebook')) return 'facebook_task';
+                if (text.includes('telegram')) return 'telegram_task';
+                return 'instagram_task';
+            }
+            if (text.includes('map')) return 'map_review';
+            if (text.includes('trustpilot')) return 'trustpilot_review';
+            if (text.includes('website')) return 'website_review';
+            return 'app_review';
+        };
+        const isAdminReviewTask = (task = {}) => getAdminTaskFamily(task) === 'review';
+        const getNextTaskMidnightMillis = () => {
+            const next = new Date();
+            next.setHours(24, 0, 0, 0);
+            return next.getTime();
+        };
+        const getAdminTaskEffectiveStatus = (task = {}) => {
+            const status = String(task.status || 'draft').toLowerCase();
+            const expiresAt = timestampToMillis(task.expiresAt || task.autoCloseAt || task.closeAt);
+            if (status === 'active' && expiresAt && expiresAt <= Date.now()) return 'closed';
+            return status;
+        };
+        const getTaskLogoFromLink = (family = 'review', subtype = 'app_review', taskLink = '') => {
+            const meta = getAdminTaskSubtypeMeta(family, subtype);
+            const link = String(taskLink || '').trim();
+            if (subtype === 'app_review' && link) {
+                return `https://www.google.com/s2/favicons?domain_url=${encodeURIComponent(link)}&sz=128`;
+            }
+            return meta.logo;
+        };
+        const getTaskPaymentLabel = (task = {}) => {
+            const mode = task.paymentMode || (Number(task.paymentDelayDays || 0) > 0 ? 'days' : 'instant');
+            const days = Number(task.paymentDelayDays || task.paymentDays || 0);
+            if (mode === 'days' && days > 0) return `${days}${days === 1 ? 'st' : days === 2 ? 'nd' : days === 3 ? 'rd' : 'th'} day payment`;
+            return 'Instant payment';
+        };
+        const renderAdminTaskSubtypeOptions = (family = 'review', selected = '') => getAdminTaskTypes(family).map(item => `
+            <option value="${item.value}" ${item.value === selected ? 'selected' : ''}>${escapeHtml(item.label)}</option>
+        `).join('');
+        const getAdminTaskIconButton = (action, taskId, title, svgPath, tone = 'slate') => {
+            const toneClass = {
+                slate: 'bg-slate-900 text-white dark:bg-white dark:text-slate-900',
+                blue: 'bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-200',
+                red: 'bg-red-50 text-red-600 dark:bg-red-900/30 dark:text-red-200',
+                amber: 'bg-amber-50 text-amber-700 dark:bg-amber-900/30 dark:text-amber-200'
+            }[tone] || 'bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-200';
+            return `
+                <button type="button" data-action="${action}" data-taskid="${taskId}" title="${escapeHtml(title)}" class="inline-flex h-10 w-10 items-center justify-center rounded-xl ${toneClass} transition hover:scale-105 active:scale-95">
+                    <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">${svgPath}</svg>
+                </button>`;
+        };
+
         const setAdminTaskPanel = (panel = 'manage') => {
             const normalized = panel === 'add' ? 'add' : 'manage';
             window.adminTaskPanel = normalized;
@@ -4876,7 +4964,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                         <div class="mt-2 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
                             <div>
                                 <h3 class="text-2xl font-black">Manage Task Board</h3>
-                                <p class="mt-1 max-w-2xl text-sm font-semibold leading-6 text-white/70">Add task, choose category, rate, proof type, status and limit from here only. User Task page stays separate.</p>
+                                <p class="mt-1 max-w-2xl text-sm font-semibold leading-6 text-white/70">Create review or social tasks here. New tasks stay OFF until you turn them ON.</p>
                             </div>
                             <div class="grid grid-cols-3 gap-2 text-center text-xs">
                                 <div class="rounded-2xl bg-white/12 px-4 py-3">
@@ -4885,11 +4973,11 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                                 </div>
                                 <div class="rounded-2xl bg-white/12 px-4 py-3">
                                     <p class="font-black text-emerald-200" id="admin-task-active-count">0</p>
-                                    <p class="text-white/60">Active</p>
+                                    <p class="text-white/60">Live</p>
                                 </div>
                                 <div class="rounded-2xl bg-white/12 px-4 py-3">
                                     <p class="font-black text-amber-200" id="admin-task-draft-count">0</p>
-                                    <p class="text-white/60">Draft</p>
+                                    <p class="text-white/60">Off</p>
                                 </div>
                             </div>
                         </div>
@@ -4904,33 +4992,37 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                         <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
                             <div>
                                 <h3 class="text-lg font-black text-gray-900 dark:text-white">Add New Task</h3>
-                                <p class="text-xs text-gray-500 dark:text-gray-400">Create earning tasks with category, rate, proof, and status.</p>
+                                <p class="text-xs text-gray-500 dark:text-gray-400">Choose task type, add link, reward, payment timing, and review comment if needed.</p>
                             </div>
                         </div>
 
                         <form id="admin-task-form" class="grid grid-cols-1 sm:grid-cols-2 gap-3">
                             <input type="hidden" id="admin-task-edit-id" value="">
-                            <div class="sm:col-span-2">
-                                <label class="text-xs font-black uppercase text-gray-400">Task Title</label>
-                                <input id="admin-task-title" placeholder="Example: Install app and submit screenshot" class="mt-1 w-full px-4 py-3 bg-gray-100 dark:bg-gray-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-cyan-500">
+                            <div>
+                                <label class="text-xs font-black uppercase text-gray-400">Task Type</label>
+                                <select id="admin-task-family" class="mt-1 w-full px-4 py-3 bg-gray-100 dark:bg-gray-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-cyan-500">
+                                    <option value="review">Review Task</option>
+                                    <option value="social">Social Task</option>
+                                </select>
                             </div>
                             <div>
-                                <label class="text-xs font-black uppercase text-gray-400">Category</label>
-                                <select id="admin-task-category" class="mt-1 w-full px-4 py-3 bg-gray-100 dark:bg-gray-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-cyan-500">
-                                    <option value="App Review Task">App Review Task</option>
-                                    <option value="Map Review">Map Review</option>
-                                    <option value="Social Media Task">Social Media Task</option>
-                                    <option value="Watch Ads & Earn">Watch Ads & Earn</option>
-                                    <option value="Daily Bonus">Daily Bonus</option>
-                                    <option value="Instant Payment Task">Instant Payment Task</option>
-                                    <option value="Review Task">Review Task</option>
-                                    <option value="App Install">App Install</option>
-                                    <option value="Map Review">Map Review</option>
-                                    <option value="Like Comment">Like Comment</option>
-                                    <option value="Signup Task">Signup Task</option>
-                                    <option value="Survey">Survey</option>
-                                    <option value="Other">Other</option>
+                                <label class="text-xs font-black uppercase text-gray-400">Choose Work</label>
+                                <select id="admin-task-subtype" class="mt-1 w-full px-4 py-3 bg-gray-100 dark:bg-gray-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-cyan-500">
+                                    ${renderAdminTaskSubtypeOptions('review', 'app_review')}
                                 </select>
+                            </div>
+                            <div class="sm:col-span-2">
+                                <label class="text-xs font-black uppercase text-gray-400">Task Title</label>
+                                <input id="admin-task-title" placeholder="Example: PopClub app review" class="mt-1 w-full px-4 py-3 bg-gray-100 dark:bg-gray-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-cyan-500">
+                            </div>
+                            <div class="sm:col-span-2">
+                                <label class="text-xs font-black uppercase text-gray-400">Task Link</label>
+                                <div class="mt-1 flex gap-2">
+                                    <input id="admin-task-link" placeholder="https://..." class="min-w-0 flex-1 px-4 py-3 bg-gray-100 dark:bg-gray-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-cyan-500">
+                                    <span class="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-gray-200 bg-white p-2 dark:border-gray-700 dark:bg-gray-900">
+                                        <img id="admin-task-logo-preview" src="${ADMIN_TASK_REVIEW_TYPES[0].logo}" alt="Task logo" class="h-full w-full object-contain" loading="eager" decoding="async">
+                                    </span>
+                                </div>
                             </div>
                             <div>
                                 <label class="text-xs font-black uppercase text-gray-400">Rate / Reward</label>
@@ -4941,35 +5033,19 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                                 <input id="admin-task-limit" type="number" min="1" step="1" placeholder="Total slots" class="mt-1 w-full px-4 py-3 bg-gray-100 dark:bg-gray-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-cyan-500">
                             </div>
                             <div>
-                                <label class="text-xs font-black uppercase text-gray-400">Status</label>
-                                <select id="admin-task-status" class="mt-1 w-full px-4 py-3 bg-gray-100 dark:bg-gray-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-cyan-500">
-                                    <option value="active">Active</option>
-                                    <option value="draft">Draft</option>
-                                    <option value="paused">Paused</option>
-                                    <option value="closed">Closed</option>
+                                <label class="text-xs font-black uppercase text-gray-400">Payment</label>
+                                <select id="admin-task-payment-mode" class="mt-1 w-full px-4 py-3 bg-gray-100 dark:bg-gray-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-cyan-500">
+                                    <option value="instant">Instant</option>
+                                    <option value="days">Pay after days</option>
                                 </select>
                             </div>
-                            <div>
-                                <label class="text-xs font-black uppercase text-gray-400">Proof Required</label>
-                                <select id="admin-task-proof" class="mt-1 w-full px-4 py-3 bg-gray-100 dark:bg-gray-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-cyan-500">
-                                    <option value="Screenshot">Screenshot</option>
-                                    <option value="Link">Link</option>
-                                    <option value="Screenshot + Link">Screenshot + Link</option>
-                                    <option value="Text Proof">Text Proof</option>
-                                    <option value="No Proof">No Proof</option>
-                                </select>
+                            <div id="admin-task-payment-days-wrap" class="hidden">
+                                <label class="text-xs font-black uppercase text-gray-400">Payment Day</label>
+                                <input id="admin-task-payment-days" type="number" min="1" step="1" placeholder="2 / 3 / 7" class="mt-1 w-full px-4 py-3 bg-gray-100 dark:bg-gray-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-cyan-500">
                             </div>
-                            <div>
-                                <label class="text-xs font-black uppercase text-gray-400">Priority</label>
-                                <select id="admin-task-priority" class="mt-1 w-full px-4 py-3 bg-gray-100 dark:bg-gray-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-cyan-500">
-                                    <option value="normal">Normal</option>
-                                    <option value="high">High</option>
-                                    <option value="urgent">Urgent</option>
-                                </select>
-                            </div>
-                            <div class="sm:col-span-2">
-                                <label class="text-xs font-black uppercase text-gray-400">Task Link</label>
-                                <input id="admin-task-link" placeholder="https://..." class="mt-1 w-full px-4 py-3 bg-gray-100 dark:bg-gray-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-cyan-500">
+                            <div id="admin-task-review-comment-wrap" class="sm:col-span-2">
+                                <label class="text-xs font-black uppercase text-gray-400">Review Comment</label>
+                                <textarea id="admin-task-review-comment" rows="3" placeholder="Comment user will copy for review..." class="mt-1 w-full px-4 py-3 bg-gray-100 dark:bg-gray-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-cyan-500"></textarea>
                             </div>
                             <div class="sm:col-span-2">
                                 <label class="text-xs font-black uppercase text-gray-400">Instructions</label>
@@ -4989,9 +5065,8 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                                 <input id="admin-task-search" placeholder="Search task..." class="min-w-0 flex-1 sm:w-64 px-3 py-2 bg-gray-100 dark:bg-gray-700 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500">
                                 <select id="admin-task-filter" class="px-3 py-2 bg-gray-100 dark:bg-gray-700 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500">
                                     <option value="all">All</option>
-                                    <option value="active">Active</option>
-                                    <option value="draft">Draft</option>
-                                    <option value="paused">Paused</option>
+                                    <option value="active">Live</option>
+                                    <option value="draft">Off</option>
                                     <option value="closed">Closed</option>
                                 </select>
                             </div>
@@ -5009,29 +5084,89 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             setAdminTaskPanel(window.adminTaskPanel || 'manage');
             document.getElementById('admin-task-form')?.addEventListener('submit', handleSaveAdminTask);
             document.getElementById('admin-task-reset-btn')?.addEventListener('click', resetAdminTaskForm);
+            document.getElementById('admin-task-family')?.addEventListener('change', () => updateAdminTaskDynamicFields());
+            document.getElementById('admin-task-subtype')?.addEventListener('change', () => updateAdminTaskDynamicFields());
+            document.getElementById('admin-task-payment-mode')?.addEventListener('change', () => updateAdminTaskDynamicFields());
+            document.getElementById('admin-task-link')?.addEventListener('input', () => updateAdminTaskLogoPreview());
             document.getElementById('admin-task-search')?.addEventListener('input', renderAdminTaskList);
             document.getElementById('admin-task-filter')?.addEventListener('change', renderAdminTaskList);
+            updateAdminTaskDynamicFields();
             renderAdminTaskList();
             getDocs(query(collection(db, `artifacts/${appId}/public/data/tasks`), orderBy("createdAt", "desc")))
                 .then(snapshot => applyAdminTasksSnapshot(snapshot.docs))
                 .catch(error => console.warn('Task refresh skipped:', error));
         };
 
-        const getAdminTaskFormData = () => {
+        const updateAdminTaskLogoPreview = () => {
+            const family = document.getElementById('admin-task-family')?.value || 'review';
+            const subtype = document.getElementById('admin-task-subtype')?.value || getAdminTaskTypes(family)[0].value;
+            const link = document.getElementById('admin-task-link')?.value.trim() || '';
+            const preview = document.getElementById('admin-task-logo-preview');
+            if (preview) {
+                preview.src = getTaskLogoFromLink(family, subtype, link);
+                preview.onerror = () => {
+                    preview.onerror = null;
+                    preview.src = getAdminTaskSubtypeMeta(family, subtype).logo;
+                };
+            }
+        };
+
+        const updateAdminTaskDynamicFields = (preferredSubtype = '') => {
+            const familyInput = document.getElementById('admin-task-family');
+            const subtypeInput = document.getElementById('admin-task-subtype');
+            if (!familyInput || !subtypeInput) return;
+            const family = familyInput.value || 'review';
+            const options = getAdminTaskTypes(family);
+            const currentSubtype = preferredSubtype || subtypeInput.value || options[0].value;
+            const selectedSubtype = options.some(item => item.value === currentSubtype) ? currentSubtype : options[0].value;
+            subtypeInput.innerHTML = renderAdminTaskSubtypeOptions(family, selectedSubtype);
+            subtypeInput.value = selectedSubtype;
+
+            const isReview = family === 'review';
+            document.getElementById('admin-task-review-comment-wrap')?.classList.toggle('hidden', !isReview);
+            const paymentMode = document.getElementById('admin-task-payment-mode')?.value || 'instant';
+            document.getElementById('admin-task-payment-days-wrap')?.classList.toggle('hidden', paymentMode !== 'days');
+            updateAdminTaskLogoPreview();
+        };
+
+        const getAdminTaskFormData = (existingTask = null) => {
             const title = document.getElementById('admin-task-title')?.value.trim() || '';
+            const family = document.getElementById('admin-task-family')?.value || 'review';
+            const subtype = document.getElementById('admin-task-subtype')?.value || getAdminTaskTypes(family)[0].value;
+            const subtypeMeta = getAdminTaskSubtypeMeta(family, subtype);
             const rate = Number(document.getElementById('admin-task-rate')?.value || 0);
             const limitValue = Number(document.getElementById('admin-task-limit')?.value || 0);
+            const taskLink = document.getElementById('admin-task-link')?.value.trim() || '';
+            const paymentMode = document.getElementById('admin-task-payment-mode')?.value || 'instant';
+            const paymentDays = paymentMode === 'days' ? Number(document.getElementById('admin-task-payment-days')?.value || 0) : 0;
+            const logoUrl = getTaskLogoFromLink(family, subtype, taskLink);
+            const status = existingTask ? (existingTask.status || 'draft') : 'draft';
             return {
                 title,
-                category: document.getElementById('admin-task-category')?.value || 'Other',
+                taskFamily: family,
+                taskType: family,
+                taskSubtype: subtype,
+                taskSubtypeLabel: subtypeMeta.label,
+                category: subtypeMeta.label,
+                taskGroup: getAdminTaskFamilyLabel(family),
                 rate,
                 reward: rate,
                 limit: Number.isFinite(limitValue) && limitValue > 0 ? limitValue : null,
-                status: document.getElementById('admin-task-status')?.value || 'active',
-                proofRequired: document.getElementById('admin-task-proof')?.value || 'Screenshot',
-                priority: document.getElementById('admin-task-priority')?.value || 'normal',
-                taskLink: document.getElementById('admin-task-link')?.value.trim() || '',
-                instructions: document.getElementById('admin-task-instructions')?.value.trim() || ''
+                status,
+                isVisible: status === 'active',
+                proofRequired: 'Screenshot',
+                priority: 'normal',
+                taskLink,
+                logoUrl,
+                imageUrl: logoUrl,
+                iconUrl: logoUrl,
+                reviewComment: family === 'review' ? (document.getElementById('admin-task-review-comment')?.value.trim() || '') : '',
+                paymentMode,
+                paymentDelayDays: Number.isFinite(paymentDays) && paymentDays > 0 ? paymentDays : 0,
+                paymentLabel: paymentMode === 'days' && paymentDays > 0 ? `${paymentDays} day payment` : 'Instant payment',
+                instructions: document.getElementById('admin-task-instructions')?.value.trim() || '',
+                autoCloseDaily: true,
+                expiresAt: existingTask?.expiresAt || null
             };
         };
 
@@ -5041,6 +5176,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             if (editId) editId.value = '';
             const saveBtn = document.getElementById('admin-task-save-btn');
             if (saveBtn) saveBtn.textContent = 'Add Task';
+            updateAdminTaskDynamicFields('app_review');
         };
 
         const handleSaveAdminTask = async (event) => {
@@ -5048,11 +5184,15 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             if (currentUser?.uid !== ADMIN_UID) return showNotification('Admin access only.', true);
             const saveBtn = document.getElementById('admin-task-save-btn');
             const editId = document.getElementById('admin-task-edit-id')?.value || '';
-            const payload = getAdminTaskFormData();
+            const existingTask = editId ? allTasksCache.find(task => task.id === editId) : null;
+            const payload = getAdminTaskFormData(existingTask);
             if (!payload.title) return showNotification('Please enter task title.', true);
             if (!Number.isFinite(payload.rate) || payload.rate <= 0) return showNotification('Please enter a valid task rate.', true);
-            if (!payload.instructions) return showNotification('Please add task instructions.', true);
+            if (!payload.taskLink) return showNotification('Please add task link.', true);
             if (payload.taskLink && !/^https?:\/\//i.test(payload.taskLink)) return showNotification('Task link must start with http:// or https://', true);
+            if (payload.taskFamily === 'review' && !payload.reviewComment) return showNotification('Please add review comment for this review task.', true);
+            if (payload.paymentMode === 'days' && (!Number.isFinite(payload.paymentDelayDays) || payload.paymentDelayDays <= 0)) return showNotification('Please enter payment day.', true);
+            if (!payload.instructions) return showNotification('Please add task instructions.', true);
 
             if (saveBtn) {
                 saveBtn.disabled = true;
@@ -5105,17 +5245,21 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
         const editAdminTask = (taskId) => {
             const task = allTasksCache.find(item => item.id === taskId);
             if (!task) return;
+            const family = getAdminTaskFamily(task);
+            const subtype = getAdminTaskSubtype(task);
             document.getElementById('admin-task-edit-id').value = task.id;
             document.getElementById('admin-task-title').value = task.title || '';
-            document.getElementById('admin-task-category').value = task.category || 'Other';
+            document.getElementById('admin-task-family').value = family;
+            updateAdminTaskDynamicFields(subtype);
             document.getElementById('admin-task-rate').value = task.rate || task.reward || '';
             document.getElementById('admin-task-limit').value = task.limit || '';
-            document.getElementById('admin-task-status').value = task.status || 'active';
-            document.getElementById('admin-task-proof').value = task.proofRequired || 'Screenshot';
-            document.getElementById('admin-task-priority').value = task.priority || 'normal';
             document.getElementById('admin-task-link').value = task.taskLink || '';
+            document.getElementById('admin-task-review-comment').value = task.reviewComment || task.commentToCopy || '';
+            document.getElementById('admin-task-payment-mode').value = (task.paymentMode || (Number(task.paymentDelayDays || 0) > 0 ? 'days' : 'instant')) === 'days' ? 'days' : 'instant';
+            document.getElementById('admin-task-payment-days').value = task.paymentDelayDays || task.paymentDays || '';
             document.getElementById('admin-task-instructions').value = task.instructions || '';
             document.getElementById('admin-task-save-btn').textContent = 'Update Task';
+            updateAdminTaskDynamicFields(subtype);
             setAdminTaskPanel('add');
             document.getElementById('admin-task-title')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
         };
@@ -5123,16 +5267,21 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
         const handleToggleAdminTaskStatus = async (taskId) => {
             const task = allTasksCache.find(item => item.id === taskId);
             if (!task) return;
-            const nextStatus = task.status === 'active' ? 'paused' : 'active';
-            allTasksCache = allTasksCache.map(item => item.id === taskId ? { ...item, status: nextStatus } : item);
+            const currentStatus = getAdminTaskEffectiveStatus(task);
+            const nextStatus = currentStatus === 'active' ? 'draft' : 'active';
+            const nextExpiresAt = nextStatus === 'active' ? getNextTaskMidnightMillis() : null;
+            allTasksCache = allTasksCache.map(item => item.id === taskId ? { ...item, status: nextStatus, isVisible: nextStatus === 'active', expiresAt: nextExpiresAt } : item);
             renderAdminTaskList();
             try {
                 await updateDoc(doc(db, `artifacts/${appId}/public/data/tasks`, taskId), {
                     status: nextStatus,
+                    isVisible: nextStatus === 'active',
+                    expiresAt: nextExpiresAt,
+                    autoCloseDaily: true,
                     updatedAt: serverTimestamp(),
                     updatedBy: currentUser.uid
                 });
-                showNotification(nextStatus === 'active' ? 'Task activated.' : 'Task paused.');
+                showNotification(nextStatus === 'active' ? 'Task is live until 12 AM.' : 'Task turned off.');
             } catch (error) {
                 console.error('Task status update failed:', error);
                 showNotification(`Could not update task: ${error.message}`, true);
@@ -5160,20 +5309,51 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             };
         };
 
+        const handleEditAdminTaskComment = (taskId) => {
+            const task = allTasksCache.find(item => item.id === taskId);
+            if (!task || !isAdminReviewTask(task)) return;
+            renderModal('Review Comment',
+                `<div class="space-y-3">
+                    <p class="text-sm font-semibold text-gray-600 dark:text-gray-300">This comment is only for review tasks. Users will copy this text while doing the review.</p>
+                    <textarea id="admin-task-comment-modal-input" rows="5" class="w-full rounded-xl bg-gray-100 px-4 py-3 text-sm font-semibold text-gray-900 outline-none focus:ring-2 focus:ring-cyan-500 dark:bg-gray-700 dark:text-white">${escapeHtml(task.reviewComment || task.commentToCopy || '')}</textarea>
+                </div>`,
+                `<button onclick="window.closeModal()" class="px-4 py-2 text-sm bg-gray-200 dark:bg-gray-600 rounded-lg">Cancel</button>
+                 <button id="save-admin-task-comment-btn" class="px-4 py-2 text-sm bg-cyan-600 text-white rounded-lg">Save</button>`);
+            document.getElementById('save-admin-task-comment-btn').onclick = async () => {
+                const comment = document.getElementById('admin-task-comment-modal-input')?.value.trim() || '';
+                if (!comment) return showNotification('Please add review comment.', true);
+                try {
+                    allTasksCache = allTasksCache.map(item => item.id === taskId ? { ...item, reviewComment: comment, commentToCopy: comment } : item);
+                    renderAdminTaskList();
+                    window.closeModal();
+                    await updateDoc(doc(db, `artifacts/${appId}/public/data/tasks`, taskId), {
+                        reviewComment: comment,
+                        commentToCopy: comment,
+                        updatedAt: serverTimestamp(),
+                        updatedBy: currentUser.uid
+                    });
+                    showNotification('Review comment updated.');
+                } catch (error) {
+                    console.error('Review comment update failed:', error);
+                    showNotification(`Could not update comment: ${error.message}`, true);
+                }
+            };
+        };
+
         const renderAdminTaskList = () => {
             const listEl = document.getElementById('admin-task-list');
             if (!listEl) return;
             const search = (document.getElementById('admin-task-search')?.value || '').trim().toLowerCase();
             const filter = document.getElementById('admin-task-filter')?.value || 'all';
             const tasks = [...allTasksCache].filter(task => {
-                const status = task.status || 'active';
+                const status = getAdminTaskEffectiveStatus(task);
                 if (filter !== 'all' && status !== filter) return false;
                 if (!search) return true;
-                return [task.title, task.category, task.instructions, task.proofRequired, task.status]
+                return [task.title, task.category, task.instructions, task.taskGroup, task.taskSubtypeLabel, task.reviewComment, status]
                     .some(value => String(value || '').toLowerCase().includes(search));
             });
-            const activeCount = allTasksCache.filter(task => (task.status || 'active') === 'active').length;
-            const draftCount = allTasksCache.filter(task => (task.status || 'active') === 'draft').length;
+            const activeCount = allTasksCache.filter(task => getAdminTaskEffectiveStatus(task) === 'active').length;
+            const draftCount = allTasksCache.filter(task => getAdminTaskEffectiveStatus(task) !== 'active').length;
             const totalEl = document.getElementById('admin-task-total-count');
             const activeEl = document.getElementById('admin-task-active-count');
             const draftEl = document.getElementById('admin-task-draft-count');
@@ -5211,7 +5391,14 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             }
 
             listEl.innerHTML = tasks.length ? tasks.map(task => {
-                const status = task.status || 'active';
+                const family = getAdminTaskFamily(task);
+                const subtype = getAdminTaskSubtype(task);
+                const subtypeMeta = getAdminTaskSubtypeMeta(family, subtype);
+                const status = getAdminTaskEffectiveStatus(task);
+                const isLive = status === 'active';
+                const logo = task.logoUrl || task.imageUrl || task.iconUrl || getTaskLogoFromLink(family, subtype, task.taskLink);
+                const expiresAt = timestampToMillis(task.expiresAt || task.autoCloseAt || task.closeAt);
+                const closesText = isLive && expiresAt ? new Date(expiresAt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }) : 'Off';
                 const statusClass = {
                     active: 'bg-emerald-50 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-200',
                     draft: 'bg-amber-50 text-amber-700 dark:bg-amber-900/30 dark:text-amber-200',
@@ -5221,26 +5408,41 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                 return `
                     <div class="rounded-2xl border border-gray-100 dark:border-gray-700 bg-gray-50 dark:bg-gray-900/30 p-4">
                         <div class="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
-                            <div class="min-w-0">
-                                <div class="flex flex-wrap items-center gap-2">
-                                    <span class="rounded-full bg-cyan-50 dark:bg-cyan-900/30 px-2.5 py-1 text-[11px] font-black text-cyan-700 dark:text-cyan-200">${escapeHtml(task.category || 'Other')}</span>
-                                    <span class="rounded-full ${statusClass} px-2.5 py-1 text-[11px] font-black">${escapeHtml(status)}</span>
-                                    <span class="rounded-full bg-white dark:bg-gray-800 px-2.5 py-1 text-[11px] font-black text-gray-500 dark:text-gray-300">${escapeHtml(task.proofRequired || 'Screenshot')}</span>
+                            <div class="flex min-w-0 flex-1 gap-3">
+                                <span class="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-2xl border border-gray-200 bg-white p-2 dark:border-gray-700 dark:bg-gray-800">
+                                    <img src="${escapeHtml(logo)}" alt="${escapeHtml(subtypeMeta.label)}" class="h-full w-full object-contain" loading="lazy" decoding="async" onerror="this.src='${escapeHtml(subtypeMeta.logo)}'">
+                                </span>
+                                <div class="min-w-0">
+                                    <div class="flex flex-wrap items-center gap-2">
+                                        <span class="rounded-full bg-cyan-50 dark:bg-cyan-900/30 px-2.5 py-1 text-[11px] font-black text-cyan-700 dark:text-cyan-200">${escapeHtml(getAdminTaskFamilyLabel(family))}</span>
+                                        <span class="rounded-full bg-white dark:bg-gray-800 px-2.5 py-1 text-[11px] font-black text-gray-600 dark:text-gray-300">${escapeHtml(subtypeMeta.label)}</span>
+                                        <span class="rounded-full ${statusClass} px-2.5 py-1 text-[11px] font-black">${isLive ? 'Live' : status === 'closed' ? 'Closed' : 'Off'}</span>
+                                    </div>
+                                    <h4 class="mt-2 text-base font-black leading-snug text-gray-900 dark:text-white">${escapeHtml(task.title || subtypeMeta.label)}</h4>
+                                    <p class="mt-1 text-sm leading-5 text-gray-500 dark:text-gray-400">${escapeHtml(task.instructions || 'No instructions added.')}</p>
+                                    ${task.taskLink ? `<p class="mt-2 truncate text-xs font-bold text-blue-600 dark:text-blue-300">${escapeHtml(task.taskLink)}</p>` : ''}
+                                    ${isAdminReviewTask(task) && (task.reviewComment || task.commentToCopy) ? `<p class="mt-2 line-clamp-2 rounded-xl bg-white px-3 py-2 text-xs font-semibold text-gray-600 dark:bg-gray-800 dark:text-gray-300">${escapeHtml(task.reviewComment || task.commentToCopy)}</p>` : ''}
                                 </div>
-                                <h4 class="mt-2 text-base font-black leading-snug text-gray-900 dark:text-white">${escapeHtml(task.title || 'Untitled Task')}</h4>
-                                <p class="mt-1 text-sm leading-5 text-gray-500 dark:text-gray-400">${escapeHtml(task.instructions || 'No instructions added.')}</p>
-                                ${task.taskLink ? `<p class="mt-2 truncate text-xs font-bold text-blue-600 dark:text-blue-300">${escapeHtml(task.taskLink)}</p>` : ''}
                             </div>
                             <div class="shrink-0 sm:text-right">
                                 <p class="text-xs font-bold text-gray-400">Rate</p>
                                 <p class="text-xl font-black text-emerald-600 dark:text-emerald-300">${formatCurrency(task.rate || task.reward || 0)}</p>
-                                <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">Limit: ${task.limit || 'Open'} | Priority: ${escapeHtml(task.priority || 'normal')}</p>
+                                <p class="mt-1 text-xs font-semibold text-gray-500 dark:text-gray-400">${escapeHtml(getTaskPaymentLabel(task))}</p>
+                                <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">Limit: ${task.limit || 'Open'} | Close: ${escapeHtml(closesText)}</p>
                             </div>
                         </div>
-                        <div class="mt-4 flex flex-wrap gap-2">
-                            <button data-action="edit-admin-task" data-taskid="${task.id}" class="rounded-lg bg-slate-900 px-3 py-2 text-xs font-black text-white dark:bg-white dark:text-slate-900">Edit</button>
-                            <button data-action="toggle-admin-task-status" data-taskid="${task.id}" class="rounded-lg bg-cyan-600 px-3 py-2 text-xs font-black text-white">${status === 'active' ? 'Pause' : 'Activate'}</button>
-                            <button data-action="delete-admin-task" data-taskid="${task.id}" class="rounded-lg bg-red-50 px-3 py-2 text-xs font-black text-red-600 dark:bg-red-900/30 dark:text-red-200">Delete</button>
+                        <div class="mt-4 flex flex-wrap items-center justify-between gap-3">
+                            <button type="button" data-action="toggle-admin-task-status" data-taskid="${task.id}" class="inline-flex items-center gap-2 rounded-full px-2 py-1 text-xs font-black ${isLive ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-200' : 'bg-gray-200 text-gray-600 dark:bg-gray-700 dark:text-gray-200'}">
+                                <span class="relative inline-flex h-7 w-12 rounded-full ${isLive ? 'bg-emerald-500' : 'bg-gray-400'} transition">
+                                    <span class="absolute top-1 h-5 w-5 rounded-full bg-white shadow transition ${isLive ? 'left-6' : 'left-1'}"></span>
+                                </span>
+                                ${isLive ? 'ON' : 'OFF'}
+                            </button>
+                            <div class="flex flex-wrap gap-2">
+                                ${isAdminReviewTask(task) ? getAdminTaskIconButton('edit-admin-task-comment', task.id, 'Edit review comment', '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 10h8M8 14h5M21 12c0 4.418-4.03 8-9 8a10.6 10.6 0 0 1-4.51-.98L3 20l1.26-3.78A7.55 7.55 0 0 1 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"></path>', 'blue') : ''}
+                                ${getAdminTaskIconButton('edit-admin-task', task.id, 'Edit task', '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L10.582 16.07a4.5 4.5 0 0 1-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 0 1 1.13-1.897l8.932-8.931z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19.5 7.125 16.875 4.5"></path>', 'slate')}
+                                ${getAdminTaskIconButton('delete-admin-task', task.id, 'Delete task', '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="m14.74 9-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673A2.25 2.25 0 0 1 15.916 21H8.084a2.25 2.25 0 0 1-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 0 0-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 0 1 3.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 0 0-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 0 0-7.5 0"></path>', 'red')}
+                            </div>
                         </div>
                     </div>`;
             }).join('') : '<p class="rounded-2xl border border-dashed border-gray-200 py-8 text-center text-sm font-semibold text-gray-500 dark:border-gray-700 dark:text-gray-400">No matching task found.</p>';
@@ -13951,6 +14153,10 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
 
                 case 'toggle-admin-task-status':
                     handleToggleAdminTaskStatus(taskid);
+                    break;
+
+                case 'edit-admin-task-comment':
+                    handleEditAdminTaskComment(taskid);
                     break;
 
                 case 'delete-admin-task':
