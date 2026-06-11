@@ -4305,15 +4305,18 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                 ? rawReferralSeed.slice(0, 12)
                 : `RW${rawReferralSeed.slice(-6) || 'USER'}`;
             const content = `
-                ${getPageHeader('Refer & Earn', { showBack: false })}
-                <div class="refer-page-shell mx-auto max-w-md px-1 pb-24">
-                    <section class="refer-poster-card">
-                        <div class="refer-text-head">
+                <header class="refer-page-header flex items-center mb-3 px-4 py-3 bg-white dark:bg-gray-800 shadow-md page-header-fixed">
+                    <h2 class="text-xl font-bold">Refer & Earn</h2>
+                </header>
+                <div class="refer-page-body px-3 pb-0">
+                <div class="refer-page-shell refer-one-screen mx-auto max-w-md px-0">
+                    <section class="refer-poster-card refer-one-card">
+                        <div class="refer-text-head refer-compact-head">
                             <span>Refer & Earn</span>
                             <h3>Invite friends. Earn together.</h3>
                             <p>You and your friend both get rewards after the first withdrawal.</p>
                         </div>
-                        <div class="refer-offer-strip">
+                        <div class="refer-offer-strip refer-compact-offers">
                             <div>
                                 <span>You get</span>
                                 <strong>${rewardText}</strong>
@@ -4327,50 +4330,49 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                                 <strong>1%</strong>
                             </div>
                         </div>
-                        <div class="refer-timeline">
-                            <div class="refer-path-line"></div>
-                            <article class="refer-step-card refer-step-left">
+                        <div class="refer-steps-compact">
+                            <article class="refer-mini-step">
                                 <span class="refer-step-node">
                                     <img src="${REFER_ICON_URL}" alt="Invite" loading="lazy" decoding="async">
                                 </span>
                                 <div>
                                     <p>Step 1</p>
-                                    <h4>Share your code</h4>
-                                    <span>Send your referral code to a friend.</span>
+                                    <h4>Share code</h4>
+                                    <span>Send it to a friend.</span>
                                 </div>
                             </article>
-                            <article class="refer-step-card refer-step-right">
+                            <article class="refer-mini-step">
                                 <span class="refer-step-node">
                                     <img src="https://cdn-icons-png.flaticon.com/512/681/681494.png" alt="Friend joins" loading="lazy" decoding="async">
                                 </span>
                                 <div>
                                     <p>Step 2</p>
-                                    <h4>Friend joins RW Wallet</h4>
-                                    <span>They create an account and start using the wallet.</span>
+                                    <h4>Friend joins</h4>
+                                    <span>They create account.</span>
                                 </div>
                             </article>
-                            <article class="refer-step-card refer-step-left">
+                            <article class="refer-mini-step">
                                 <span class="refer-step-node">
                                     <img src="https://cdn-icons-png.flaticon.com/512/7939/7939990.png" alt="First withdrawal" loading="lazy" decoding="async">
                                 </span>
                                 <div>
                                     <p>Step 3</p>
-                                    <h4>First withdrawal done</h4>
-                                    <span>You get ${rewardText} and your friend gets ${rewardText}.</span>
+                                    <h4>First withdrawal</h4>
+                                    <span>Both get ${rewardText}.</span>
                                 </div>
                             </article>
-                            <article class="refer-step-card refer-step-right">
+                            <article class="refer-mini-step">
                                 <span class="refer-step-node">
                                     <img src="${PARTNER_ICON_URL}" alt="Lifetime income" loading="lazy" decoding="async">
                                 </span>
                                 <div>
                                     <p>Lifetime</p>
                                     <h4>Earn 1% income</h4>
-                                    <span>Get 1% from every friend withdrawal.</span>
+                                    <span>On friend withdrawals.</span>
                                 </div>
                             </article>
                         </div>
-                        <div class="refer-share-card">
+                        <div class="refer-share-card refer-compact-share">
                             <div>
                                 <p>Referral code</p>
                                 <h4>${escapeHtml(referralCode)}</h4>
@@ -4381,7 +4383,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                         </div>
                     </section>
                 </div>
-                ${getPageFooter()}`;
+                </div>`;
             showPage(content, { keepBottomNav: true, returnTo: currentUser?.uid === ADMIN_UID ? 'admin' : 'home' });
             currentMainSection = 'refer';
             setBottomNavActive('bottom-refer-btn');
