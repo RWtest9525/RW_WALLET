@@ -183,12 +183,9 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
         };
         const getLoanReservedAmount = (user = currentUserData || {}) => {
             if (Number(user.activeLoanVersion || 0) < LOAN_APPLICATION_VERSION) return 0;
-            const dueAt = timestampToMillis(user.activeLoanDueDate || user.loanDueDate || user.loan_due_date || 0);
-            if (!dueAt || dueAt > Date.now()) return 0;
             const explicit = Number(user.loanLockedAmount ?? user.loan_locked_amount ?? 0);
-            const activeRepayable = Number(user.activeLoanRepayable ?? user.active_loan_repayable ?? 0);
-            const rawReserve = Number.isFinite(explicit) && explicit > 0 ? explicit : activeRepayable;
-            return Math.max(0, Math.min(Number(user.balance || 0), Number.isFinite(rawReserve) ? rawReserve : 0));
+            const rawReserve = Number.isFinite(explicit) && explicit > 0 ? explicit : 0;
+            return Math.max(0, Math.min(Number(user.balance || 0), rawReserve));
         };
         const getSpendableWalletBalance = (user = currentUserData || {}) =>
             Math.max(0, Number(user.balance || 0) - getLoanReservedAmount(user));
@@ -295,6 +292,15 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             .replace(/>/g, '&gt;')
             .replace(/"/g, '&quot;')
             .replace(/'/g, '&#039;');
+        const stripUndefinedFields = (value) => {
+            if (Array.isArray(value)) return value.map(stripUndefinedFields);
+            if (!value || typeof value !== 'object' || value.constructor !== Object) return value;
+            return Object.entries(value).reduce((clean, [key, item]) => {
+                if (item === undefined) return clean;
+                clean[key] = stripUndefinedFields(item);
+                return clean;
+            }, {});
+        };
         const getUserCacheKey = (userId) => `rw_wallet_user_cache_${userId}`;
         const getHistoryCacheKey = (userId) => `rw_wallet_history_cache_${userId}`;
         const getHistoryDataCacheKey = (userId) => `rw_wallet_history_data_cache_${userId}`;
@@ -11511,6 +11517,13 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             if (!currentUserData) {
                 return showNotification('Your user data is still loading. Please try again.', true);
             }
+            if (currentUserData.isDisabled || currentUserData.dueLoanBlocked) {
+                return showNotification(currentUserData.dueLoanReason || currentUserData.banReason || 'Your account is blocked. Please contact admin.', true);
+            }
+            if (currentUserData.isFlagged) {
+                return showNotification(currentUserData.banReason || 'Your account is flagged. Please contact admin.', true);
+            }
+            const resolvedMethodName = methodName || getWithdrawalMethodName(method, 'Withdrawal');
 
             const pendingWithdrawalCount = (await loadUserPendingWithdrawalsMerged(currentUser.uid)).length;
             if (pendingWithdrawalCount >= maxPendingWithdrawalsPerUser) {
@@ -11548,7 +11561,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                     methodSpecificDetails = { email: paymentDetails };
                     if (['play_store', 'amazon_gift', 'flipkart_gift'].includes(method)) {
                         methodSpecificDetails.giftCardType = method;
-                        methodSpecificDetails.giftCardName = methodName || getWithdrawalMethodName(method);
+                        methodSpecificDetails.giftCardName = resolvedMethodName;
                     }
                     if (amount < minWithdrawalRedeem) return showNotification(`Minimum withdrawal for this method is ₹${minWithdrawalRedeem}`, true);
             }
@@ -11557,7 +11570,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                 const userRef = doc(db, `artifacts/${appId}/public/data/users`, currentUser.uid);
                 const reqRef = doc(collection(db, `artifacts/${appId}/public/data/fund_requests`));
                 const requestedAt = Date.now();
-                const requestPayload = {
+                const requestPayload = stripUndefinedFields({
                     id: reqRef.id,
                     userId: currentUser.uid,
                     userName: currentUserData.name || 'N/A',
@@ -11565,14 +11578,14 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                     userEmail: currentUserData.email || 'N/A',
                     type: 'withdrawal',
                     amount,
-                    method: methodName,
+                    method: resolvedMethodName,
                     methodId: method,
                     upiId: method === 'upi' ? paymentDetails : '',
                     paymentDetails,
                     ...methodSpecificDetails,
                     status: 'pending',
                     requestedAt
-                };
+                });
 
                 await runTransaction(db, async (tx) => {
                     const userDoc = await tx.get(userRef);
@@ -11589,29 +11602,29 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
 
                     // 2. Add fund request (with snapshot of payment details)
                     const { id, ...firebaseRequestPayload } = requestPayload;
-                    tx.set(reqRef, {
+                    tx.set(reqRef, stripUndefinedFields({
                         ...firebaseRequestPayload,
                         requestedAt: serverTimestamp()
-                    });
+                    }));
 
                     // 3. Add a pending transaction record for the user
                     const txRef = doc(collection(userRef, 'transactions'));
-                    tx.set(txRef, {
+                    tx.set(txRef, stripUndefinedFields({
                         type: 'withdrawal',
                         amount: amount,
-                        comment: `Withdrawal Request (${methodName})`,
+                        comment: `Withdrawal Request (${resolvedMethodName})`,
                         timestamp: serverTimestamp(),
                         status: 'pending',
                         requestId: reqRef.id,
                         transactionId: generateTransactionId(),
-                        method: methodName,
+                        method: resolvedMethodName,
                         methodId: method,
                         // Save a snapshot of details here too
                         paymentDetails: paymentDetails,
                         balanceBefore: currentBalance,
                         balanceAfter,
                         ...methodSpecificDetails
-                    });
+                    }));
                 });
 
                 upsertCloudFundRequest(requestPayload).catch(error => {
@@ -11626,7 +11639,9 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             } catch (e) {
                 console.error("Withdraw request failed: ", e);
                 const message = String(e?.message || '');
-                const userMessage = /insufficient|pending|not found|minimum|flagged|blocked/i.test(message)
+                const userMessage = /permission-denied|missing or insufficient permissions/i.test(message)
+                    ? 'Withdrawal permission is blocked for this account. Please contact admin.'
+                    : /insufficient|pending|not found|minimum|flagged|blocked/i.test(message)
                     ? message
                     : 'Could not submit withdrawal request. Please try again.';
                 showNotification(userMessage, true);
