@@ -102,9 +102,19 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
         let allGiftCodesCache = [];
         let allInvestmentsCache = [];
         let allTasksCache = [];
+        let userTaskSubmissionIds = new Set();
+        let userTaskTodaySubmissionIds = new Set();
+        let userTaskParticipationLoadedFor = '';
+        let activeTaskReservation = null;
+        let activeTaskReservationTimer = null;
         let allAdsCache = [];
         let allSupportChatsCache = [];
         let unifiedHistoryCache = [];
+        let lastManualPageOpenAt = 0;
+        const locallyProcessedFundRequestIds = new Set();
+        const locallyProcessedFundRequestSignatures = new Set();
+        const TASK_COMMENT_RESERVATION_MS = 5 * 60 * 1000;
+        const NORMAL_USER_DAILY_TASK_LIMIT = 4;
         const TRANSACTION_PAGE_SIZE = 10;
         let transactionListState = { filter: 'all', visibleCount: TRANSACTION_PAGE_SIZE, items: [] };
         let transactionHistoryPrefetch = { userId: '', promise: null, loadedAt: 0 };
@@ -985,30 +995,79 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                 .filter(req => (req.type || 'withdrawal') === 'withdrawal' && (req.status || 'pending') === 'pending');
         };
 
+        const getFundRequestPrimaryId = (request = {}) =>
+            String(request.requestId || request.request_id || request.id || request.firestoreId || '').trim();
+
+        const getFundRequestSignature = (request = {}, bucketMs = 10 * 60 * 1000) => {
+            const timestamp = timestampToMillis(request.requestedAt || request.requested_at || request.timestamp || request.createdAt);
+            const timeBucket = timestamp ? Math.floor(timestamp / bucketMs) : 'no-time';
+            const userId = String(request.userId || request.uid || request.user_id || '').trim();
+            const type = String(request.type || 'withdrawal').trim();
+            const amount = Number(request.amount || 0).toFixed(2);
+            const method = String(request.method || request.methodId || request.paymentMethod || request.payment_method || '').toLowerCase().trim();
+            const detail = String(getWithdrawalDetailText(request) || '').toLowerCase().replace(/\s+/g, '').trim();
+            return `${userId}|${type}|${amount}|${method}|${detail}|${timeBucket}`;
+        };
+
+        const getFundRequestLooseSignature = (request = {}) => {
+            const userId = String(request.userId || request.uid || request.user_id || '').trim();
+            const type = String(request.type || 'withdrawal').trim();
+            const amount = Number(request.amount || 0).toFixed(2);
+            const method = String(request.method || request.methodId || request.paymentMethod || request.payment_method || '').toLowerCase().trim();
+            const detail = String(getWithdrawalDetailText(request) || '').toLowerCase().replace(/\s+/g, '').trim();
+            return `${userId}|${type}|${amount}|${method}|${detail}`;
+        };
+
+        const markFundRequestLocallyProcessed = (request = {}) => {
+            const ids = [
+                request.id,
+                request.requestId,
+                request.request_id,
+                request.firestoreId,
+                request.cloudId
+            ].filter(Boolean).map(value => String(value).trim());
+            ids.forEach(id => locallyProcessedFundRequestIds.add(id));
+            locallyProcessedFundRequestSignatures.add(getFundRequestSignature(request));
+            locallyProcessedFundRequestSignatures.add(getFundRequestLooseSignature(request));
+        };
+
+        const isFundRequestLocallyProcessed = (request = {}) => {
+            const ids = [
+                request.id,
+                request.requestId,
+                request.request_id,
+                request.firestoreId,
+                request.cloudId
+            ].filter(Boolean).map(value => String(value).trim());
+            if (ids.some(id => locallyProcessedFundRequestIds.has(id))) return true;
+            return locallyProcessedFundRequestSignatures.has(getFundRequestSignature(request)) ||
+                locallyProcessedFundRequestSignatures.has(getFundRequestLooseSignature(request));
+        };
+
+        const isFinalFundStatus = (status = '') => ['completed', 'rejected', 'cancelled', 'failed'].includes(String(status || '').toLowerCase());
+
         const mergeFundRequestsById = (...groups) => {
             const merged = new Map();
             const signatureToKey = new Map();
-            const getRequestSignature = (request = {}) => {
-                const timestamp = timestampToMillis(request.requestedAt || request.requested_at || request.timestamp || request.createdAt);
-                const minuteBucket = timestamp ? Math.floor(timestamp / 60000) : 'no-time';
-                const userId = request.userId || request.uid || request.user_id || '';
-                const type = request.type || 'withdrawal';
-                const amount = Number(request.amount || 0).toFixed(2);
-                const method = String(request.method || request.methodId || request.paymentMethod || request.payment_method || '').toLowerCase().trim();
-                const detail = String(getWithdrawalDetailText(request) || '').toLowerCase().trim();
-                return `${userId}|${type}|${amount}|${method}|${detail}|${minuteBucket}`;
-            };
+            const looseSignatureToKey = new Map();
             groups.flat().forEach((request) => {
-                const id = request.id || request.requestId || request.request_id;
-                const signature = getRequestSignature(request);
-                const existingKey = signatureToKey.get(signature);
+                if (!request || isFundRequestLocallyProcessed(request)) return;
+                const id = getFundRequestPrimaryId(request);
+                const signature = getFundRequestSignature(request);
+                const looseSignature = getFundRequestLooseSignature(request);
+                const existingKey = signatureToKey.get(signature) || looseSignatureToKey.get(looseSignature);
                 const key = existingKey || id || signature;
                 if (!key) return;
                 signatureToKey.set(signature, key);
-                merged.set(key, { ...(merged.get(key) || {}), ...request, id: id || key });
+                looseSignatureToKey.set(looseSignature, key);
+                const current = merged.get(key) || {};
+                const currentStatus = current.status || 'pending';
+                const nextStatus = request.status || 'pending';
+                const finalWins = isFinalFundStatus(currentStatus) && !isFinalFundStatus(nextStatus);
+                merged.set(key, finalWins ? current : { ...current, ...request, id: id || current.id || key });
             });
             return Array.from(merged.values())
-                .filter(req => (req.status || 'pending') === 'pending')
+                .filter(req => (req.status || 'pending') === 'pending' && !isFundRequestLocallyProcessed(req))
                 .sort((a, b) => timestampToMillis(b.requestedAt || b.requested_at) - timestampToMillis(a.requestedAt || a.requested_at));
         };
 
@@ -1027,8 +1086,8 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                     fundRequestsImportedFromFirebase = true;
                 }
                 const allRequests = mergeFundRequestsById(cloudRequests, firebasePendingRequests);
-                allFundRequestsCache = allRequests.filter(req => (req.type || 'withdrawal') === 'withdrawal');
-                allRechargeRequestsCache = allRequests.filter(req => req.type === 'mobile_recharge');
+                allFundRequestsCache = allRequests.filter(req => (req.type || 'withdrawal') === 'withdrawal' && !isFundRequestLocallyProcessed(req));
+                allRechargeRequestsCache = allRequests.filter(req => req.type === 'mobile_recharge' && !isFundRequestLocallyProcessed(req));
                 updateAdminPendingRequestSummary();
                 if (document.getElementById('admin-fund-requests-list-page')) renderAdminFundRequests(allFundRequestsCache);
                 if (document.getElementById('admin-recharge-requests-list-page')) renderAdminRechargeRequests(allRechargeRequestsCache);
@@ -1981,6 +2040,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
         };
 
         const showPage = (content, options = {}) => {
+            lastManualPageOpenAt = Date.now();
             document.getElementById('dashboard-content').classList.add('hidden');
             const pageContainer = document.getElementById('page-container');
             const returnSection = options.returnTo || currentMainSection;
@@ -2522,6 +2582,14 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             allLoansCache = [];
             allInvestmentsCache = [];
             allTasksCache = [];
+            userTaskSubmissionIds = new Set();
+            userTaskTodaySubmissionIds = new Set();
+            userTaskParticipationLoadedFor = '';
+            activeTaskReservation = null;
+            if (activeTaskReservationTimer) {
+                clearInterval(activeTaskReservationTimer);
+                activeTaskReservationTimer = null;
+            }
             allAdsCache = [];
             allSupportChatsCache = [];
             currentUserData = null;
@@ -2731,7 +2799,16 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                         return false;
                     });
                     if (approvalBlocked) return;
-                    showApprovedDashboardAfterHold(userId === ADMIN_UID);
+                    const pageContainer = document.getElementById('page-container');
+                    const pageIsOpen = !!(
+                        pageContainer &&
+                        !pageContainer.classList.contains('hidden') &&
+                        pageContainer.innerHTML.trim()
+                    );
+                    const pageOpenedRecently = Date.now() - lastManualPageOpenAt < 15000;
+                    if (!pageIsOpen && !pageOpenedRecently) {
+                        showApprovedDashboardAfterHold(userId === ADMIN_UID);
+                    }
                     if (!data.isFlagged && data.isDisabled && !data.dueLoanBlocked) {
                         updateDoc(userDocRef, {
                             isDisabled: false,
@@ -2747,6 +2824,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                     getBackendAuthToken().catch(e => logBackgroundSkip('Backend session warmup skipped', e));
                     preloadSupportChatForUser(userId).catch(e => logBackgroundSkip('Support chat preload skipped', e));
                     preloadNotificationsForUser(userId).catch(e => logBackgroundSkip('Notification preload skipped', e));
+                    preloadUserTaskParticipation(userId).catch(e => logBackgroundSkip('Task participation preload skipped', e));
                     const now = Date.now();
                     if (now - lastAutoProcessCheckAt > 60000) {
                         lastAutoProcessCheckAt = now;
@@ -3226,11 +3304,14 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
         const renderHomeTaskCategories = () => {
             const container = document.getElementById('home-task-category-list');
             if (!container) return;
+            const hideNewTasksForDailyLimit = !isBulkTaskUser() && userTaskTodaySubmissionIds.size >= NORMAL_USER_DAILY_TASK_LIMIT;
             const activeTasks = allTasksCache
                 .filter(task => getAdminTaskEffectiveStatus(task) === 'active')
+                .filter(task => !userTaskSubmissionIds.has(task.id))
+                .filter(() => !hideNewTasksForDailyLimit)
                 .sort((a, b) => timestampToMillis(b.createdAt) - timestampToMillis(a.createdAt));
             if (!activeTasks.length) {
-                container.innerHTML = '<p class="rounded-2xl border border-dashed border-gray-200 dark:border-gray-700 p-6 text-center text-sm font-bold text-gray-500 dark:text-gray-400">No live missions right now.</p>';
+                container.innerHTML = `<p class="rounded-2xl border border-dashed border-gray-200 dark:border-gray-700 p-6 text-center text-sm font-bold text-gray-500 dark:text-gray-400">${hideNewTasksForDailyLimit ? 'Daily task limit completed. Please continue tomorrow.' : 'No live missions right now.'}</p>`;
                 return;
             }
             const categories = ['All', ...Array.from(new Set(activeTasks.map(task => task.category || 'Other'))).slice(0, 8)];
@@ -4737,7 +4818,8 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             const reward = task.rate || task.reward || 0;
             const taskTitle = task.title || 'Task Mission';
             const appName = task.appName || taskTitle;
-            const reviewText = task.reviewComment || task.commentToCopy || task.reviewText || task.copyText || 'good app';
+            const commentPool = getTaskCommentPool(task);
+            const reviewText = commentPool[0] || 'good app';
             const taskLink = task.taskLink || task.link || task.url || '';
             const image = task.imageUrl || task.logoUrl || task.iconUrl || 'https://cdn-icons-png.flaticon.com/512/3176/3176366.png';
             const content = `
@@ -4788,10 +4870,11 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                                 <div>
                                     <p class="mb-2 text-[10px] font-black uppercase tracking-widest text-slate-500"><span class="mr-2 rounded-full bg-slate-100 px-2 py-1">2</span> Copy & Review</p>
                                     <div class="rounded-2xl border border-dashed border-slate-200 bg-slate-50 p-4 text-center dark:border-slate-700 dark:bg-slate-900">
-                                        <p class="mb-4 text-sm font-bold italic text-slate-950 dark:text-white">"${escapeHtml(reviewText)}"</p>
+                                        <p id="task-assigned-review-text" class="mb-2 text-sm font-bold italic text-slate-950 dark:text-white">Tap copy to reserve your review comment.</p>
+                                        <p id="task-reservation-timer" class="mb-4 text-[11px] font-black uppercase tracking-wide text-blue-600 dark:text-blue-300">5 minute lock starts after copy</p>
                                         <button id="task-copy-review-btn" class="flex w-full items-center justify-center gap-2 rounded-xl bg-slate-950 px-4 py-3 text-xs font-black uppercase tracking-wide text-white">
                                             <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16h8M8 12h8m-7 8h6a2 2 0 0 0 2-2V7l-5-5H9a2 2 0 0 0-2 2v16z"></path></svg>
-                                            Copy Review
+                                            Reserve & Copy Review
                                         </button>
                                     </div>
                                 </div>
@@ -4812,14 +4895,46 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                 ${getPageFooter()}`;
             showPage(content, { returnTo: 'task', keepBottomNav: true, onBack: showUserTaskPage });
             setBottomNavActive('bottom-task-btn');
+            activeTaskReservation = null;
+            if (activeTaskReservationTimer) {
+                clearInterval(activeTaskReservationTimer);
+                activeTaskReservationTimer = null;
+            }
+            const updateReservationUi = (reservation) => {
+                activeTaskReservation = reservation;
+                const commentEl = document.getElementById('task-assigned-review-text');
+                const timerEl = document.getElementById('task-reservation-timer');
+                const copyBtn = document.getElementById('task-copy-review-btn');
+                if (commentEl) commentEl.textContent = `"${reservation.comment}"`;
+                if (copyBtn) copyBtn.textContent = 'Copy Assigned Review Again';
+                const tick = () => {
+                    const expiresAt = timestampToMillis(reservation.expiresAt);
+                    const remaining = Math.max(0, expiresAt - Date.now());
+                    const minutes = Math.floor(remaining / 60000);
+                    const seconds = Math.floor((remaining % 60000) / 1000);
+                    if (timerEl) timerEl.textContent = remaining > 0
+                        ? `Reserved for ${minutes}:${String(seconds).padStart(2, '0')}`
+                        : 'Reservation expired. Copy again to continue.';
+                    if (!remaining && activeTaskReservationTimer) {
+                        clearInterval(activeTaskReservationTimer);
+                        activeTaskReservationTimer = null;
+                    }
+                };
+                tick();
+                if (activeTaskReservationTimer) clearInterval(activeTaskReservationTimer);
+                activeTaskReservationTimer = setInterval(tick, 1000);
+            };
             const downloadBtn = document.getElementById('task-download-btn');
             downloadBtn.onclick = () => taskLink ? window.open(taskLink, '_blank', 'noopener') : showNotification('Task link is not added yet.', true);
             document.getElementById('task-copy-review-btn').onclick = async () => {
                 try {
-                    await navigator.clipboard.writeText(reviewText);
-                    showNotification('Review copied.');
-                } catch {
-                    showNotification('Copy failed. Please copy manually.', true);
+                    const reservation = await reserveTaskReviewComment(task);
+                    updateReservationUi(reservation);
+                    await navigator.clipboard.writeText(reservation.comment);
+                    showNotification('Review reserved and copied.');
+                } catch (error) {
+                    console.error('Review reserve/copy failed:', error);
+                    showNotification(error.message || 'Copy failed. Please try again.', true);
                 }
             };
             document.getElementById('task-proof-input').onchange = (event) => {
@@ -4830,19 +4945,51 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             document.getElementById('task-submit-mission-btn').onclick = async () => {
                 const file = document.getElementById('task-proof-input')?.files?.[0];
                 if (!file) return showNotification('Please select screenshot proof first.', true);
+                const expiresAt = timestampToMillis(activeTaskReservation?.expiresAt);
+                if (!activeTaskReservation?.comment || !expiresAt || expiresAt <= Date.now()) {
+                    return showNotification('Please copy and reserve a review comment before submitting.', true);
+                }
                 try {
                     await addDoc(collection(db, `artifacts/${appId}/public/data/task_submissions`), {
                         taskId: task.id,
+                        taskCode: task.taskCode || task.id,
                         taskTitle,
+                        taskFamily: getAdminTaskFamily(task),
+                        taskSubtype: getAdminTaskSubtype(task),
+                        taskSubtypeLabel: task.taskSubtypeLabel || getAdminTaskSubtypeMeta(getAdminTaskFamily(task), getAdminTaskSubtype(task)).label,
+                        appName,
+                        appLogoUrl: image,
+                        taskLink,
                         userId: currentUser.uid,
                         userName: currentUserData?.name || currentUser.email || 'User',
+                        userEmail: currentUser.email || currentUserData?.email || '',
                         userMobile: currentUserData?.mobile || '',
                         reward: Number(reward || 0),
+                        assignedComment: activeTaskReservation.comment,
+                        assignedCommentIndex: activeTaskReservation.commentIndex ?? 0,
+                        reservationId: activeTaskReservation.id || getTaskReservationDocId(task.id, currentUser.uid),
+                        reservationExpiresAt: activeTaskReservation.expiresAt,
                         proofFileName: file.name,
                         proofFileSize: file.size,
-                        status: 'pending',
+                        proofMimeType: file.type || 'image/*',
+                        status: 'pending_manual_verification',
+                        manualStatus: 'pending',
+                        autoStatus: 'waiting_scraper',
+                        verificationMode: 'manual_and_auto_ready',
+                        ocrStatus: 'pending',
+                        ocrExtractedName: '',
+                        ocrExtractedComment: '',
+                        ocrExtractedLogoUrl: '',
+                        scraperStatus: 'not_configured',
+                        payoutStatus: 'pending',
                         submittedAt: serverTimestamp()
                     });
+                    await setDoc(doc(db, `artifacts/${appId}/public/data/task_comment_reservations`, activeTaskReservation.id || getTaskReservationDocId(task.id, currentUser.uid)), {
+                        status: 'submitted',
+                        submittedAt: serverTimestamp()
+                    }, { merge: true });
+                    userTaskSubmissionIds.add(task.id);
+                    userTaskTodaySubmissionIds.add(task.id);
                     showNotification('Mission submitted for admin review.');
                     showUserTaskPage();
                 } catch (error) {
@@ -4908,6 +5055,121 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             const expiresAt = timestampToMillis(task.expiresAt || task.autoCloseAt || task.closeAt);
             if (status === 'active' && expiresAt && expiresAt <= Date.now()) return 'closed';
             return status;
+        };
+        const getTaskCommentPool = (task = {}) => {
+            const source = Array.isArray(task.reviewComments) && task.reviewComments.length
+                ? task.reviewComments
+                : String(task.reviewComment || task.commentToCopy || task.reviewText || task.copyText || 'good app').split(/\r?\n/);
+            const unique = [];
+            source.map(value => String(value || '').trim()).filter(Boolean).forEach(comment => {
+                if (!unique.includes(comment)) unique.push(comment);
+            });
+            return unique.length ? unique : ['good app'];
+        };
+        const isBulkTaskUser = () => !!(
+            currentUserData?.bulkTaskMode ||
+            currentUserData?.taskBulkMode ||
+            currentUserData?.isBulkTaskUser ||
+            currentUser?.uid === ADMIN_UID
+        );
+        const getTaskReservationDocId = (taskId, userId) => getSafeTransactionDocId(`task-reservation-${taskId}-${userId}`);
+        const getStartOfTodayMillis = () => {
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+            return today.getTime();
+        };
+        const preloadUserTaskParticipation = async (userId = currentUser?.uid, { force = false } = {}) => {
+            if (!userId) return;
+            if (!force && userTaskParticipationLoadedFor === userId) return;
+            try {
+                const snap = await getDocs(query(
+                    collection(db, `artifacts/${appId}/public/data/task_submissions`),
+                    where('userId', '==', userId)
+                ));
+                const allIds = new Set();
+                const todayIds = new Set();
+                const todayStart = getStartOfTodayMillis();
+                snap.docs.forEach(docSnap => {
+                    const data = docSnap.data();
+                    const taskId = data.taskId || data.task_id;
+                    if (!taskId) return;
+                    allIds.add(taskId);
+                    const submittedAt = timestampToMillis(data.submittedAt || data.createdAt || data.timestamp);
+                    if (submittedAt >= todayStart) todayIds.add(taskId);
+                });
+                userTaskSubmissionIds = allIds;
+                userTaskTodaySubmissionIds = todayIds;
+                userTaskParticipationLoadedFor = userId;
+                renderHomeTaskCategories();
+            } catch (error) {
+                console.warn('Task participation preload skipped:', error);
+            }
+        };
+        const findReusableTaskReservation = async (taskId, userId) => {
+            const reservationRef = doc(db, `artifacts/${appId}/public/data/task_comment_reservations`, getTaskReservationDocId(taskId, userId));
+            const snap = await getDoc(reservationRef);
+            if (!snap.exists()) return null;
+            const data = { id: snap.id, ...snap.data() };
+            const expiresAt = timestampToMillis(data.expiresAt);
+            if (data.status === 'reserved' && expiresAt > Date.now()) return data;
+            return null;
+        };
+        const reserveTaskReviewComment = async (task = {}) => {
+            if (!currentUser?.uid) throw new Error('Please login again.');
+            await preloadUserTaskParticipation(currentUser.uid);
+            if (userTaskSubmissionIds.has(task.id)) {
+                throw new Error('You have already submitted this task.');
+            }
+            if (!isBulkTaskUser() && userTaskTodaySubmissionIds.size >= NORMAL_USER_DAILY_TASK_LIMIT) {
+                throw new Error('Daily task limit reached. Please continue tomorrow.');
+            }
+            const existing = await findReusableTaskReservation(task.id, currentUser.uid);
+            if (existing) return existing;
+
+            const comments = getTaskCommentPool(task);
+            const reservationsSnap = await getDocs(query(
+                collection(db, `artifacts/${appId}/public/data/task_comment_reservations`),
+                where('taskId', '==', task.id),
+                where('status', '==', 'reserved')
+            ));
+            const usedByOthers = new Set();
+            reservationsSnap.docs.forEach(docSnap => {
+                const data = docSnap.data();
+                const expiresAt = timestampToMillis(data.expiresAt);
+                if (data.userId !== currentUser.uid && expiresAt > Date.now()) {
+                    usedByOthers.add(String(data.comment || '').trim());
+                }
+            });
+            const comment = comments.find(item => !usedByOthers.has(item)) || comments[0];
+            const commentIndex = Math.max(0, comments.indexOf(comment));
+            const now = Date.now();
+            const expiresAt = now + TASK_COMMENT_RESERVATION_MS;
+            const reservation = {
+                taskId: task.id,
+                taskTitle: task.title || 'Task Mission',
+                taskCode: task.taskCode || task.id,
+                taskFamily: getAdminTaskFamily(task),
+                taskSubtype: getAdminTaskSubtype(task),
+                taskSubtypeLabel: task.taskSubtypeLabel || getAdminTaskSubtypeMeta(getAdminTaskFamily(task), getAdminTaskSubtype(task)).label,
+                appName: task.appName || task.title || 'Task Mission',
+                appLogoUrl: task.imageUrl || task.logoUrl || task.iconUrl || getTaskLogoFromLink(getAdminTaskFamily(task), getAdminTaskSubtype(task), task.taskLink),
+                taskLink: task.taskLink || task.link || task.url || '',
+                reward: Number(task.rate || task.reward || 0),
+                userId: currentUser.uid,
+                userName: currentUserData?.name || currentUser.email || 'User',
+                userEmail: currentUser.email || currentUserData?.email || '',
+                userMobile: currentUserData?.mobile || '',
+                comment,
+                commentIndex,
+                status: 'reserved',
+                isBulkMode: isBulkTaskUser(),
+                reservedAt: Timestamp.fromMillis(now),
+                expiresAt: Timestamp.fromMillis(expiresAt),
+                updatedAt: serverTimestamp()
+            };
+            const reservationRef = doc(db, `artifacts/${appId}/public/data/task_comment_reservations`, getTaskReservationDocId(task.id, currentUser.uid));
+            await setDoc(reservationRef, reservation, { merge: true });
+            return { id: reservationRef.id, ...reservation, reservedAt: now, expiresAt };
         };
         const getTaskLogoFromLink = (family = 'review', subtype = 'app_review', taskLink = '') => {
             const meta = getAdminTaskSubtypeMeta(family, subtype);
@@ -5347,23 +5609,26 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
         const handleEditAdminTaskComment = (taskId) => {
             const task = allTasksCache.find(item => item.id === taskId);
             if (!task || !isAdminReviewTask(task)) return;
+            const existingComments = getTaskCommentPool(task).join('\n');
             renderModal('Review Comment',
                 `<div class="space-y-3">
-                    <p class="text-sm font-semibold text-gray-600 dark:text-gray-300">This comment is only for review tasks. Users will copy this text while doing the review.</p>
-                    <textarea id="admin-task-comment-modal-input" rows="5" class="w-full rounded-xl bg-gray-100 px-4 py-3 text-sm font-semibold text-gray-900 outline-none focus:ring-2 focus:ring-cyan-500 dark:bg-gray-700 dark:text-white">${escapeHtml(task.reviewComment || task.commentToCopy || '')}</textarea>
+                    <p class="text-sm font-semibold text-gray-600 dark:text-gray-300">Add one review comment per line. A copied comment is reserved for one user for 5 minutes.</p>
+                    <textarea id="admin-task-comment-modal-input" rows="7" class="w-full rounded-xl bg-gray-100 px-4 py-3 text-sm font-semibold text-gray-900 outline-none focus:ring-2 focus:ring-cyan-500 dark:bg-gray-700 dark:text-white">${escapeHtml(existingComments)}</textarea>
                 </div>`,
                 `<button onclick="window.closeModal()" class="px-4 py-2 text-sm bg-gray-200 dark:bg-gray-600 rounded-lg">Cancel</button>
                  <button id="save-admin-task-comment-btn" class="px-4 py-2 text-sm bg-cyan-600 text-white rounded-lg">Save</button>`);
             document.getElementById('save-admin-task-comment-btn').onclick = async () => {
                 const comment = document.getElementById('admin-task-comment-modal-input')?.value.trim() || '';
-                if (!comment) return showNotification('Please add review comment.', true);
+                const comments = comment.split(/\r?\n/).map(item => item.trim()).filter(Boolean);
+                if (!comments.length) return showNotification('Please add review comment.', true);
                 try {
-                    allTasksCache = allTasksCache.map(item => item.id === taskId ? { ...item, reviewComment: comment, commentToCopy: comment } : item);
+                    allTasksCache = allTasksCache.map(item => item.id === taskId ? { ...item, reviewComments: comments, reviewComment: comments[0], commentToCopy: comments[0] } : item);
                     renderAdminTaskList();
                     window.closeModal();
                     await updateDoc(doc(db, `artifacts/${appId}/public/data/tasks`, taskId), {
-                        reviewComment: comment,
-                        commentToCopy: comment,
+                        reviewComments: comments,
+                        reviewComment: comments[0],
+                        commentToCopy: comments[0],
                         updatedAt: serverTimestamp(),
                         updatedBy: currentUser.uid
                     });
@@ -9925,6 +10190,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                             ${isUserApprovalRejected(u) ? '<span class="px-1.5 py-0.5 text-[10px] bg-gray-600 text-white rounded uppercase font-bold">Signup Cancelled</span>' : ''}
                             ${isMinusBalance ? '<span class="px-1.5 py-0.5 text-[10px] bg-red-600 text-white rounded uppercase font-bold">Minus</span>' : ''}
                             ${u.isProProfile ? '<span class="px-1.5 py-0.5 text-[10px] bg-blue-600 text-white rounded-full uppercase font-bold">Pro</span>' : ''}
+                            ${u.bulkTaskMode || u.isBulkTaskUser ? '<span class="px-1.5 py-0.5 text-[10px] bg-purple-600 text-white rounded-full uppercase font-bold">Bulk Tasks</span>' : ''}
                             ${updatedWeb ? '<span class="px-1.5 py-0.5 text-[10px] bg-emerald-600 text-white rounded uppercase font-bold">New Version</span>' : '<span class="px-1.5 py-0.5 text-[10px] bg-amber-500 text-white rounded uppercase font-bold">Old Version</span>'}
                         </div>
                         <p class="text-xs text-gray-500 dark:text-gray-400 truncate">${escapeHtml(u.email || '')}</p>
@@ -9942,6 +10208,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                             <button data-action="edit-user-balance" data-userid="${u.id}" class="w-full text-left px-3 py-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-blue-700 dark:text-blue-300">Edit</button>
                             <button data-action="flag-user" data-userid="${u.id}" data-flagged="${u.isFlagged || false}" class="w-full text-left px-3 py-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-orange-600 dark:text-orange-300">${u.isFlagged ? 'Unflag' : 'Flag'}</button>
                             <button data-action="toggle-pro-user" data-userid="${u.id}" data-pro="${u.isProProfile || false}" class="w-full text-left px-3 py-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-indigo-700 dark:text-indigo-300">${u.isProProfile ? 'Remove Pro' : 'Make Pro'}</button>
+                            <button data-action="toggle-bulk-task-user" data-userid="${u.id}" data-bulk="${u.bulkTaskMode || u.isBulkTaskUser || false}" class="w-full text-left px-3 py-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-purple-700 dark:text-purple-300">${u.bulkTaskMode || u.isBulkTaskUser ? 'Remove Bulk' : 'Bulk Tasks'}</button>
                             <button data-action="delete-user" data-userid="${u.id}" data-username="${escapeHtml(u.name || u.email || 'User')}" class="w-full text-left px-3 py-2 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/30 text-red-600 dark:text-red-300">Delete</button>
                         </div>
                     </details>
@@ -13175,12 +13442,23 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                         .catch(error => console.warn('Loan repayment start update skipped:', error));
                 }
 
-                allFundRequestsCache = allFundRequestsCache.filter(req => req.id !== requestId);
+                const processedRequest = {
+                    ...(requestData || {}),
+                    id: requestId,
+                    requestId,
+                    request_id: requestData?.request_id || requestId,
+                    status: newStatus,
+                    requestedAt,
+                    processedAt,
+                    amount: processedAmount
+                };
+                markFundRequestLocallyProcessed(processedRequest);
+                allFundRequestsCache = allFundRequestsCache.filter(req => !isFundRequestLocallyProcessed(req));
                 renderAdminFundRequests(allFundRequestsCache);
                 updateAdminPendingRequestSummary();
                 showNotification(`Success! Request has been ${newStatus}.`);
 
-                updateCloudFundRequestStatus(requestId, newStatus, {
+                const cloudSyncPromise = updateCloudFundRequestStatus(requestId, newStatus, {
                     ...(requestData || {}),
                     status: newStatus,
                     adminTransactionId: txnId || '',
@@ -13207,7 +13485,9 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                     rejectionReason,
                     processedAt
                 });
-                refreshAdminFundRequestsFromCloud().catch(error => console.warn('Pending withdrawal refresh skipped:', error));
+                cloudSyncPromise
+                    .then(() => refreshAdminFundRequestsFromCloud())
+                    .catch(error => console.warn('Pending withdrawal refresh skipped:', error));
                 window.closeModal();
             } catch (e) {
                 console.error("Request action failed:", e);
@@ -13546,6 +13826,39 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                 } catch (e) {
                     console.error('Toggle pro user failed:', e);
                     showNotification(`Error: ${e.message}`, true);
+                }
+            };
+        };
+
+        const handleToggleBulkTaskUser = (userId, currentlyBulk) => {
+            const user = allUsersCache.find(u => u.id === userId);
+            if (!user) return showNotification('Error: User not found.', true);
+            renderModal(currentlyBulk ? 'Remove Bulk Task Mode' : 'Enable Bulk Task Mode',
+                `<div class="space-y-3">
+                    <div class="rounded-xl bg-gray-100 p-3 dark:bg-gray-700">
+                        <p class="font-semibold">${escapeHtml(user.name || 'No Name')}</p>
+                        <p class="text-xs text-gray-500 dark:text-gray-300">${escapeHtml(user.email || '')}</p>
+                    </div>
+                    <p class="text-sm text-gray-600 dark:text-gray-300">${currentlyBulk ? 'This user will return to the normal 4 task links per day limit.' : 'This user can take review comments in bulk for team work.'}</p>
+                </div>`,
+                `<button onclick="window.closeModal()" class="px-4 py-2 text-sm bg-gray-200 dark:bg-gray-600 rounded-lg">Cancel</button>
+                 <button id="confirm-bulk-task-user-btn" class="px-4 py-2 text-sm bg-purple-600 text-white rounded-lg">${currentlyBulk ? 'Remove Bulk' : 'Enable Bulk'}</button>`,
+                'max-w-md'
+            );
+            document.getElementById('confirm-bulk-task-user-btn').onclick = async () => {
+                try {
+                    await updateDoc(doc(db, `artifacts/${appId}/public/data/users`, userId), {
+                        bulkTaskMode: !currentlyBulk,
+                        bulkTaskModeUpdatedAt: serverTimestamp(),
+                        bulkTaskModeUpdatedBy: currentUser.uid
+                    });
+                    allUsersCache = allUsersCache.map(item => item.id === userId ? { ...item, bulkTaskMode: !currentlyBulk } : item);
+                    if (document.getElementById('admin-users-list-page')) updateAdminUserListView();
+                    window.closeModal();
+                    showNotification(currentlyBulk ? 'Bulk task mode removed.' : 'Bulk task mode enabled.');
+                } catch (error) {
+                    console.error('Bulk task mode update failed:', error);
+                    showNotification(`Error: ${error.message}`, true);
                 }
             };
         };
@@ -14151,7 +14464,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             const target = e.target.closest('[data-action]');
             if (!target) return;
 
-            const { action, id, userid, requestid, upi, username, text, flagged, pro, taskid, adid, index } = target.dataset;
+            const { action, id, userid, requestid, upi, username, text, flagged, pro, bulk, taskid, adid, index } = target.dataset;
             e.stopPropagation();
 
             switch (action) {
@@ -14264,6 +14577,10 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
 
                 case 'toggle-pro-user':
                     handleToggleProUser(userid, pro === 'true');
+                    break;
+
+                case 'toggle-bulk-task-user':
+                    handleToggleBulkTaskUser(userid, bulk === 'true');
                     break;
 
                 case 'delete-user':
