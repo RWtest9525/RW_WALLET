@@ -958,7 +958,8 @@ const _driveFolderCache = new Map(); // cache: "parentId/folderName" → folderI
 
 function getGoogleDriveClient() {
   if (_driveClient) return _driveClient;
-  const saJson = process.env.GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON;
+  // Use dedicated Drive SA key, or fallback to Firebase SA key (same Google Cloud project)
+  const saJson = process.env.GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON || process.env.FIREBASE_SERVICE_ACCOUNT_JSON;
   if (!saJson) return null;
   try {
     const credentials = typeof saJson === 'string' ? JSON.parse(saJson) : saJson;
@@ -967,6 +968,7 @@ function getGoogleDriveClient() {
       scopes: ['https://www.googleapis.com/auth/drive.file']
     });
     _driveClient = google.drive({ version: 'v3', auth });
+    console.log(`Google Drive client initialized with SA: ${credentials.client_email}`);
     return _driveClient;
   } catch (err) {
     console.error('Google Drive auth failed:', err.message);
@@ -1823,7 +1825,7 @@ function registerRoutes(app, { d1, r2 }) {
 
       // Try Google Drive first (free 2TB storage)
       const driveFolderId = process.env.GOOGLE_DRIVE_FOLDER_ID;
-      if (driveFolderId && process.env.GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON) {
+      if (driveFolderId && (process.env.GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON || process.env.FIREBASE_SERVICE_ACCOUNT_JSON)) {
         try {
           const driveResult = await uploadToGoogleDrive(body, fileName, contentType, driveFolderId, { appName });
           console.log(`Screenshot uploaded to Google Drive: ${driveResult.dateFolderName}/${driveResult.appFolderName}/${driveResult.name} (${body.length} bytes)`);
