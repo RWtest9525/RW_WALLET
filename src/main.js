@@ -643,6 +643,17 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             console.warn(`${label}:`, error);
         };
 
+        // Report sync failures to backend audit log (fire-and-forget)
+        const reportSyncFailure = (entityType, entityId, source, target, errorMessage) => {
+            getBackendAuthToken().then(token => {
+                fetch(`${BACKEND_BASE_URL}/api/admin/audit/log-sync-failure`, {
+                    method: 'POST',
+                    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ entityType, entityId, source, target, errorMessage: String(errorMessage || '').slice(0, 500) })
+                }).catch(() => {});
+            }).catch(() => {});
+        };
+
         const fetchCloudTransactionHistory = async (userId, limit = 100) => {
             const token = await getBackendAuthToken();
             const response = await fetchWithTimeout(`${BACKEND_BASE_URL}/api/transactions/${encodeURIComponent(userId)}?limit=${limit}`, {
@@ -673,6 +684,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                 }
             } catch (error) {
                 console.warn('Cloudflare history import failed:', error);
+                reportSyncFailure('transaction_import', userId, 'firebase', 'd1', error?.message);
             }
         };
 
@@ -689,6 +701,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                 }, 5000);
             } catch (error) {
                 console.warn('Cloudflare transaction save failed:', error);
+                reportSyncFailure('transaction', item?.transactionId || 'unknown', 'firebase', 'd1', error?.message);
             }
         };
 
@@ -722,6 +735,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                 }, 5000);
             } catch (error) {
                 console.warn('Cloudflare transfer save failed:', error);
+                reportSyncFailure('transfer', 'transfer', 'firebase', 'd1', error?.message);
             }
         };
 
@@ -777,6 +791,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                 });
             } catch (error) {
                 console.warn('Cloudflare fund request save failed:', error);
+                reportSyncFailure('fund_request', 'new', 'firebase', 'd1', error?.message);
             }
         };
 
@@ -794,6 +809,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                 });
             } catch (error) {
                 console.warn('Cloudflare fund request import failed:', error);
+                reportSyncFailure('fund_request_import', 'batch', 'firebase', 'd1', error?.message);
             }
         };
 
@@ -823,6 +839,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                 });
             } catch (error) {
                 console.warn('Cloudflare fund request update failed:', error);
+                reportSyncFailure('fund_request', requestId || 'unknown', 'firebase', 'd1', error?.message);
             }
         };
 
@@ -919,6 +936,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                 return true;
             } catch (error) {
                 console.warn('Cloudflare loan request save failed:', error);
+                reportSyncFailure('loan_request', 'new', 'firebase', 'd1', error?.message);
                 return false;
             }
         };
@@ -937,6 +955,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                 }, 8000);
             } catch (error) {
                 console.warn('Cloudflare loan request import failed:', error);
+                reportSyncFailure('loan_import', 'batch', 'firebase', 'd1', error?.message);
             }
         };
 
@@ -967,6 +986,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                 return true;
             } catch (error) {
                 console.warn('Cloudflare loan request update failed:', error);
+                reportSyncFailure('loan_request', requestId || 'unknown', 'firebase', 'd1', error?.message);
                 return false;
             }
         };
@@ -4949,7 +4969,78 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                 if (!activeTaskReservation?.comment || !expiresAt || expiresAt <= Date.now()) {
                     return showNotification('Please copy and reserve a review comment before submitting.', true);
                 }
+                const submitBtn = document.getElementById('task-submit-mission-btn');
+                if (submitBtn) { submitBtn.disabled = true; submitBtn.textContent = 'Uploading...'; }
                 try {
+                    let screenshotUrl = '';
+                    let screenshotKey = '';
+                    let screenshotViewUrl = '';
+                    let screenshotDrivePath = '';
+
+                    // Step 1: Upload screenshot to Google Drive (or R2 fallback)
+                    try {
+                        const token = await getBackendAuthToken();
+                        const params = new URLSearchParams({
+                            taskId: task.id,
+                            fileName: file.name,
+                            appName: appName || task.appName || task.title || 'Unknown App'
+                        });
+                        const uploadResponse = await fetchWithTimeout(`${BACKEND_BASE_URL}/api/uploads/task-screenshot?${params.toString()}`, {
+                            method: 'POST',
+                            headers: {
+                                Authorization: `Bearer ${token}`,
+                                'Content-Type': file.type || 'image/jpeg',
+                                'Content-Length': String(file.size)
+                            },
+                            body: file
+                        }, 30000);
+                        const uploadData = await uploadResponse.json().catch(() => ({}));
+                        if (uploadResponse.ok && uploadData.ok && uploadData.screenshot) {
+                            screenshotUrl = uploadData.screenshot.url || '';
+                            screenshotKey = uploadData.screenshot.key || '';
+                            screenshotViewUrl = uploadData.screenshot.viewUrl || '';
+                            screenshotDrivePath = uploadData.screenshot.drivePath || '';
+                        }
+                    } catch (uploadErr) {
+                        console.warn('Screenshot upload failed (continuing with Firebase-only):', uploadErr);
+                    }
+
+                    if (submitBtn) submitBtn.textContent = 'Submitting...';
+
+                    // Step 2: Create D1 task submission record
+                    const reservationId = activeTaskReservation.id || getTaskReservationDocId(task.id, currentUser.uid);
+                    try {
+                        const token = await getBackendAuthToken();
+                        await fetchWithTimeout(`${BACKEND_BASE_URL}/api/task-submissions`, {
+                            method: 'POST',
+                            headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                taskId: task.id,
+                                reservationId,
+                                assignedComment: activeTaskReservation.comment,
+                                screenshotUrl,
+                                screenshotKey,
+                                screenshotViewUrl,
+                                screenshotDrivePath,
+                                reward: Number(reward || 0),
+                                taskLink,
+                                appName,
+                                userName: currentUserData?.name || currentUser.email || 'User',
+                                userEmail: currentUser.email || currentUserData?.email || '',
+                                payoutDelayDays: Number(task.paymentDelayDays || task.paymentDays || 7)
+                            })
+                        }, 10000);
+                        // Mark reservation as submitted on backend
+                        const token2 = await getBackendAuthToken();
+                        fetchWithTimeout(`${BACKEND_BASE_URL}/api/task-reservations/${encodeURIComponent(reservationId)}/submit`, {
+                            method: 'POST',
+                            headers: { Authorization: `Bearer ${token2}` }
+                        }, 5000).catch(e => console.warn('Backend reservation mark failed:', e));
+                    } catch (backendErr) {
+                        console.warn('D1 submission save failed (continuing with Firebase):', backendErr);
+                    }
+
+                    // Step 3: Firebase submission (always, for backwards compatibility)
                     await addDoc(collection(db, `artifacts/${appId}/public/data/task_submissions`), {
                         taskId: task.id,
                         taskCode: task.taskCode || task.id,
@@ -4967,8 +5058,10 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                         reward: Number(reward || 0),
                         assignedComment: activeTaskReservation.comment,
                         assignedCommentIndex: activeTaskReservation.commentIndex ?? 0,
-                        reservationId: activeTaskReservation.id || getTaskReservationDocId(task.id, currentUser.uid),
+                        reservationId,
                         reservationExpiresAt: activeTaskReservation.expiresAt,
+                        screenshotUrl,
+                        screenshotKey,
                         proofFileName: file.name,
                         proofFileSize: file.size,
                         proofMimeType: file.type || 'image/*',
@@ -4984,7 +5077,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                         payoutStatus: 'pending',
                         submittedAt: serverTimestamp()
                     });
-                    await setDoc(doc(db, `artifacts/${appId}/public/data/task_comment_reservations`, activeTaskReservation.id || getTaskReservationDocId(task.id, currentUser.uid)), {
+                    await setDoc(doc(db, `artifacts/${appId}/public/data/task_comment_reservations`, reservationId), {
                         status: 'submitted',
                         submittedAt: serverTimestamp()
                     }, { merge: true });
@@ -4995,6 +5088,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                 } catch (error) {
                     console.error('Task submission failed:', error);
                     showNotification('Could not submit mission. Please contact admin.', true);
+                    if (submitBtn) { submitBtn.disabled = false; submitBtn.textContent = 'Submit Mission'; }
                 }
             };
         };
@@ -5123,6 +5217,64 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             if (!isBulkTaskUser() && userTaskTodaySubmissionIds.size >= NORMAL_USER_DAILY_TASK_LIMIT) {
                 throw new Error('Daily task limit reached. Please continue tomorrow.');
             }
+
+            // Try backend-first atomic reservation
+            try {
+                const token = await getBackendAuthToken();
+                const comments = getTaskCommentPool(task);
+                const response = await fetchWithTimeout(`${BACKEND_BASE_URL}/api/task-reservations`, {
+                    method: 'POST',
+                    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        taskId: task.id,
+                        userName: currentUserData?.name || currentUser.email || 'User',
+                        comments,
+                        reservationMs: TASK_COMMENT_RESERVATION_MS
+                    })
+                }, 8000);
+                const data = await response.json().catch(() => ({}));
+                if (response.ok && data.ok && data.reservation) {
+                    const res = data.reservation;
+                    const reservation = {
+                        id: res.id,
+                        taskId: task.id,
+                        taskTitle: task.title || 'Task Mission',
+                        taskCode: task.taskCode || task.id,
+                        taskFamily: getAdminTaskFamily(task),
+                        taskSubtype: getAdminTaskSubtype(task),
+                        taskSubtypeLabel: task.taskSubtypeLabel || getAdminTaskSubtypeMeta(getAdminTaskFamily(task), getAdminTaskSubtype(task)).label,
+                        appName: task.appName || task.title || 'Task Mission',
+                        appLogoUrl: task.imageUrl || task.logoUrl || task.iconUrl || getTaskLogoFromLink(getAdminTaskFamily(task), getAdminTaskSubtype(task), task.taskLink),
+                        taskLink: task.taskLink || task.link || task.url || '',
+                        reward: Number(task.rate || task.reward || 0),
+                        userId: currentUser.uid,
+                        userName: currentUserData?.name || currentUser.email || 'User',
+                        userEmail: currentUser.email || currentUserData?.email || '',
+                        userMobile: currentUserData?.mobile || '',
+                        comment: res.comment,
+                        commentIndex: res.comment_index ?? 0,
+                        status: 'reserved',
+                        isBulkMode: isBulkTaskUser(),
+                        reservedAt: res.reserved_at || Date.now(),
+                        expiresAt: res.expires_at || (Date.now() + TASK_COMMENT_RESERVATION_MS)
+                    };
+                    // Sync to Firebase for backwards compatibility
+                    const reservationRef = doc(db, `artifacts/${appId}/public/data/task_comment_reservations`, getTaskReservationDocId(task.id, currentUser.uid));
+                    setDoc(reservationRef, {
+                        ...reservation,
+                        reservedAt: Timestamp.fromMillis(reservation.reservedAt),
+                        expiresAt: Timestamp.fromMillis(reservation.expiresAt),
+                        updatedAt: serverTimestamp()
+                    }, { merge: true }).catch(e => console.warn('Firebase reservation sync skipped:', e));
+                    return reservation;
+                }
+                if (data.error === 'TASK_ALREADY_SUBMITTED') throw new Error('You have already submitted this task.');
+            } catch (backendError) {
+                if (backendError.message === 'You have already submitted this task.') throw backendError;
+                console.warn('Backend reservation failed, falling back to Firebase:', backendError);
+            }
+
+            // Fallback to Firebase-only reservation (original logic)
             const existing = await findReusableTaskReservation(task.id, currentUser.uid);
             if (existing) return existing;
 
@@ -5746,6 +5898,449 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                         </div>
                     </div>`;
             }).join('') : '<p class="rounded-2xl border border-dashed border-gray-200 py-8 text-center text-sm font-semibold text-gray-500 dark:border-gray-700 dark:text-gray-400">No matching task found.</p>';
+        };
+
+        // ==================== ADMIN TASK SUBMISSIONS PAGE ====================
+        let adminSubmissionsCache = [];
+        let adminSubmissionsLoading = false;
+
+        const showAdminTaskSubmissionsPage = async () => {
+            if (!currentUser || currentUser.uid !== ADMIN_UID) return showNotification('Admin access only.', true);
+            currentMainSection = 'admin';
+            const content = `
+                ${getPageHeader('Task Submissions')}
+                <div class="max-w-5xl mx-auto space-y-4 pb-24">
+                    <section class="relative overflow-hidden rounded-2xl bg-gradient-to-br from-orange-950 via-amber-900 to-yellow-700 p-5 text-white shadow-xl">
+                        <div class="absolute -right-10 -top-10 h-36 w-36 rounded-full border border-white/15"></div>
+                        <div class="relative">
+                            <p class="text-xs font-black uppercase tracking-wide text-white/65">Admin</p>
+                            <h2 class="mt-1 text-xl font-black">Task Submissions</h2>
+                            <p class="mt-1 text-sm text-white/75">Review, approve, and manage task submissions from users.</p>
+                            <div class="mt-3 grid grid-cols-4 gap-2">
+                                <div class="rounded-xl bg-white/15 px-3 py-2 text-center"><p class="text-[9px] font-bold uppercase text-white/60">Total</p><p id="admin-sub-total" class="text-lg font-black">0</p></div>
+                                <div class="rounded-xl bg-white/15 px-3 py-2 text-center"><p class="text-[9px] font-bold uppercase text-white/60">Pending</p><p id="admin-sub-pending" class="text-lg font-black text-yellow-300">0</p></div>
+                                <div class="rounded-xl bg-white/15 px-3 py-2 text-center"><p class="text-[9px] font-bold uppercase text-white/60">Approved</p><p id="admin-sub-approved" class="text-lg font-black text-green-300">0</p></div>
+                                <div class="rounded-xl bg-white/15 px-3 py-2 text-center"><p class="text-[9px] font-bold uppercase text-white/60">Paid</p><p id="admin-sub-paid" class="text-lg font-black text-cyan-300">0</p></div>
+                            </div>
+                        </div>
+                    </section>
+                    <section class="rounded-2xl border border-gray-100 dark:border-gray-700 bg-white dark:bg-gray-800 p-4 shadow-sm space-y-3">
+                        <div class="flex flex-wrap items-center gap-2">
+                            <input id="admin-sub-search" type="text" placeholder="Search user or task..." class="flex-1 min-w-[140px] rounded-xl bg-gray-100 dark:bg-gray-700 px-3 py-2 text-sm font-semibold outline-none focus:ring-2 focus:ring-orange-500">
+                            <select id="admin-sub-filter" class="rounded-xl bg-gray-100 dark:bg-gray-700 px-3 py-2 text-sm font-semibold">
+                                <option value="all">All</option>
+                                <option value="pending" selected>Pending</option>
+                                <option value="approved">Approved</option>
+                                <option value="rejected">Rejected</option>
+                                <option value="paid">Paid</option>
+                            </select>
+                            <button id="admin-sub-refresh-btn" class="rounded-xl bg-orange-600 px-4 py-2 text-sm font-bold text-white hover:bg-orange-700 transition">Refresh</button>
+                        </div>
+                        <div id="admin-sub-list" class="space-y-3">
+                            <div class="py-8 text-center text-sm text-gray-400">Loading submissions...</div>
+                        </div>
+                    </section>
+                </div>`;
+            showPage(content, { returnTo: 'admin', keepBottomNav: true });
+            setBottomNavActive('bottom-admin-btn');
+            loadAdminSubmissions();
+            document.getElementById('admin-sub-refresh-btn')?.addEventListener('click', loadAdminSubmissions);
+            document.getElementById('admin-sub-search')?.addEventListener('input', renderAdminSubmissions);
+            document.getElementById('admin-sub-filter')?.addEventListener('change', renderAdminSubmissions);
+        };
+
+        const loadAdminSubmissions = async () => {
+            if (adminSubmissionsLoading) return;
+            adminSubmissionsLoading = true;
+            try {
+                const token = await getBackendAuthToken();
+                const response = await fetchWithTimeout(`${BACKEND_BASE_URL}/api/admin/task-submissions?limit=500`, {
+                    headers: { Authorization: `Bearer ${token}` }
+                }, 15000);
+                const data = await response.json().catch(() => ({}));
+                if (data.ok && Array.isArray(data.submissions)) {
+                    adminSubmissionsCache = data.submissions;
+                }
+            } catch (err) {
+                console.warn('Backend submissions load failed, falling back to Firebase:', err);
+                try {
+                    const snap = await getDocs(query(
+                        collection(db, `artifacts/${appId}/public/data/task_submissions`),
+                        orderBy('submittedAt', 'desc'),
+                        limit(500)
+                    ));
+                    adminSubmissionsCache = snap.docs.map(d => {
+                        const data = d.data();
+                        return {
+                            id: d.id,
+                            task_id: data.taskId,
+                            user_id: data.userId,
+                            user_name: data.userName || '',
+                            user_email: data.userEmail || '',
+                            app_name: data.appName || data.taskTitle || '',
+                            assigned_comment: data.assignedComment || '',
+                            screenshot_url: data.screenshotUrl || '',
+                            manual_status: data.manualStatus || 'pending',
+                            ocr_status: data.ocrStatus || 'pending',
+                            scraper_status: data.scraperStatus || 'not_configured',
+                            payout_status: data.payoutStatus || 'pending',
+                            reward: Number(data.reward || 0),
+                            task_link: data.taskLink || '',
+                            submitted_at: timestampToMillis(data.submittedAt),
+                            _source: 'firebase'
+                        };
+                    });
+                } catch (fbErr) {
+                    console.error('Firebase submissions also failed:', fbErr);
+                }
+            }
+            adminSubmissionsLoading = false;
+            renderAdminSubmissions();
+        };
+
+        const renderAdminSubmissions = () => {
+            const listEl = document.getElementById('admin-sub-list');
+            if (!listEl) return;
+            const search = (document.getElementById('admin-sub-search')?.value || '').trim().toLowerCase();
+            const filter = document.getElementById('admin-sub-filter')?.value || 'all';
+
+            let subs = [...adminSubmissionsCache];
+            if (filter !== 'all') {
+                if (filter === 'paid') {
+                    subs = subs.filter(s => s.payout_status === 'paid');
+                } else {
+                    subs = subs.filter(s => s.manual_status === filter);
+                }
+            }
+            if (search) {
+                subs = subs.filter(s =>
+                    [s.user_name, s.user_email, s.app_name, s.task_id, s.assigned_comment]
+                        .some(v => String(v || '').toLowerCase().includes(search))
+                );
+            }
+
+            // Update counts
+            const total = adminSubmissionsCache.length;
+            const pending = adminSubmissionsCache.filter(s => s.manual_status === 'pending').length;
+            const approved = adminSubmissionsCache.filter(s => s.manual_status === 'approved').length;
+            const paid = adminSubmissionsCache.filter(s => s.payout_status === 'paid').length;
+            const totalEl = document.getElementById('admin-sub-total');
+            const pendingEl = document.getElementById('admin-sub-pending');
+            const approvedEl = document.getElementById('admin-sub-approved');
+            const paidEl = document.getElementById('admin-sub-paid');
+            if (totalEl) totalEl.textContent = total;
+            if (pendingEl) pendingEl.textContent = pending;
+            if (approvedEl) approvedEl.textContent = approved;
+            if (paidEl) paidEl.textContent = paid;
+
+            // Group by task
+            const grouped = {};
+            subs.forEach(s => {
+                const key = s.task_id || 'unknown';
+                if (!grouped[key]) grouped[key] = { taskName: s.app_name || key, taskLink: s.task_link || '', reward: s.reward || 0, items: [] };
+                grouped[key].items.push(s);
+            });
+
+            if (!Object.keys(grouped).length) {
+                listEl.innerHTML = '<p class="rounded-2xl border border-dashed border-gray-200 py-8 text-center text-sm font-semibold text-gray-500 dark:border-gray-700 dark:text-gray-400">No submissions found.</p>';
+                return;
+            }
+
+            listEl.innerHTML = Object.entries(grouped).map(([taskId, group]) => `
+                <div class="rounded-2xl border border-gray-100 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 overflow-hidden">
+                    <div class="flex items-center gap-3 px-4 py-3 bg-white dark:bg-gray-800 border-b border-gray-100 dark:border-gray-700">
+                        <span class="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-orange-100 dark:bg-orange-900/30 text-xs font-black text-orange-600">${group.items.length}</span>
+                        <div class="min-w-0 flex-1">
+                            <p class="truncate text-sm font-extrabold">${escapeHtml(group.taskName)}</p>
+                            <p class="text-[10px] text-gray-400">₹${group.reward} reward · ${taskId.slice(0, 12)}</p>
+                        </div>
+                        <button onclick="document.getElementById('sub-group-${taskId}')?.classList.toggle('hidden')" class="rounded-lg bg-gray-100 dark:bg-gray-700 px-2 py-1 text-xs font-bold">▼</button>
+                    </div>
+                    <div id="sub-group-${taskId}" class="divide-y divide-gray-100 dark:divide-gray-700">
+                        ${group.items.map(s => {
+                            const statusColor = s.manual_status === 'approved' ? 'green' : s.manual_status === 'rejected' ? 'red' : 'yellow';
+                            const payoutBadge = s.payout_status === 'paid' ? '<span class="rounded-full bg-cyan-100 dark:bg-cyan-900/30 px-2 py-0.5 text-[9px] font-black text-cyan-700 dark:text-cyan-300">PAID</span>' : '';
+                            const ocrBadge = s.ocr_status === 'completed' ? '🟢' : s.ocr_status === 'failed' ? '🔴' : '⏳';
+                            const timeStr = s.submitted_at ? new Date(s.submitted_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }) : 'Unknown';
+                            return `
+                            <div class="px-4 py-3 bg-white dark:bg-gray-800 space-y-2">
+                                <div class="flex items-center gap-2">
+                                    <div class="min-w-0 flex-1">
+                                        <p class="text-sm font-bold truncate">${escapeHtml(s.user_name || s.user_email || 'User')}</p>
+                                        <p class="text-[10px] text-gray-400">${escapeHtml(s.user_email || '')} · ${timeStr}</p>
+                                    </div>
+                                    <span class="rounded-full bg-${statusColor}-100 dark:bg-${statusColor}-900/30 px-2 py-0.5 text-[9px] font-black text-${statusColor}-700 dark:text-${statusColor}-300 uppercase">${escapeHtml(s.manual_status)}</span>
+                                    ${payoutBadge}
+                                </div>
+                                <div class="flex items-center gap-2 text-[10px] text-gray-500">
+                                    <span>💬 ${escapeHtml((s.assigned_comment || '').slice(0, 40))}${(s.assigned_comment || '').length > 40 ? '...' : ''}</span>
+                                    <span>OCR: ${ocrBadge}</span>
+                                </div>
+                                ${s.screenshot_url ? `<div class="mt-1 space-y-1">
+                                    <div class="relative inline-block">
+                                        <img src="${escapeHtml(s.screenshot_url)}" alt="Screenshot" class="h-28 w-auto rounded-xl border-2 border-gray-200 dark:border-gray-600 cursor-pointer object-cover shadow-sm hover:shadow-md hover:scale-[1.02] transition" onclick="(function(){var o=document.createElement('div');o.id='ss-overlay-'+Date.now();o.className='fixed inset-0 z-[9999] flex items-center justify-center bg-black/80 p-4';o.onclick=function(e){if(e.target===o)o.remove()};o.innerHTML='<div class=\\'relative max-w-3xl max-h-[90vh]\\' onclick=\\'event.stopPropagation()\\'><img src=\\'${escapeHtml(s.screenshot_url)}\\' class=\\'max-w-full max-h-[85vh] rounded-2xl shadow-2xl object-contain\\'/><div class=\\'mt-2 flex gap-2 justify-center\\'><a href=\\'${escapeHtml(s.screenshot_url)}\\' target=\\'_blank\\' class=\\'rounded-xl bg-white/20 px-4 py-2 text-xs font-bold text-white hover:bg-white/30 transition\\'>Open Full Image ↗</a>${s.view_url ? `<a href=\\'${escapeHtml(s.view_url)}\\' target=\\'_blank\\' class=\\'rounded-xl bg-blue-600 px-4 py-2 text-xs font-bold text-white hover:bg-blue-700 transition\\'>Open in Drive ↗</a>` : ''}<button onclick=\\'this.closest(\\\"[id^=ss-overlay]\\\").remove()\\' class=\\'rounded-xl bg-red-600 px-4 py-2 text-xs font-bold text-white hover:bg-red-700 transition\\'>Close ✕</button></div></div>';document.body.appendChild(o)})()">
+                                        <span class="absolute -bottom-1 -right-1 rounded-full bg-blue-600 p-1"><svg class="h-3 w-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0zM10 7v3m0 0v3m0-3h3m-3 0H7"></path></svg></span>
+                                    </div>
+                                    ${s.drive_path ? `<p class="text-[9px] text-blue-400">📁 ${escapeHtml(s.drive_path)}</p>` : ''}
+                                </div>` : '<p class="text-[10px] text-red-400 italic">⚠️ No screenshot uploaded</p>'}
+                                <div class="flex flex-wrap gap-1.5 pt-1">
+                                    ${s.manual_status === 'pending' ? `
+                                        <button data-action="approve-submission" data-subid="${s.id}" class="rounded-lg bg-green-600 px-3 py-1.5 text-[10px] font-black text-white hover:bg-green-700 transition">✅ Approve</button>
+                                        <button data-action="reject-submission" data-subid="${s.id}" class="rounded-lg bg-red-600 px-3 py-1.5 text-[10px] font-black text-white hover:bg-red-700 transition">❌ Reject</button>
+                                    ` : ''}
+                                    ${s.manual_status === 'approved' && s.payout_status !== 'paid' ? `
+                                        <button data-action="pay-submission" data-subid="${s.id}" class="rounded-lg bg-cyan-600 px-3 py-1.5 text-[10px] font-black text-white hover:bg-cyan-700 transition">💰 Pay Now</button>
+                                    ` : ''}
+                                    <button data-action="ocr-submission" data-subid="${s.id}" class="rounded-lg bg-purple-600 px-3 py-1.5 text-[10px] font-black text-white hover:bg-purple-700 transition">🤖 OCR</button>
+                                    <button data-action="scraper-submission" data-subid="${s.id}" data-tasklink="${escapeHtml(s.task_link || '')}" data-comment="${escapeHtml(s.assigned_comment || '')}" data-appname="${escapeHtml(s.app_name || '')}" class="rounded-lg bg-indigo-600 px-3 py-1.5 text-[10px] font-black text-white hover:bg-indigo-700 transition">🔎 Check</button>
+                                </div>
+                            </div>`;
+                        }).join('')}
+                    </div>
+                </div>
+            `).join('');
+
+            // Attach submission action handlers
+            listEl.querySelectorAll('[data-action]').forEach(btn => {
+                btn.addEventListener('click', async (e) => {
+                    const action = e.currentTarget.dataset.action;
+                    const subId = e.currentTarget.dataset.subid;
+                    if (!subId) return;
+                    try {
+                        const token = await getBackendAuthToken();
+                        if (action === 'approve-submission') {
+                            await fetchWithTimeout(`${BACKEND_BASE_URL}/api/admin/task-submissions/${encodeURIComponent(subId)}`, {
+                                method: 'PATCH',
+                                headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ manualStatus: 'approved', verifiedAt: Date.now() })
+                            }, 8000);
+                            showNotification('Submission approved.');
+                        } else if (action === 'reject-submission') {
+                            await fetchWithTimeout(`${BACKEND_BASE_URL}/api/admin/task-submissions/${encodeURIComponent(subId)}`, {
+                                method: 'PATCH',
+                                headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ manualStatus: 'rejected' })
+                            }, 8000);
+                            showNotification('Submission rejected.');
+                        } else if (action === 'pay-submission') {
+                            await fetchWithTimeout(`${BACKEND_BASE_URL}/api/admin/task-submissions/${encodeURIComponent(subId)}`, {
+                                method: 'PATCH',
+                                headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ payoutStatus: 'paid', paidAt: Date.now() })
+                            }, 8000);
+                            showNotification('Payment credited.');
+                        } else if (action === 'ocr-submission') {
+                            showNotification('Running OCR...');
+                            const resp = await fetchWithTimeout(`${BACKEND_BASE_URL}/api/admin/ocr-process/${encodeURIComponent(subId)}`, {
+                                method: 'POST',
+                                headers: { Authorization: `Bearer ${token}` }
+                            }, 20000);
+                            const ocrData = await resp.json().catch(() => ({}));
+                            showNotification(ocrData.ok ? `OCR complete: ${(ocrData.ocr?.text || '').slice(0, 80)}` : 'OCR failed');
+                        } else if (action === 'scraper-submission') {
+                            const taskLink = e.currentTarget.dataset.tasklink || '';
+                            const assignedComment = e.currentTarget.dataset.comment || '';
+                            const appName = e.currentTarget.dataset.appname || '';
+                            await fetchWithTimeout(`${BACKEND_BASE_URL}/api/admin/scraper/check-review`, {
+                                method: 'POST',
+                                headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ submissionId: subId, taskLink, assignedComment, appName })
+                            }, 10000);
+                            showNotification('Scraper check initiated.');
+                        }
+                        await loadAdminSubmissions();
+                    } catch (err) {
+                        console.error('Submission action failed:', err);
+                        showNotification('Action failed. Please try again.', true);
+                    }
+                });
+            });
+        };
+
+        // ==================== ADMIN SYNC AUDIT PAGE ====================
+        const showAdminAuditPage = async () => {
+            if (!currentUser || currentUser.uid !== ADMIN_UID) return showNotification('Admin access only.', true);
+            currentMainSection = 'admin';
+            const content = `
+                ${getPageHeader('Sync Audit')}
+                <div class="max-w-5xl mx-auto space-y-4 pb-24">
+                    <section class="relative overflow-hidden rounded-2xl bg-gradient-to-br from-teal-950 via-emerald-900 to-cyan-700 p-5 text-white shadow-xl">
+                        <div class="absolute -right-10 -top-10 h-36 w-36 rounded-full border border-white/15"></div>
+                        <div class="relative">
+                            <p class="text-xs font-black uppercase tracking-wide text-white/65">Admin</p>
+                            <h2 class="mt-1 text-xl font-black">Cloudflare / Firebase Sync Audit</h2>
+                            <p class="mt-1 text-sm text-white/75">Monitor data consistency between D1 and Firestore.</p>
+                            <div class="mt-3 grid grid-cols-3 gap-2">
+                                <div class="rounded-xl bg-white/15 px-3 py-2 text-center"><p class="text-[9px] font-bold uppercase text-white/60">Failed</p><p id="audit-failed-count" class="text-lg font-black text-red-300">-</p></div>
+                                <div class="rounded-xl bg-white/15 px-3 py-2 text-center"><p class="text-[9px] font-bold uppercase text-white/60">Pending</p><p id="audit-pending-count" class="text-lg font-black text-yellow-300">-</p></div>
+                                <div class="rounded-xl bg-white/15 px-3 py-2 text-center"><p class="text-[9px] font-bold uppercase text-white/60">Resolved</p><p id="audit-resolved-count" class="text-lg font-black text-green-300">-</p></div>
+                            </div>
+                        </div>
+                    </section>
+                    <section class="rounded-2xl border border-gray-100 dark:border-gray-700 bg-white dark:bg-gray-800 p-4 shadow-sm">
+                        <h3 class="text-sm font-black mb-3">D1 Database Counts</h3>
+                        <div class="grid grid-cols-2 sm:grid-cols-5 gap-2" id="audit-d1-counts">
+                            <div class="rounded-xl bg-gray-50 dark:bg-gray-900 p-3 text-center"><p class="text-[9px] font-bold uppercase text-gray-400">Users</p><p id="audit-d1-users" class="text-lg font-black">-</p></div>
+                            <div class="rounded-xl bg-gray-50 dark:bg-gray-900 p-3 text-center"><p class="text-[9px] font-bold uppercase text-gray-400">Transactions</p><p id="audit-d1-txns" class="text-lg font-black">-</p></div>
+                            <div class="rounded-xl bg-gray-50 dark:bg-gray-900 p-3 text-center"><p class="text-[9px] font-bold uppercase text-gray-400">Fund Requests</p><p id="audit-d1-funds" class="text-lg font-black">-</p></div>
+                            <div class="rounded-xl bg-gray-50 dark:bg-gray-900 p-3 text-center"><p class="text-[9px] font-bold uppercase text-gray-400">Submissions</p><p id="audit-d1-subs" class="text-lg font-black">-</p></div>
+                            <div class="rounded-xl bg-gray-50 dark:bg-gray-900 p-3 text-center"><p class="text-[9px] font-bold uppercase text-gray-400">Active Locks</p><p id="audit-d1-locks" class="text-lg font-black">-</p></div>
+                        </div>
+                    </section>
+                    <section class="rounded-2xl border border-gray-100 dark:border-gray-700 bg-white dark:bg-gray-800 p-4 shadow-sm space-y-3">
+                        <div class="flex items-center justify-between gap-3">
+                            <h3 class="text-sm font-black">Failed Sync Logs</h3>
+                            <div class="flex gap-2">
+                                <select id="audit-type-filter" class="rounded-xl bg-gray-100 dark:bg-gray-700 px-3 py-2 text-xs font-semibold">
+                                    <option value="">All Types</option>
+                                    <option value="transaction">Transaction</option>
+                                    <option value="fund_request">Fund Request</option>
+                                    <option value="task_submission">Task Submission</option>
+                                    <option value="task_payout">Task Payout</option>
+                                    <option value="user">User</option>
+                                </select>
+                                <button id="audit-refresh-btn" class="rounded-xl bg-teal-600 px-4 py-2 text-xs font-bold text-white hover:bg-teal-700 transition">Refresh</button>
+                            </div>
+                        </div>
+                        <div id="audit-logs-list" class="space-y-2">
+                            <div class="py-6 text-center text-sm text-gray-400">Loading audit data...</div>
+                        </div>
+                    </section>
+                    <section class="rounded-2xl border border-gray-100 dark:border-gray-700 bg-white dark:bg-gray-800 p-4 shadow-sm">
+                        <div class="flex items-center justify-between gap-3">
+                            <h3 class="text-sm font-black">Auto Payout</h3>
+                            <button id="audit-run-payout-btn" class="rounded-xl bg-emerald-600 px-4 py-2 text-xs font-bold text-white hover:bg-emerald-700 transition">Run Auto-Payout Now</button>
+                        </div>
+                        <p class="mt-2 text-xs text-gray-500 dark:text-gray-400">Auto-payout runs daily at 8 PM IST for approved submissions past their delay period. Click above to trigger manually.</p>
+                        <div id="audit-payout-pending" class="mt-3"></div>
+                    </section>
+                </div>`;
+            showPage(content, { returnTo: 'admin', keepBottomNav: true });
+            setBottomNavActive('bottom-admin-btn');
+            loadAuditData();
+            document.getElementById('audit-refresh-btn')?.addEventListener('click', loadAuditData);
+            document.getElementById('audit-type-filter')?.addEventListener('change', loadAuditFailedLogs);
+            document.getElementById('audit-run-payout-btn')?.addEventListener('click', async () => {
+                try {
+                    const token = await getBackendAuthToken();
+                    const resp = await fetchWithTimeout(`${BACKEND_BASE_URL}/api/admin/auto-payout/run`, {
+                        method: 'POST', headers: { Authorization: `Bearer ${token}` }
+                    }, 15000);
+                    const data = await resp.json().catch(() => ({}));
+                    showNotification(data.ok ? `Auto-payout processed: ${data.paidCount || 0} payments.` : 'Auto-payout failed.');
+                    loadAuditData();
+                } catch (err) {
+                    showNotification('Auto-payout failed.', true);
+                }
+            });
+        };
+
+        const loadAuditData = async () => {
+            try {
+                const token = await getBackendAuthToken();
+                const [summaryResp, pendingResp] = await Promise.all([
+                    fetchWithTimeout(`${BACKEND_BASE_URL}/api/admin/audit/summary`, { headers: { Authorization: `Bearer ${token}` } }, 10000),
+                    fetchWithTimeout(`${BACKEND_BASE_URL}/api/admin/auto-payout/pending`, { headers: { Authorization: `Bearer ${token}` } }, 10000)
+                ]);
+                const summaryData = await summaryResp.json().catch(() => ({}));
+                const pendingData = await pendingResp.json().catch(() => ({}));
+
+                if (summaryData.ok) {
+                    const failedEl = document.getElementById('audit-failed-count');
+                    const pendingEl = document.getElementById('audit-pending-count');
+                    const resolvedEl = document.getElementById('audit-resolved-count');
+                    if (failedEl) failedEl.textContent = summaryData.sync?.totalFailed || 0;
+                    if (pendingEl) pendingEl.textContent = summaryData.sync?.totalPending || 0;
+                    if (resolvedEl) resolvedEl.textContent = summaryData.sync?.totalResolved || 0;
+                    const counts = summaryData.d1Counts || {};
+                    const usersEl = document.getElementById('audit-d1-users');
+                    const txnsEl = document.getElementById('audit-d1-txns');
+                    const fundsEl = document.getElementById('audit-d1-funds');
+                    const subsEl = document.getElementById('audit-d1-subs');
+                    const locksEl = document.getElementById('audit-d1-locks');
+                    if (usersEl) usersEl.textContent = counts.users || 0;
+                    if (txnsEl) txnsEl.textContent = counts.transactions || 0;
+                    if (fundsEl) fundsEl.textContent = counts.fundRequests || 0;
+                    if (subsEl) subsEl.textContent = counts.taskSubmissions || 0;
+                    if (locksEl) locksEl.textContent = counts.activeReservations || 0;
+                }
+
+                if (pendingData.ok && Array.isArray(pendingData.pending)) {
+                    const payoutEl = document.getElementById('audit-payout-pending');
+                    if (payoutEl) {
+                        if (pendingData.pending.length) {
+                            payoutEl.innerHTML = `<p class="text-xs font-bold text-amber-600 mb-2">${pendingData.pending.length} pending payouts:</p>
+                                <div class="space-y-1">${pendingData.pending.slice(0, 10).map(p => {
+                                    const dueAt = p.payout_due_at || 0;
+                                    const remaining = Math.max(0, dueAt - Date.now());
+                                    const days = Math.ceil(remaining / 86400000);
+                                    return `<div class="flex items-center justify-between rounded-lg bg-gray-50 dark:bg-gray-900 px-3 py-2 text-xs">
+                                        <span class="font-bold">${escapeHtml(p.user_name || p.user_email || 'User')} · ₹${p.reward || 0}</span>
+                                        <span class="font-bold ${days <= 0 ? 'text-green-600' : 'text-gray-400'}">${days <= 0 ? 'Ready to pay' : `${days}d remaining`}</span>
+                                    </div>`;
+                                }).join('')}</div>`;
+                        } else {
+                            payoutEl.innerHTML = '<p class="text-xs text-gray-400">No pending payouts.</p>';
+                        }
+                    }
+                }
+            } catch (err) {
+                console.error('Audit data load failed:', err);
+                showNotification('Could not load audit data.', true);
+            }
+            loadAuditFailedLogs();
+        };
+
+        const loadAuditFailedLogs = async () => {
+            const logsEl = document.getElementById('audit-logs-list');
+            if (!logsEl) return;
+            try {
+                const token = await getBackendAuthToken();
+                const entityType = document.getElementById('audit-type-filter')?.value || '';
+                const params = new URLSearchParams({ status: 'failed', limit: '100' });
+                if (entityType) params.set('entityType', entityType);
+                const resp = await fetchWithTimeout(`${BACKEND_BASE_URL}/api/admin/audit/failed-syncs?${params.toString()}`, {
+                    headers: { Authorization: `Bearer ${token}` }
+                }, 10000);
+                const data = await resp.json().catch(() => ({}));
+                if (!data.ok || !Array.isArray(data.logs) || !data.logs.length) {
+                    logsEl.innerHTML = '<p class="rounded-2xl border border-dashed border-gray-200 py-6 text-center text-sm font-semibold text-gray-500 dark:border-gray-700 dark:text-gray-400">No failed sync logs found. System is healthy! 🟢</p>';
+                    return;
+                }
+                logsEl.innerHTML = data.logs.map(log => {
+                    const timeStr = log.created_at ? new Date(log.created_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }) : 'Unknown';
+                    return `<div class="flex items-center gap-3 rounded-xl border border-red-100 dark:border-red-900/30 bg-red-50 dark:bg-red-900/10 px-4 py-3">
+                        <div class="min-w-0 flex-1">
+                            <div class="flex items-center gap-2">
+                                <span class="rounded-md bg-red-200 dark:bg-red-900/40 px-1.5 py-0.5 text-[9px] font-black uppercase text-red-700 dark:text-red-300">${escapeHtml(log.entity_type)}</span>
+                                <span class="text-[10px] text-gray-400">${escapeHtml(log.entity_id?.slice(0, 20) || '')}</span>
+                            </div>
+                            <p class="mt-1 text-xs text-red-600 dark:text-red-400 truncate">${escapeHtml(log.error_message || 'Unknown error')}</p>
+                            <p class="text-[10px] text-gray-400">${log.source} → ${log.target} · ${timeStr}</p>
+                        </div>
+                        <button data-action="resolve-audit" data-logid="${log.id}" class="shrink-0 rounded-lg bg-teal-600 px-3 py-1.5 text-[10px] font-black text-white hover:bg-teal-700 transition">Resolve</button>
+                    </div>`;
+                }).join('');
+
+                logsEl.querySelectorAll('[data-action="resolve-audit"]').forEach(btn => {
+                    btn.addEventListener('click', async (e) => {
+                        const logId = e.currentTarget.dataset.logid;
+                        if (!logId) return;
+                        try {
+                            const token = await getBackendAuthToken();
+                            await fetchWithTimeout(`${BACKEND_BASE_URL}/api/admin/audit/resolve/${encodeURIComponent(logId)}`, {
+                                method: 'POST', headers: { Authorization: `Bearer ${token}` }
+                            }, 5000);
+                            showNotification('Log resolved.');
+                            loadAuditFailedLogs();
+                        } catch (err) {
+                            showNotification('Resolve failed.', true);
+                        }
+                    });
+                });
+            } catch (err) {
+                logsEl.innerHTML = '<p class="py-6 text-center text-sm text-red-400">Failed to load sync logs.</p>';
+            }
         };
 
         const showAdminAdsPage = () => {
@@ -14769,6 +15364,8 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
         document.getElementById('admin-chats-btn').addEventListener('click', () => openAdminQuickAction(showAdminChatsPage));
         document.getElementById('admin-tasks-btn').addEventListener('click', () => openAdminQuickAction(showAdminTaskPage));
         document.getElementById('admin-ads-btn')?.addEventListener('click', () => openAdminQuickAction(showAdminAdsPage));
+        document.getElementById('admin-submissions-btn')?.addEventListener('click', () => openAdminQuickAction(showAdminTaskSubmissionsPage));
+        document.getElementById('admin-audit-btn')?.addEventListener('click', () => openAdminQuickAction(showAdminAuditPage));
 
         // Withdraw Fund Button - Now opens full page
         document.getElementById('withdraw-fund-btn').addEventListener('click', () => openUserQuickAction(showWithdrawPage));

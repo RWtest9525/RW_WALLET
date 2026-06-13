@@ -3,6 +3,9 @@ const jwt = require('jsonwebtoken');
 const admin = require('firebase-admin');
 const path = require('path');
 const { S3Client, PutObjectCommand, GetObjectCommand } = require('@aws-sdk/client-s3');
+const Tesseract = require('tesseract.js');
+const { google } = require('googleapis');
+const { Readable } = require('stream');
 
 const REQUIRED_ENV = [
   'APP_JWT_SECRET',
@@ -318,6 +321,76 @@ async function initSchema(d1) {
     CREATE INDEX IF NOT EXISTS idx_notification_recipients_user
     ON notification_recipients (user_id, read_at)
   `);
+
+  await d1.query(`
+    CREATE TABLE IF NOT EXISTS task_comment_reservations (
+      id TEXT PRIMARY KEY,
+      task_id TEXT NOT NULL,
+      user_id TEXT NOT NULL,
+      comment TEXT NOT NULL,
+      comment_index INTEGER NOT NULL DEFAULT 0,
+      status TEXT NOT NULL DEFAULT 'reserved',
+      reserved_at INTEGER NOT NULL,
+      expires_at INTEGER NOT NULL,
+      submitted_at INTEGER,
+      details_json TEXT
+    )
+  `);
+  await d1.query(`CREATE INDEX IF NOT EXISTS idx_task_reservations_task_status ON task_comment_reservations (task_id, status, expires_at)`);
+  await d1.query(`CREATE INDEX IF NOT EXISTS idx_task_reservations_user ON task_comment_reservations (user_id, status)`);
+
+  await d1.query(`
+    CREATE TABLE IF NOT EXISTS task_submissions (
+      id TEXT PRIMARY KEY,
+      task_id TEXT NOT NULL,
+      user_id TEXT NOT NULL,
+      reservation_id TEXT,
+      assigned_comment TEXT,
+      screenshot_url TEXT,
+      screenshot_key TEXT,
+      screenshot_view_url TEXT,
+      screenshot_drive_path TEXT,
+      ocr_status TEXT DEFAULT 'pending',
+      ocr_extracted_text TEXT,
+      ocr_extracted_name TEXT,
+      ocr_confidence REAL DEFAULT 0,
+      scraper_status TEXT DEFAULT 'not_configured',
+      scraper_result_json TEXT,
+      manual_status TEXT DEFAULT 'pending',
+      payout_status TEXT DEFAULT 'pending',
+      payout_delay_days INTEGER DEFAULT 7,
+      reward REAL DEFAULT 0,
+      task_link TEXT,
+      app_name TEXT,
+      user_name TEXT,
+      user_email TEXT,
+      submitted_at INTEGER NOT NULL,
+      verified_at INTEGER,
+      paid_at INTEGER,
+      details_json TEXT
+    )
+  `);
+  await d1.query(`CREATE INDEX IF NOT EXISTS idx_task_submissions_task ON task_submissions (task_id, submitted_at DESC)`);
+  await d1.query(`CREATE INDEX IF NOT EXISTS idx_task_submissions_user ON task_submissions (user_id, submitted_at DESC)`);
+  await d1.query(`CREATE INDEX IF NOT EXISTS idx_task_submissions_ocr ON task_submissions (ocr_status)`);
+  await d1.query(`CREATE INDEX IF NOT EXISTS idx_task_submissions_manual ON task_submissions (manual_status, submitted_at DESC)`);
+  await d1.query(`CREATE INDEX IF NOT EXISTS idx_task_submissions_payout ON task_submissions (payout_status, manual_status, submitted_at)`);
+
+  await d1.query(`
+    CREATE TABLE IF NOT EXISTS sync_audit_log (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      entity_type TEXT NOT NULL,
+      entity_id TEXT NOT NULL,
+      source TEXT NOT NULL,
+      target TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'pending',
+      error_message TEXT,
+      created_at INTEGER NOT NULL,
+      resolved_at INTEGER
+    )
+  `);
+  await d1.query(`CREATE INDEX IF NOT EXISTS idx_sync_audit_status ON sync_audit_log (status, created_at DESC)`);
+  await d1.query(`CREATE INDEX IF NOT EXISTS idx_sync_audit_entity ON sync_audit_log (entity_type, entity_id)`);
 }
 
 async function ensureColumn(d1, table, column, type) {
@@ -879,6 +952,124 @@ function sanitizeUploadFileName(fileName = 'document') {
   return cleaned || 'document';
 }
 
+// ── Google Drive Upload Helper (Organized Folders) ──────────────────────────
+let _driveClient = null;
+const _driveFolderCache = new Map(); // cache: "parentId/folderName" → folderId
+
+function getGoogleDriveClient() {
+  if (_driveClient) return _driveClient;
+  const saJson = process.env.GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON;
+  if (!saJson) return null;
+  try {
+    const credentials = typeof saJson === 'string' ? JSON.parse(saJson) : saJson;
+    const auth = new google.auth.GoogleAuth({
+      credentials,
+      scopes: ['https://www.googleapis.com/auth/drive.file']
+    });
+    _driveClient = google.drive({ version: 'v3', auth });
+    return _driveClient;
+  } catch (err) {
+    console.error('Google Drive auth failed:', err.message);
+    return null;
+  }
+}
+
+/**
+ * Find or create a subfolder inside a parent folder.
+ * Caches folder IDs in memory to avoid repeated API lookups.
+ */
+async function findOrCreateDriveFolder(drive, parentId, folderName) {
+  const cacheKey = `${parentId}/${folderName}`;
+  if (_driveFolderCache.has(cacheKey)) return _driveFolderCache.get(cacheKey);
+
+  // Search for existing folder
+  const searchResult = await drive.files.list({
+    q: `'${parentId}' in parents AND name = '${folderName.replace(/'/g, "\\'")}' AND mimeType = 'application/vnd.google-apps.folder' AND trashed = false`,
+    fields: 'files(id, name)',
+    pageSize: 1
+  });
+
+  if (searchResult.data.files && searchResult.data.files.length > 0) {
+    const folderId = searchResult.data.files[0].id;
+    _driveFolderCache.set(cacheKey, folderId);
+    return folderId;
+  }
+
+  // Create new folder
+  const createResult = await drive.files.create({
+    requestBody: {
+      name: folderName,
+      mimeType: 'application/vnd.google-apps.folder',
+      parents: [parentId]
+    },
+    fields: 'id'
+  });
+
+  const newFolderId = createResult.data.id;
+
+  // Make folder publicly viewable (so admin can browse from Drive)
+  await drive.permissions.create({
+    fileId: newFolderId,
+    requestBody: { role: 'reader', type: 'anyone' }
+  }).catch(() => {}); // non-critical if parent already has public access
+
+  _driveFolderCache.set(cacheKey, newFolderId);
+  return newFolderId;
+}
+
+/**
+ * Upload screenshot to Google Drive with organized folder structure:
+ *   Root Folder → DD-MM-YYYY → AppName → screenshot files
+ */
+async function uploadToGoogleDrive(buffer, fileName, mimeType, rootFolderId, { appName = 'Unknown App' } = {}) {
+  const drive = getGoogleDriveClient();
+  if (!drive) throw new Error('GOOGLE_DRIVE_NOT_CONFIGURED');
+
+  // Step 1: Find or create date folder (DD-MM-YYYY)
+  const now = new Date();
+  const dateStr = `${String(now.getDate()).padStart(2, '0')}-${String(now.getMonth() + 1).padStart(2, '0')}-${now.getFullYear()}`;
+  const dateFolderId = await findOrCreateDriveFolder(drive, rootFolderId, dateStr);
+
+  // Step 2: Find or create app name folder inside date folder
+  const safeAppName = String(appName || 'Unknown App').replace(/[<>:"/\\|?*]+/g, '_').trim().slice(0, 100) || 'Unknown App';
+  const appFolderId = await findOrCreateDriveFolder(drive, dateFolderId, safeAppName);
+
+  // Step 3: Upload file into app folder
+  const response = await drive.files.create({
+    requestBody: {
+      name: fileName,
+      parents: [appFolderId]
+    },
+    media: {
+      mimeType: mimeType || 'image/jpeg',
+      body: Readable.from(buffer)
+    },
+    fields: 'id, name, webViewLink, webContentLink, size'
+  });
+
+  const fileId = response.data.id;
+
+  // Make the file publicly viewable
+  await drive.permissions.create({
+    fileId,
+    requestBody: { role: 'reader', type: 'anyone' }
+  });
+
+  return {
+    fileId,
+    name: response.data.name,
+    dateFolderName: dateStr,
+    appFolderName: safeAppName,
+    viewUrl: response.data.webViewLink || `https://drive.google.com/file/d/${fileId}/view`,
+    downloadUrl: response.data.webContentLink || `https://drive.google.com/uc?export=download&id=${fileId}`,
+    thumbnailUrl: `https://drive.google.com/thumbnail?id=${fileId}&sz=w400`,
+    directUrl: `https://lh3.googleusercontent.com/d/${fileId}`
+  };
+}
+
+// Clear folder cache every hour to pick up any manual Drive changes
+setInterval(() => _driveFolderCache.clear(), 60 * 60 * 1000);
+
 function sanitizePathSegment(value = 'user') {
   const cleaned = String(value || 'user').replace(/[^\w-]+/g, '_').slice(0, 80);
   return cleaned || 'user';
@@ -941,6 +1132,271 @@ function readRequestBody(req, maxBytes) {
   });
 }
 
+// ── Task Reservation helpers ───────────────────────────────────────────────
+const TASK_RESERVATION_MS = 5 * 60 * 1000;
+const TASK_SCREENSHOT_MAX_BYTES = 5 * 1024 * 1024;
+
+async function cleanupExpiredReservations(d1) {
+  await d1.query(
+    `UPDATE task_comment_reservations SET status = 'expired' WHERE status = 'reserved' AND expires_at <= ?`,
+    [nowMs()]
+  );
+}
+
+async function reserveTaskComment(d1, { taskId, userId, userName, userEmail, comments, reservationMs = TASK_RESERVATION_MS }) {
+  await cleanupExpiredReservations(d1);
+
+  // Check existing active reservation for this user+task
+  const existing = await d1.first(
+    `SELECT * FROM task_comment_reservations WHERE task_id = ? AND user_id = ? AND status = 'reserved' AND expires_at > ? LIMIT 1`,
+    [taskId, userId, nowMs()]
+  );
+  if (existing) {
+    let details = {};
+    try { details = existing.details_json ? JSON.parse(existing.details_json) : {}; } catch { details = {}; }
+    return { ...details, ...existing, details_json: undefined };
+  }
+
+  // Check already submitted
+  const submitted = await d1.first(
+    `SELECT id FROM task_submissions WHERE task_id = ? AND user_id = ? LIMIT 1`,
+    [taskId, userId]
+  );
+  if (submitted) throw new Error('TASK_ALREADY_SUBMITTED');
+
+  // Find used comments by other active reservations
+  const activeReservations = await d1.all(
+    `SELECT comment FROM task_comment_reservations WHERE task_id = ? AND status IN ('reserved', 'submitted') AND (expires_at > ? OR status = 'submitted') AND user_id != ?`,
+    [taskId, nowMs(), userId]
+  );
+  const usedComments = new Set(activeReservations.map(r => r.comment));
+
+  // Pick first available comment
+  const commentsList = Array.isArray(comments) ? comments : ['good app'];
+  const comment = commentsList.find(c => !usedComments.has(c)) || commentsList[0];
+  const commentIndex = Math.max(0, commentsList.indexOf(comment));
+
+  const now = nowMs();
+  const expiresAt = now + reservationMs;
+  const id = `res_${taskId.slice(0,12)}_${userId.slice(0,12)}_${now}`;
+
+  const detailsObj = { userName: userName || '', userEmail: userEmail || '' };
+
+  await d1.query(
+    `INSERT INTO task_comment_reservations (id, task_id, user_id, comment, comment_index, status, reserved_at, expires_at, details_json)
+     VALUES (?, ?, ?, ?, ?, 'reserved', ?, ?, ?)
+     ON CONFLICT(id) DO UPDATE SET
+       comment = excluded.comment, comment_index = excluded.comment_index,
+       status = 'reserved', reserved_at = excluded.reserved_at,
+       expires_at = excluded.expires_at, details_json = excluded.details_json`,
+    [id, taskId, userId, comment, commentIndex, now, expiresAt, JSON.stringify(detailsObj)]
+  );
+
+  return { id, task_id: taskId, user_id: userId, comment, comment_index: commentIndex, status: 'reserved', reserved_at: now, expires_at: expiresAt, ...detailsObj };
+}
+
+async function getTaskReservation(d1, taskId, userId) {
+  await cleanupExpiredReservations(d1);
+  const row = await d1.first(
+    `SELECT * FROM task_comment_reservations WHERE task_id = ? AND user_id = ? AND status = 'reserved' AND expires_at > ? LIMIT 1`,
+    [taskId, userId, nowMs()]
+  );
+  if (!row) return null;
+  let details = {};
+  try { details = row.details_json ? JSON.parse(row.details_json) : {}; } catch { details = {}; }
+  return { ...details, ...row, details_json: undefined };
+}
+
+async function markReservationSubmitted(d1, reservationId) {
+  await d1.query(
+    `UPDATE task_comment_reservations SET status = 'submitted', submitted_at = ? WHERE id = ?`,
+    [nowMs(), reservationId]
+  );
+}
+
+// ── Task Submission helpers ────────────────────────────────────────────────
+async function saveTaskSubmission(d1, { id, taskId, userId, reservationId, assignedComment, screenshotUrl, screenshotKey, screenshotViewUrl, screenshotDrivePath, reward, taskLink, appName, userName, userEmail, payoutDelayDays = 7, details = {} }) {
+  const submittedAt = nowMs();
+  const submissionId = id || `sub_${taskId.slice(0,12)}_${userId.slice(0,12)}_${submittedAt}`;
+  await d1.query(
+    `INSERT INTO task_submissions (id, task_id, user_id, reservation_id, assigned_comment, screenshot_url, screenshot_key, screenshot_view_url, screenshot_drive_path, reward, task_link, app_name, user_name, user_email, payout_delay_days, submitted_at, details_json)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+     ON CONFLICT(id) DO UPDATE SET
+       screenshot_url = excluded.screenshot_url, screenshot_key = excluded.screenshot_key,
+       screenshot_view_url = excluded.screenshot_view_url, screenshot_drive_path = excluded.screenshot_drive_path,
+       details_json = excluded.details_json`,
+    [submissionId, taskId, userId, reservationId || null, assignedComment || '', screenshotUrl || '', screenshotKey || '', screenshotViewUrl || '', screenshotDrivePath || '', Number(reward || 0), taskLink || '', appName || '', userName || '', userEmail || '', payoutDelayDays, submittedAt, JSON.stringify(details || {})]
+  );
+  return submissionId;
+}
+
+async function listTaskSubmissions(d1, { taskId = null, userId = null, manualStatus = null, ocrStatus = null, payoutStatus = null, limit = 200 } = {}) {
+  const conditions = [];
+  const params = [];
+  if (taskId) { conditions.push('task_id = ?'); params.push(taskId); }
+  if (userId) { conditions.push('user_id = ?'); params.push(userId); }
+  if (manualStatus) { conditions.push('manual_status = ?'); params.push(manualStatus); }
+  if (ocrStatus) { conditions.push('ocr_status = ?'); params.push(ocrStatus); }
+  if (payoutStatus) { conditions.push('payout_status = ?'); params.push(payoutStatus); }
+  params.push(limit);
+  return d1.all(
+    `SELECT * FROM task_submissions ${conditions.length ? 'WHERE ' + conditions.join(' AND ') : ''} ORDER BY submitted_at DESC LIMIT ?`,
+    params
+  );
+}
+
+async function updateTaskSubmission(d1, submissionId, updates = {}) {
+  const fields = [];
+  const params = [];
+  if (updates.manualStatus !== undefined) { fields.push('manual_status = ?'); params.push(updates.manualStatus); }
+  if (updates.ocrStatus !== undefined) { fields.push('ocr_status = ?'); params.push(updates.ocrStatus); }
+  if (updates.ocrExtractedText !== undefined) { fields.push('ocr_extracted_text = ?'); params.push(updates.ocrExtractedText); }
+  if (updates.ocrExtractedName !== undefined) { fields.push('ocr_extracted_name = ?'); params.push(updates.ocrExtractedName); }
+  if (updates.ocrConfidence !== undefined) { fields.push('ocr_confidence = ?'); params.push(updates.ocrConfidence); }
+  if (updates.scraperStatus !== undefined) { fields.push('scraper_status = ?'); params.push(updates.scraperStatus); }
+  if (updates.scraperResultJson !== undefined) { fields.push('scraper_result_json = ?'); params.push(JSON.stringify(updates.scraperResultJson)); }
+  if (updates.payoutStatus !== undefined) { fields.push('payout_status = ?'); params.push(updates.payoutStatus); }
+  if (updates.verifiedAt !== undefined) { fields.push('verified_at = ?'); params.push(updates.verifiedAt); }
+  if (updates.paidAt !== undefined) { fields.push('paid_at = ?'); params.push(updates.paidAt); }
+  if (!fields.length) return;
+  params.push(submissionId);
+  await d1.query(`UPDATE task_submissions SET ${fields.join(', ')} WHERE id = ?`, params);
+}
+
+// ── Sync Audit helpers ─────────────────────────────────────────────────────
+async function logSyncAudit(d1, { entityType, entityId, source, target, status = 'failed', errorMessage = '' }) {
+  await d1.query(
+    `INSERT INTO sync_audit_log (entity_type, entity_id, source, target, status, error_message, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    [entityType, entityId, source, target, status, String(errorMessage || '').slice(0, 2000), nowMs()]
+  );
+}
+
+async function listSyncAuditLogs(d1, { entityType = null, status = null, limit = 200 } = {}) {
+  const conditions = [];
+  const params = [];
+  if (entityType) { conditions.push('entity_type = ?'); params.push(entityType); }
+  if (status) { conditions.push('status = ?'); params.push(status); }
+  params.push(limit);
+  return d1.all(
+    `SELECT * FROM sync_audit_log ${conditions.length ? 'WHERE ' + conditions.join(' AND ') : ''} ORDER BY created_at DESC LIMIT ?`,
+    params
+  );
+}
+
+async function resolveSyncAuditLog(d1, logId) {
+  await d1.query(
+    `UPDATE sync_audit_log SET status = 'resolved', resolved_at = ? WHERE id = ?`,
+    [nowMs(), logId]
+  );
+}
+
+async function getSyncAuditSummary(d1) {
+  const rows = await d1.all(
+    `SELECT entity_type, status, COUNT(*) as count FROM sync_audit_log GROUP BY entity_type, status ORDER BY entity_type, status`
+  );
+  const totalFailed = await d1.first(`SELECT COUNT(*) as count FROM sync_audit_log WHERE status = 'failed'`);
+  const totalPending = await d1.first(`SELECT COUNT(*) as count FROM sync_audit_log WHERE status = 'pending'`);
+  const totalResolved = await d1.first(`SELECT COUNT(*) as count FROM sync_audit_log WHERE status = 'resolved'`);
+  return {
+    breakdown: rows,
+    totalFailed: totalFailed?.count || 0,
+    totalPending: totalPending?.count || 0,
+    totalResolved: totalResolved?.count || 0
+  };
+}
+
+// ── Auto-Payout ────────────────────────────────────────────────────────────
+async function processAutoPayouts(d1) {
+  const now = nowMs();
+  // Find submissions where: manual_status='approved', payout_status='pending',
+  // scraper_status IN ('live_confirmed','not_applicable','checked'),
+  // submitted_at <= now - (payout_delay_days * 86400000)
+  const eligible = await d1.all(
+    `SELECT * FROM task_submissions
+     WHERE manual_status = 'approved'
+       AND payout_status = 'pending'
+       AND scraper_status IN ('live_confirmed', 'not_applicable', 'checked', 'not_configured')
+       AND submitted_at <= (? - (payout_delay_days * 86400000))
+     ORDER BY submitted_at ASC
+     LIMIT 100`,
+    [now]
+  );
+
+  let paidCount = 0;
+  for (const sub of eligible) {
+    try {
+      const reward = Number(sub.reward || 0);
+      if (reward <= 0) continue;
+
+      // Create transaction
+      const transactionId = `task_payout_${sub.id}_${now}`;
+      await saveTransaction(d1, {
+        userId: sub.user_id,
+        transactionId,
+        type: 'credit',
+        amount: reward,
+        status: 'completed',
+        timestamp: now,
+        details: {
+          comment: `Task reward: ${sub.app_name || 'Task'}`,
+          source: 'task_auto_payout',
+          taskId: sub.task_id,
+          submissionId: sub.id
+        }
+      });
+
+      // Update submission
+      await updateTaskSubmission(d1, sub.id, {
+        payoutStatus: 'paid',
+        paidAt: now,
+        verifiedAt: sub.verified_at || now
+      });
+
+      paidCount++;
+    } catch (error) {
+      console.error(`Auto-payout failed for submission ${sub.id}:`, error);
+      await logSyncAudit(d1, {
+        entityType: 'task_payout',
+        entityId: sub.id,
+        source: 'auto_payout',
+        target: 'd1',
+        status: 'failed',
+        errorMessage: error.message
+      }).catch(() => {});
+    }
+  }
+
+  if (paidCount) console.log(`Auto-payout: processed ${paidCount} task rewards`);
+  return paidCount;
+}
+
+// ── Rate Limiter ───────────────────────────────────────────────────────────
+const rateLimitBuckets = new Map();
+function rateLimit({ windowMs = 60000, maxRequests = 60 } = {}) {
+  return (req, res, next) => {
+    const key = req.auth?.sub || req.ip || 'anon';
+    const now = Date.now();
+    let bucket = rateLimitBuckets.get(key);
+    if (!bucket || now - bucket.windowStart > windowMs) {
+      bucket = { windowStart: now, count: 0 };
+      rateLimitBuckets.set(key, bucket);
+    }
+    bucket.count++;
+    if (bucket.count > maxRequests) {
+      return res.status(429).json({ ok: false, error: 'RATE_LIMIT_EXCEEDED' });
+    }
+    next();
+  };
+}
+// Cleanup stale buckets periodically
+setInterval(() => {
+  const cutoff = Date.now() - 120000;
+  for (const [key, bucket] of rateLimitBuckets.entries()) {
+    if (bucket.windowStart < cutoff) rateLimitBuckets.delete(key);
+  }
+}, 60000).unref?.();
+
 function registerRoutes(app, { d1, r2 }) {
   app.post('/api/session/firebase', async (req, res) => {
     try {
@@ -961,7 +1417,7 @@ function registerRoutes(app, { d1, r2 }) {
     }
   });
 
-  app.post('/api/login', async (req, res) => {
+  app.post('/api/login', rateLimit({ windowMs: 60000, maxRequests: 10 }), async (req, res) => {
     try {
       const email = normalizeEmail(req.body.email);
       const password = String(req.body.password || '');
@@ -1051,6 +1507,19 @@ function registerRoutes(app, { d1, r2 }) {
     }
     if (!recipient.userId) {
       return res.status(400).json({ ok: false, error: 'RECIPIENT_REQUIRED' });
+    }
+
+    // Server-side balance validation for transfers
+    const senderAmount = Number(sender.amount || 0);
+    const recipientAmount = Number(recipient.amount || 0);
+    if (senderAmount >= 0) {
+      return res.status(400).json({ ok: false, error: 'SENDER_AMOUNT_MUST_BE_NEGATIVE' });
+    }
+    if (recipientAmount <= 0) {
+      return res.status(400).json({ ok: false, error: 'RECIPIENT_AMOUNT_MUST_BE_POSITIVE' });
+    }
+    if (Math.abs(senderAmount) !== Math.abs(recipientAmount)) {
+      return res.status(400).json({ ok: false, error: 'TRANSFER_AMOUNTS_MISMATCH' });
     }
 
     await saveTransaction(d1, sender);
@@ -1291,6 +1760,327 @@ function registerRoutes(app, { d1, r2 }) {
     await deleteNotification(d1, req.params.notificationId);
     res.json({ ok: true });
   });
+
+  // ── Task Reservation Endpoints ───────────────────────────────────────────
+  app.post('/api/task-reservations', requireHttpAuth, rateLimit({ windowMs: 60000, maxRequests: 20 }), async (req, res) => {
+    try {
+      const { taskId, comments, reservationMs } = req.body;
+      if (!taskId) return res.status(400).json({ ok: false, error: 'TASK_ID_REQUIRED' });
+      const reservation = await reserveTaskComment(d1, {
+        taskId,
+        userId: req.auth.sub,
+        userName: req.body.userName || '',
+        userEmail: req.auth.email || '',
+        comments: Array.isArray(comments) ? comments : ['good app'],
+        reservationMs: Math.min(Number(reservationMs || TASK_RESERVATION_MS), 10 * 60 * 1000)
+      });
+      res.json({ ok: true, reservation });
+    } catch (error) {
+      if (error.message === 'TASK_ALREADY_SUBMITTED') return res.status(409).json({ ok: false, error: error.message });
+      console.error('Task reservation failed:', error);
+      res.status(500).json({ ok: false, error: 'RESERVATION_FAILED' });
+    }
+  });
+
+  app.get('/api/task-reservations/:taskId', requireHttpAuth, async (req, res) => {
+    const reservation = await getTaskReservation(d1, req.params.taskId, req.auth.sub);
+    res.json({ ok: true, reservation });
+  });
+
+  app.post('/api/task-reservations/:reservationId/submit', requireHttpAuth, async (req, res) => {
+    try {
+      await markReservationSubmitted(d1, req.params.reservationId);
+      res.json({ ok: true });
+    } catch (error) {
+      console.error('Reservation submit marking failed:', error);
+      res.status(500).json({ ok: false, error: 'SUBMISSION_MARKING_FAILED' });
+    }
+  });
+
+  // ── Screenshot Upload Endpoint ───────────────────────────────────────────
+  app.post('/api/uploads/task-screenshot', requireHttpAuth, rateLimit({ windowMs: 60000, maxRequests: 10 }), async (req, res) => {
+    try {
+      const declaredSize = Number(req.headers['content-length'] || req.query.size || 0);
+      if (declaredSize > TASK_SCREENSHOT_MAX_BYTES) {
+        return res.status(413).json({ ok: false, error: 'UPLOAD_TOO_LARGE' });
+      }
+
+      const taskId = sanitizePathSegment(req.query.taskId || 'unknown');
+      const originalName = sanitizeUploadFileName(req.query.fileName || 'screenshot.jpg');
+      const appName = req.query.appName || 'Unknown App';
+      const contentType = normalizeContentType(req.headers['content-type'] || 'image/jpeg');
+      if (!contentType.startsWith('image/')) {
+        return res.status(400).json({ ok: false, error: 'ONLY_IMAGES_ALLOWED' });
+      }
+
+      const body = await readRequestBody(req, TASK_SCREENSHOT_MAX_BYTES);
+      if (!body.length) return res.status(400).json({ ok: false, error: 'EMPTY_UPLOAD' });
+
+      const ext = getLoanDocumentExtension(originalName, contentType);
+      const userSegment = sanitizePathSegment(req.auth.sub);
+      const timestamp = Date.now();
+      const fileName = `${timestamp}-${taskId}-${sanitizeUploadFileName(path.basename(originalName, path.extname(originalName)))}${ext}`;
+
+      // Try Google Drive first (free 2TB storage)
+      const driveFolderId = process.env.GOOGLE_DRIVE_FOLDER_ID;
+      if (driveFolderId && process.env.GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON) {
+        try {
+          const driveResult = await uploadToGoogleDrive(body, fileName, contentType, driveFolderId, { appName });
+          console.log(`Screenshot uploaded to Google Drive: ${driveResult.dateFolderName}/${driveResult.appFolderName}/${driveResult.name} (${body.length} bytes)`);
+          return res.json({
+            ok: true,
+            screenshot: {
+              name: originalName,
+              size: body.length,
+              type: contentType,
+              key: `gdrive:${driveResult.fileId}`,
+              url: driveResult.directUrl,
+              viewUrl: driveResult.viewUrl,
+              thumbnailUrl: driveResult.thumbnailUrl,
+              drivePath: `${driveResult.dateFolderName}/${driveResult.appFolderName}`,
+              storage: 'google_drive',
+              uploadedAt: nowMs()
+            }
+          });
+        } catch (driveError) {
+          console.error('Google Drive upload failed, falling back to R2:', driveError.message);
+        }
+      }
+
+      // Fallback to R2
+      if (r2 && process.env.CLOUDFLARE_R2_BUCKET && process.env.CLOUDFLARE_R2_PUBLIC_BASE_URL) {
+        const key = `task-screenshots/${userSegment}/${fileName}`;
+        const url = await putR2Object(r2, key, body, contentType);
+        return res.json({
+          ok: true,
+          screenshot: { name: originalName, size: body.length, type: contentType, key, url, storage: 'r2', uploadedAt: nowMs() }
+        });
+      }
+
+      return res.status(503).json({ ok: false, error: 'NO_STORAGE_CONFIGURED' });
+    } catch (error) {
+      if (error?.code === 'UPLOAD_TOO_LARGE') return res.status(413).json({ ok: false, error: 'UPLOAD_TOO_LARGE' });
+      console.error('Task screenshot upload failed:', error);
+      return res.status(500).json({ ok: false, error: 'SCREENSHOT_UPLOAD_FAILED' });
+    }
+  });
+
+  // ── Task Submission Endpoints ────────────────────────────────────────────
+  app.post('/api/task-submissions', requireHttpAuth, rateLimit({ windowMs: 60000, maxRequests: 10 }), async (req, res) => {
+    try {
+      const submissionId = await saveTaskSubmission(d1, { ...req.body, userId: req.auth.sub });
+      if (req.body.reservationId) {
+        await markReservationSubmitted(d1, req.body.reservationId).catch(e => console.warn('Reservation mark failed:', e));
+      }
+      res.json({ ok: true, submissionId });
+    } catch (error) {
+      console.error('Task submission save failed:', error);
+      res.status(500).json({ ok: false, error: 'SUBMISSION_FAILED' });
+    }
+  });
+
+  app.get('/api/admin/task-submissions', requireHttpAuth, async (req, res) => {
+    if (!req.auth.isAdmin) return res.status(403).json({ ok: false, error: 'ADMIN_REQUIRED' });
+    const submissions = await listTaskSubmissions(d1, {
+      taskId: req.query.taskId || null,
+      userId: req.query.userId || null,
+      manualStatus: req.query.manualStatus || null,
+      ocrStatus: req.query.ocrStatus || null,
+      payoutStatus: req.query.payoutStatus || null,
+      limit: Math.min(Number(req.query.limit || 200), 500)
+    });
+    res.json({ ok: true, submissions });
+  });
+
+  app.patch('/api/admin/task-submissions/:submissionId', requireHttpAuth, async (req, res) => {
+    if (!req.auth.isAdmin) return res.status(403).json({ ok: false, error: 'ADMIN_REQUIRED' });
+    try {
+      await updateTaskSubmission(d1, req.params.submissionId, req.body);
+      res.json({ ok: true });
+    } catch (error) {
+      console.error('Task submission update failed:', error);
+      res.status(500).json({ ok: false, error: 'UPDATE_FAILED' });
+    }
+  });
+
+  // ── OCR Endpoint ─────────────────────────────────────────────────────────
+  app.post('/api/admin/ocr-process/:submissionId', requireHttpAuth, async (req, res) => {
+    if (!req.auth.isAdmin) return res.status(403).json({ ok: false, error: 'ADMIN_REQUIRED' });
+    try {
+      const submission = await d1.first('SELECT * FROM task_submissions WHERE id = ? LIMIT 1', [req.params.submissionId]);
+      if (!submission) return res.status(404).json({ ok: false, error: 'SUBMISSION_NOT_FOUND' });
+
+      let ocrResult = { text: '', confidence: 0, status: 'completed' };
+
+      if (submission.screenshot_url) {
+        try {
+          // Download image from URL
+          const imgResponse = await fetch(submission.screenshot_url);
+          if (!imgResponse.ok) throw new Error(`Image download failed: ${imgResponse.status}`);
+          const imgBuffer = Buffer.from(await imgResponse.arrayBuffer());
+
+          // Run Tesseract OCR (free, no API key needed)
+          const { data } = await Tesseract.recognize(imgBuffer, 'eng', {
+            logger: () => {} // suppress progress logs
+          });
+
+          ocrResult.text = (data.text || '').trim();
+          ocrResult.confidence = (data.confidence || 0) / 100; // normalize to 0-1
+          ocrResult.status = ocrResult.text ? 'completed' : 'completed';
+
+          console.log(`OCR completed for ${req.params.submissionId}: ${ocrResult.text.length} chars, confidence ${(ocrResult.confidence * 100).toFixed(1)}%`);
+        } catch (ocrError) {
+          console.error('Tesseract OCR error:', ocrError);
+          ocrResult = { text: '', confidence: 0, status: 'failed' };
+        }
+      } else {
+        ocrResult = { text: '[No screenshot URL available for OCR]', confidence: 0, status: 'failed' };
+      }
+
+      await updateTaskSubmission(d1, req.params.submissionId, {
+        ocrStatus: ocrResult.status,
+        ocrExtractedText: ocrResult.text.slice(0, 4000),
+        ocrConfidence: ocrResult.confidence
+      });
+
+      res.json({ ok: true, ocr: ocrResult });
+    } catch (error) {
+      console.error('OCR processing failed:', error);
+      res.status(500).json({ ok: false, error: 'OCR_FAILED' });
+    }
+  });
+
+  // ── Scraper Endpoints ────────────────────────────────────────────────────
+  app.post('/api/admin/scraper/check-review', requireHttpAuth, async (req, res) => {
+    if (!req.auth.isAdmin) return res.status(403).json({ ok: false, error: 'ADMIN_REQUIRED' });
+    try {
+      const { submissionId, taskLink, assignedComment, appName } = req.body;
+      if (!submissionId) return res.status(400).json({ ok: false, error: 'SUBMISSION_ID_REQUIRED' });
+
+      const isPlayStore = String(taskLink || '').includes('play.google.com');
+      let scraperResult = {
+        checked: true,
+        isPlayStore,
+        found: false,
+        message: isPlayStore
+          ? 'Play Store review check requires external Python scraper. Run your scraper script and update via PATCH endpoint.'
+          : 'Non-Play-Store link — manual verification required.',
+        checkedAt: nowMs()
+      };
+
+      const newStatus = isPlayStore ? 'awaiting_scraper' : 'not_applicable';
+      await updateTaskSubmission(d1, submissionId, {
+        scraperStatus: newStatus,
+        scraperResultJson: scraperResult
+      });
+
+      res.json({ ok: true, result: scraperResult });
+    } catch (error) {
+      console.error('Scraper check failed:', error);
+      res.status(500).json({ ok: false, error: 'SCRAPER_CHECK_FAILED' });
+    }
+  });
+
+  app.post('/api/admin/scraper/confirm-live', requireHttpAuth, async (req, res) => {
+    if (!req.auth.isAdmin) return res.status(403).json({ ok: false, error: 'ADMIN_REQUIRED' });
+    try {
+      const { submissionId } = req.body;
+      if (!submissionId) return res.status(400).json({ ok: false, error: 'SUBMISSION_ID_REQUIRED' });
+      await updateTaskSubmission(d1, submissionId, {
+        scraperStatus: 'live_confirmed',
+        verifiedAt: nowMs()
+      });
+      res.json({ ok: true });
+    } catch (error) {
+      console.error('Scraper confirm failed:', error);
+      res.status(500).json({ ok: false, error: 'CONFIRM_FAILED' });
+    }
+  });
+
+  app.post('/api/admin/auto-payout/run', requireHttpAuth, async (req, res) => {
+    if (!req.auth.isAdmin) return res.status(403).json({ ok: false, error: 'ADMIN_REQUIRED' });
+    try {
+      const paidCount = await processAutoPayouts(d1);
+      res.json({ ok: true, paidCount });
+    } catch (error) {
+      console.error('Manual auto-payout trigger failed:', error);
+      res.status(500).json({ ok: false, error: 'AUTO_PAYOUT_FAILED' });
+    }
+  });
+
+  app.get('/api/admin/auto-payout/pending', requireHttpAuth, async (req, res) => {
+    if (!req.auth.isAdmin) return res.status(403).json({ ok: false, error: 'ADMIN_REQUIRED' });
+    const pending = await d1.all(
+      `SELECT *, (submitted_at + (payout_delay_days * 86400000)) as payout_due_at
+       FROM task_submissions
+       WHERE manual_status = 'approved' AND payout_status = 'pending'
+       ORDER BY submitted_at ASC LIMIT 200`
+    );
+    res.json({ ok: true, pending });
+  });
+
+  // ── Audit Endpoints ──────────────────────────────────────────────────────
+  app.get('/api/admin/audit/summary', requireHttpAuth, async (req, res) => {
+    if (!req.auth.isAdmin) return res.status(403).json({ ok: false, error: 'ADMIN_REQUIRED' });
+    try {
+      const summary = await getSyncAuditSummary(d1);
+      const d1UserCount = await d1.first('SELECT COUNT(*) as count FROM users');
+      const d1TransactionCount = await d1.first('SELECT COUNT(*) as count FROM transactions');
+      const d1FundRequestCount = await d1.first('SELECT COUNT(*) as count FROM fund_requests');
+      const d1SubmissionCount = await d1.first('SELECT COUNT(*) as count FROM task_submissions');
+      const d1ReservationCount = await d1.first('SELECT COUNT(*) as count FROM task_comment_reservations WHERE status = \'reserved\' AND expires_at > ' + nowMs());
+      res.json({
+        ok: true,
+        sync: summary,
+        d1Counts: {
+          users: d1UserCount?.count || 0,
+          transactions: d1TransactionCount?.count || 0,
+          fundRequests: d1FundRequestCount?.count || 0,
+          taskSubmissions: d1SubmissionCount?.count || 0,
+          activeReservations: d1ReservationCount?.count || 0
+        }
+      });
+    } catch (error) {
+      console.error('Audit summary failed:', error);
+      res.status(500).json({ ok: false, error: 'AUDIT_SUMMARY_FAILED' });
+    }
+  });
+
+  app.get('/api/admin/audit/failed-syncs', requireHttpAuth, async (req, res) => {
+    if (!req.auth.isAdmin) return res.status(403).json({ ok: false, error: 'ADMIN_REQUIRED' });
+    const logs = await listSyncAuditLogs(d1, {
+      entityType: req.query.entityType || null,
+      status: req.query.status || 'failed',
+      limit: Math.min(Number(req.query.limit || 200), 500)
+    });
+    res.json({ ok: true, logs });
+  });
+
+  app.post('/api/admin/audit/resolve/:logId', requireHttpAuth, async (req, res) => {
+    if (!req.auth.isAdmin) return res.status(403).json({ ok: false, error: 'ADMIN_REQUIRED' });
+    await resolveSyncAuditLog(d1, Number(req.params.logId));
+    res.json({ ok: true });
+  });
+
+  // Frontend sync failure reporting (any authenticated user can report their own sync failures)
+  app.post('/api/admin/audit/log-sync-failure', requireHttpAuth, async (req, res) => {
+    try {
+      const { entityType, entityId, source, target, errorMessage } = req.body || {};
+      if (!entityType) return res.status(400).json({ ok: false, error: 'MISSING_ENTITY_TYPE' });
+      await logSyncAudit(d1, {
+        entityType: String(entityType).slice(0, 50),
+        entityId: String(entityId || req.auth.userId || 'unknown').slice(0, 100),
+        source: String(source || 'firebase').slice(0, 20),
+        target: String(target || 'd1').slice(0, 20),
+        status: 'failed',
+        errorMessage: String(errorMessage || '').slice(0, 2000)
+      });
+      res.json({ ok: true });
+    } catch (error) {
+      console.error('Sync failure log failed:', error);
+      res.status(500).json({ ok: false, error: 'LOG_FAILED' });
+    }
+  });
 }
 
 function requireHttpAuth(req, res, next) {
@@ -1488,11 +2278,30 @@ async function createCloudflareWalletService() {
   await initSchema(d1);
   cleanupExpiredReadChats(d1).catch((error) => console.error('Initial chat cleanup failed:', error));
   cleanupExpiredNotifications(d1).catch((error) => console.error('Initial notification cleanup failed:', error));
+  cleanupExpiredReservations(d1).catch((error) => console.error('Initial reservation cleanup failed:', error));
   const cleanupTimer = setInterval(() => {
     cleanupExpiredReadChats(d1).catch((error) => console.error('Scheduled chat cleanup failed:', error));
     cleanupExpiredNotifications(d1).catch((error) => console.error('Scheduled notification cleanup failed:', error));
+    processAutoPayouts(d1).catch((error) => console.error('Scheduled auto-payout failed:', error));
   }, 60 * 60 * 1000);
   cleanupTimer.unref?.();
+
+  // Schedule auto-payout at 8 PM IST daily
+  const scheduleAutoPayoutAt8PM = () => {
+    const now = new Date();
+    const ist = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Kolkata' }));
+    const target = new Date(ist);
+    target.setHours(20, 0, 0, 0);
+    if (target <= ist) target.setDate(target.getDate() + 1);
+    const delay = target.getTime() - ist.getTime();
+    setTimeout(() => {
+      processAutoPayouts(d1).catch(e => console.error('Scheduled auto-payout failed:', e));
+      setInterval(() => {
+        processAutoPayouts(d1).catch(e => console.error('Daily auto-payout failed:', e));
+      }, 24 * 60 * 60 * 1000).unref?.();
+    }, delay).unref?.();
+  };
+  scheduleAutoPayoutAt8PM();
 
   return {
     d1,
@@ -1509,7 +2318,18 @@ async function createCloudflareWalletService() {
     putInvoice: (userId, invoiceId, data) =>
       putR2Object(r2, `invoices/${userId}/${invoiceId}.json`, JSON.stringify(data, null, 2)),
     getInvoice: (userId, invoiceId) =>
-      getR2Object(r2, `invoices/${userId}/${invoiceId}.json`)
+      getR2Object(r2, `invoices/${userId}/${invoiceId}.json`),
+    reserveTaskComment: (opts) => reserveTaskComment(d1, opts),
+    getTaskReservation: (taskId, userId) => getTaskReservation(d1, taskId, userId),
+    markReservationSubmitted: (reservationId) => markReservationSubmitted(d1, reservationId),
+    saveTaskSubmission: (opts) => saveTaskSubmission(d1, opts),
+    listTaskSubmissions: (opts) => listTaskSubmissions(d1, opts),
+    updateTaskSubmission: (submissionId, updates) => updateTaskSubmission(d1, submissionId, updates),
+    logSyncAudit: (opts) => logSyncAudit(d1, opts),
+    listSyncAuditLogs: (opts) => listSyncAuditLogs(d1, opts),
+    resolveSyncAuditLog: (logId) => resolveSyncAuditLog(d1, logId),
+    getSyncAuditSummary: () => getSyncAuditSummary(d1),
+    processAutoPayouts: () => processAutoPayouts(d1)
   };
 }
 
@@ -1526,5 +2346,16 @@ module.exports = {
   saveLoanRequest,
   listLoanRequests,
   updateLoanRequestStatus,
-  listChatRooms
+  listChatRooms,
+  reserveTaskComment,
+  getTaskReservation,
+  markReservationSubmitted,
+  saveTaskSubmission,
+  listTaskSubmissions,
+  updateTaskSubmission,
+  logSyncAudit,
+  listSyncAuditLogs,
+  resolveSyncAuditLog,
+  getSyncAuditSummary,
+  processAutoPayouts
 };

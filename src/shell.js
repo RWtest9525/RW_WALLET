@@ -449,6 +449,21 @@ root.outerHTML = String.raw`
                                 </span>
                                 <span class="text-sm font-medium text-fuchsia-700 dark:text-fuchsia-300">Manage Ads</span>
                             </button>
+                            <button id="admin-submissions-btn"
+                                class="relative flex flex-col items-center justify-center p-3 min-h-28 bg-orange-50 dark:bg-orange-900/20 rounded-2xl hover:bg-orange-100 dark:hover:bg-orange-900/30 transition border border-orange-200 dark:border-orange-800 shadow-sm">
+                                <span id="admin-submissions-badge" class="hidden absolute right-2 top-2 min-w-6 h-6 rounded-full bg-red-600 px-2 text-center text-xs font-black leading-6 text-white shadow"></span>
+                                <span class="flex h-12 w-12 items-center justify-center rounded-2xl bg-white dark:bg-gray-800 shadow-sm mb-2">
+                                    <img src="https://cdn-icons-png.flaticon.com/512/7692/7692345.png" class="h-8 w-8 object-contain" alt="Submissions">
+                                </span>
+                                <span class="text-sm font-medium text-orange-700 dark:text-orange-300">Submissions</span>
+                            </button>
+                            <button id="admin-audit-btn"
+                                class="flex flex-col items-center justify-center p-3 min-h-28 bg-teal-50 dark:bg-teal-900/20 rounded-2xl hover:bg-teal-100 dark:hover:bg-teal-900/30 transition border border-teal-200 dark:border-teal-800 shadow-sm">
+                                <span class="flex h-12 w-12 items-center justify-center rounded-2xl bg-white dark:bg-gray-800 shadow-sm mb-2">
+                                    <img src="https://cdn-icons-png.flaticon.com/512/4726/4726005.png" class="h-8 w-8 object-contain" alt="Sync Audit">
+                                </span>
+                                <span class="text-sm font-medium text-teal-700 dark:text-teal-300">Sync Audit</span>
+                            </button>
                         </div>
                     </div>
                 </div>
