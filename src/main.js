@@ -3335,9 +3335,18 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             const container = document.getElementById('home-task-category-list');
             if (!container) return;
             const hideNewTasksForDailyLimit = !isBulkTaskUser() && userTaskTodaySubmissionIds.size >= NORMAL_USER_DAILY_TASK_LIMIT;
+            const isBulker = isBulkTaskUser();
             const activeTasks = allTasksCache
                 .filter(task => getAdminTaskEffectiveStatus(task) === 'active')
-                .filter(task => !userTaskSubmissionIds.has(task.id))
+                .filter(task => {
+                    // Show task if user hasn't submitted it yet
+                    if (!userTaskSubmissionIds.has(task.id)) return true;
+                    // If they have submitted it: for bulkers, keep visible if submitted today (until 12 AM)
+                    if (isBulker) {
+                        return userTaskTodaySubmissionIds.has(task.id);
+                    }
+                    return false;
+                })
                 .filter(() => !hideNewTasksForDailyLimit)
                 .sort((a, b) => timestampToMillis(b.createdAt) - timestampToMillis(a.createdAt));
             if (!activeTasks.length) {
@@ -5324,17 +5333,19 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                     } catch (uploadErr) {
                         console.warn('Screenshot upload failed (continuing with Firebase-only):', uploadErr);
                     }
+                    
+                    if (submitBtn) { submitBtn.disabled = true; submitBtn.textContent = 'Verifying screenshot...'; }
 
-                    if (submitBtn) submitBtn.textContent = 'Submitting...';
-
-                    // Step 2: Create D1 task submission record
+                    // Step 2: Create D1 task submission record (with synchronous OCR)
                     const reservationId = activeTaskReservation.id || getTaskReservationDocId(task.id, currentUser.uid);
+                    let submissionId = `sub_${task.id.slice(0, 12)}_${currentUser.uid.slice(0, 12)}_${Date.now()}`;
                     try {
                         const token = await getBackendAuthToken();
-                        await fetchWithTimeout(`${BACKEND_BASE_URL}/api/task-submissions`, {
+                        const response = await fetchWithTimeout(`${BACKEND_BASE_URL}/api/task-submissions`, {
                             method: 'POST',
                             headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
                             body: JSON.stringify({
+                                id: submissionId,
                                 taskId: task.id,
                                 reservationId,
                                 assignedComment: activeTaskReservation.comment,
@@ -5349,7 +5360,20 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                                 userEmail: currentUser.email || currentUserData?.email || '',
                                 payoutDelayDays: Number(task.paymentDelayDays || task.paymentDays || 7)
                             })
-                        }, 10000);
+                        }, 25000); // 25s for synchronous OCR
+                        
+                        const resData = await response.json().catch(() => ({}));
+                        if (!response.ok) {
+                            if (resData.error === 'COMMENT_NOT_MATCHED') {
+                                throw new Error('Your comment is wrong. Copy the same comment as given.');
+                            } else {
+                                throw new Error(resData.detail || resData.error || 'Submission failed');
+                            }
+                        }
+                        if (resData.submissionId) {
+                            submissionId = resData.submissionId;
+                        }
+
                         // Mark reservation as submitted on backend
                         const token2 = await getBackendAuthToken();
                         fetchWithTimeout(`${BACKEND_BASE_URL}/api/task-reservations/${encodeURIComponent(reservationId)}/submit`, {
@@ -5357,11 +5381,17 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                             headers: { Authorization: `Bearer ${token2}` }
                         }, 5000).catch(e => console.warn('Backend reservation mark failed:', e));
                     } catch (backendErr) {
-                        console.warn('D1 submission save failed (continuing with Firebase):', backendErr);
+                        console.error('D1 submission save failed:', backendErr);
+                        showNotification(backendErr.message || 'Validation failed. Please check your screenshot.', true);
+                        if (submitBtn) { submitBtn.disabled = false; submitBtn.textContent = 'Submit Mission'; }
+                        return; // Stop execution here! Do not proceed to Firebase.
                     }
 
-                    // Step 3: Firebase submission (always, for backwards compatibility)
-                    await addDoc(collection(db, `artifacts/${appId}/public/data/task_submissions`), {
+                    if (submitBtn) submitBtn.textContent = 'Submitting...';
+
+                    // Step 3: Firebase submission (always, for backwards compatibility, with aligned ID)
+                    await setDoc(doc(db, `artifacts/${appId}/public/data/task_submissions`, submissionId), {
+                        id: submissionId,
                         taskId: task.id,
                         taskCode: task.taskCode || task.id,
                         taskTitle,
@@ -5389,9 +5419,9 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                         manualStatus: 'pending',
                         autoStatus: 'waiting_scraper',
                         verificationMode: 'manual_and_auto_ready',
-                        ocrStatus: 'pending',
+                        ocrStatus: 'completed',
                         ocrExtractedName: '',
-                        ocrExtractedComment: '',
+                        ocrExtractedComment: activeTaskReservation.comment,
                         ocrExtractedLogoUrl: '',
                         scraperStatus: 'not_configured',
                         payoutStatus: 'pending',
@@ -5532,7 +5562,12 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             if (!currentUser?.uid) throw new Error('Please login again.');
             await preloadUserTaskParticipation(currentUser.uid);
             if (userTaskSubmissionIds.has(task.id)) {
-                throw new Error('You have already submitted this task.');
+                if (!isBulkTaskUser()) {
+                    throw new Error('You have already submitted this task.');
+                } else if (!userTaskTodaySubmissionIds.has(task.id)) {
+                    // Bulker submitted this on a previous day, so it has now disappeared/locked for them
+                    throw new Error('You have already submitted this task.');
+                }
             }
             if (!isBulkTaskUser() && userTaskTodaySubmissionIds.size >= NORMAL_USER_DAILY_TASK_LIMIT) {
                 throw new Error('Daily task limit reached. Please continue tomorrow.');
@@ -5868,40 +5903,51 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                 
                 const handleLinkInput = async () => {
                     const link = linkInput.value.trim();
+                    if (!link) return;
+
+                    const isPlayStoreUrl = link.includes('play.google.com') && link.includes('id=');
+                    if (!isPlayStoreUrl) return;
+
+                    if (linkInput.dataset.scrapingInProgress === 'true' || linkInput.dataset.scrapedUrl === link) {
+                        return;
+                    }
                     
-                    if (link.includes('play.google.com')) {
-                        try {
-                            const token = await getBackendAuthToken();
-                            linkInput.classList.add('border-cyan-500', 'animate-pulse');
-                            const response = await fetchWithTimeout(`${BACKEND_BASE_URL}/api/admin/scrape-playstore`, {
-                                method: 'POST',
-                                headers: {
-                                    Authorization: `Bearer ${token}`,
-                                    'Content-Type': 'application/json'
-                                },
-                                body: JSON.stringify({ url: link })
-                            }, 10000);
-                            
-                            const data = await response.json();
-                            linkInput.classList.remove('border-cyan-500', 'animate-pulse');
-                            if (response.ok && data.ok) {
-                                if (data.name) {
-                                    const titleInput = document.getElementById('admin-task-title');
-                                    if (titleInput) titleInput.value = data.name;
-                                }
-                                if (data.logoUrl) {
-                                    linkInput.dataset.scrapedLogoUrl = data.logoUrl;
-                                    updateAdminTaskLogoPreview();
-                                }
-                                showNotification('Play Store details fetched successfully.');
+                    try {
+                        linkInput.dataset.scrapingInProgress = 'true';
+                        const token = await getBackendAuthToken();
+                        linkInput.classList.add('border-cyan-500', 'animate-pulse');
+                        const response = await fetchWithTimeout(`${BACKEND_BASE_URL}/api/admin/scrape-playstore`, {
+                            method: 'POST',
+                            headers: {
+                                Authorization: `Bearer ${token}`,
+                                'Content-Type': 'application/json'
+                            },
+                            body: JSON.stringify({ url: link })
+                        }, 10000);
+                        
+                        const data = await response.json();
+                        linkInput.classList.remove('border-cyan-500', 'animate-pulse');
+                        if (response.ok && data.ok) {
+                            linkInput.dataset.scrapedUrl = link;
+                            if (data.name) {
+                                const titleInput = document.getElementById('admin-task-title');
+                                if (titleInput) titleInput.value = data.name;
                             }
-                        } catch (err) {
-                            console.error('Play Store scraping failed:', err);
-                            linkInput.classList.remove('border-cyan-500', 'animate-pulse');
+                            if (data.logoUrl) {
+                                linkInput.dataset.scrapedLogoUrl = data.logoUrl;
+                                updateAdminTaskLogoPreview();
+                            }
+                            showNotification('Play Store details fetched successfully.');
                         }
+                    } catch (err) {
+                        console.error('Play Store scraping failed:', err);
+                        linkInput.classList.remove('border-cyan-500', 'animate-pulse');
+                    } finally {
+                        linkInput.dataset.scrapingInProgress = 'false';
                     }
                 };
 
+                linkInput.addEventListener('input', handleLinkInput);
                 linkInput.addEventListener('paste', () => {
                     setTimeout(handleLinkInput, 100);
                 });
@@ -6192,7 +6238,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                 const status = getAdminTaskEffectiveStatus(task);
                 if (filter !== 'all' && status !== filter) return false;
                 if (!search) return true;
-                return [task.title, task.category, task.instructions, task.taskGroup, task.taskSubtypeLabel, task.reviewComment, status]
+                return [task.title, task.category, task.instructions, task.taskGroup, task.taskSubtypeLabel, status]
                     .some(value => String(value || '').toLowerCase().includes(search));
             });
             const activeCount = allTasksCache.filter(task => getAdminTaskEffectiveStatus(task) === 'active').length;
@@ -6262,9 +6308,6 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                                         <span class="rounded-full ${statusClass} px-2.5 py-1 text-[11px] font-black">${isLive ? 'Live' : status === 'closed' ? 'Closed' : 'Off'}</span>
                                     </div>
                                     <h4 class="mt-2 text-base font-black leading-snug text-gray-900 dark:text-white">${escapeHtml(task.title || subtypeMeta.label)}</h4>
-                                    <p class="mt-1 text-sm leading-5 text-gray-500 dark:text-gray-400">${escapeHtml(task.instructions || 'No instructions added.')}</p>
-                                    ${task.taskLink ? `<p class="mt-2 truncate text-xs font-bold text-blue-600 dark:text-blue-300">${escapeHtml(task.taskLink)}</p>` : ''}
-                                    ${isAdminReviewTask(task) && (task.reviewComment || task.commentToCopy) ? `<p class="mt-2 line-clamp-2 rounded-xl bg-white px-3 py-2 text-xs font-semibold text-gray-600 dark:bg-gray-800 dark:text-gray-300">${escapeHtml(task.reviewComment || task.commentToCopy)}</p>` : ''}
                                 </div>
                             </div>
                             <div class="shrink-0 sm:text-right">
@@ -6282,13 +6325,164 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                                 ${isLive ? 'ON' : 'OFF'}
                             </button>
                             <div class="flex flex-wrap gap-2">
-                                ${isAdminReviewTask(task) ? getAdminTaskIconButton('edit-admin-task-comment', task.id, 'Edit review comment', '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 10h8M8 14h5M21 12c0 4.418-4.03 8-9 8a10.6 10.6 0 0 1-4.51-.98L3 20l1.26-3.78A7.55 7.55 0 0 1 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"></path>', 'blue') : ''}
+                                ${isAdminReviewTask(task) ? getAdminTaskIconButton('manage-task-comments', task.id, 'Manage Comments', '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a10.6 10.6 0 0 1-4.51-.98L3 20l1.26-3.78A7.55 7.55 0 0 1 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"></path>', 'blue') : ''}
                                 ${getAdminTaskIconButton('edit-admin-task', task.id, 'Edit task', '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L10.582 16.07a4.5 4.5 0 0 1-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 0 1 1.13-1.897l8.932-8.931z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19.5 7.125 16.875 4.5"></path>', 'slate')}
                                 ${getAdminTaskIconButton('delete-admin-task', task.id, 'Delete task', '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="m14.74 9-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673A2.25 2.25 0 0 1 15.916 21H8.084a2.25 2.25 0 0 1-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 0 0-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 0 1 3.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 0 0-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 0 0-7.5 0"></path>', 'red')}
                             </div>
                         </div>
                     </div>`;
             }).join('') : '<p class="rounded-2xl border border-dashed border-gray-200 py-8 text-center text-sm font-semibold text-gray-500 dark:border-gray-700 dark:text-gray-400">No matching task found.</p>';
+        };
+
+        const showAdminTaskCommentsPage = async (taskId) => {
+            const task = allTasksCache.find(item => item.id === taskId);
+            if (!task) return showNotification('Task not found.', true);
+            
+            const content = `
+                ${getPageHeader(`Comments - ${escapeHtml(task.title || 'Task')}`)}
+                <div class="max-w-2xl mx-auto space-y-6 pb-24 px-4">
+                    <!-- Add Comment Form -->
+                    <section class="bg-white dark:bg-gray-800 p-6 rounded-2xl shadow-md border border-gray-100 dark:border-gray-700 space-y-4">
+                        <h3 class="text-base font-extrabold text-gray-900 dark:text-white">Add Review Comment</h3>
+                        <div class="flex gap-2">
+                            <input type="text" id="admin-comment-input" placeholder="Enter review comment..." class="flex-grow px-4 py-2.5 bg-gray-50 dark:bg-gray-700 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none text-sm border border-gray-100 dark:border-gray-600">
+                            <button id="admin-comment-add-btn" class="px-5 py-2.5 bg-blue-600 text-white font-bold rounded-xl hover:bg-blue-700 transition shrink-0">Add</button>
+                        </div>
+                    </section>
+
+                    <!-- Comments Listing & Tracking -->
+                    <section class="bg-white dark:bg-gray-800 p-6 rounded-2xl shadow-md border border-gray-100 dark:border-gray-700 space-y-4">
+                        <h3 class="text-base font-extrabold text-gray-900 dark:text-white">Review Comments & Reservations</h3>
+                        <div id="admin-comments-container" class="divide-y divide-gray-100 dark:divide-gray-700">
+                            <div class="py-6 text-center text-sm text-gray-400">Loading comments & reservations...</div>
+                        </div>
+                    </section>
+                </div>
+                ${getPageFooter()}`;
+
+            showPage(content, { onBack: showAdminTaskPage, returnTo: 'admin', keepBottomNav: true });
+            
+            let reservations = [];
+            try {
+                const token = await getBackendAuthToken();
+                const resp = await fetchWithTimeout(`${BACKEND_BASE_URL}/api/admin/task-reservations/${encodeURIComponent(taskId)}`, {
+                    headers: { Authorization: `Bearer ${token}` }
+                }, 8000);
+                const data = await resp.json().catch(() => ({}));
+                if (data.ok && Array.isArray(data.reservations)) {
+                    reservations = data.reservations;
+                }
+            } catch (err) {
+                console.error('Failed to load active reservations:', err);
+            }
+
+            const renderComments = () => {
+                const container = document.getElementById('admin-comments-container');
+                if (!container) return;
+                
+                const comments = getTaskCommentPool(task);
+                if (comments.length === 0) {
+                    container.innerHTML = `<p class="py-6 text-center text-sm text-gray-400 italic">No comments added yet.</p>`;
+                    return;
+                }
+
+                container.innerHTML = comments.map((comment, index) => {
+                    const reservation = reservations.find(r => r.comment === comment);
+                    let resInfo = '';
+                    if (reservation) {
+                        const remaining = Math.max(0, reservation.expiresAt - Date.now());
+                        const mins = Math.floor(remaining / 60000);
+                        const secs = Math.floor((remaining % 60000) / 1000);
+                        const timeStr = remaining > 0 ? `${mins}m ${secs}s` : 'Expired';
+                        resInfo = `
+                            <div class="mt-1.5 flex items-center gap-1.5 text-[10px] font-bold text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/20 px-2.5 py-1 rounded-lg w-fit">
+                                <span class="h-1.5 w-1.5 rounded-full bg-amber-500 animate-pulse"></span>
+                                Reserved by: ${escapeHtml(reservation.userName)} (${escapeHtml(reservation.userEmail)}) · Expires: ${timeStr}
+                            </div>`;
+                    }
+
+                    return `
+                        <div class="py-4 flex flex-col gap-1.5">
+                            <div class="flex justify-between items-start gap-4">
+                                <p class="text-sm font-semibold text-gray-800 dark:text-gray-200 flex-1">${index + 1}. "${escapeHtml(comment)}"</p>
+                                <div class="flex gap-1 shrink-0">
+                                    <button data-action="edit-comment-item" data-index="${index}" class="p-1.5 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-lg transition">
+                                        <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"></path></svg>
+                                    </button>
+                                    <button data-action="delete-comment-item" data-index="${index}" class="p-1.5 text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition">
+                                        <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+                                    </button>
+                                </div>
+                            </div>
+                            ${resInfo}
+                        </div>`;
+                }).join('');
+
+                container.querySelectorAll('[data-action="delete-comment-item"]').forEach(btn => {
+                    btn.onclick = async (e) => {
+                        const index = Number(e.currentTarget.dataset.index);
+                        if (!confirm('Are you sure you want to delete this comment?')) return;
+                        
+                        const currentComments = getTaskCommentPool(task);
+                        currentComments.splice(index, 1);
+                        await saveTaskComments(taskId, currentComments);
+                        renderComments();
+                    };
+                });
+
+                container.querySelectorAll('[data-action="edit-comment-item"]').forEach(btn => {
+                    btn.onclick = async (e) => {
+                        const index = Number(e.currentTarget.dataset.index);
+                        const currentComments = getTaskCommentPool(task);
+                        const original = currentComments[index];
+                        const updated = prompt('Edit review comment:', original);
+                        if (updated === null) return;
+                        const clean = updated.trim();
+                        if (!clean) return showNotification('Comment cannot be empty.', true);
+                        
+                        currentComments[index] = clean;
+                        await saveTaskComments(taskId, currentComments);
+                        renderComments();
+                    };
+                });
+            };
+
+            const saveTaskComments = async (taskId, comments) => {
+                try {
+                    showLoading();
+                    task.reviewComments = comments;
+                    task.reviewComment = comments[0] || '';
+                    task.commentToCopy = comments[0] || '';
+                    
+                    await updateDoc(doc(db, `artifacts/${appId}/public/data/tasks`, taskId), {
+                        reviewComments: comments,
+                        reviewComment: comments[0] || '',
+                        commentToCopy: comments[0] || '',
+                        updatedAt: serverTimestamp(),
+                        updatedBy: currentUser.uid
+                    });
+                    hideLoading();
+                    showNotification('Comments updated successfully.');
+                } catch (err) {
+                    hideLoading();
+                    console.error('Failed to save comments:', err);
+                    showNotification('Failed to save comments.', true);
+                }
+            };
+
+            renderComments();
+
+            document.getElementById('admin-comment-add-btn').onclick = async () => {
+                const input = document.getElementById('admin-comment-input');
+                const text = input.value.trim();
+                if (!text) return showNotification('Please enter comment text.', true);
+                
+                const currentComments = getTaskCommentPool(task);
+                currentComments.push(text);
+                input.value = '';
+                await saveTaskComments(taskId, currentComments);
+                renderComments();
+            };
         };
 
         // ==================== ADMIN TASK SUBMISSIONS PAGE ====================
@@ -15628,6 +15822,10 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
 
                 case 'edit-admin-task-comment':
                     handleEditAdminTaskComment(taskid);
+                    break;
+
+                case 'manage-task-comments':
+                    showAdminTaskCommentsPage(taskid);
                     break;
 
                 case 'delete-admin-task':

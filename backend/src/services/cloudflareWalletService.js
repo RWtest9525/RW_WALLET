@@ -1159,6 +1159,20 @@ function readRequestBody(req, maxBytes) {
 const TASK_RESERVATION_MS = 5 * 60 * 1000;
 const TASK_SCREENSHOT_MAX_BYTES = 5 * 1024 * 1024;
 
+async function checkIsBulker(d1, userId) {
+  try {
+    const db = admin.firestore();
+    const userDoc = await db.doc(`artifacts/digital-wallet-prod/public/data/users/${userId}`).get();
+    if (userDoc.exists) {
+      const data = userDoc.data();
+      return !!(data.bulkTaskMode || data.taskBulkMode || data.isBulkTaskUser);
+    }
+  } catch (err) {
+    console.error('Error checking isBulker in Firestore:', err);
+  }
+  return false;
+}
+
 async function cleanupExpiredReservations(d1) {
   await d1.query(
     `UPDATE task_comment_reservations SET status = 'expired' WHERE status = 'reserved' AND expires_at <= ?`,
@@ -1168,6 +1182,8 @@ async function cleanupExpiredReservations(d1) {
 
 async function reserveTaskComment(d1, { taskId, userId, userName, userEmail, comments, reservationMs = TASK_RESERVATION_MS }) {
   await cleanupExpiredReservations(d1);
+
+  const isBulker = await checkIsBulker(d1, userId);
 
   // Check existing active reservation for this user+task
   const existing = await d1.first(
@@ -1180,18 +1196,29 @@ async function reserveTaskComment(d1, { taskId, userId, userName, userEmail, com
     return { ...details, ...existing, details_json: undefined };
   }
 
-  // Check already submitted
-  const submitted = await d1.first(
-    `SELECT id FROM task_submissions WHERE task_id = ? AND user_id = ? LIMIT 1`,
-    [taskId, userId]
-  );
-  if (submitted) throw new Error('TASK_ALREADY_SUBMITTED');
+  // Check already submitted (only for non-bulkers)
+  if (!isBulker) {
+    const submitted = await d1.first(
+      `SELECT id FROM task_submissions WHERE task_id = ? AND user_id = ? LIMIT 1`,
+      [taskId, userId]
+    );
+    if (submitted) throw new Error('TASK_ALREADY_SUBMITTED');
+  }
 
   // Find used comments by other active reservations
-  const activeReservations = await d1.all(
-    `SELECT comment FROM task_comment_reservations WHERE task_id = ? AND status IN ('reserved', 'submitted') AND (expires_at > ? OR status = 'submitted') AND user_id != ?`,
-    [taskId, nowMs(), userId]
-  );
+  let activeReservations;
+  if (isBulker) {
+    // Bulkers shouldn't reuse comments they themselves or others have already reserved or submitted
+    activeReservations = await d1.all(
+      `SELECT comment FROM task_comment_reservations WHERE task_id = ? AND status IN ('reserved', 'submitted') AND (expires_at > ? OR status = 'submitted')`,
+      [taskId, nowMs()]
+    );
+  } else {
+    activeReservations = await d1.all(
+      `SELECT comment FROM task_comment_reservations WHERE task_id = ? AND status IN ('reserved', 'submitted') AND (expires_at > ? OR status = 'submitted') AND user_id != ?`,
+      [taskId, nowMs(), userId]
+    );
+  }
   const usedComments = new Set(activeReservations.map(r => r.comment));
 
   // Pick first available comment
@@ -2097,6 +2124,31 @@ function registerRoutes(app, { d1, r2 }) {
     res.json({ ok: true, reservation });
   });
 
+  app.get('/api/admin/task-reservations/:taskId', requireHttpAuth, async (req, res) => {
+    if (!req.auth.isAdmin) return res.status(403).json({ ok: false, error: 'ADMIN_REQUIRED' });
+    try {
+      await cleanupExpiredReservations(d1);
+      const reservations = await d1.all(
+        `SELECT * FROM task_comment_reservations WHERE task_id = ? ORDER BY reserved_at DESC`,
+        [req.params.taskId]
+      );
+      const formatted = reservations.map(r => {
+        let details = {};
+        try { details = r.details_json ? JSON.parse(r.details_json) : {}; } catch {}
+        return {
+          ...r,
+          userName: details.userName || '',
+          userEmail: details.userEmail || '',
+          expiresAt: r.expires_at // make sure to format matching frontend expectation
+        };
+      });
+      res.json({ ok: true, reservations: formatted });
+    } catch (error) {
+      console.error('Failed to get task reservations:', error);
+      res.status(500).json({ ok: false, error: 'GET_RESERVATIONS_FAILED' });
+    }
+  });
+
   app.post('/api/task-reservations/:reservationId/submit', requireHttpAuth, async (req, res) => {
     try {
       await markReservationSubmitted(d1, req.params.reservationId);
@@ -2178,14 +2230,163 @@ function registerRoutes(app, { d1, r2 }) {
   // ── Task Submission Endpoints ────────────────────────────────────────────
   app.post('/api/task-submissions', requireHttpAuth, rateLimit({ windowMs: 60000, maxRequests: 10 }), async (req, res) => {
     try {
-      const submissionId = await saveTaskSubmission(d1, { ...req.body, userId: req.auth.sub });
+      const { taskId, assignedComment, screenshotUrl } = req.body;
+      const userId = req.auth.sub;
+
+      if (!screenshotUrl) {
+        return res.status(400).json({ ok: false, error: 'SCREENSHOT_REQUIRED' });
+      }
+
+      // 1. Download image from URL synchronously
+      let imgBuffer;
+      try {
+        const imgResponse = await fetch(screenshotUrl);
+        if (!imgResponse.ok) throw new Error(`Status ${imgResponse.status}`);
+        imgBuffer = Buffer.from(await imgResponse.arrayBuffer());
+      } catch (err) {
+        console.error('[OCR-Submit] Image fetch failed:', err);
+        return res.status(400).json({ ok: false, error: 'SCREENSHOT_FETCH_FAILED', detail: 'Could not retrieve screenshot for validation' });
+      }
+
+      // 2. Run Tesseract OCR synchronously
+      let ocrText = '';
+      let ocrConfidence = 0;
+      let matched = false;
+      let nameLine = null;
+      let data = null;
+
+      try {
+        const ocrResult = await Tesseract.recognize(imgBuffer, 'eng');
+        data = ocrResult.data;
+        ocrText = (data.text || '').trim();
+        ocrConfidence = (data.confidence || 0) / 100;
+      } catch (ocrErr) {
+        console.error('[OCR-Submit] Tesseract OCR failed:', ocrErr);
+        return res.status(500).json({ ok: false, error: 'OCR_FAILED', detail: 'Screenshot text recognition failed' });
+      }
+
+      const cleanStr = (s) => String(s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+      const cleanedComment = cleanStr(assignedComment);
+
+      if (data && data.lines && data.lines.length > 0) {
+        let foundIndex = -1;
+        for (let j = 0; j < data.lines.length; j++) {
+          const cleanedLine = cleanStr(data.lines[j].text);
+          if (cleanedLine && (cleanedLine.includes(cleanedComment) || cleanedComment.includes(cleanedLine) || (cleanedComment.length > 5 && cleanedLine.length > 5 && cleanedLine.indexOf(cleanedComment.slice(0, 10)) !== -1))) {
+            matched = true;
+            foundIndex = j;
+            break;
+          }
+        }
+
+        if (foundIndex !== -1) {
+          // Look for reviewer name 1-3 lines above comment line
+          for (let k = foundIndex - 1; k >= Math.max(0, foundIndex - 3); k--) {
+            const txt = data.lines[k].text.trim();
+            const isRatingOrDate = /^[0-9★☆\s]+$/.test(txt) || txt.toLowerCase().includes('ago') || txt.toLowerCase().includes('edited') || /\d/.test(txt) && (txt.includes('/') || txt.includes('-'));
+            if (txt && !isRatingOrDate && txt.length > 2 && txt.length < 50) {
+              nameLine = data.lines[k];
+              break;
+            }
+          }
+          if (!nameLine && foundIndex >= 2) nameLine = data.lines[foundIndex - 2];
+          if (!nameLine && foundIndex >= 1) nameLine = data.lines[foundIndex - 1];
+        }
+
+        // Fallback: search first 10 lines
+        if (!nameLine) {
+          for (let j = 0; j < Math.min(data.lines.length, 10); j++) {
+            const txt = data.lines[j].text.trim();
+            const isRatingOrDate = /^[0-9★☆\s]+$/.test(txt) || txt.toLowerCase().includes('ago') || txt.toLowerCase().includes('edited') || txt.length < 3 || txt.length > 40;
+            if (txt && !isRatingOrDate) {
+              nameLine = data.lines[j];
+              break;
+            }
+          }
+        }
+      }
+
+      if (!matched) {
+        console.warn(`[OCR-Submit] Comment mismatch for user ${userId}. Assigned comment: "${assignedComment}". OCR Extracted: "${ocrText}"`);
+        return res.status(400).json({
+          ok: false,
+          error: 'COMMENT_NOT_MATCHED',
+          detail: 'Your comment is wrong. Copy the same comment as given.'
+        });
+      }
+
+      // 3. Save task submission to D1
+      const submissionId = await saveTaskSubmission(d1, { ...req.body, userId });
+
       if (req.body.reservationId) {
         await markReservationSubmitted(d1, req.body.reservationId).catch(e => console.warn('Reservation mark failed:', e));
       }
-      processOcrAndGmailProfile(d1, r2, submissionId).catch(e => console.error('Background OCR processor failed:', e));
+
+      // 4. Crop Gmail profile avatar using Jimp synchronously (since we already have the nameLine and image buffer)
+      let gmailName = nameLine ? nameLine.text.trim().replace(/[\r\n]+/g, ' ') : 'Unknown User';
+      let gmailLogoUrl = '';
+
+      if (nameLine) {
+        try {
+          const image = await Jimp.read(imgBuffer);
+          const imgWidth = image.bitmap.width;
+          const imgHeight = image.bitmap.height;
+          const bbox = nameLine.bbox;
+
+          if (bbox) {
+            const cropX = Math.max(0, Math.min(bbox.x0 - 85, imgWidth - 75));
+            const cropY = Math.max(0, Math.min(bbox.y0 - 15, imgHeight - 75));
+            const cropW = Math.min(75, imgWidth - cropX);
+            const cropH = Math.min(75, imgHeight - cropY);
+
+            if (cropW > 10 && cropH > 10) {
+              const avatar = image.clone().crop(cropX, cropY, cropW, cropH);
+              const avatarBuffer = await avatar.getBufferAsync(Jimp.MIME_JPEG);
+              const timestamp = Date.now();
+              const avatarFileName = `${timestamp}-${submissionId}-avatar.jpg`;
+
+              const driveFolderId = process.env.GOOGLE_DRIVE_FOLDER_ID;
+              if (driveFolderId && (process.env.GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON || process.env.FIREBASE_SERVICE_ACCOUNT_JSON)) {
+                try {
+                  const driveResult = await uploadToGoogleDrive(avatarBuffer, avatarFileName, 'image/jpeg', driveFolderId, { appName: 'Avatars' });
+                  gmailLogoUrl = driveResult.directUrl;
+                } catch (driveErr) {
+                  console.error('[OCR-Submit] Avatar Drive upload failed:', driveErr.message);
+                }
+              }
+
+              if (!gmailLogoUrl && r2 && process.env.CLOUDFLARE_R2_BUCKET) {
+                const key = `task-screenshots/avatars/${userId}/${avatarFileName}`;
+                gmailLogoUrl = await putR2Object(r2, key, avatarBuffer, 'image/jpeg');
+              }
+            }
+          }
+        } catch (cropErr) {
+          console.error('[OCR-Submit] Avatar cropping failed:', cropErr);
+        }
+      }
+
+      const details = {};
+      try {
+        if (req.body.details) {
+          Object.assign(details, req.body.details);
+        }
+      } catch {}
+      details.gmailLogoUrl = gmailLogoUrl;
+
+      // Update OCR fields directly in D1
+      await updateTaskSubmission(d1, submissionId, {
+        ocrStatus: 'completed',
+        ocrExtractedText: ocrText.slice(0, 4000),
+        ocrExtractedName: gmailName.slice(0, 200),
+        ocrConfidence,
+        detailsJson: details
+      });
+
+      console.log(`[OCR-Submit] Synchronous verification and save completed for ${submissionId}`);
       res.json({ ok: true, submissionId });
     } catch (error) {
-      console.error('Task submission save failed:', error);
+      console.error('[OCR-Submit] Task submission save failed:', error);
       res.status(500).json({ ok: false, error: 'SUBMISSION_FAILED' });
     }
   });
