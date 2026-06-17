@@ -4,6 +4,7 @@ const admin = require('firebase-admin');
 const path = require('path');
 const { S3Client, PutObjectCommand, GetObjectCommand } = require('@aws-sdk/client-s3');
 const Tesseract = require('tesseract.js');
+const Jimp = require('jimp');
 const { google } = require('googleapis');
 const { Readable } = require('stream');
 
@@ -391,6 +392,26 @@ async function initSchema(d1) {
   `);
   await d1.query(`CREATE INDEX IF NOT EXISTS idx_sync_audit_status ON sync_audit_log (status, created_at DESC)`);
   await d1.query(`CREATE INDEX IF NOT EXISTS idx_sync_audit_entity ON sync_audit_log (entity_type, entity_id)`);
+
+  await d1.query(`
+    CREATE TABLE IF NOT EXISTS live_lists (
+      id TEXT PRIMARY KEY,
+      app_name TEXT NOT NULL,
+      date TEXT NOT NULL,
+      content TEXT NOT NULL,
+      created_at INTEGER NOT NULL
+    )
+  `);
+
+  await d1.query(`
+    CREATE TABLE IF NOT EXISTS compiled_lists (
+      task_id TEXT NOT NULL,
+      date TEXT NOT NULL,
+      compiled_at INTEGER NOT NULL,
+      drive_folder_id TEXT,
+      PRIMARY KEY (task_id, date)
+    )
+  `);
 }
 
 async function ensureColumn(d1, table, column, type) {
@@ -1260,9 +1281,144 @@ async function updateTaskSubmission(d1, submissionId, updates = {}) {
   if (updates.payoutStatus !== undefined) { fields.push('payout_status = ?'); params.push(updates.payoutStatus); }
   if (updates.verifiedAt !== undefined) { fields.push('verified_at = ?'); params.push(updates.verifiedAt); }
   if (updates.paidAt !== undefined) { fields.push('paid_at = ?'); params.push(updates.paidAt); }
+  if (updates.detailsJson !== undefined) { fields.push('details_json = ?'); params.push(JSON.stringify(updates.detailsJson)); }
   if (!fields.length) return;
   params.push(submissionId);
   await d1.query(`UPDATE task_submissions SET ${fields.join(', ')} WHERE id = ?`, params);
+}
+
+async function processOcrAndGmailProfile(d1, r2, submissionId) {
+  try {
+    const submission = await d1.first('SELECT * FROM task_submissions WHERE id = ? LIMIT 1', [submissionId]);
+    if (!submission || !submission.screenshot_url) return;
+
+    console.log(`[OCR] Auto-processing submission ${submissionId}...`);
+
+    // Download image from URL
+    const imgResponse = await fetch(submission.screenshot_url);
+    if (!imgResponse.ok) throw new Error(`Image download failed: ${imgResponse.status}`);
+    const imgBuffer = Buffer.from(await imgResponse.arrayBuffer());
+
+    // Run Tesseract OCR
+    const { data } = await Tesseract.recognize(imgBuffer, 'eng');
+    const text = (data.text || '').trim();
+    const confidence = (data.confidence || 0) / 100;
+
+    let gmailName = '';
+    let gmailLogoUrl = '';
+    let nameLine = null;
+
+    if (data.lines && data.lines.length > 0) {
+      // Look for assigned comment
+      const assignedComment = submission.assigned_comment || '';
+      const cleanedComment = assignedComment.toLowerCase().replace(/[^a-z0-9]/g, '');
+      let foundIndex = -1;
+
+      for (let j = 0; j < data.lines.length; j++) {
+        const cleanedLine = data.lines[j].text.toLowerCase().replace(/[^a-z0-9]/g, '');
+        if (cleanedLine && (cleanedLine.includes(cleanedComment) || cleanedComment.includes(cleanedLine) || (cleanedComment.length > 5 && cleanedLine.length > 5 && cleanedLine.indexOf(cleanedComment.slice(0, 10)) !== -1))) {
+          foundIndex = j;
+          break;
+        }
+      }
+
+      if (foundIndex !== -1) {
+        // Look for reviewer name 1-3 lines above comment line
+        for (let k = foundIndex - 1; k >= Math.max(0, foundIndex - 3); k--) {
+          const txt = data.lines[k].text.trim();
+          const isRatingOrDate = /^[0-9★☆\s]+$/.test(txt) || txt.toLowerCase().includes('ago') || txt.toLowerCase().includes('edited') || /\d/.test(txt) && (txt.includes('/') || txt.includes('-'));
+          if (txt && !isRatingOrDate && txt.length > 2 && txt.length < 50) {
+            nameLine = data.lines[k];
+            break;
+          }
+        }
+        if (!nameLine && foundIndex >= 2) nameLine = data.lines[foundIndex - 2];
+        if (!nameLine && foundIndex >= 1) nameLine = data.lines[foundIndex - 1];
+      }
+
+      // Fallback: search first 10 lines
+      if (!nameLine) {
+        for (let j = 0; j < Math.min(data.lines.length, 10); j++) {
+          const txt = data.lines[j].text.trim();
+          const isRatingOrDate = /^[0-9★☆\s]+$/.test(txt) || txt.toLowerCase().includes('ago') || txt.toLowerCase().includes('edited') || txt.length < 3 || txt.length > 40;
+          if (txt && !isRatingOrDate) {
+            nameLine = data.lines[j];
+            break;
+          }
+        }
+      }
+    }
+
+    if (nameLine) {
+      gmailName = nameLine.text.trim().replace(/[\r\n]+/g, ' ');
+      
+      // Crop Gmail avatar logo using Jimp
+      try {
+        const image = await Jimp.read(imgBuffer);
+        const imgWidth = image.bitmap.width;
+        const imgHeight = image.bitmap.height;
+        const bbox = nameLine.bbox;
+
+        if (bbox) {
+          const cropX = Math.max(0, Math.min(bbox.x0 - 85, imgWidth - 75));
+          const cropY = Math.max(0, Math.min(bbox.y0 - 15, imgHeight - 75));
+          const cropW = Math.min(75, imgWidth - cropX);
+          const cropH = Math.min(75, imgHeight - cropY);
+
+          if (cropW > 10 && cropH > 10) {
+            const avatar = image.clone().crop(cropX, cropY, cropW, cropH);
+            const avatarBuffer = await avatar.getBufferAsync(Jimp.MIME_JPEG);
+            const timestamp = Date.now();
+            const avatarFileName = `${timestamp}-${submissionId}-avatar.jpg`;
+
+            // Try uploading to Google Drive first
+            const driveFolderId = process.env.GOOGLE_DRIVE_FOLDER_ID;
+            if (driveFolderId && (process.env.GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON || process.env.FIREBASE_SERVICE_ACCOUNT_JSON)) {
+              try {
+                const driveResult = await uploadToGoogleDrive(avatarBuffer, avatarFileName, 'image/jpeg', driveFolderId, { appName: 'Avatars' });
+                gmailLogoUrl = driveResult.directUrl;
+              } catch (driveErr) {
+                console.error('[OCR] Avatar Drive upload failed:', driveErr.message);
+              }
+            }
+
+            // Fallback to R2
+            if (!gmailLogoUrl && r2 && process.env.CLOUDFLARE_R2_BUCKET) {
+              const key = `task-screenshots/avatars/${submission.user_id}/${avatarFileName}`;
+              gmailLogoUrl = await putR2Object(r2, key, avatarBuffer, 'image/jpeg');
+            }
+          }
+        }
+      } catch (cropErr) {
+        console.error('[OCR] Avatar cropping failed:', cropErr);
+      }
+    }
+
+    if (!gmailName) {
+      gmailName = 'Unknown User';
+    }
+
+    const details = {};
+    try {
+      if (submission.details_json) {
+        Object.assign(details, JSON.parse(submission.details_json));
+      }
+    } catch {}
+    details.gmailLogoUrl = gmailLogoUrl;
+
+    await updateTaskSubmission(d1, submissionId, {
+      ocrStatus: 'completed',
+      ocrExtractedText: text.slice(0, 4000),
+      ocrExtractedName: gmailName.slice(0, 200),
+      ocrConfidence: confidence,
+      detailsJson: details
+    });
+
+    console.log(`[OCR] Auto-process complete for ${submissionId}: name="${gmailName}", logo="${gmailLogoUrl}"`);
+  } catch (err) {
+    console.error(`[OCR] Auto-processing failed for ${submissionId}:`, err);
+    await updateTaskSubmission(d1, submissionId, { ocrStatus: 'failed' }).catch(() => {});
+  }
 }
 
 // ── Sync Audit helpers ─────────────────────────────────────────────────────
@@ -1371,6 +1527,158 @@ async function processAutoPayouts(d1) {
 
   if (paidCount) console.log(`Auto-payout: processed ${paidCount} task rewards`);
   return paidCount;
+}
+
+async function processDailyLists(d1) {
+  try {
+    const drive = getGoogleDriveClient();
+    if (!drive) {
+      console.warn('[Scheduler] Google Drive is not configured, skipping daily list sync.');
+      return;
+    }
+
+    const db = admin.firestore();
+    const tasksSnap = await db.collection('artifacts/digital-wallet-prod/public/data/tasks').get().catch(() => null);
+    if (!tasksSnap || tasksSnap.empty) return;
+
+    const now = new Date();
+    const istDate = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Kolkata' }));
+    const currentHours = istDate.getHours();
+    const currentMinutes = istDate.getMinutes();
+    const todayDateStr = `${istDate.getFullYear()}-${String(istDate.getMonth() + 1).padStart(2, '0')}-${String(istDate.getDate()).padStart(2, '0')}`;
+
+    console.log(`[Scheduler] Checking daily lists at IST ${currentHours}:${currentMinutes} for ${todayDateStr}...`);
+
+    for (const taskDoc of tasksSnap.docs) {
+      const task = taskDoc.data();
+      const listTime = task.listTime || task.list_time;
+      if (!listTime || task.status === 'draft') continue;
+
+      const [listH, listM] = listTime.split(':').map(Number);
+      if (currentHours < listH || (currentHours === listH && currentMinutes < listM)) {
+        continue;
+      }
+
+      const alreadyCompiled = await d1.first(
+        'SELECT * FROM compiled_lists WHERE task_id = ? AND date = ? LIMIT 1',
+        [taskDoc.id, todayDateStr]
+      );
+      if (alreadyCompiled) {
+        continue;
+      }
+
+      console.log(`[Scheduler] Compiling list for task "${task.title}" (${taskDoc.id})...`);
+
+      const submissions = await d1.all(
+        'SELECT * FROM task_submissions WHERE task_id = ?',
+        [taskDoc.id]
+      );
+
+      if (!submissions.length) {
+        console.log(`[Scheduler] No submissions for task ${taskDoc.id}, marking compiled.`);
+        await d1.query(
+          'INSERT INTO compiled_lists (task_id, date, compiled_at, drive_folder_id) VALUES (?, ?, ?, ?)',
+          [taskDoc.id, todayDateStr, Date.now(), 'empty']
+        );
+        continue;
+      }
+
+      const appNameLower = String(task.appName || task.title || '').trim().toLowerCase();
+      const liveList = await d1.first(
+        'SELECT * FROM live_lists WHERE LOWER(app_name) = ? ORDER BY date DESC LIMIT 1',
+        [appNameLower]
+      );
+
+      for (const sub of submissions) {
+        if (sub.scraper_status !== 'live_confirmed') {
+          let isLive = false;
+          if (liveList && sub.ocr_extracted_name) {
+            isLive = liveList.content.toLowerCase().includes(sub.ocr_extracted_name.toLowerCase());
+          }
+
+          if (isLive) {
+            await d1.query(
+              "UPDATE task_submissions SET scraper_status = 'live_confirmed', manual_status = 'approved', verified_at = ? WHERE id = ?",
+              [Date.now(), sub.id]
+            );
+            const firestoreSubRef = db.doc(`artifacts/digital-wallet-prod/public/data/task_submissions/${sub.id}`);
+            await firestoreSubRef.update({
+              scraperStatus: 'live_confirmed',
+              manualStatus: 'approved',
+              status: 'approved',
+              verifiedAt: admin.firestore.FieldValue.serverTimestamp()
+            }).catch(e => console.error(`[Scheduler] Firestore sync failed for ${sub.id}:`, e));
+            
+            sub.scraper_status = 'live_confirmed';
+            sub.manual_status = 'approved';
+          } else {
+            await d1.query(
+              "UPDATE task_submissions SET scraper_status = 'not_live' WHERE id = ?",
+              [sub.id]
+            );
+            const firestoreSubRef = db.doc(`artifacts/digital-wallet-prod/public/data/task_submissions/${sub.id}`);
+            await firestoreSubRef.update({
+              scraperStatus: 'not_live'
+            }).catch(e => console.error(`[Scheduler] Firestore sync failed for ${sub.id}:`, e));
+
+            sub.scraper_status = 'not_live';
+          }
+        }
+      }
+
+      const csvRows = [
+        ['Submission ID', 'User Name', 'User Email', 'Submitted At', 'Assigned Comment', 'Gmail Name', 'Gmail Logo URL', 'Live Status', 'Payout Status']
+      ];
+      for (const sub of submissions) {
+        let details = {};
+        try { details = sub.details_json ? JSON.parse(sub.details_json) : {}; } catch {}
+        const gmailLogoUrl = details.gmailLogoUrl || '';
+        const submittedDateStr = new Date(sub.submitted_at).toISOString();
+        const liveStatus = sub.scraper_status === 'live_confirmed' ? 'Live' : 'Not Live';
+        csvRows.push([
+          sub.id,
+          sub.user_name || '',
+          sub.user_email || '',
+          submittedDateStr,
+          sub.assigned_comment || '',
+          sub.ocr_extracted_name || '',
+          gmailLogoUrl,
+          liveStatus,
+          sub.payout_status || 'pending'
+        ]);
+      }
+      const csvContent = csvRows.map(row => row.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(',')).join('\n');
+
+      try {
+        const driveFolderId = process.env.GOOGLE_DRIVE_FOLDER_ID || 'root';
+        const rwWalletRootId = await findOrCreateDriveFolder(drive, driveFolderId, 'rw wallet');
+        const appFolderId = await findOrCreateDriveFolder(drive, rwWalletRootId, task.appName || task.title || 'App Task');
+        const dateFolderId = await findOrCreateDriveFolder(drive, appFolderId, todayDateStr);
+
+        await drive.files.create({
+          requestBody: {
+            name: `Submissions_List_${todayDateStr}`,
+            mimeType: 'application/vnd.google-apps.spreadsheet',
+            parents: [dateFolderId]
+          },
+          media: {
+            mimeType: 'text/csv',
+            body: Readable.from([csvContent])
+          },
+          fields: 'id, webViewLink'
+        });
+
+        await d1.query(
+          'INSERT INTO compiled_lists (task_id, date, compiled_at, drive_folder_id) VALUES (?, ?, ?, ?)',
+          [taskDoc.id, todayDateStr, Date.now(), dateFolderId]
+        );
+      } catch (driveErr) {
+        console.error(`[Scheduler] Google Drive sync failed for task ${taskDoc.id}:`, driveErr);
+      }
+    }
+  } catch (err) {
+    console.error('[Scheduler] daily list processor failed:', err);
+  }
 }
 
 // ── Rate Limiter ───────────────────────────────────────────────────────────
@@ -1874,6 +2182,7 @@ function registerRoutes(app, { d1, r2 }) {
       if (req.body.reservationId) {
         await markReservationSubmitted(d1, req.body.reservationId).catch(e => console.warn('Reservation mark failed:', e));
       }
+      processOcrAndGmailProfile(d1, r2, submissionId).catch(e => console.error('Background OCR processor failed:', e));
       res.json({ ok: true, submissionId });
     } catch (error) {
       console.error('Task submission save failed:', error);
@@ -1897,7 +2206,35 @@ function registerRoutes(app, { d1, r2 }) {
   app.patch('/api/admin/task-submissions/:submissionId', requireHttpAuth, async (req, res) => {
     if (!req.auth.isAdmin) return res.status(403).json({ ok: false, error: 'ADMIN_REQUIRED' });
     try {
-      await updateTaskSubmission(d1, req.params.submissionId, req.body);
+      const subId = req.params.submissionId;
+      const updates = req.body;
+      const sub = await d1.first('SELECT * FROM task_submissions WHERE id = ? LIMIT 1', [subId]);
+      if (!sub) return res.status(404).json({ ok: false, error: 'SUBMISSION_NOT_FOUND' });
+
+      if (updates.payoutStatus === 'paid' && sub.payout_status !== 'paid') {
+        const reward = Number(sub.reward || 0);
+        if (reward > 0) {
+          const now = Date.now();
+          const transactionId = `task_payout_${sub.id}_${now}`;
+          await saveTransaction(d1, {
+            userId: sub.user_id,
+            transactionId,
+            type: 'credit',
+            amount: reward,
+            status: 'completed',
+            timestamp: now,
+            details: {
+              comment: `Task reward: ${sub.app_name || 'Task'}`,
+              source: 'task_manual_payout',
+              taskId: sub.task_id,
+              submissionId: sub.id
+            }
+          });
+          updates.paidAt = now;
+        }
+      }
+
+      await updateTaskSubmission(d1, subId, updates);
       res.json({ ok: true });
     } catch (error) {
       console.error('Task submission update failed:', error);
@@ -2081,6 +2418,156 @@ function registerRoutes(app, { d1, r2 }) {
     } catch (error) {
       console.error('Sync failure log failed:', error);
       res.status(500).json({ ok: false, error: 'LOG_FAILED' });
+    }
+  });
+
+  // Play Store Scraper API
+  app.post('/api/admin/scrape-playstore', requireHttpAuth, async (req, res) => {
+    if (!req.auth.isAdmin) return res.status(403).json({ ok: false, error: 'ADMIN_REQUIRED' });
+    try {
+      const { url } = req.body;
+      if (!url) return res.status(400).json({ ok: false, error: 'URL_REQUIRED' });
+      if (!url.includes('play.google.com')) return res.status(400).json({ ok: false, error: 'NOT_A_PLAY_STORE_URL' });
+
+      const response = await fetch(url, {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115.0.0.0 Safari/537.36'
+        }
+      });
+      if (!response.ok) throw new Error(`Failed to fetch Google Play Store: ${response.statusText}`);
+      
+      const html = await response.text();
+      
+      let title = '';
+      const ogTitleMatch = html.match(/<meta[^>]*property=["']og:title["'][^>]*content=["']([^"']+)["']/i) ||
+                           html.match(/<meta[^>]*content=["']([^"']+)["'][^>]*property=["']og:title["']/i);
+      if (ogTitleMatch) {
+        title = ogTitleMatch[1];
+      } else {
+        const titleTagMatch = html.match(/<title[^>]*>([^<]+)<\/title>/i);
+        if (titleTagMatch) title = titleTagMatch[1];
+      }
+      title = title.replace(/\s*-\s*Apps on Google Play/gi, '').trim();
+
+      let logoUrl = '';
+      const ogImageMatch = html.match(/<meta[^>]*property=["']og:image["'][^>]*content=["']([^"']+)["']/i) ||
+                           html.match(/<meta[^>]*content=["']([^"']+)["'][^>]*property=["']og:image["']/i);
+      if (ogImageMatch) {
+        logoUrl = ogImageMatch[1];
+      }
+
+      res.json({ ok: true, name: title, logoUrl });
+    } catch (error) {
+      console.error('Play Store scraping failed:', error);
+      res.status(500).json({ ok: false, error: 'SCRAPE_FAILED', message: error.message });
+    }
+  });
+
+  // User submissions history
+  app.get('/api/task-submissions', requireHttpAuth, async (req, res) => {
+    try {
+      const submissions = await listTaskSubmissions(d1, {
+        userId: req.auth.sub,
+        limit: Math.min(Number(req.query.limit || 100), 300)
+      });
+      res.json({ ok: true, submissions });
+    } catch (error) {
+      console.error('List user submissions failed:', error);
+      res.status(500).json({ ok: false, error: 'LOAD_SUBMISSIONS_FAILED' });
+    }
+  });
+
+  // Live Lists management API (List Finder integration)
+  app.get('/api/lists', async (req, res) => {
+    try {
+      const appName = String(req.query.appName || '').trim().toLowerCase();
+      const date = String(req.query.date || '').trim();
+      let sql = 'SELECT * FROM live_lists';
+      const params = [];
+      const conditions = [];
+      if (appName) {
+        conditions.push('LOWER(app_name) LIKE ?');
+        params.push(`%${appName}%`);
+      }
+      if (date) {
+        conditions.push('date = ?');
+        params.push(date);
+      }
+      if (conditions.length) {
+        sql += ' WHERE ' + conditions.join(' AND ');
+      }
+      sql += ' ORDER BY created_at DESC LIMIT 500';
+      const lists = await d1.all(sql, params);
+      
+      const formatted = lists.map(item => {
+        const lines = item.content.split(/\r?\n/).filter(Boolean);
+        return {
+          id: item.id,
+          appName: item.app_name,
+          date: item.date,
+          preview: lines.slice(0, 3).join('\n'),
+          lineCount: lines.length,
+          content: item.content,
+          createdAt: new Date(item.created_at).toISOString()
+        };
+      });
+      res.json({ ok: true, lists: formatted });
+    } catch (error) {
+      console.error('Fetch live lists failed:', error);
+      res.status(500).json({ ok: false, error: 'FETCH_LISTS_FAILED' });
+    }
+  });
+
+  app.get('/api/lists/:id', async (req, res) => {
+    try {
+      const item = await d1.first('SELECT * FROM live_lists WHERE id = ? LIMIT 1', [req.params.id]);
+      if (!item) return res.status(404).json({ ok: false, error: 'LIST_NOT_FOUND' });
+      const lines = item.content.split(/\r?\n/).filter(Boolean);
+      res.json({
+        ok: true,
+        list: {
+          id: item.id,
+          appName: item.app_name,
+          date: item.date,
+          content: item.content,
+          lineCount: lines.length,
+          createdAt: new Date(item.created_at).toISOString()
+        }
+      });
+    } catch (error) {
+      console.error('Fetch live list failed:', error);
+      res.status(500).json({ ok: false, error: 'FETCH_LIST_FAILED' });
+    }
+  });
+
+  app.post('/api/lists', requireHttpAuth, async (req, res) => {
+    if (!req.auth.isAdmin) return res.status(403).json({ ok: false, error: 'ADMIN_REQUIRED' });
+    try {
+      const { appName, date, content } = req.body;
+      if (!appName || !date || !content) {
+        return res.status(400).json({ ok: false, error: 'MISSING_FIELDS' });
+      }
+      const id = `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+      const now = Date.now();
+      await d1.query(
+        `INSERT INTO live_lists (id, app_name, date, content, created_at) VALUES (?, ?, ?, ?, ?)`,
+        [id, appName, date, content, now]
+      );
+      res.status(201).json({ ok: true, list: { id, appName, date, content, createdAt: new Date(now).toISOString() } });
+    } catch (error) {
+      console.error('Save live list failed:', error);
+      res.status(500).json({ ok: false, error: 'SAVE_LIST_FAILED' });
+    }
+  });
+
+  app.delete('/api/lists/:id', requireHttpAuth, async (req, res) => {
+    if (!req.auth.isAdmin) return res.status(403).json({ ok: false, error: 'ADMIN_REQUIRED' });
+    try {
+      await d1.query('DELETE FROM live_lists WHERE id = ?', [req.params.id]);
+      res.json({ ok: true });
+    } catch (error) {
+      console.error('Delete live list failed:', error);
+      res.status(500).json({ ok: false, error: 'DELETE_LIST_FAILED' });
     }
   });
 }
@@ -2304,6 +2791,12 @@ async function createCloudflareWalletService() {
     }, delay).unref?.();
   };
   scheduleAutoPayoutAt8PM();
+
+  processDailyLists(d1).catch((error) => console.error('Initial daily list compilation failed:', error));
+  const dailyListTimer = setInterval(() => {
+    processDailyLists(d1).catch((error) => console.error('Scheduled daily list compilation failed:', error));
+  }, 15 * 60 * 1000);
+  dailyListTimer.unref?.();
 
   return {
     d1,

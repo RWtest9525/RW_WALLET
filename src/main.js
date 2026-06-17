@@ -3952,6 +3952,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                         ${renderSettingAction('settings-profile-btn', 'My Profile', 'https://cdn-icons-png.flaticon.com/512/3135/3135715.png', 'blue')}
                         ${renderSettingAction('settings-track-income-btn', 'Track Income', 'https://cdn-icons-png.flaticon.com/512/3135/3135706.png', 'emerald')}
                         ${renderSettingAction('settings-invoice-btn', 'Invoice', 'https://cdn-icons-png.flaticon.com/512/337/337946.png', 'yellow')}
+                        ${renderSettingAction('settings-task-history-btn', 'Task History', TASK_ICON_URL, 'purple')}
                         <button id="settings-theme-btn" class="flex items-center justify-between w-full text-left p-4 bg-gray-100 dark:bg-gray-700 rounded-xl hover:bg-gray-200 dark:hover:bg-gray-600 transition font-medium">
                             <span>Toggle Light/Dark Mode</span>
                         <div class="relative w-5 h-5">
@@ -3971,6 +3972,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                         ${renderSettingAction('settings-admin-rates', 'Rate Settings', 'https://cdn-icons-png.flaticon.com/512/3524/3524659.png', 'emerald')}
                         ${renderSettingAction('settings-admin-maintenance', 'Maintenance Mode', 'https://cdn-icons-png.flaticon.com/512/2099/2099058.png', 'red')}
                         ${renderSettingAction('settings-admin-whats-new', "What's New Popup", 'https://cdn-icons-png.flaticon.com/512/1828/1828884.png', 'blue')}
+                        ${renderSettingAction('settings-admin-live-lists', 'Live List Finder', 'https://cdn-icons-png.flaticon.com/512/2620/2620743.png', 'indigo')}
                     </div>` : ''}
                     <button id="settings-logout-btn" class="flex items-center justify-center w-full p-4 rounded-2xl bg-red-50 dark:bg-red-900/20 border border-red-100 dark:border-red-800 text-red-600 dark:text-red-300 font-bold">Logout</button>
                 </div>
@@ -3981,6 +3983,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             document.getElementById('settings-profile-btn').onclick = showProfilePage;
             document.getElementById('settings-track-income-btn').onclick = showTrackIncomePage;
             document.getElementById('settings-invoice-btn').onclick = showWithdrawalInvoicesPage;
+            document.getElementById('settings-task-history-btn').onclick = showUserTaskHistoryPage;
             document.getElementById('settings-theme-btn').onclick = toggleTheme;
             document.getElementById('settings-logout-btn').onclick = () => signOut(auth);
             if (isAdmin) {
@@ -3992,6 +3995,313 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                 document.getElementById('settings-admin-rates').onclick = showAdminWithdrawSettingsModal;
                 document.getElementById('settings-admin-maintenance').onclick = showMaintenanceSettingsPage;
                 document.getElementById('settings-admin-whats-new').onclick = showWhatsNewSettingsPage;
+                document.getElementById('settings-admin-live-lists').onclick = showAdminLiveListsPage;
+            }
+        };
+
+        const showUserTaskHistoryPage = () => {
+            if (!ensureUserSessionReady()) return;
+            const content = `
+                ${getPageHeader('Task History')}
+                <div class="max-w-xl mx-auto space-y-4 pb-24 px-4">
+                    <div class="flex gap-2">
+                        <select id="user-task-history-filter" class="w-full px-4 py-2.5 bg-white dark:bg-gray-800 rounded-xl border border-gray-150 dark:border-gray-700 outline-none text-sm font-semibold shadow-sm focus:ring-2 focus:ring-blue-500">
+                            <option value="all">All Submissions</option>
+                            <option value="pending">Pending Review</option>
+                            <option value="approved">Approved</option>
+                            <option value="paid">Paid</option>
+                            <option value="rejected">Rejected</option>
+                        </select>
+                    </div>
+                    <div id="user-task-history-list" class="space-y-4">
+                        <div class="py-8 text-center text-sm text-gray-400">Loading history...</div>
+                    </div>
+                </div>
+                ${getPageFooter()}`;
+
+            showPage(content, { returnTo: 'settings', keepBottomNav: true });
+            loadUserTaskHistory();
+
+            document.getElementById('user-task-history-filter').onchange = renderUserTaskHistory;
+        };
+
+        let userTaskHistoryCache = [];
+        let userTaskHistoryLoading = false;
+
+        const loadUserTaskHistory = async () => {
+            if (userTaskHistoryLoading) return;
+            userTaskHistoryLoading = true;
+            try {
+                const token = await getBackendAuthToken();
+                const response = await fetchWithTimeout(`${BACKEND_BASE_URL}/api/task-submissions`, {
+                    headers: { Authorization: `Bearer ${token}` }
+                }, 10000);
+                const data = await response.json().catch(() => ({}));
+                if (data.ok && Array.isArray(data.submissions)) {
+                    userTaskHistoryCache = data.submissions;
+                } else {
+                    userTaskHistoryCache = [];
+                }
+            } catch (err) {
+                console.error('Failed to load user task history:', err);
+                userTaskHistoryCache = [];
+            }
+            userTaskHistoryLoading = false;
+            renderUserTaskHistory();
+        };
+
+        const renderUserTaskHistory = () => {
+            const listEl = document.getElementById('user-task-history-list');
+            if (!listEl) return;
+
+            const filter = document.getElementById('user-task-history-filter')?.value || 'all';
+            let subs = [...userTaskHistoryCache];
+
+            if (filter !== 'all') {
+                if (filter === 'paid') {
+                    subs = subs.filter(s => s.payout_status === 'paid');
+                } else if (filter === 'approved') {
+                    subs = subs.filter(s => s.manual_status === 'approved' && s.payout_status !== 'paid');
+                } else {
+                    subs = subs.filter(s => s.manual_status === filter);
+                }
+            }
+
+            if (subs.length === 0) {
+                listEl.innerHTML = `<div class="rounded-2xl border border-dashed border-gray-200 dark:border-gray-700 py-10 text-center text-sm font-semibold text-gray-450 dark:text-gray-500">No submissions found.</div>`;
+                return;
+            }
+
+            listEl.innerHTML = subs.map(s => {
+                const statusColor = s.manual_status === 'approved' ? 'green' : s.manual_status === 'rejected' ? 'red' : 'yellow';
+                const statusText = s.manual_status === 'approved' 
+                    ? (s.payout_status === 'paid' ? 'Paid' : 'Approved') 
+                    : (s.manual_status === 'rejected' ? 'Rejected' : 'Pending Review');
+                
+                const timeStr = s.submitted_at 
+                    ? new Date(s.submitted_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }) 
+                    : 'Unknown';
+
+                let details = {};
+                try { details = s.details_json ? JSON.parse(s.details_json) : {}; } catch {}
+                const gmailLogoUrl = details.gmailLogoUrl || '';
+                const gmailName = s.ocr_extracted_name || '';
+
+                let liveBadge = '';
+                if (s.scraper_status === 'live_confirmed') {
+                    liveBadge = '<span class="rounded-full bg-emerald-100 dark:bg-emerald-900/30 px-2 py-0.5 text-[9px] font-black text-emerald-700 dark:text-emerald-300">🟢 LIVE</span>';
+                } else if (s.scraper_status === 'not_live') {
+                    liveBadge = '<span class="rounded-full bg-rose-100 dark:bg-rose-900/30 px-2 py-0.5 text-[9px] font-black text-rose-700 dark:text-rose-300">🔴 NOT LIVE</span>';
+                } else {
+                    liveBadge = '<span class="rounded-full bg-gray-150 dark:bg-gray-700 px-2 py-0.5 text-[9px] font-black text-gray-500 dark:text-gray-400">⏳ UNCHECKED</span>';
+                }
+
+                const payoutBadge = s.payout_status === 'paid' 
+                    ? '<span class="rounded-full bg-cyan-100 dark:bg-cyan-900/30 px-2 py-0.5 text-[9px] font-black text-cyan-700 dark:text-cyan-300">PAID</span>' 
+                    : '';
+
+                return `
+                <div class="bg-white dark:bg-gray-800 p-5 rounded-2xl shadow-md border border-gray-100 dark:border-gray-700 space-y-4">
+                    <div class="flex items-center justify-between gap-2">
+                        <div class="min-w-0">
+                            <h4 class="text-sm font-extrabold text-gray-900 dark:text-white truncate">${escapeHtml(s.app_name || 'Task Submission')}</h4>
+                            <p class="text-[10px] text-gray-400 dark:text-gray-500">${timeStr} · ID: ${s.id.slice(0, 10)}</p>
+                        </div>
+                        <div class="flex items-center gap-1.5 shrink-0">
+                            <span class="rounded-full bg-${statusColor}-100 dark:bg-${statusColor}-900/30 px-2 py-0.5 text-[9px] font-black text-${statusColor}-700 dark:text-${statusColor}-300 uppercase">${statusText}</span>
+                            ${payoutBadge}
+                        </div>
+                    </div>
+
+                    <div class="text-xs space-y-1 bg-gray-50 dark:bg-gray-900/50 p-3 rounded-xl border border-gray-100 dark:border-gray-700">
+                        <p class="text-gray-500 dark:text-gray-400 font-medium"><span class="font-bold text-gray-700 dark:text-gray-300">Reward:</span> ₹${s.reward}</p>
+                        <p class="text-gray-500 dark:text-gray-400 font-medium truncate"><span class="font-bold text-gray-700 dark:text-gray-300">Expected Review:</span> "${escapeHtml(s.assigned_comment)}"</p>
+                    </div>
+
+                    <div class="flex items-center gap-2 border-t border-gray-100 dark:border-gray-700 pt-3">
+                        ${gmailLogoUrl ? `<img src="${escapeHtml(gmailLogoUrl)}" alt="Gmail avatar" class="h-7 w-7 rounded-full border border-gray-200 dark:border-gray-600 object-cover shrink-0" loading="lazy">` : `<span class="flex h-7 w-7 items-center justify-center rounded-full bg-gray-100 dark:bg-gray-700 text-[10px] font-bold text-gray-400 dark:text-gray-300 shrink-0">G</span>`}
+                        <div class="min-w-0 flex-1">
+                            <p class="text-xs font-semibold truncate text-gray-700 dark:text-gray-300">Reviewer Gmail: <span class="font-bold text-gray-950 dark:text-white">${escapeHtml(gmailName || 'Extracting...')}</span></p>
+                        </div>
+                        ${liveBadge}
+                    </div>
+
+                    ${s.screenshot_url ? `
+                    <div class="flex items-center gap-4 border-t border-gray-100 dark:border-gray-700 pt-3">
+                        <div class="relative shrink-0 cursor-pointer group" onclick="openFullscreenScreenshotHistory('${escapeHtml(s.screenshot_url)}')">
+                            <img src="${escapeHtml(s.screenshot_url)}" alt="Screenshot Preview" class="h-24 w-16 rounded-xl border-2 border-gray-100 dark:border-gray-700 object-cover shadow-sm group-hover:scale-102 transition">
+                            <span class="absolute bottom-1 right-1 rounded-full bg-black/60 p-1 text-white"><svg class="h-2.5 w-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0zM10 7v3m0 0v3m0-3h3m-3 0H7"></path></svg></span>
+                        </div>
+                        <div class="flex-1 min-w-0 space-y-1.5">
+                            <p class="text-xs text-gray-500 dark:text-gray-400 font-medium">Click screenshot to expand full screen.</p>
+                            ${s.task_link ? `<a href="${escapeHtml(s.task_link)}" target="_blank" class="inline-flex items-center gap-1 text-[11px] font-bold text-blue-600 dark:text-blue-400 hover:underline">Play Store Link ↗</a>` : ''}
+                            ${s.screenshot_view_url ? `<a href="${escapeHtml(s.screenshot_view_url)}" target="_blank" class="block text-[10px] text-gray-400 hover:underline">View in Drive Folder 📁</a>` : ''}
+                        </div>
+                    </div>` : ''}
+                </div>`;
+            }).join('');
+        };
+
+        const openFullscreenScreenshotHistory = (url) => {
+            const overlay = document.createElement('div');
+            overlay.id = 'fullscreen-ss-overlay';
+            overlay.className = 'fixed inset-0 z-[10000] flex flex-col items-center justify-center bg-black/95 p-4';
+            overlay.onclick = (e) => {
+                if (e.target === overlay) overlay.remove();
+            };
+            overlay.innerHTML = `
+                <div class="relative max-w-3xl max-h-[90vh] flex flex-col items-center" onclick="event.stopPropagation()">
+                    <button onclick="this.closest('#fullscreen-ss-overlay').remove()" class="absolute top-4 right-4 p-3 bg-white/10 hover:bg-white/20 text-white rounded-full transition z-[10001]">
+                        <svg class="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                    </button>
+                    <img src="${url}" class="max-w-full max-h-[80vh] rounded-2xl shadow-2xl object-contain border border-gray-800">
+                    <div class="mt-4 flex gap-2">
+                        <a href="${url}" target="_blank" class="rounded-xl bg-white/20 px-4 py-2.5 text-xs font-bold text-white hover:bg-white/30 transition">Open Original ↗</a>
+                        <button onclick="this.closest('#fullscreen-ss-overlay').remove()" class="rounded-xl bg-red-600 px-4 py-2.5 text-xs font-bold text-white hover:bg-red-700 transition">Close ✕</button>
+                    </div>
+                </div>`;
+            document.body.appendChild(overlay);
+        };
+
+        const showAdminLiveListsPage = () => {
+            const todayStr = new Date().toISOString().split('T')[0];
+            const content = `
+                ${getPageHeader('Live List Finder')}
+                <div class="max-w-2xl mx-auto space-y-6 pb-24 px-4">
+                    <!-- Add Live List Form -->
+                    <section class="bg-white dark:bg-gray-800 p-6 rounded-2xl shadow-md border border-gray-100 dark:border-gray-700 space-y-4">
+                        <h3 class="text-base font-extrabold text-gray-900 dark:text-white">Add Reviewers List</h3>
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div>
+                                <label class="block text-xs font-bold text-gray-400 uppercase mb-1">App Name</label>
+                                <input type="text" id="admin-list-app-name" placeholder="e.g. RW Wallet" class="w-full px-4 py-2.5 bg-gray-50 dark:bg-gray-700 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none text-sm border border-gray-100 dark:border-gray-600">
+                            </div>
+                            <div>
+                                <label class="block text-xs font-bold text-gray-400 uppercase mb-1">Target Date</label>
+                                <input type="date" id="admin-list-date" value="${todayStr}" class="w-full px-4 py-2.5 bg-gray-50 dark:bg-gray-700 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none text-sm border border-gray-100 dark:border-gray-600">
+                            </div>
+                        </div>
+                        <div>
+                            <label class="block text-xs font-bold text-gray-400 uppercase mb-1">Reviewer Names (One per line)</label>
+                            <textarea id="admin-list-content" rows="6" placeholder="Paste live review list names here..." class="w-full px-4 py-2.5 bg-gray-50 dark:bg-gray-700 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none text-sm border border-gray-100 dark:border-gray-600 font-mono"></textarea>
+                        </div>
+                        <button id="admin-list-submit-btn" class="w-full py-3 bg-blue-600 text-white font-bold rounded-xl hover:bg-blue-700 transition">Save Reviewer List</button>
+                    </section>
+
+                    <!-- Existing Live Lists -->
+                    <section class="bg-white dark:bg-gray-800 p-6 rounded-2xl shadow-md border border-gray-100 dark:border-gray-700 space-y-4">
+                        <h3 class="text-base font-extrabold text-gray-900 dark:text-white">Active Reviewer Lists</h3>
+                        <div id="admin-live-lists-container" class="space-y-3">
+                            <div class="py-6 text-center text-sm text-gray-400">Loading live lists...</div>
+                        </div>
+                    </section>
+                </div>
+                ${getPageFooter()}`;
+
+            showPage(content, { returnTo: 'settings', keepBottomNav: true });
+            loadAdminLiveLists();
+
+            document.getElementById('admin-list-submit-btn').onclick = handleSaveLiveList;
+        };
+
+        const loadAdminLiveLists = async () => {
+            const container = document.getElementById('admin-live-lists-container');
+            if (!container) return;
+            try {
+                const token = await getBackendAuthToken();
+                const response = await fetchWithTimeout(`${BACKEND_BASE_URL}/api/lists`, {
+                    headers: { Authorization: `Bearer ${token}` }
+                }, 8000);
+                const data = await response.json().catch(() => ({}));
+                if (data.ok && Array.isArray(data.lists)) {
+                    if (data.lists.length === 0) {
+                        container.innerHTML = `<p class="py-6 text-center text-sm text-gray-400 italic">No live lists uploaded yet.</p>`;
+                        return;
+                    }
+                    container.innerHTML = data.lists.map(list => `
+                        <div class="p-4 bg-gray-50 dark:bg-gray-900 rounded-xl border border-gray-100 dark:border-gray-700 flex justify-between items-start gap-4">
+                            <div class="min-w-0 flex-1 space-y-1">
+                                <div class="flex items-center gap-2 flex-wrap">
+                                    <span class="text-sm font-bold text-gray-900 dark:text-white truncate">${escapeHtml(list.appName)}</span>
+                                    <span class="rounded-full bg-blue-100 dark:bg-blue-900/30 px-2 py-0.5 text-[10px] font-black text-blue-700 dark:text-blue-300">${escapeHtml(list.date)}</span>
+                                    <span class="rounded-full bg-purple-100 dark:bg-purple-900/30 px-2 py-0.5 text-[10px] font-black text-purple-700 dark:text-purple-300">${list.lineCount} reviewers</span>
+                                </div>
+                                <p class="text-[11px] font-mono text-gray-400 bg-white dark:bg-gray-800 p-2 rounded border border-gray-100 dark:border-gray-700 truncate">${escapeHtml(list.preview || 'Empty')}</p>
+                            </div>
+                            <button data-action="delete-live-list" data-listid="${list.id}" class="p-2 text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition">
+                                <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+                            </button>
+                        </div>
+                    `).join('');
+
+                    container.querySelectorAll('[data-action="delete-live-list"]').forEach(btn => {
+                        btn.onclick = async (e) => {
+                            const listId = e.currentTarget.dataset.listid;
+                            if (!confirm('Are you sure you want to delete this list?')) return;
+                            try {
+                                showLoading();
+                                const token = await getBackendAuthToken();
+                                const resp = await fetch(`${BACKEND_BASE_URL}/api/lists/${encodeURIComponent(listId)}`, {
+                                    method: 'DELETE',
+                                    headers: { Authorization: `Bearer ${token}` }
+                                });
+                                hideLoading();
+                                if (resp.ok) {
+                                    showNotification('List deleted.');
+                                    loadAdminLiveLists();
+                                } else {
+                                    showNotification('Failed to delete list.', true);
+                                }
+                            } catch (err) {
+                                hideLoading();
+                                console.error('Delete list error:', err);
+                                showNotification('Failed to delete list.', true);
+                            }
+                        };
+                    });
+                } else {
+                    container.innerHTML = `<p class="py-6 text-center text-sm text-red-400">Failed to load lists.</p>`;
+                }
+            } catch (err) {
+                console.error('Load lists error:', err);
+                container.innerHTML = `<p class="py-6 text-center text-sm text-red-400">Error loading live lists.</p>`;
+            }
+        };
+
+        const handleSaveLiveList = async () => {
+            const appName = document.getElementById('admin-list-app-name').value.trim();
+            const date = document.getElementById('admin-list-date').value;
+            const content = document.getElementById('admin-list-content').value.trim();
+
+            if (!appName || !date || !content) {
+                return showNotification('Please fill in all fields.', true);
+            }
+
+            try {
+                showLoading();
+                const token = await getBackendAuthToken();
+                const response = await fetch(`${BACKEND_BASE_URL}/api/lists`, {
+                    method: 'POST',
+                    headers: {
+                        Authorization: `Bearer ${token}`,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ appName, date, content })
+                });
+                hideLoading();
+                const resData = await response.json().catch(() => ({}));
+                if (response.ok && resData.ok) {
+                    showNotification('Reviewer list saved successfully!');
+                    document.getElementById('admin-list-app-name').value = '';
+                    document.getElementById('admin-list-content').value = '';
+                    loadAdminLiveLists();
+                } else {
+                    showNotification(resData.error || 'Failed to save list.', true);
+                }
+            } catch (err) {
+                hideLoading();
+                console.error('Save list error:', err);
+                showNotification('Failed to save list.', true);
             }
         };
 
@@ -5499,6 +5809,10 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                                 <label class="text-xs font-black uppercase text-gray-400">Payment Day</label>
                                 <input id="admin-task-payment-days" type="number" min="1" step="1" placeholder="2 / 3 / 7" class="mt-1 w-full px-4 py-3 bg-gray-100 dark:bg-gray-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-cyan-500">
                             </div>
+                            <div>
+                                <label class="text-xs font-black uppercase text-gray-400">List Compile Time (IST)</label>
+                                <input id="admin-task-list-time" type="time" value="20:00" class="mt-1 w-full px-4 py-3 bg-gray-100 dark:bg-gray-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-cyan-500">
+                            </div>
                             <div class="sm:col-span-2">
                                 <label class="text-xs font-black uppercase text-gray-400">Instructions</label>
                                 <textarea id="admin-task-instructions" rows="4" placeholder="Write exact steps users must follow..." class="mt-1 w-full px-4 py-3 bg-gray-100 dark:bg-gray-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-cyan-500"></textarea>
@@ -5547,6 +5861,55 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             document.getElementById('admin-task-filter')?.addEventListener('change', renderAdminTaskList);
             updateAdminTaskDynamicFields();
             renderAdminTaskList();
+
+            const attachPlayStoreScraper = () => {
+                const linkInput = document.getElementById('admin-task-link');
+                if (!linkInput) return;
+                
+                const handleLinkInput = async () => {
+                    const link = linkInput.value.trim();
+                    const family = document.getElementById('admin-task-family')?.value || 'review';
+                    const subtype = document.getElementById('admin-task-subtype')?.value || 'app_review';
+                    
+                    if (family === 'review' && subtype === 'app_review' && link.includes('play.google.com')) {
+                        try {
+                            const token = await getBackendAuthToken();
+                            linkInput.classList.add('border-cyan-500', 'animate-pulse');
+                            const response = await fetchWithTimeout(`${BACKEND_BASE_URL}/api/admin/scrape-playstore`, {
+                                method: 'POST',
+                                headers: {
+                                    Authorization: `Bearer ${token}`,
+                                    'Content-Type': 'application/json'
+                                },
+                                body: JSON.stringify({ url: link })
+                            }, 10000);
+                            
+                            const data = await response.json();
+                            linkInput.classList.remove('border-cyan-500', 'animate-pulse');
+                            if (response.ok && data.ok) {
+                                if (data.name) {
+                                    const titleInput = document.getElementById('admin-task-title');
+                                    if (titleInput) titleInput.value = data.name;
+                                }
+                                if (data.logoUrl) {
+                                    linkInput.dataset.scrapedLogoUrl = data.logoUrl;
+                                    updateAdminTaskLogoPreview();
+                                }
+                                showNotification('Play Store details fetched successfully.');
+                            }
+                        } catch (err) {
+                            console.error('Play Store scraping failed:', err);
+                            linkInput.classList.remove('border-cyan-500', 'animate-pulse');
+                        }
+                    }
+                };
+
+                linkInput.addEventListener('paste', () => {
+                    setTimeout(handleLinkInput, 100);
+                });
+                linkInput.addEventListener('blur', handleLinkInput);
+            };
+            attachPlayStoreScraper();
             getDocs(query(collection(db, `artifacts/${appId}/public/data/tasks`), orderBy("createdAt", "desc")))
                 .then(snapshot => applyAdminTasksSnapshot(snapshot.docs))
                 .catch(error => console.warn('Task refresh skipped:', error));
@@ -5556,9 +5919,10 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             const family = document.getElementById('admin-task-family')?.value || 'review';
             const subtype = document.getElementById('admin-task-subtype')?.value || getAdminTaskTypes(family)[0].value;
             const link = document.getElementById('admin-task-link')?.value.trim() || '';
+            const scrapedLogoUrl = document.getElementById('admin-task-link')?.dataset.scrapedLogoUrl || '';
             const preview = document.getElementById('admin-task-logo-preview');
             if (preview) {
-                preview.src = getTaskLogoFromLink(family, subtype, link);
+                preview.src = scrapedLogoUrl || getTaskLogoFromLink(family, subtype, link);
                 preview.onerror = () => {
                     preview.onerror = null;
                     preview.src = getAdminTaskSubtypeMeta(family, subtype).logo;
@@ -5593,7 +5957,9 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             const taskLink = document.getElementById('admin-task-link')?.value.trim() || '';
             const paymentMode = document.getElementById('admin-task-payment-mode')?.value || 'instant';
             const paymentDays = paymentMode === 'days' ? Number(document.getElementById('admin-task-payment-days')?.value || 0) : 0;
-            const logoUrl = getTaskLogoFromLink(family, subtype, taskLink);
+            const scrapedLogoUrl = document.getElementById('admin-task-link')?.dataset.scrapedLogoUrl || '';
+            const logoUrl = scrapedLogoUrl || getTaskLogoFromLink(family, subtype, taskLink);
+            const listTime = document.getElementById('admin-task-list-time')?.value || '20:00';
             const status = existingTask ? (existingTask.status || 'draft') : 'draft';
             const preservedReviewComment = family === 'review' && existingTask ? (existingTask.reviewComment || existingTask.commentToCopy || '') : '';
             return {
@@ -5620,6 +5986,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                 paymentMode,
                 paymentDelayDays: Number.isFinite(paymentDays) && paymentDays > 0 ? paymentDays : 0,
                 paymentLabel: paymentMode === 'days' && paymentDays > 0 ? `${paymentDays} day payment` : 'Instant payment',
+                listTime,
                 instructions: document.getElementById('admin-task-instructions')?.value.trim() || '',
                 autoCloseDaily: true,
                 expiresAt: existingTask?.expiresAt || null
@@ -5630,6 +5997,10 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             document.getElementById('admin-task-form')?.reset();
             const editId = document.getElementById('admin-task-edit-id');
             if (editId) editId.value = '';
+            const linkInput = document.getElementById('admin-task-link');
+            if (linkInput) delete linkInput.dataset.scrapedLogoUrl;
+            const listTimeInput = document.getElementById('admin-task-list-time');
+            if (listTimeInput) listTimeInput.value = '20:00';
             const saveBtn = document.getElementById('admin-task-save-btn');
             if (saveBtn) saveBtn.textContent = 'Add Task';
             updateAdminTaskDynamicFields('app_review');
@@ -5709,7 +6080,19 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             updateAdminTaskDynamicFields(subtype);
             document.getElementById('admin-task-rate').value = task.rate || task.reward || '';
             document.getElementById('admin-task-limit').value = task.limit || '';
-            document.getElementById('admin-task-link').value = task.taskLink || '';
+            const linkInput = document.getElementById('admin-task-link');
+            if (linkInput) {
+                linkInput.value = task.taskLink || '';
+                if (task.logoUrl) {
+                    linkInput.dataset.scrapedLogoUrl = task.logoUrl;
+                } else {
+                    delete linkInput.dataset.scrapedLogoUrl;
+                }
+            }
+            const listTimeInput = document.getElementById('admin-task-list-time');
+            if (listTimeInput) {
+                listTimeInput.value = task.listTime || task.list_time || '20:00';
+            }
             document.getElementById('admin-task-payment-mode').value = (task.paymentMode || (Number(task.paymentDelayDays || 0) > 0 ? 'days' : 'instant')) === 'days' ? 'days' : 'instant';
             document.getElementById('admin-task-payment-days').value = task.paymentDelayDays || task.paymentDays || '';
             const instructionsInput = document.getElementById('admin-task-instructions');
@@ -6072,6 +6455,21 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                             const payoutBadge = s.payout_status === 'paid' ? '<span class="rounded-full bg-cyan-100 dark:bg-cyan-900/30 px-2 py-0.5 text-[9px] font-black text-cyan-700 dark:text-cyan-300">PAID</span>' : '';
                             const ocrBadge = s.ocr_status === 'completed' ? '🟢' : s.ocr_status === 'failed' ? '🔴' : '⏳';
                             const timeStr = s.submitted_at ? new Date(s.submitted_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }) : 'Unknown';
+                            
+                            let details = {};
+                            try { details = s.details_json ? JSON.parse(s.details_json) : {}; } catch {}
+                            const gmailLogoUrl = details.gmailLogoUrl || '';
+                            const gmailName = s.ocr_extracted_name || '';
+
+                            let liveBadge = '';
+                            if (s.scraper_status === 'live_confirmed') {
+                                liveBadge = '<span class="rounded-full bg-emerald-100 dark:bg-emerald-900/30 px-2 py-0.5 text-[9px] font-black text-emerald-700 dark:text-emerald-300">🟢 LIVE</span>';
+                            } else if (s.scraper_status === 'not_live') {
+                                liveBadge = '<span class="rounded-full bg-rose-100 dark:bg-rose-900/30 px-2 py-0.5 text-[9px] font-black text-rose-700 dark:text-rose-300">🔴 NOT LIVE</span>';
+                            } else {
+                                liveBadge = '<span class="rounded-full bg-gray-150 dark:bg-gray-700 px-2 py-0.5 text-[9px] font-black text-gray-500 dark:text-gray-400">⏳ UNCHECKED</span>';
+                            }
+
                             return `
                             <div class="px-4 py-3 bg-white dark:bg-gray-800 space-y-2">
                                 <div class="flex items-center gap-2">
@@ -6085,6 +6483,13 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                                 <div class="flex items-center gap-2 text-[10px] text-gray-500">
                                     <span>💬 ${escapeHtml((s.assigned_comment || '').slice(0, 40))}${(s.assigned_comment || '').length > 40 ? '...' : ''}</span>
                                     <span>OCR: ${ocrBadge}</span>
+                                </div>
+                                <div class="flex items-center gap-2 border-t border-gray-100 dark:border-gray-700 pt-2 mt-1">
+                                    ${gmailLogoUrl ? `<img src="${escapeHtml(gmailLogoUrl)}" alt="Gmail avatar" class="h-6 w-6 rounded-full border border-gray-200 dark:border-gray-600 object-cover shrink-0" loading="lazy">` : `<span class="flex h-6 w-6 items-center justify-center rounded-full bg-gray-100 dark:bg-gray-700 text-[9px] font-bold text-gray-400 dark:text-gray-300 shrink-0">G</span>`}
+                                    <div class="min-w-0 flex-1">
+                                        <p class="text-xs font-semibold truncate text-gray-700 dark:text-gray-300">Gmail: <span class="font-bold text-gray-900 dark:text-white">${escapeHtml(gmailName || 'Not parsed yet')}</span></p>
+                                    </div>
+                                    ${liveBadge}
                                 </div>
                                 ${s.screenshot_url ? `<div class="mt-1 space-y-1">
                                     <div class="relative inline-block">

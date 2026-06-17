@@ -10,6 +10,7 @@
     "build": "npm run build:css && vite build",
     "build:css": "tailwindcss -c ./tailwind.config.cjs -i ./src/styles/tailwind.input.css -o ./src/styles/tailwind.generated.css --minify",
     "check": "node scripts/check-project.js",
+    "search": "node scripts/search-main.js",
     "audit:duplicate-loans": "node scripts/audit-fix-duplicate-loans.cjs",
     "fix:duplicate-loans": "node scripts/audit-fix-duplicate-loans.cjs --apply"
   },
