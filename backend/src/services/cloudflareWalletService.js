@@ -2429,14 +2429,58 @@ function registerRoutes(app, { d1, r2 }) {
       if (!url) return res.status(400).json({ ok: false, error: 'URL_REQUIRED' });
       if (!url.includes('play.google.com')) return res.status(400).json({ ok: false, error: 'NOT_A_PLAY_STORE_URL' });
 
-      const response = await fetch(url, {
-        headers: {
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115.0.0.0 Safari/537.36'
-        }
-      });
-      if (!response.ok) throw new Error(`Failed to fetch Google Play Store: ${response.statusText}`);
+      let html = '';
       
-      const html = await response.text();
+      // Step 1: Direct Fetch
+      try {
+        const response = await fetch(url, {
+          headers: {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115.0.0.0 Safari/537.36'
+          }
+        });
+        if (response.ok) {
+          html = await response.text();
+        } else {
+          console.warn(`Direct Play Store fetch failed with status ${response.status}`);
+        }
+      } catch (err) {
+        console.warn(`Direct Play Store fetch failed with error: ${err.message}`);
+      }
+
+      // Step 2: Codetabs Proxy
+      if (!html) {
+        try {
+          const proxyUrl = 'https://api.codetabs.com/v1/proxy?quest=' + encodeURIComponent(url);
+          const response = await fetch(proxyUrl);
+          if (response.ok) {
+            html = await response.text();
+          } else {
+            console.warn(`Codetabs proxy failed with status ${response.status}`);
+          }
+        } catch (err) {
+          console.warn(`Codetabs proxy failed with error: ${err.message}`);
+        }
+      }
+
+      // Step 3: AllOrigins Proxy
+      if (!html) {
+        try {
+          const proxyUrl = 'https://api.allorigins.win/get?url=' + encodeURIComponent(url);
+          const response = await fetch(proxyUrl);
+          if (response.ok) {
+            const json = await response.json();
+            html = json.contents || '';
+          } else {
+            console.warn(`AllOrigins proxy failed with status ${response.status}`);
+          }
+        } catch (err) {
+          console.warn(`AllOrigins proxy failed with error: ${err.message}`);
+        }
+      }
+
+      if (!html) {
+        throw new Error('Failed to retrieve Play Store HTML content');
+      }
       
       let title = '';
       const ogTitleMatch = html.match(/<meta[^>]*property=["']og:title["'][^>]*content=["']([^"']+)["']/i) ||
@@ -2451,6 +2495,7 @@ function registerRoutes(app, { d1, r2 }) {
 
       let logoUrl = '';
       const ogImageMatch = html.match(/<meta[^>]*property=["']og:image["'][^>]*content=["']([^"']+)["']/i) ||
+                           html.match(/<meta[^>]*content=["']([^"']+)["']/i) ||
                            html.match(/<meta[^>]*content=["']([^"']+)["'][^>]*property=["']og:image["']/i);
       if (ogImageMatch) {
         logoUrl = ogImageMatch[1];

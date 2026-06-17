@@ -5868,10 +5868,8 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                 
                 const handleLinkInput = async () => {
                     const link = linkInput.value.trim();
-                    const family = document.getElementById('admin-task-family')?.value || 'review';
-                    const subtype = document.getElementById('admin-task-subtype')?.value || 'app_review';
                     
-                    if (family === 'review' && subtype === 'app_review' && link.includes('play.google.com')) {
+                    if (link.includes('play.google.com')) {
                         try {
                             const token = await getBackendAuthToken();
                             linkInput.classList.add('border-cyan-500', 'animate-pulse');
