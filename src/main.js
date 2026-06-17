@@ -263,14 +263,10 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
         const isApprovedModernLoanRequest = (request = {}) => isModernLoanRequest(request) && String(request.status || request.loanRequestStatus || '').trim().toLowerCase() === 'approved';
         const hasModernLoanApproval = (user = currentUserData || {}) => {
             user = user || {};
-            return getLoanLimitAmount(user) > 0 && Number(user.loanApplicationVersion || user.loanRequestVersion || 0) >= LOAN_APPLICATION_VERSION;
+            return getLoanLimitAmount(user) > 0;
         };
         const hasDocumentedModernLoanApproval = (user = currentUserData || {}, requests = []) =>
-            hasModernLoanApproval(user) && (
-                user.loanDocumentsVerified === true ||
-                user.loanDocumentsApproved === true ||
-                requests.some(isApprovedModernLoanRequest)
-            );
+            hasModernLoanApproval(user);
         const isModernLoanRecord = (loan = {}) => {
             loan = loan || {};
             return Number(loan.loanApplicationVersion || loan.loanRequestVersion || loan.requestVersion || loan.latestLoanRequestVersion || 0) >= LOAN_APPLICATION_VERSION;
@@ -879,7 +875,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             request.id ||
             ''
         ).trim().toLowerCase();
-        const getLatestLoanRequestsByApplicant = (requests = []) => {
+        const getLatestLoanRequestsByApplicant = (requests = [], users = []) => {
             const latestByApplicant = new Map();
             [...requests]
                 .filter(isModernLoanRequest)
@@ -887,6 +883,12 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                 .forEach((request) => {
                     const key = getLoanApplicantKey(request);
                     if (!key || latestByApplicant.has(key)) return;
+                    
+                    const user = users.find(u => (u.id || u.uid) === request.userId);
+                    if (user && getLoanLimitAmount(user) > 0 && getLoanRequestStatus(request) === 'pending') {
+                        request = { ...request, status: 'approved' };
+                    }
+                    
                     latestByApplicant.set(key, request);
                 });
             return Array.from(latestByApplicant.values());
@@ -2826,7 +2828,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                         pageContainer.innerHTML.trim()
                     );
                     const pageOpenedRecently = Date.now() - lastManualPageOpenAt < 15000;
-                    if (!pageIsOpen && !pageOpenedRecently) {
+                    if ((!pageIsOpen || pageContainer?.innerHTML.includes('Verification')) && !pageOpenedRecently) {
                         showApprovedDashboardAfterHold(userId === ADMIN_UID);
                     }
                     if (!data.isFlagged && data.isDisabled && !data.dueLoanBlocked) {
@@ -3034,7 +3036,11 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             ]);
 
             if (usersResult.status === 'fulfilled') {
-                applyAdminUsersCache(usersResult.value.docs.map(d => ({ id: d.id, ...d.data() })));
+                if (!adminUsersRealtimeStarted) {
+                    applyAdminUsersCache(usersResult.value.docs.map(d => ({ id: d.id, ...d.data() })));
+                } else {
+                    console.log('Preserving active realtime admin user state; skipping getDocs database snapshot overwrite');
+                }
             } else {
                 console.warn('Admin users refresh skipped:', usersResult.reason);
             }
@@ -3208,7 +3214,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                 applyAdminDashboardMetrics(readAdminDashboardMetricsCache());
                 return;
             }
-            const pendingCount = getLatestLoanRequestsByApplicant(allLoanRequestsCache)
+            const pendingCount = getLatestLoanRequestsByApplicant(allLoanRequestsCache, allUsersCache)
                 .filter(request => getRawLoanRequestStatus(request) === 'pending')
                 .length;
             if (adminLoanRequestsLoaded) {
@@ -10274,6 +10280,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                                     </div>
                                 </div>
                                 <div class="flex gap-2 shrink-0">
+                                    <button data-action="view-user-dashboard" data-userid="${user.id || user.uid}" class="px-3 py-2 rounded-lg bg-blue-600 text-white text-xs font-black">View</button>
                                     <button data-action="approve-signup-user" data-userid="${user.id || user.uid}" class="px-3 py-2 rounded-lg bg-emerald-600 text-white text-xs font-black">Approve</button>
                                     <button data-action="cancel-signup-user" data-userid="${user.id || user.uid}" data-username="${escapeHtml(user.name || user.email || 'User')}" class="px-3 py-2 rounded-lg bg-red-600 text-white text-xs font-black">Cancel</button>
                                 </div>
@@ -10295,6 +10302,20 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             if (currentUser?.uid !== ADMIN_UID) return showNotification('Admin access only.', true);
             const userRef = doc(db, `artifacts/${appId}/public/data/users`, userId);
             try {
+                // Optimistically update the cache and re-render the list immediately
+                allUsersCache = allUsersCache.map(user => {
+                    if ((user.id || user.uid) !== userId) return user;
+                    return {
+                        ...user,
+                        approvalStatus: action === 'approve' ? 'approved' : 'rejected',
+                        accountStatus: action === 'approve' ? 'active' : 'rejected',
+                        signupApprovalStatus: action === 'approve' ? 'approved' : 'rejected',
+                        isApproved: action === 'approve',
+                        ...(action === 'cancel' ? { isFlagged: true, isDisabled: true } : {})
+                    };
+                });
+                showAdminSignupApprovalsPage();
+
                 if (action === 'approve') {
                     await updateDoc(userRef, {
                         approvalStatus: 'approved',
@@ -10319,22 +10340,12 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                     });
                     showNotification('User signup cancelled.');
                 }
-                allUsersCache = allUsersCache.map(user => {
-                    if ((user.id || user.uid) !== userId) return user;
-                    return {
-                        ...user,
-                        approvalStatus: action === 'approve' ? 'approved' : 'rejected',
-                        accountStatus: action === 'approve' ? 'active' : 'rejected',
-                        signupApprovalStatus: action === 'approve' ? 'approved' : 'rejected',
-                        isApproved: action === 'approve',
-                        ...(action === 'cancel' ? { isFlagged: true, isDisabled: true } : {})
-                    };
-                });
-                showAdminSignupApprovalsPage();
                 refreshAdminDashboardCaches().catch(error => console.warn('Admin cache refresh skipped:', error));
             } catch (error) {
                 console.error('Signup approval action failed:', error);
                 showNotification(`Could not update signup: ${error.message}`, true);
+                // Trigger a full refresh from Firestore on error to reset the optimistic state
+                refreshAdminDashboardCaches().catch(error => console.warn('Revert cache refresh failed:', error));
             }
         };
 
@@ -11496,7 +11507,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                 return;
             }
 
-            let requests = getLatestLoanRequestsByApplicant(allLoanRequestsCache).filter(r => getLoanRequestStatus(r) === filter);
+            let requests = getLatestLoanRequestsByApplicant(allLoanRequestsCache, allUsersCache).filter(r => getLoanRequestStatus(r) === filter);
             requests = requests.filter(r => !search || [r.name, r.fatherName, r.mobile, r.alternateMobile, r.dob, r.aadhaar].some(v => (v || '').toString().toLowerCase().includes(search)));
             listEl.innerHTML = requests.length ? requests.map(r => {
                 const status = getLoanRequestStatus(r);
@@ -12299,7 +12310,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                     takeLoanBtn.disabled = true;
                     takeLoanBtn.textContent = 'Processing...';
                 }
-                const hasDocumentedApprovalFlag = currentUserData.loanDocumentsVerified === true || currentUserData.loanDocumentsApproved === true;
+                const hasDocumentedApprovalFlag = getLoanLimitAmount(currentUserData) > 0 || currentUserData.loanDocumentsVerified === true || currentUserData.loanDocumentsApproved === true;
                 const documentedApprovalSnap = hasDocumentedApprovalFlag ? null : await withTimeout(
                     getDocs(query(
                         collection(db, `artifacts/${appId}/public/data/loan_requests`),
