@@ -1930,6 +1930,18 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             const pageContainer = document.getElementById('page-container');
             if (!shell || !composer || !input || !messages) return null;
 
+            const isSmallTouchScreen = () =>
+                window.matchMedia?.('(pointer: coarse)')?.matches ||
+                Math.min(window.innerWidth || 0, window.innerHeight || 0) <= 768;
+
+            if (!isSmallTouchScreen()) {
+                // On desktop/laptop screen sizes, bypass viewport locking to prevent layout shrinking
+                requestAnimationFrame(() => {
+                    messages.scrollTop = messages.scrollHeight;
+                });
+                return () => {};
+            }
+
             let scheduledFrame = 0;
             let keyboardFallbackActive = false;
             let baseViewportHeight = Math.max(
@@ -1937,9 +1949,6 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                 document.documentElement.clientHeight || 0,
                 window.visualViewport?.height || 0
             );
-            const isSmallTouchScreen = () =>
-                window.matchMedia?.('(pointer: coarse)')?.matches ||
-                Math.min(window.innerWidth || 0, window.innerHeight || 0) <= 768;
 
             const getCurrentLayoutHeight = () => Math.max(
                 window.innerHeight || 0,
@@ -2674,6 +2683,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
 
                 // Hide loading overlay only after maintenance status is known.
                 hideLoading();
+                window.__appLoaded = true;
 
                 applyAdminBottomChrome(isAdmin);
                 applyMaintenanceMode();
@@ -2774,6 +2784,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                     supportSocket = null;
                 }
                 hideLoading();
+                window.__appLoaded = true;
                 const hadCachedUser = !!localStorage.getItem('lastLoggedInUser');
                 if (hadCachedUser) {
                     console.warn('Saved login was found but Firebase session is not active. Showing login again.');
@@ -8270,7 +8281,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                         'Content-Type': 'application/json'
                     },
                     body: JSON.stringify({ question, history, userContext })
-                }, 10000);
+                }, 25000);
                 
                 const data = await response.json();
                 if (response.ok && data.ok && data.answer) {

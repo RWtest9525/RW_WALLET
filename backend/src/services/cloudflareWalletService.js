@@ -2036,11 +2036,47 @@ function registerRoutes(app, { d1, r2 }) {
 
       const formattedHistory = Array.isArray(history) ? history : [];
       
+      const db = admin.firestore();
+      
+      // Securely verify user email from Firestore
+      let callerEmail = (req.auth.email || '').toLowerCase().trim();
+      try {
+        const userDoc = await db.doc(`artifacts/digital-wallet-prod/public/data/users/${req.auth.sub}`).get();
+        if (userDoc.exists) {
+          const userData = userDoc.data();
+          if (userData && userData.email) {
+            callerEmail = userData.email.toLowerCase().trim();
+          }
+        }
+      } catch (err) {
+        console.error('Error verifying user email in Firestore:', err);
+      }
+      
+      const isCallerAdmin = (callerEmail === 'reviewsworld01@gmail.com');
+
+      // Fetch dynamic chatbot memories from Firestore
+      let memories = [];
+      const memoryRef = db.doc(`artifacts/digital-wallet-prod/public/data/bot_memory/global`);
+      try {
+        const memoryDoc = await memoryRef.get();
+        if (memoryDoc.exists) {
+          memories = memoryDoc.data().memories || [];
+        }
+      } catch (err) {
+        console.error('Error fetching bot memory:', err);
+      }
+
+      let memoriesContext = "";
+      if (memories.length > 0) {
+        memoriesContext = "\nIMPORTANT: You have stored the following custom information from the admin in your memory. Follow these instructions/facts strictly:\n" + 
+          memories.map((m, idx) => `${idx + 1}. ${m}`).join('\n') + "\n";
+      }
+
       let contextStr = "None";
       if (userContext) {
         contextStr = `
 - User Name: ${userContext.userName || 'User'}
-- Email: ${userContext.userEmail || ''}
+- Email: ${callerEmail}
 - Mobile: ${userContext.userMobile || ''}
 - Current Wallet Balance: ₹${userContext.balance || 0}
 - Active Loan Status: ${userContext.activeLoan ? `₹${userContext.activeLoan.amount} (${userContext.activeLoan.status})` : 'No active loan'}
@@ -2057,13 +2093,26 @@ ${userContext.latestTransactions && userContext.latestTransactions.length ? user
 Your job is to answer questions about the app's features (earning, task verification, add fund deposit, pay to wallet transfer, bank/UPI withdrawals, mobile recharges, gift codes, partner investments, loans), the owner, and greetings.
 
 CRITICAL RULES:
-1. Speak in a friendly, conversational Hinglish/Hindi/English mixed tone (e.g. "Aap Settings > My Profile me jaakar UPI details save karein, phir Withdraw par click karein.").
+1. Match the user's language/style of communication EXACTLY:
+   * If the user writes in English, reply in English.
+   * If the user writes in Hinglish (Hindi written using Latin/English characters, e.g., "recharge kaise karein"), reply in Hinglish.
+   * If the user writes in Hindi (using Devanagari script, e.g., "रिचार्ज कैसे करें"), reply in Hindi.
+   * Match other languages (e.g. Spanish, Bengali) if the user writes in them.
+   * Keep responses friendly, brief, conversational, and direct.
 2. Keep responses EXTREMELY short, direct, and to-the-point (MAX 2-3 lines). Avoid generic filler paragraphs.
 3. Use the following Live User Context to answer user queries about their balance, transactions, withdrawals, loans, or investments:
 ${contextStr}
 4. Address greetings (hi, hello, who are you, help, etc.) naturally and briefly as REVY.
 5. If the user asks anything completely unrelated to the app, the owner, or greetings, reply EXACTLY with this:
-"Sorry, I can help only with RW Wallet, REVIEWS WORLD, earning, account, wallet, transaction, withdrawal, add fund, pay to wallet, recharge, gift code, loan, partner investment, profile, and app usage questions. Would you like me to transfer your problem to ADMIN?"`
+"Sorry, I can help only with RW Wallet, REVIEWS WORLD, earning, account, wallet, transaction, withdrawal, add fund, pay to wallet, recharge, gift code, loan, partner investment, profile, and app usage questions. Would you like me to transfer your problem to ADMIN?"
+
+ADMIN MEMORY TRAINING:
+The user with email 'reviewsworld01@gmail.com' is the ADMIN.
+- If the admin (email: reviewsworld01@gmail.com) explicitly tells you to remember, save, or note down any fact, rule, or information, you must accept and confirm it briefly, AND you MUST append a special tag at the very end of your response: [SAVE_MEMORY: <the exact details/info to save>].
+  * Example instruction: "admin says remember that withdrawal takes 2 hours"
+  * Example response: "Got it admin, I have noted that withdrawals take 2 hours. [SAVE_MEMORY: Withdrawals take 2 hours]"
+- Do NOT output this [SAVE_MEMORY: ...] tag for any other user (non-admin). If a non-admin user asks you to remember or save something, reply that only the administrator can train or update your memory.
+${memoriesContext}`
       };
 
       const messages = [systemMessage, ...formattedHistory, { role: "user", content: question }];
@@ -2079,7 +2128,7 @@ ${contextStr}
           messages: messages,
           temperature: 0.2,
           top_p: 0.7,
-          max_tokens: 1024
+          max_tokens: 300
         })
       });
 
@@ -2088,7 +2137,35 @@ ${contextStr}
       }
 
       const data = await response.json();
-      const answer = data.choices?.[0]?.message?.content || "";
+      let answer = data.choices?.[0]?.message?.content || "";
+
+      // Process and save memory if admin and [SAVE_MEMORY: ...] tag exists
+      const saveMemoryRegex = /\[SAVE_MEMORY:\s*(.*?)\]/i;
+      const match = answer.match(saveMemoryRegex);
+      if (match) {
+        const newMemory = match[1].trim();
+        if (newMemory && isCallerAdmin) {
+          try {
+            await db.runTransaction(async (transaction) => {
+              const doc = await transaction.get(memoryRef);
+              let currentMemories = [];
+              if (doc.exists) {
+                currentMemories = doc.data().memories || [];
+              }
+              if (!currentMemories.includes(newMemory)) {
+                currentMemories.push(newMemory);
+                transaction.set(memoryRef, { memories: currentMemories }, { merge: true });
+              }
+            });
+            console.log('Saved admin memory:', newMemory);
+          } catch (saveErr) {
+            console.error('Error saving admin memory to Firestore:', saveErr);
+          }
+        }
+        // Always clean up the tag so the end user never sees it in the chat
+        answer = answer.replace(/\[SAVE_MEMORY:\s*(.*?)\]/gi, '').trim();
+      }
+
       res.json({ ok: true, answer });
     } catch (error) {
       console.error('Revy Bot API error:', error);

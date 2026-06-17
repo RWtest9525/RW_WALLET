@@ -18,11 +18,13 @@ const showRuntimeRecoveryScreen = (error) => {
 };
 
 window.addEventListener('error', (event) => {
+    if (window.__appLoaded) return;
     if (!document.querySelector('#auth-screen:not(.hidden), #main-content:not(.hidden), #page-container:not(.hidden)')) {
         showRuntimeRecoveryScreen(event.error || event.message);
     }
 });
 window.addEventListener('unhandledrejection', (event) => {
+    if (window.__appLoaded) return;
     if (!document.querySelector('#auth-screen:not(.hidden), #main-content:not(.hidden), #page-container:not(.hidden)')) {
         showRuntimeRecoveryScreen(event.reason);
     }
@@ -151,13 +153,14 @@ const hydrateInstantShell = () => {
                 document.getElementById('main-content').classList.add('hidden');
             }
             setTimeout(() => {
+                if (window.__appLoaded) return;
                 const authVisible = !!document.querySelector('#auth-screen:not(.hidden)');
                 const mainVisible = !!document.querySelector('#main-content:not(.hidden)');
                 const pageVisible = !!document.querySelector('#page-container:not(.hidden)');
                 if (!authVisible && !mainVisible && !pageVisible) {
                     showRuntimeRecoveryScreen('No visible app screen after startup.');
                 }
-            }, 4000);
+            }, 20000);
         };
 
 if (document.readyState === 'loading') {
