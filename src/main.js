@@ -263,10 +263,10 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
         const isApprovedModernLoanRequest = (request = {}) => isModernLoanRequest(request) && String(request.status || request.loanRequestStatus || '').trim().toLowerCase() === 'approved';
         const hasModernLoanApproval = (user = currentUserData || {}) => {
             user = user || {};
-            return getLoanLimitAmount(user) > 0;
+            return getLoanLimitAmount(user) > 0 || user.loanDocumentsVerified === true || user.loanDocumentsApproved === true || user.loanRequestStatus === 'approved';
         };
         const hasDocumentedModernLoanApproval = (user = currentUserData || {}, requests = []) =>
-            hasModernLoanApproval(user);
+            hasModernLoanApproval(user) || (requests && requests.some(isApprovedModernLoanRequest));
         const isModernLoanRecord = (loan = {}) => {
             loan = loan || {};
             return Number(loan.loanApplicationVersion || loan.loanRequestVersion || loan.requestVersion || loan.latestLoanRequestVersion || 0) >= LOAN_APPLICATION_VERSION;
@@ -885,8 +885,12 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                     if (!key || latestByApplicant.has(key)) return;
                     
                     const user = users.find(u => (u.id || u.uid) === request.userId);
-                    if (user && getLoanLimitAmount(user) > 0 && getLoanRequestStatus(request) === 'pending') {
-                        request = { ...request, status: 'approved' };
+                    const userLoanStatus = user ? String(user.loanRequestStatus || '').trim().toLowerCase() : '';
+                    const finalizedStatuses = ['approved', 'rejected', 'cancelled', 'canceled', 'failed', 'denied'];
+                    
+                    if (user && (getLoanLimitAmount(user) > 0 || finalizedStatuses.includes(userLoanStatus)) && getLoanRequestStatus(request) === 'pending') {
+                        const targetStatus = finalizedStatuses.includes(userLoanStatus) ? userLoanStatus : 'approved';
+                        request = { ...request, status: targetStatus };
                     }
                     
                     latestByApplicant.set(key, request);
@@ -9943,7 +9947,14 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                 showLoanApplicationPage(1);
                 return;
             }
-            const maxLoanAmount = Math.max(1, getLoanLimitAmount(currentUserData));
+            const userLoans = allLoansCache.filter(l => l.userId === currentUser.uid);
+            const summary = buildLoanSummary(currentUserData, userLoans);
+            if (summary.availableAmount <= 0) {
+                showNotification('Your loan limit is exhausted. Please repay your active loan to free up limit.', true);
+                showLoanPage();
+                return;
+            }
+            const maxLoanAmount = Math.max(0, summary.availableAmount);
             const content = `
                 ${getPageHeader('Take Loan')}
                 <div class="max-w-md mx-auto bg-white dark:bg-gray-800 p-6 rounded-xl shadow-md space-y-5">
@@ -12295,7 +12306,9 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             const takeLoanBtn = document.getElementById('confirm-take-loan-btn');
             if (takeLoanBtn?.disabled) return;
             const amount = parseFloat(document.getElementById('loan-amount-input').value);
-            const maxLoanAmount = Math.max(1, getLoanLimitAmount(currentUserData));
+            const userLoans = allLoansCache.filter(l => l.userId === currentUser.uid);
+            const summary = buildLoanSummary(currentUserData, userLoans);
+            const maxLoanAmount = Math.max(0, summary.availableAmount);
             if (isNaN(amount) || amount < 1 || amount > maxLoanAmount) {
                 return showNotification(`Loan amount must be between ₹1 and ${formatCurrency(maxLoanAmount)}.`, true);
             }
@@ -12330,14 +12343,14 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                     where("userId", "==", currentUser.uid),
                     where("status", "==", "active")
                 ));
-                const activeModernLoan = activeLoanSnap.docs
-                    .map(docItem => ({ id: docItem.id, ...docItem.data() }))
-                    .find(isModernLoanRecord);
+                const activeLoans = activeLoanSnap.docs.map(docItem => ({ id: docItem.id, ...docItem.data() }));
+                const activeModernLoan = activeLoans.find(isModernLoanRecord);
                 if (activeModernLoan) {
                     const activeLoan = activeModernLoan;
                     showActiveLoanPage(activeLoan);
                     throw new Error('You already have an active loan. Repay it before taking another loan.');
                 }
+                const usedAmount = activeLoans.filter(isModernLoanRecord).reduce((sum, loan) => sum + getLoanPrincipal(loan), 0);
                 const userRef = doc(db, `artifacts/${appId}/public/data/users`, currentUser.uid);
                 await runTransaction(db, async (tx) => {
                     const userDoc = await tx.get(userRef);
@@ -12352,8 +12365,9 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                     if (!hasModernLoanApproval(userData)) throw new Error('Please submit updated loan details and wait for admin approval.');
                     if (!userData.loanEligible && getLoanLimitAmount(userData) <= 0) throw new Error('Loan is not approved for your account.');
                     const approvedMaxLoan = Math.max(0, getLoanLimitAmount(userData));
-                    if (approvedMaxLoan < 1) throw new Error('Loan limit is not approved for your account.');
-                    if (amount > approvedMaxLoan) throw new Error(`Loan amount cannot exceed ${formatCurrency(approvedMaxLoan)}.`);
+                    const availableLimit = Math.max(0, approvedMaxLoan - usedAmount);
+                    if (availableLimit < 1) throw new Error('Your available loan limit is exhausted.');
+                    if (amount > availableLimit) throw new Error(`Loan amount cannot exceed your available limit of ${formatCurrency(availableLimit)}.`);
 
                     const loanRef = doc(collection(db, `artifacts/${appId}/public/data/loans`));
                     tx.update(userRef, {
