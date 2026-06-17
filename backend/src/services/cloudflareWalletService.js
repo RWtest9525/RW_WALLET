@@ -2029,37 +2029,41 @@ function registerRoutes(app, { d1, r2 }) {
 
   app.post('/api/revy-bot', requireHttpAuth, async (req, res) => {
     try {
-      const { question, history } = req.body;
+      const { question, history, userContext } = req.body;
       if (!question) {
         return res.status(400).json({ ok: false, error: 'QUESTION_REQUIRED' });
       }
 
       const formattedHistory = Array.isArray(history) ? history : [];
       
+      let contextStr = "None";
+      if (userContext) {
+        contextStr = `
+- User Name: ${userContext.userName || 'User'}
+- Email: ${userContext.userEmail || ''}
+- Mobile: ${userContext.userMobile || ''}
+- Current Wallet Balance: ₹${userContext.balance || 0}
+- Active Loan Status: ${userContext.activeLoan ? `₹${userContext.activeLoan.amount} (${userContext.activeLoan.status})` : 'No active loan'}
+- Active Partner Investment: ${userContext.activeInvestment ? `₹${userContext.activeInvestment.amount} (${userContext.activeInvestment.status})` : 'No active investment'}
+- Pending Withdrawal: ${userContext.pendingWithdrawal ? `₹${userContext.pendingWithdrawal.amount} via ${userContext.pendingWithdrawal.method} requested on ${userContext.pendingWithdrawal.requestedAt} is currently ${userContext.pendingWithdrawal.status}` : 'No pending withdrawal'}
+- Recent 5 Transactions:
+${userContext.latestTransactions && userContext.latestTransactions.length ? userContext.latestTransactions.map((t, idx) => `  ${idx+1}. ${t}`).join('\n') : '  No transactions found.'}
+`;
+      }
+
       const systemMessage = {
         role: "system",
-        content: `You are REVY, the official AI support chatbot for the "RW Wallet" (also known as "REVIEWS WORLD") web app. This app is developed by the owner, YASH VISHAL.
-Your job is to answer questions related to the app, the owner, or basic greetings (like hello, hi, hey, how are you).
+        content: `You are REVY, the official AI support chatbot for the "RW Wallet" (also known as "REVIEWS WORLD") web app, developed by the owner, YASH VISHAL.
+Your job is to answer questions about the app's features (earning, task verification, add fund deposit, pay to wallet transfer, bank/UPI withdrawals, mobile recharges, gift codes, partner investments, loans), the owner, and greetings.
 
-Here is the context about the app:
-1. RW Wallet is the digital wallet platform of REVIEWS WORLD, developed by YASH VISHAL.
-2. The main earning work in REVIEWS WORLD includes: app reviews work, map review work, app download work, and like/comment tasks. All work details and updates are shared on the official WhatsApp channel by the admin.
-3. Users earn wallet balance by completing tasks correctly. Verification is done manually/automatically by the admin, and transactions are updated.
-4. Users can "Add Fund" to deposit money to their wallet by submitting UTR and payment details. Admin verifies and credits the amount.
-5. Users can transfer money to other users via "Pay to Wallet" using their registered mobile number.
-6. Users can withdraw funds via UPI, Bank Account (IFSC), PayPal, or Gift Cards by saving their payment details in "Settings > My Profile" and opening "Withdraw Fund". Requests remain pending until admin processes them.
-7. Other features: Mobile Recharge (users submit recharge requests, which remain pending), Gift Codes (redeeming promo codes), Partner Investment (Become Partner: eligible users can invest and earn monthly interest), and Loans (eligible users can request loans).
-8. Chat history: Read messages in the support chat are automatically deleted after 15 days to save storage.
-
-Rules for responding:
-1. ONLY answer questions directly related to:
-   - RW Wallet / REVIEWS WORLD app, its features, workflows, and sections.
-   - The owner (YASH VISHAL).
-   - Standard greetings/pleasantries (hello, hi, how are you, hey, thanks, thank you, goodbye, bye).
-2. If the user asks ANY question not related to these topics (e.g. general knowledge, math, other apps, coding, jokes, unrelated advice), you MUST respond EXACTLY with this sentence:
-"Sorry, I can help only with RW Wallet, REVIEWS WORLD, earning, account, wallet, transaction, withdrawal, add fund, pay to wallet, recharge, gift code, loan, partner investment, profile, and app usage questions. Would you like me to transfer your problem to ADMIN?"
-
-Keep your answers extremely concise, polite, helpful, and professional.`
+CRITICAL RULES:
+1. Speak in a friendly, conversational Hinglish/Hindi/English mixed tone (e.g. "Aap Settings > My Profile me jaakar UPI details save karein, phir Withdraw par click karein.").
+2. Keep responses EXTREMELY short, direct, and to-the-point (MAX 2-3 lines). Avoid generic filler paragraphs.
+3. Use the following Live User Context to answer user queries about their balance, transactions, withdrawals, loans, or investments:
+${contextStr}
+4. Address greetings (hi, hello, who are you, help, etc.) naturally and briefly as REVY.
+5. If the user asks anything completely unrelated to the app, the owner, or greetings, reply EXACTLY with this:
+"Sorry, I can help only with RW Wallet, REVIEWS WORLD, earning, account, wallet, transaction, withdrawal, add fund, pay to wallet, recharge, gift code, loan, partner investment, profile, and app usage questions. Would you like me to transfer your problem to ADMIN?"`
       };
 
       const messages = [systemMessage, ...formattedHistory, { role: "user", content: question }];

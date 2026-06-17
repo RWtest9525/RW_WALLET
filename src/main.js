@@ -8236,13 +8236,40 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                     }))
                     .slice(-6);
 
+                const pendingWithdrawal = await getPendingWithdrawalForBot();
+                const latestTransactions = await getLatestTransactionsForBot(5);
+                const activeLoan = allLoansCache.find(loan => loan.userId === currentUser?.uid && loan.status === 'active' && isModernLoanRecord(loan));
+                const activeInvestment = allInvestmentsCache.find(item => item.userId === currentUser?.uid && item.status === 'active');
+
+                const userContext = {
+                    userName: currentUserData?.name || 'User',
+                    userEmail: currentUserData?.email || '',
+                    userMobile: currentUserData?.mobile || '',
+                    balance: currentUserData?.balance || 0,
+                    pendingWithdrawal: pendingWithdrawal ? {
+                        amount: pendingWithdrawal.amount || 0,
+                        method: getWithdrawalDisplayMethodName(pendingWithdrawal, 'saved payout method'),
+                        status: pendingWithdrawal.status || 'pending',
+                        requestedAt: formatDateDDMMYY(pendingWithdrawal.timestamp || pendingWithdrawal.requestedAt || pendingWithdrawal.processedAt)
+                    } : null,
+                    latestTransactions: latestTransactions.map(item => getBotTransactionSummary(item)),
+                    activeLoan: activeLoan ? {
+                        amount: activeLoan.amount || activeLoan.principal || 0,
+                        status: activeLoan.status || 'active'
+                    } : null,
+                    activeInvestment: activeInvestment ? {
+                        amount: activeInvestment.amount || 0,
+                        status: activeInvestment.status || 'active'
+                    } : null
+                };
+
                 const response = await fetchWithTimeout(`${BACKEND_BASE_URL}/api/revy-bot`, {
                     method: 'POST',
                     headers: {
                         Authorization: `Bearer ${token}`,
                         'Content-Type': 'application/json'
                     },
-                    body: JSON.stringify({ question, history })
+                    body: JSON.stringify({ question, history, userContext })
                 }, 10000);
                 
                 const data = await response.json();
