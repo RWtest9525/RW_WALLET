@@ -8226,6 +8226,40 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
         };
 
         const getRevyBotReply = async (question) => {
+            try {
+                const token = await getBackendAuthToken();
+                const history = (revyBotMessages || [])
+                    .slice(0, -1)
+                    .map(msg => ({
+                        role: msg.senderRole === 'user' ? 'user' : 'assistant',
+                        content: msg.text
+                    }))
+                    .slice(-6);
+
+                const response = await fetchWithTimeout(`${BACKEND_BASE_URL}/api/revy-bot`, {
+                    method: 'POST',
+                    headers: {
+                        Authorization: `Bearer ${token}`,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ question, history })
+                }, 10000);
+                
+                const data = await response.json();
+                if (response.ok && data.ok && data.answer) {
+                    const ans = data.answer.trim();
+                    if (ans.includes('Sorry, I can help only with RW Wallet') || ans.includes('transfer your problem to ADMIN')) {
+                        return {
+                            unsupported: true,
+                            text: 'Sorry, I can help only with RW Wallet, REVIEWS WORLD, earning, account, wallet, transaction, withdrawal, add fund, pay to wallet, recharge, gift code, loan, partner investment, profile, and app usage questions. Would you like me to transfer your problem to ADMIN?'
+                        };
+                    }
+                    return ans;
+                }
+            } catch (err) {
+                console.warn('Backend Revy Bot request failed, falling back to local rules:', err);
+            }
+
             const text = String(question || '').toLowerCase();
             const compactText = text.replace(/[^a-z0-9]+/g, ' ').trim();
             const hasAny = (...words) => words.some(word => compactText.includes(String(word).toLowerCase()));

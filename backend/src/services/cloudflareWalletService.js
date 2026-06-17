@@ -2027,6 +2027,71 @@ function registerRoutes(app, { d1, r2 }) {
     res.json({ ok: true, key: urlOrKey });
   });
 
+  app.post('/api/revy-bot', requireHttpAuth, async (req, res) => {
+    try {
+      const { question, history } = req.body;
+      if (!question) {
+        return res.status(400).json({ ok: false, error: 'QUESTION_REQUIRED' });
+      }
+
+      const formattedHistory = Array.isArray(history) ? history : [];
+      
+      const systemMessage = {
+        role: "system",
+        content: `You are REVY, the official AI support chatbot for the "RW Wallet" (also known as "REVIEWS WORLD") web app. This app is developed by the owner, YASH VISHAL.
+Your job is to answer questions related to the app, the owner, or basic greetings (like hello, hi, hey, how are you).
+
+Here is the context about the app:
+1. RW Wallet is the digital wallet platform of REVIEWS WORLD, developed by YASH VISHAL.
+2. The main earning work in REVIEWS WORLD includes: app reviews work, map review work, app download work, and like/comment tasks. All work details and updates are shared on the official WhatsApp channel by the admin.
+3. Users earn wallet balance by completing tasks correctly. Verification is done manually/automatically by the admin, and transactions are updated.
+4. Users can "Add Fund" to deposit money to their wallet by submitting UTR and payment details. Admin verifies and credits the amount.
+5. Users can transfer money to other users via "Pay to Wallet" using their registered mobile number.
+6. Users can withdraw funds via UPI, Bank Account (IFSC), PayPal, or Gift Cards by saving their payment details in "Settings > My Profile" and opening "Withdraw Fund". Requests remain pending until admin processes them.
+7. Other features: Mobile Recharge (users submit recharge requests, which remain pending), Gift Codes (redeeming promo codes), Partner Investment (Become Partner: eligible users can invest and earn monthly interest), and Loans (eligible users can request loans).
+8. Chat history: Read messages in the support chat are automatically deleted after 15 days to save storage.
+
+Rules for responding:
+1. ONLY answer questions directly related to:
+   - RW Wallet / REVIEWS WORLD app, its features, workflows, and sections.
+   - The owner (YASH VISHAL).
+   - Standard greetings/pleasantries (hello, hi, how are you, hey, thanks, thank you, goodbye, bye).
+2. If the user asks ANY question not related to these topics (e.g. general knowledge, math, other apps, coding, jokes, unrelated advice), you MUST respond EXACTLY with this sentence:
+"Sorry, I can help only with RW Wallet, REVIEWS WORLD, earning, account, wallet, transaction, withdrawal, add fund, pay to wallet, recharge, gift code, loan, partner investment, profile, and app usage questions. Would you like me to transfer your problem to ADMIN?"
+
+Keep your answers extremely concise, polite, helpful, and professional.`
+      };
+
+      const messages = [systemMessage, ...formattedHistory, { role: "user", content: question }];
+
+      const response = await fetch("https://integrate.api.nvidia.com/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": "Bearer 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"
+        },
+        body: JSON.stringify({
+          model: "llama-3_3-70b-instruct",
+          messages: messages,
+          temperature: 0.2,
+          top_p: 0.7,
+          max_tokens: 1024
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error(`Nvidia API error: status ${response.status}`);
+      }
+
+      const data = await response.json();
+      const answer = data.choices?.[0]?.message?.content || "";
+      res.json({ ok: true, answer });
+    } catch (error) {
+      console.error('Revy Bot API error:', error);
+      res.status(500).json({ ok: false, error: 'BOT_ERROR', detail: error.message });
+    }
+  });
+
   app.get('/api/admin/chats', requireHttpAuth, async (req, res) => {
     if (!req.auth.isAdmin) {
       return res.status(403).json({ ok: false, error: 'ADMIN_REQUIRED' });
