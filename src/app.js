@@ -104,7 +104,7 @@ const hydrateInstantShell = () => {
                             const requested = cachedUser.signupRequestedAt ? new Date(cachedUser.signupRequestedAt).toLocaleString('en-IN') : '';
                             if (pageContainer) {
                                 pageContainer.innerHTML = `
-                                    <div class="min-h-[100dvh] flex items-center justify-center p-4 bg-gray-100 dark:bg-gray-900">
+                                    <div id="verification-pending-container" class="min-h-[100dvh] flex items-center justify-center p-4 bg-gray-100 dark:bg-gray-900">
                                         <div class="w-full max-w-md rounded-3xl bg-white dark:bg-gray-800 border border-amber-100 dark:border-amber-900/50 shadow-xl overflow-hidden">
                                             <div class="bg-gradient-to-br from-amber-500 to-orange-600 p-6 text-white">
                                                 <h2 class="text-center text-2xl font-black">${title}</h2>

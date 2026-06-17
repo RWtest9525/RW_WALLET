@@ -2484,7 +2484,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             document.getElementById('slide-menu')?.classList.add('translate-x-full');
             const pageContainer = document.getElementById('page-container');
             pageContainer.innerHTML = `
-                <div class="min-h-[100dvh] flex items-center justify-center p-4 bg-gray-100 dark:bg-gray-900">
+                <div id="verification-pending-container" class="min-h-[100dvh] flex items-center justify-center p-4 bg-gray-100 dark:bg-gray-900">
                     <div class="w-full max-w-md rounded-3xl bg-white dark:bg-gray-800 border border-amber-100 dark:border-amber-900/50 shadow-xl overflow-hidden">
                         <div class="bg-gradient-to-br from-amber-500 to-orange-600 p-6 text-white">
                             <div class="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-white/15 ring-1 ring-white/25">
@@ -2516,7 +2516,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
         const showApprovedDashboardAfterHold = (isAdmin = false) => {
             const dashboard = document.getElementById('dashboard-content');
             const pageContainer = document.getElementById('page-container');
-            if (!dashboard?.classList.contains('hidden') || !pageContainer?.innerHTML.includes('Verification')) return;
+            if (!dashboard?.classList.contains('hidden') || !document.getElementById('verification-pending-container')) return;
             applyAdminBottomChrome(isAdmin);
             currentMainSection = 'home';
             switchTab('user-panel');
@@ -2844,7 +2844,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                         pageContainer.innerHTML.trim()
                     );
                     const pageOpenedRecently = Date.now() - lastManualPageOpenAt < 15000;
-                    if ((!pageIsOpen || pageContainer?.innerHTML.includes('Verification')) && !pageOpenedRecently) {
+                    if ((!pageIsOpen || document.getElementById('verification-pending-container')) && !pageOpenedRecently) {
                         showApprovedDashboardAfterHold(userId === ADMIN_UID);
                     }
                     if (!data.isFlagged && data.isDisabled && !data.dueLoanBlocked) {
@@ -3276,6 +3276,9 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                 renderAdminTaskList();
             }
             renderHomeTaskCategories();
+            if (document.querySelector('.task-page-shell')) {
+                showUserTaskPage();
+            }
         };
 
         const applyAdsSnapshot = (docs = []) => {
@@ -5063,49 +5066,114 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
         const showUserTaskPage = () => {
             if (!ensureUserSessionReady()) return;
             currentMainSection = 'task';
-            const taskCategories = [
-                {
-                    label: 'App Review',
-                    accent: 'task-accent-blue',
-                    logo: PLAY_STORE_LOGO_URL,
-                    items: [
-                        { title: 'App Review', reward: 'Rs 8' },
-                        { title: 'App Review', reward: 'Rs 10' },
-                        { title: 'App Review', reward: 'Rs 12' }
-                    ]
-                },
-                {
-                    label: 'Map Review',
-                    accent: 'task-accent-emerald',
-                    logo: 'https://cdn-icons-png.flaticon.com/512/854/854878.png',
-                    items: [
-                        { title: 'Map Review', reward: 'Rs 15' },
-                        { title: 'Map Review', reward: 'Rs 20' },
-                        { title: 'Map Review', reward: 'Rs 10' }
-                    ]
-                },
-                {
-                    label: 'Social Media Task',
-                    accent: 'task-accent-rose',
-                    logo: 'https://cdn-icons-png.flaticon.com/512/4187/4187336.png',
-                    items: [
-                        { title: 'Social Task', reward: 'Rs 5' },
-                        { title: 'Social Task', reward: 'Rs 8' },
-                        { title: 'Social Task', reward: 'Rs 7' }
-                    ]
+            const isTaskPageEnabled = !!appConfigCache?.task_page_enabled;
+            let taskCategories = [];
+
+            if (!isTaskPageEnabled) {
+                taskCategories = [
+                    {
+                        label: 'App Review',
+                        accent: 'task-accent-blue',
+                        logo: PLAY_STORE_LOGO_URL,
+                        items: [
+                            { title: 'App Review', reward: 'Rs 8' },
+                            { title: 'App Review', reward: 'Rs 10' },
+                            { title: 'App Review', reward: 'Rs 12' }
+                        ]
+                    },
+                    {
+                        label: 'Map Review',
+                        accent: 'task-accent-emerald',
+                        logo: 'https://cdn-icons-png.flaticon.com/512/854/854878.png',
+                        items: [
+                            { title: 'Map Review', reward: 'Rs 15' },
+                            { title: 'Map Review', reward: 'Rs 20' },
+                            { title: 'Map Review', reward: 'Rs 10' }
+                        ]
+                    },
+                    {
+                        label: 'Social Media Task',
+                        accent: 'task-accent-rose',
+                        logo: 'https://cdn-icons-png.flaticon.com/512/4187/4187336.png',
+                        items: [
+                            { title: 'Social Task', reward: 'Rs 5' },
+                            { title: 'Social Task', reward: 'Rs 8' },
+                            { title: 'Social Task', reward: 'Rs 7' }
+                        ]
+                    }
+                ];
+            } else {
+                const appReviewItems = [];
+                const mapReviewItems = [];
+                const socialTaskItems = [];
+
+                allTasksCache.forEach(task => {
+                    const subtype = task.subtype || '';
+                    if (subtype === 'app_review' || subtype === 'app_download_task') {
+                        appReviewItems.push(task);
+                    } else if (subtype === 'map_review' || subtype === 'trustpilot_review' || subtype === 'website_review') {
+                        mapReviewItems.push(task);
+                    } else {
+                        socialTaskItems.push(task);
+                    }
+                });
+
+                taskCategories = [
+                    {
+                        label: 'App Review',
+                        accent: 'task-accent-blue',
+                        logo: PLAY_STORE_LOGO_URL,
+                        items: appReviewItems
+                    },
+                    {
+                        label: 'Map Review',
+                        accent: 'task-accent-emerald',
+                        logo: 'https://cdn-icons-png.flaticon.com/512/854/854878.png',
+                        items: mapReviewItems
+                    },
+                    {
+                        label: 'Social Media Task',
+                        accent: 'task-accent-rose',
+                        logo: 'https://cdn-icons-png.flaticon.com/512/4187/4187336.png',
+                        items: socialTaskItems
+                    }
+                ].filter(cat => cat.items.length > 0);
+            }
+
+            const renderTaskCard = (category, task, index) => {
+                const isReal = isTaskPageEnabled;
+                const status = isReal ? getAdminTaskEffectiveStatus(task) : 'draft';
+                const isLive = isReal && status === 'active';
+                const reward = isReal ? `₹${task.rate || task.reward || 0}` : task.reward;
+                const imageUrl = isReal ? (task.imageUrl || category.logo) : category.logo;
+                const taskTitle = isReal ? (task.title || 'Task Mission') : task.title;
+
+                if (isLive) {
+                    return `
+                        <article class="task-preview-card cursor-pointer hover:border-slate-400 dark:hover:border-slate-500" style="--task-card-delay:${index * 90}ms" data-action="open-user-task" data-taskid="${task.id}">
+                            <div class="task-card-main">
+                                <span class="task-card-logo">
+                                    <img src="${escapeHtml(imageUrl)}" alt="${escapeHtml(taskTitle)}" loading="lazy" decoding="async">
+                                </span>
+                                <span class="task-rate-pill">${escapeHtml(reward)}</span>
+                                <h4>${escapeHtml(taskTitle)}</h4>
+                            </div>
+                        </article>`;
+                } else {
+                    return `
+                        <article class="task-preview-card" style="--task-card-delay:${index * 90}ms" aria-disabled="true">
+                            <div class="task-card-main">
+                                <span class="task-card-logo">
+                                    <img src="${escapeHtml(imageUrl)}" alt="${escapeHtml(taskTitle)}" loading="lazy" decoding="async">
+                                </span>
+                                <span class="task-rate-pill">${escapeHtml(reward)}</span>
+                                <h4>${escapeHtml(taskTitle)}</h4>
+                            </div>
+                            <div class="task-card-coming">Coming Soon</div>
+                        </article>`;
                 }
-            ];
-            const renderTaskCard = (category, task, index) => `
-                <article class="task-preview-card" style="--task-card-delay:${index * 90}ms" aria-disabled="true">
-                    <div class="task-card-main">
-                        <span class="task-card-logo">
-                            <img src="${escapeHtml(category.logo)}" alt="${escapeHtml(category.label)}" loading="lazy" decoding="async">
-                        </span>
-                        <span class="task-rate-pill">${escapeHtml(task.reward)}</span>
-                        <h4>${escapeHtml(task.title)}</h4>
-                    </div>
-                    <div class="task-card-coming">Coming Soon</div>
-                </article>`;
+            };
+
             const renderCategory = (category) => `
                 <section class="task-category-block ${category.accent}">
                     <div class="task-category-title">
@@ -5116,6 +5184,21 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                         ${category.items.map((task, index) => renderTaskCard(category, task, index)).join('')}
                     </div>
                 </section>`;
+
+            let bodyContent = '';
+            if (isTaskPageEnabled && taskCategories.length === 0) {
+                bodyContent = `
+                    <div class="rounded-3xl border border-dashed border-gray-200 dark:border-gray-700 p-8 text-center bg-white dark:bg-gray-800 shadow-sm">
+                        <div class="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-cyan-50 dark:bg-cyan-900/20 mb-4">
+                            <img src="https://cdn-icons-png.flaticon.com/512/3176/3176366.png" alt="No tasks" class="h-8 w-8 object-contain">
+                        </div>
+                        <h3 class="text-lg font-black text-gray-900 dark:text-white">No Live Missions</h3>
+                        <p class="mt-2 text-sm text-gray-500 dark:text-gray-400">Real tasks are currently not available. Please check back later.</p>
+                    </div>`;
+            } else {
+                bodyContent = taskCategories.map(renderCategory).join('');
+            }
+
             const content = `
                 <header class="mb-4 bg-white/95 px-4 py-3 shadow-sm backdrop-blur page-header-fixed dark:bg-gray-900/95">
                     <div class="flex items-center justify-between gap-3">
@@ -5136,7 +5219,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                 </header>
                 <div class="task-page-shell px-4 pt-1 pb-28">
                     <div class="mx-auto max-w-4xl space-y-4">
-                        ${taskCategories.map(renderCategory).join('')}
+                        ${bodyContent}
                     </div>
                 </div>
                 ${getPageFooter()}`;
@@ -5746,6 +5829,19 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                 </button>`;
         };
 
+        const getAdminTaskIconButtonMini = (action, taskId, title, svgPath, tone = 'slate') => {
+            const toneClass = {
+                slate: 'bg-slate-900 text-white dark:bg-white dark:text-slate-900 hover:bg-slate-800 dark:hover:bg-gray-100',
+                blue: 'bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-200 hover:bg-blue-100 dark:hover:bg-blue-900/50',
+                red: 'bg-red-50 text-red-600 dark:bg-red-900/30 dark:text-red-200 hover:bg-red-100 dark:hover:bg-red-900/50',
+                amber: 'bg-amber-50 text-amber-700 dark:bg-amber-900/30 dark:text-amber-200 hover:bg-amber-100 dark:hover:bg-amber-900/50'
+            }[tone] || 'bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-200 hover:bg-gray-200 dark:hover:bg-gray-600';
+            return `
+                <button type="button" data-action="${action}" data-taskid="${taskId}" title="${escapeHtml(title)}" class="inline-flex h-8 w-8 items-center justify-center rounded-lg ${toneClass} transition hover:scale-105 active:scale-95">
+                    <svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">${svgPath}</svg>
+                </button>`;
+        };
+
         const setAdminTaskPanel = (panel = 'manage') => {
             const normalized = panel === 'add' ? 'add' : 'manage';
             window.adminTaskPanel = normalized;
@@ -5768,6 +5864,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
         const showAdminTaskPage = () => {
             if (!currentUser || currentUser.uid !== ADMIN_UID) return showNotification('Admin access only.', true);
             currentMainSection = 'admin';
+            const isTaskPageEnabled = !!appConfigCache?.task_page_enabled;
             const content = `
                 ${getPageHeader('Manage Task')}
                 <div class="pb-24">
@@ -5793,6 +5890,15 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                                     <p class="text-white/60">Off</p>
                                 </div>
                             </div>
+                        </div>
+                        <div class="mt-4 pt-3 border-t border-white/10 flex items-center justify-between">
+                            <span class="text-sm font-bold text-white/95">Task Page Status (for Users)</span>
+                            <button type="button" id="admin-toggle-task-page-status" class="inline-flex items-center gap-1.5 text-xs font-black ${isTaskPageEnabled ? 'text-emerald-300' : 'text-white/70'}">
+                                <span class="relative inline-flex h-5 w-9 rounded-full ${isTaskPageEnabled ? 'bg-emerald-500' : 'bg-white/20'} transition">
+                                    <span class="absolute top-0.5 left-0.5 h-4 w-4 rounded-full bg-white shadow transition transform ${isTaskPageEnabled ? 'translate-x-4' : 'translate-x-0'}"></span>
+                                </span>
+                                ${isTaskPageEnabled ? 'ON' : 'OFF'}
+                            </button>
                         </div>
                     </section>
 
@@ -5884,7 +5990,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                                 </select>
                             </div>
                         </div>
-                        <div id="admin-task-list" class="space-y-3 max-h-[72vh] overflow-y-auto"></div>
+                        <div id="admin-task-list" class="grid grid-cols-1 md:grid-cols-2 gap-3 max-h-[72vh] overflow-y-auto pr-1"></div>
                     </section>
                 </div>
                 </div>
@@ -5895,6 +6001,25 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                 button.addEventListener('click', () => setAdminTaskPanel(button.dataset.adminTaskPanel));
             });
             setAdminTaskPanel(window.adminTaskPanel || 'manage');
+            const toggleBtn = document.getElementById('admin-toggle-task-page-status');
+            if (toggleBtn) {
+                toggleBtn.addEventListener('click', async () => {
+                    const currentVal = !!appConfigCache?.task_page_enabled;
+                    const nextVal = !currentVal;
+                    toggleBtn.disabled = true;
+                    try {
+                        const configRef = doc(db, `artifacts/${appId}/settings`, 'app_config');
+                        await setDoc(configRef, { task_page_enabled: nextVal }, { merge: true });
+                        showNotification(`User task page is now ${nextVal ? 'ON (Real tasks shown)' : 'OFF (Coming Soon shown)'}`);
+                        appConfigCache.task_page_enabled = nextVal;
+                        showAdminTaskPage();
+                    } catch (error) {
+                        console.error('Failed to toggle task page status:', error);
+                        showNotification('Error updating settings.', true);
+                        toggleBtn.disabled = false;
+                    }
+                });
+            }
             document.getElementById('admin-task-form')?.addEventListener('submit', handleSaveAdminTask);
             document.getElementById('admin-task-reset-btn')?.addEventListener('click', resetAdminTaskForm);
             document.getElementById('admin-task-family')?.addEventListener('change', () => updateAdminTaskDynamicFields());
@@ -6264,30 +6389,27 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
 
             if (!tasks.length && !allTasksCache.length) {
                 listEl.innerHTML = `
-                    <div class="space-y-3">
-                        <div class="rounded-2xl border border-blue-100 bg-blue-50 px-4 py-3 text-sm font-semibold text-blue-700 dark:border-blue-900/40 dark:bg-blue-900/20 dark:text-blue-100">
-                            No task added yet. The faded missions below are preview only and are not clickable.
-                        </div>
-                        ${[
-                            { title: 'PopClub', category: 'Active App Review', rate: '₹8', image: 'Pop' },
-                            { title: 'Map Review Work', category: 'Review Task', rate: '₹12', image: 'Map' },
-                            { title: 'App Install Mission', category: 'Instant Payment Task', rate: '₹10', image: 'App' }
-                        ].map(item => `
-                            <div class="pointer-events-none rounded-2xl border border-slate-100 bg-slate-50 p-4 opacity-55 dark:border-slate-700 dark:bg-gray-900">
-                                <div class="flex items-center gap-3">
-                                    <span class="flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-slate-200 bg-white text-xs font-bold text-slate-400 dark:border-slate-700 dark:bg-gray-800">${item.image}</span>
-                                    <span class="min-w-0 flex-1">
-                                        <span class="block truncate text-sm font-extrabold text-slate-700 dark:text-slate-200">${item.title}</span>
-                                        <span class="mt-1 inline-flex rounded bg-slate-200 px-1.5 py-0.5 text-[9px] font-extrabold uppercase text-slate-500 dark:bg-slate-700 dark:text-slate-300">${item.category}</span>
-                                    </span>
-                                    <span class="text-right">
-                                        <span class="block text-[8px] font-extrabold uppercase text-slate-400">Reward</span>
-                                        <span class="block text-lg font-extrabold text-slate-500 dark:text-slate-300">${item.rate}</span>
-                                    </span>
+                    <div class="md:col-span-2 rounded-2xl border border-blue-100 bg-blue-50 px-4 py-3 text-sm font-semibold text-blue-700 dark:border-blue-900/40 dark:bg-blue-900/20 dark:text-blue-100">
+                        No task added yet. The faded missions below are preview only and are not clickable.
+                    </div>
+                    ${[
+                        { title: 'PopClub', category: 'Active App Review', rate: '₹8', image: 'Pop' },
+                        { title: 'Map Review Work', category: 'Review Task', rate: '₹12', image: 'Map' },
+                        { title: 'App Install Mission', category: 'Instant Payment Task', rate: '₹10', image: 'App' }
+                    ].map(item => `
+                        <div class="pointer-events-none rounded-xl border border-slate-100 bg-slate-50 p-3 opacity-55 dark:border-slate-700 dark:bg-gray-900 flex flex-col justify-between">
+                            <div class="flex items-start gap-2.5 min-w-0">
+                                <span class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-white text-xs font-bold text-slate-400 dark:border-slate-700 dark:bg-gray-800">${item.image}</span>
+                                <div class="min-w-0 flex-1">
+                                    <div class="flex items-center justify-between gap-1">
+                                        <span class="truncate text-xs font-bold text-gray-400 dark:text-gray-500">${item.category}</span>
+                                        <span class="text-sm font-black text-emerald-600 dark:text-emerald-400 shrink-0">${item.rate}</span>
+                                    </div>
+                                    <h4 class="mt-0.5 text-sm font-black text-gray-900 dark:text-white line-clamp-1 truncate">${item.title}</h4>
                                 </div>
                             </div>
-                        `).join('')}
-                    </div>`;
+                        </div>
+                    `).join('')}`;
                 return;
             }
 
@@ -6307,43 +6429,39 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                     closed: 'bg-red-50 text-red-700 dark:bg-red-900/30 dark:text-red-200'
                 }[status] || 'bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-200';
                 return `
-                    <div class="rounded-2xl border border-gray-100 dark:border-gray-700 bg-gray-50 dark:bg-gray-900/30 p-4">
-                        <div class="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
-                            <div class="flex min-w-0 flex-1 gap-3">
-                                <span class="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-2xl border border-gray-200 bg-white p-2 dark:border-gray-700 dark:bg-gray-800">
-                                    <img src="${escapeHtml(logo)}" alt="${escapeHtml(subtypeMeta.label)}" class="h-full w-full object-contain" loading="lazy" decoding="async" onerror="this.src='${escapeHtml(subtypeMeta.logo)}'">
-                                </span>
-                                <div class="min-w-0">
-                                    <div class="flex flex-wrap items-center gap-2">
-                                        <span class="rounded-full bg-cyan-50 dark:bg-cyan-900/30 px-2.5 py-1 text-[11px] font-black text-cyan-700 dark:text-cyan-200">${escapeHtml(getAdminTaskFamilyLabel(family))}</span>
-                                        <span class="rounded-full bg-white dark:bg-gray-800 px-2.5 py-1 text-[11px] font-black text-gray-600 dark:text-gray-300">${escapeHtml(subtypeMeta.label)}</span>
-                                        <span class="rounded-full ${statusClass} px-2.5 py-1 text-[11px] font-black">${isLive ? 'Live' : status === 'closed' ? 'Closed' : 'Off'}</span>
-                                    </div>
-                                    <h4 class="mt-2 text-base font-black leading-snug text-gray-900 dark:text-white">${escapeHtml(task.title || subtypeMeta.label)}</h4>
+                    <div class="rounded-xl border border-gray-100 dark:border-gray-700 bg-white dark:bg-gray-800 p-3 shadow-sm hover:shadow-md transition flex flex-col justify-between min-h-[145px]">
+                        <div class="flex items-start gap-2.5 min-w-0">
+                            <span class="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-gray-100 bg-gray-50 p-1.5 dark:border-gray-700 dark:bg-gray-900">
+                                <img src="${escapeHtml(logo)}" alt="${escapeHtml(subtypeMeta.label)}" class="h-full w-full object-contain" loading="lazy" decoding="async" onerror="this.src='${escapeHtml(subtypeMeta.logo)}'">
+                            </span>
+                            <div class="min-w-0 flex-1">
+                                <div class="flex items-center justify-between gap-1">
+                                    <span class="truncate text-[11px] font-bold text-gray-400 dark:text-gray-500">${escapeHtml(subtypeMeta.label)}</span>
+                                    <span class="text-sm font-black text-emerald-600 dark:text-emerald-400 shrink-0">${formatCurrency(task.rate || task.reward || 0)}</span>
+                                </div>
+                                <h4 class="mt-0.5 text-sm font-black text-gray-900 dark:text-white truncate" title="${escapeHtml(task.title || subtypeMeta.label)}">${escapeHtml(task.title || subtypeMeta.label)}</h4>
+                                <div class="mt-1 flex items-center gap-1 flex-wrap">
+                                    <span class="rounded bg-cyan-50 dark:bg-cyan-900/20 px-1.5 py-0.5 text-[9px] font-bold text-cyan-700 dark:text-cyan-300">${escapeHtml(getAdminTaskFamilyLabel(family))}</span>
+                                    <span class="rounded px-1.5 py-0.5 text-[9px] font-bold ${statusClass}">${isLive ? 'Live' : status === 'closed' ? 'Closed' : 'Off'}</span>
+                                    <span class="text-[9px] font-bold text-gray-400 dark:text-gray-500">Lim: ${task.limit || 'Open'}</span>
+                                    ${expiresAt ? `<span class="text-[9px] font-bold text-amber-600 dark:text-amber-400">Close: ${escapeHtml(closesText)}</span>` : ''}
                                 </div>
                             </div>
-                            <div class="shrink-0 sm:text-right">
-                                <p class="text-xs font-bold text-gray-400">Rate</p>
-                                <p class="text-xl font-black text-emerald-600 dark:text-emerald-300">${formatCurrency(task.rate || task.reward || 0)}</p>
-                                <p class="mt-1 text-xs font-semibold text-gray-500 dark:text-gray-400">${escapeHtml(getTaskPaymentLabel(task))}</p>
-                                <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">Limit: ${task.limit || 'Open'} | Close: ${escapeHtml(closesText)}</p>
-                            </div>
                         </div>
-                        <div class="mt-4 flex flex-wrap items-center justify-between gap-3">
-                            <button type="button" data-action="toggle-admin-task-status" data-taskid="${task.id}" class="inline-flex items-center gap-2 rounded-full px-2 py-1 text-xs font-black ${isLive ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-200' : 'bg-gray-200 text-gray-600 dark:bg-gray-700 dark:text-gray-200'}">
-                                <span class="relative inline-flex h-7 w-12 rounded-full ${isLive ? 'bg-emerald-500' : 'bg-gray-400'} transition">
-                                    <span class="absolute top-1 h-5 w-5 rounded-full bg-white shadow transition ${isLive ? 'left-6' : 'left-1'}"></span>
+                        <div class="mt-3 pt-2 border-t border-gray-50 dark:border-gray-700/50 flex items-center justify-between gap-2">
+                            <button type="button" data-action="toggle-admin-task-status" data-taskid="${task.id}" class="inline-flex items-center gap-1.5 text-xs font-black ${isLive ? 'text-emerald-600 dark:text-emerald-400' : 'text-gray-400 dark:text-gray-500'}">
+                                <span class="relative inline-flex h-5 w-9 rounded-full ${isLive ? 'bg-emerald-500' : 'bg-gray-300 dark:bg-gray-600'} transition">
+                                    <span class="absolute top-0.5 left-0.5 h-4 w-4 rounded-full bg-white shadow transition transform ${isLive ? 'translate-x-4' : 'translate-x-0'}"></span>
                                 </span>
                                 ${isLive ? 'ON' : 'OFF'}
                             </button>
-                            <div class="flex flex-wrap gap-2">
-                                ${isAdminReviewTask(task) ? getAdminTaskIconButton('manage-task-comments', task.id, 'Manage Comments', '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a10.6 10.6 0 0 1-4.51-.98L3 20l1.26-3.78A7.55 7.55 0 0 1 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"></path>', 'blue') : ''}
-                                ${getAdminTaskIconButton('edit-admin-task', task.id, 'Edit task', '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L10.582 16.07a4.5 4.5 0 0 1-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 0 1 1.13-1.897l8.932-8.931z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19.5 7.125 16.875 4.5"></path>', 'slate')}
-                                ${getAdminTaskIconButton('delete-admin-task', task.id, 'Delete task', '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="m14.74 9-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673A2.25 2.25 0 0 1 15.916 21H8.084a2.25 2.25 0 0 1-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 0 0-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 0 1 3.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 0 0-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 0 0-7.5 0"></path>', 'red')}
-                            </div>
+                            <div class="flex gap-1">
+                                ${isAdminReviewTask(task) ? getAdminTaskIconButtonMini('manage-task-comments', task.id, 'Comments', '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a10.6 10.6 0 0 1-4.51-.98L3 20l1.26-3.78A7.55 7.55 0 0 1 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"></path>', 'blue') : ''}
+                                ${getAdminTaskIconButtonMini('edit-admin-task', task.id, 'Edit', '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L10.582 16.07a4.5 4.5 0 0 1-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 0 1 1.13-1.897l8.932-8.931z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19.5 7.125 16.875 4.5"></path>', 'slate')}
+                                ${getAdminTaskIconButtonMini('delete-admin-task', task.id, 'Delete', '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="m14.74 9-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673A2.25 2.25 0 0 1 15.916 21H8.084a2.25 2.25 0 0 1-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 0 0-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 0 1 3.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 0 0-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 0 0-7.5 0"></path>', 'red')}
                         </div>
                     </div>`;
-            }).join('') : '<p class="rounded-2xl border border-dashed border-gray-200 py-8 text-center text-sm font-semibold text-gray-500 dark:border-gray-700 dark:text-gray-400">No matching task found.</p>';
+            }).join('') : '<p class="md:col-span-2 rounded-2xl border border-dashed border-gray-200 py-8 text-center text-sm font-semibold text-gray-500 dark:border-gray-700 dark:text-gray-400">No matching task found.</p>';
         };
 
         const showAdminTaskCommentsPage = async (taskId) => {
@@ -7899,7 +8017,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                         </div>
                         <div id="support-chat-composer" class="shrink-0 flex items-center gap-2 p-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] border-t border-gray-100 dark:border-gray-700 bg-white dark:bg-gray-800 transition-transform duration-150">
                             <button id="emoji-toggle-btn" class="h-10 w-10 rounded-full bg-gray-100 dark:bg-gray-700 text-xl">☺</button>
-                            <input id="support-message-input" type="text" placeholder="Type a message" class="flex-1 min-w-0 px-4 py-2.5 text-[16px] bg-gray-100 dark:bg-gray-700 rounded-full focus:outline-none focus:ring-2 focus:ring-blue-500">
+                            <textarea id="support-message-input" placeholder="Type a message" rows="1" class="flex-1 min-w-0 px-4 py-2 text-[16px] bg-gray-100 dark:bg-gray-700 rounded-2xl focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none overflow-y-auto max-h-24"></textarea>
                             <button id="support-send-btn" class="h-10 w-10 rounded-full bg-blue-600 text-white flex items-center justify-center">
                                 <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M2 21l21-9L2 3v7l15 2-15 2v7z"></path></svg>
                             </button>
@@ -8067,6 +8185,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                     }
                 };
                 input.value = '';
+                input.style.height = 'auto';
                 const userMeta = {
                     userId: chatUserId,
                     userName: chatMeta.userName || currentUserData?.name || currentUser?.email || 'User',
@@ -8121,8 +8240,18 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             const emojiPanel = document.getElementById('emoji-panel');
             if (!supportSendButton || !supportMessageInput || !emojiToggleButton) return;
             supportSendButton.onclick = sendMessage;
+
+            const adjustSupportTextareaHeight = () => {
+                supportMessageInput.style.height = 'auto';
+                supportMessageInput.style.height = Math.min(supportMessageInput.scrollHeight, 120) + 'px';
+            };
+            supportMessageInput.addEventListener('input', adjustSupportTextareaHeight);
+
             supportMessageInput.addEventListener('keydown', (e) => {
-                if (e.key === 'Enter') sendMessage();
+                if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    sendMessage();
+                }
             });
             emojiToggleButton.onclick = () => {
                 emojiPanel?.classList.toggle('hidden');
@@ -8132,6 +8261,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                 btn.onclick = () => {
                     supportMessageInput.value += btn.textContent;
                     supportMessageInput.focus();
+                    adjustSupportTextareaHeight();
                 };
             });
             if (initialMessage) {
@@ -8497,7 +8627,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                             ].map(([question, label]) => `<button data-revy-question="${question}" class="revy-option shrink-0 px-3 py-1.5 rounded-full bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-200 text-xs font-bold">${label}</button>`).join('')}
                         </div>
                         <div id="revy-chat-composer" class="shrink-0 flex items-center gap-2 p-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] border-t border-gray-100 dark:border-gray-700 bg-white dark:bg-gray-800">
-                            <input id="revy-message-input" type="text" placeholder="Or type your question" class="flex-1 min-w-0 px-4 py-2.5 text-[16px] bg-gray-100 dark:bg-gray-700 rounded-full focus:outline-none focus:ring-2 focus:ring-blue-500">
+                            <textarea id="revy-message-input" placeholder="Or type your question" rows="1" class="flex-1 min-w-0 px-4 py-2 text-[16px] bg-gray-100 dark:bg-gray-700 rounded-2xl focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none overflow-y-auto max-h-24"></textarea>
                             <button id="revy-send-btn" class="h-10 w-10 rounded-full bg-blue-600 text-white flex items-center justify-center">
                                 <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M2 21l21-9L2 3v7l15 2-15 2v7z"></path></svg>
                             </button>
@@ -8518,6 +8648,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                 const text = input.value.trim();
                 if (!text) return;
                 input.value = '';
+                input.style.height = 'auto';
                 revyBotLastQuestion = text;
                 addRevyBotMessage(text, 'user');
 
@@ -8535,17 +8666,30 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                 }
             };
             document.getElementById('revy-send-btn').onclick = sendBotMessage;
-            document.querySelectorAll('.revy-option').forEach(btn => {
-                btn.onclick = () => {
-                    const input = document.getElementById('revy-message-input');
-                    input.value = btn.dataset.revyQuestion;
-                    sendBotMessage();
+            const revyInput = document.getElementById('revy-message-input');
+            if (revyInput) {
+                const adjustRevyTextareaHeight = () => {
+                    revyInput.style.height = 'auto';
+                    revyInput.style.height = Math.min(revyInput.scrollHeight, 120) + 'px';
                 };
-            });
-            document.getElementById('revy-message-input').addEventListener('keydown', (e) => {
-                resetRevyBotTimer();
-                if (e.key === 'Enter') sendBotMessage();
-            });
+                revyInput.addEventListener('input', adjustRevyTextareaHeight);
+
+                document.querySelectorAll('.revy-option').forEach(btn => {
+                    btn.onclick = () => {
+                        revyInput.value = btn.dataset.revyQuestion;
+                        sendBotMessage();
+                        adjustRevyTextareaHeight();
+                    };
+                });
+
+                revyInput.addEventListener('keydown', (e) => {
+                    resetRevyBotTimer();
+                    if (e.key === 'Enter' && !e.shiftKey) {
+                        e.preventDefault();
+                        sendBotMessage();
+                    }
+                });
+            }
             document.getElementById('revy-back-btn').onclick = () => {
                 if (revyKeyboardCleanup) revyKeyboardCleanup();
                 showHelpSupportPage();
@@ -16241,6 +16385,9 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             applyWithdrawalConfig(appConfigCache);
             applyMaintenanceMode();
             showWhatsNewPopupIfNeeded();
+            if (document.querySelector('.task-page-shell')) {
+                showUserTaskPage();
+            }
         };
 
         const loadWithdrawalSettingsOnce = async (force = false) => {
