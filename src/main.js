@@ -158,6 +158,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
         let revyBotMessages = [];
         let revyBotLastQuestion = '';
         let revyBotTimer = null;
+        let revyBotTyping = false;
         let currentMainSection = 'home';
         let notificationTimeout;
         let appConfigCache = {};
@@ -8393,7 +8394,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
         const renderRevyBotMessages = () => {
             const list = document.getElementById('revy-bot-messages');
             if (!list) return;
-            list.innerHTML = revyBotMessages.map((message, index) => {
+            let html = revyBotMessages.map((message, index) => {
                 const isMine = message.senderRole === 'user';
                 const showActions = message.actions === 'escalate' && index === revyBotMessages.length - 1;
                 return `
@@ -8411,6 +8412,21 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                         </div>
                     </div>`;
             }).join('');
+
+            if (revyBotTyping) {
+                html += `
+                    <div class="flex justify-start">
+                        <div class="chat-bubble-admin bg-white dark:bg-gray-800 border border-gray-100 dark:border-gray-700 px-4 py-3 rounded-2xl shadow-sm">
+                            <div class="flex items-center gap-1.5 py-1">
+                                <span class="h-2 w-2 rounded-full bg-gray-400 dark:bg-gray-500 animate-bounce" style="animation-delay: 0ms"></span>
+                                <span class="h-2 w-2 rounded-full bg-gray-400 dark:bg-gray-500 animate-bounce" style="animation-delay: 150ms"></span>
+                                <span class="h-2 w-2 rounded-full bg-gray-400 dark:bg-gray-500 animate-bounce" style="animation-delay: 300ms"></span>
+                            </div>
+                        </div>
+                    </div>`;
+            }
+
+            list.innerHTML = html;
             list.scrollTop = list.scrollHeight;
             document.getElementById('revy-transfer-yes')?.addEventListener('click', () => {
                 const question = revyBotLastQuestion || 'I need admin help.';
@@ -8504,7 +8520,14 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                 input.value = '';
                 revyBotLastQuestion = text;
                 addRevyBotMessage(text, 'user');
+
+                revyBotTyping = true;
+                renderRevyBotMessages();
+
                 const reply = await getRevyBotReply(text);
+                
+                revyBotTyping = false;
+
                 if (reply?.unsupported) {
                     addRevyBotMessage(reply.text, 'bot', 'escalate');
                 } else {
