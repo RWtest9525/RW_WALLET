@@ -7070,7 +7070,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             };
         };
 
-        // Global Screenshot Lightbox and OCR extraction helper
+        // Global Screenshot Lightbox
         window.showScreenshotLightbox = function(url, driveUrl) {
             const existing = document.getElementById('screenshot-lightbox-overlay');
             if (existing) existing.remove();
@@ -7099,6 +7099,253 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             if (closeBtn) {
                 closeBtn.onclick = () => overlay.remove();
             }
+        };
+
+        window.showAdminSubmissionDetailModal = function(index) {
+            const list = window.currentActiveSubmissions || [];
+            if (!list || index < 0 || index >= list.length) return;
+
+            const s = list[index];
+            const statusColor = s.manual_status === 'approved' ? 'emerald' : s.manual_status === 'rejected' ? 'rose' : 'amber';
+            const payoutBadge = s.payout_status === 'paid' ? '<span class="rounded-full bg-cyan-100 dark:bg-cyan-900/30 px-2.5 py-0.5 text-[9px] font-black text-cyan-700 dark:text-cyan-300">PAID</span>' : '';
+            const ocrBadge = s.ocr_status === 'completed' ? '🟢' : s.ocr_status === 'failed' ? '🔴' : '⏳';
+            const timeStr = s.submitted_at ? new Date(s.submitted_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }) : 'Unknown';
+            
+            let details = {};
+            try { details = s.details_json ? JSON.parse(s.details_json) : {}; } catch {}
+            const gmailLogoUrl = details.gmailLogoUrl || '';
+            const gmailName = s.ocr_extracted_name || '';
+
+            let liveBadge = '';
+            if (s.scraper_status === 'live_confirmed') {
+                liveBadge = '<span class="rounded-full bg-emerald-100 dark:bg-emerald-900/30 px-2 py-0.5 text-[9px] font-black text-emerald-700 dark:text-emerald-300">🟢 LIVE</span>';
+            } else if (s.scraper_status === 'not_live') {
+                liveBadge = '<span class="rounded-full bg-rose-100 dark:bg-rose-900/30 px-2 py-0.5 text-[9px] font-black text-rose-700 dark:text-rose-300">🔴 NOT LIVE</span>';
+            } else {
+                liveBadge = '<span class="rounded-full bg-gray-150 dark:bg-gray-700 px-2 py-0.5 text-[9px] font-black text-gray-500 dark:text-gray-400">⏳ UNCHECKED</span>';
+            }
+
+            // Remove existing modal if any
+            const existing = document.getElementById('admin-detail-modal');
+            if (existing) existing.remove();
+
+            const modal = document.createElement('div');
+            modal.id = 'admin-detail-modal';
+            modal.className = 'fixed inset-0 z-[9990] flex items-center justify-center bg-black/85 backdrop-blur-sm p-4 transition-all duration-300';
+            
+            modal.innerHTML = `
+                <!-- Prev Button -->
+                ${index > 0 ? `<button id="modal-prev-btn" class="absolute left-2 md:left-6 top-1/2 -translate-y-1/2 h-12 w-12 flex items-center justify-center rounded-full bg-gray-800/60 hover:bg-gray-800 text-white hover:scale-105 active:scale-95 transition shrink-0 z-50 text-xl font-bold">‹</button>` : ''}
+
+                <!-- Container -->
+                <div class="relative w-full max-w-4xl bg-white dark:bg-gray-900 rounded-3xl border border-gray-150 dark:border-gray-850 shadow-2xl overflow-hidden flex flex-col md:flex-row max-h-[90vh]">
+                    <!-- Close Button -->
+                    <button id="modal-close-btn" class="absolute top-4 right-4 z-50 h-8 w-8 flex items-center justify-center rounded-full bg-black/40 hover:bg-black/60 text-white text-sm font-bold transition">✕</button>
+
+                    <!-- Left: Image -->
+                    <div class="flex-1 bg-gray-950 flex items-center justify-center p-4 relative min-h-[40vh] md:min-h-0 max-h-[50vh] md:max-h-none overflow-hidden select-none">
+                        <img src="${escapeHtml(s.screenshot_url)}" alt="Screenshot" class="max-w-full max-h-[45vh] md:max-h-[75vh] object-contain rounded-xl border border-gray-800 shadow-lg cursor-zoom-in" onclick="window.showScreenshotLightbox('${escapeHtml(s.screenshot_url)}', '${escapeHtml(s.view_url || s.screenshot_view_url || '')}')">
+                    </div>
+
+                    <!-- Right: Info Panel -->
+                    <div class="w-full md:w-[360px] shrink-0 p-5 flex flex-col justify-between border-t md:border-t-0 md:border-l border-gray-150 dark:border-gray-800 overflow-y-auto bg-gray-50 dark:bg-gray-900/50">
+                        <div class="space-y-4">
+                            <!-- Header Info -->
+                            <div class="text-left">
+                                <div class="flex items-center gap-1.5 flex-wrap">
+                                    <span class="rounded-full bg-${statusColor}-100 dark:bg-${statusColor}-900/30 px-2 py-0.5 text-[9px] font-black text-${statusColor}-700 dark:text-${statusColor}-300 uppercase">${escapeHtml(s.manual_status)}</span>
+                                    ${payoutBadge}
+                                </div>
+                                <h3 class="mt-2 text-sm font-extrabold text-gray-850 dark:text-white truncate">${escapeHtml(s.user_name || 'User')}</h3>
+                                <p class="text-[10px] text-gray-450 truncate">${escapeHtml(s.user_email || '')}</p>
+                                <p class="text-[9px] text-gray-400 mt-1">Submitted: ${timeStr}</p>
+                            </div>
+
+                            <!-- Comment -->
+                            <div class="rounded-2xl bg-white dark:bg-gray-855 p-3.5 border border-gray-150 dark:border-gray-800 shadow-sm text-left">
+                                <p class="text-[9px] font-black uppercase text-gray-400">Assigned Comment</p>
+                                <p class="mt-1 text-xs font-bold text-gray-800 dark:text-gray-200 italic leading-relaxed">"${escapeHtml(s.assigned_comment || '')}"</p>
+                            </div>
+
+                            <!-- Reviewer Name -->
+                            <div class="rounded-2xl bg-white dark:bg-gray-855 p-3.5 border border-gray-150 dark:border-gray-800 shadow-sm space-y-2 text-left">
+                                <div class="flex items-center gap-2">
+                                    ${gmailLogoUrl ? `<img src="${escapeHtml(gmailLogoUrl)}" class="h-6 w-6 rounded-full object-cover border border-gray-200 dark:border-gray-700 shrink-0">` : `<span class="flex h-6 w-6 items-center justify-center rounded-full bg-gray-100 dark:bg-gray-850 text-[9px] font-bold text-gray-400 shrink-0">G</span>`}
+                                    <div class="min-w-0 flex-1">
+                                        <p class="text-[9px] font-black uppercase text-gray-400">Gmail Reviewer</p>
+                                        <p class="text-xs font-bold text-gray-900 dark:text-white truncate">${escapeHtml(gmailName || 'Not parsed yet')}</p>
+                                    </div>
+                                </div>
+
+                                ${(s.ocr_extracted_text || s.ocrExtractedText) ? `
+                                    <div class="border-t border-gray-100 dark:border-gray-750 pt-2 mt-2">
+                                        <p class="text-[9px] font-black uppercase text-purple-500">OCR Extracted Text</p>
+                                        <p class="mt-1 text-[10px] text-gray-655 dark:text-gray-300 font-mono bg-gray-55 dark:bg-gray-900 p-2 rounded-xl border border-gray-100 dark:border-gray-800 max-h-24 overflow-y-auto whitespace-pre-wrap select-text">${escapeHtml(s.ocr_extracted_text || s.ocrExtractedText)}</p>
+                                    </div>
+                                ` : ''}
+                            </div>
+
+                            <!-- Check badges -->
+                            <div class="flex items-center justify-between text-[10px] text-gray-450 border-t border-gray-100 dark:border-gray-850 pt-3">
+                                <div class="flex items-center gap-1"><span>Live check:</span> ${liveBadge}</div>
+                                <div class="flex items-center gap-1"><span>OCR:</span> ${ocrBadge}</div>
+                            </div>
+                        </div>
+
+                        <!-- Action Buttons -->
+                        <div class="mt-6 border-t border-gray-150 dark:border-gray-800 pt-4 space-y-2">
+                            <div class="grid grid-cols-2 gap-2">
+                                ${s.manual_status === 'pending' ? `
+                                    <button id="modal-approve-btn" class="rounded-xl bg-green-600 py-2.5 text-xs font-black text-white hover:bg-green-700 active:scale-98 transition">✅ Approve</button>
+                                    <button id="modal-reject-btn" class="rounded-xl bg-red-600 py-2.5 text-xs font-black text-white hover:bg-red-700 active:scale-98 transition">❌ Reject</button>
+                                ` : ''}
+                                ${s.manual_status === 'approved' && s.payout_status !== 'paid' ? `
+                                    <button id="modal-pay-btn" class="col-span-2 rounded-xl bg-cyan-600 py-2.5 text-xs font-black text-white hover:bg-cyan-700 active:scale-98 transition">💰 Pay Now</button>
+                                ` : ''}
+                            </div>
+                            <div class="grid grid-cols-2 gap-2">
+                                <button id="modal-ocr-btn" class="rounded-xl bg-purple-600 py-2 text-xs font-black text-white hover:bg-purple-700 active:scale-98 transition">🤖 OCR</button>
+                                <button id="modal-check-btn" class="rounded-xl bg-indigo-600 py-2 text-xs font-black text-white hover:bg-indigo-700 active:scale-98 transition">🔎 Check</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Next Button -->
+                ${index < list.length - 1 ? `<button id="modal-next-btn" class="absolute right-2 md:right-6 top-1/2 -translate-y-1/2 h-12 w-12 flex items-center justify-center rounded-full bg-gray-800/60 hover:bg-gray-800 text-white hover:scale-105 active:scale-95 transition shrink-0 z-50 text-xl font-bold">›</button>` : ''}
+            `;
+
+            document.body.appendChild(modal);
+
+            // Close actions
+            const closeModal = () => {
+                modal.remove();
+                document.removeEventListener('keydown', keyHandler);
+            };
+            modal.onclick = (e) => {
+                if (e.target === modal) closeModal();
+            };
+            const closeBtn = document.getElementById('modal-close-btn');
+            if (closeBtn) closeBtn.onclick = closeModal;
+
+            // Nav actions
+            const prevBtn = document.getElementById('modal-prev-btn');
+            if (prevBtn) prevBtn.onclick = () => {
+                closeModal();
+                window.showAdminSubmissionDetailModal(index - 1);
+            };
+            const nextBtn = document.getElementById('modal-next-btn');
+            if (nextBtn) nextBtn.onclick = () => {
+                closeModal();
+                window.showAdminSubmissionDetailModal(index + 1);
+            };
+
+            // Keyboard nav
+            const keyHandler = (e) => {
+                if (e.key === 'ArrowLeft' && index > 0) {
+                    closeModal();
+                    window.showAdminSubmissionDetailModal(index - 1);
+                } else if (e.key === 'ArrowRight' && index < list.length - 1) {
+                    closeModal();
+                    window.showAdminSubmissionDetailModal(index + 1);
+                } else if (e.key === 'Escape') {
+                    closeModal();
+                }
+            };
+            document.addEventListener('keydown', keyHandler);
+
+            // Bind Action Buttons inside Modal
+            const subId = s.id;
+            const bindAction = (btnId, callback) => {
+                const btn = document.getElementById(btnId);
+                if (!btn) return;
+                btn.onclick = async () => {
+                    const originalText = btn.textContent;
+                    btn.disabled = true;
+                    btn.textContent = 'Processing...';
+                    try {
+                        await callback();
+                        // Reload data in background
+                        await loadAdminSubmissions();
+                        // Re-render admin screen
+                        renderAdminSubmissions();
+                        // Re-open/update modal with new data
+                        closeModal();
+                        window.showAdminSubmissionDetailModal(index);
+                    } catch (err) {
+                        console.error('Modal action failed:', err);
+                        showNotification('Action failed. Please try again.', true);
+                        btn.disabled = false;
+                        btn.textContent = originalText;
+                    }
+                };
+            };
+
+            bindAction('modal-approve-btn', async () => {
+                const token = await getBackendAuthToken();
+                await fetchWithTimeout(`${BACKEND_BASE_URL}/api/admin/task-submissions/${encodeURIComponent(subId)}`, {
+                    method: 'PATCH',
+                    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ manualStatus: 'approved', verifiedAt: Date.now() })
+                }, 8000);
+                showNotification('Submission approved.');
+            });
+
+            bindAction('modal-reject-btn', async () => {
+                const token = await getBackendAuthToken();
+                await fetchWithTimeout(`${BACKEND_BASE_URL}/api/admin/task-submissions/${encodeURIComponent(subId)}`, {
+                    method: 'PATCH',
+                    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ manualStatus: 'rejected' })
+                }, 8000);
+                showNotification('Submission rejected.');
+            });
+
+            bindAction('modal-pay-btn', async () => {
+                const token = await getBackendAuthToken();
+                await fetchWithTimeout(`${BACKEND_BASE_URL}/api/admin/task-submissions/${encodeURIComponent(subId)}`, {
+                    method: 'PATCH',
+                    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ payoutStatus: 'paid', paidAt: Date.now() })
+                }, 8000);
+                showNotification('Payment credited.');
+            });
+
+            bindAction('modal-ocr-btn', async () => {
+                showNotification('Running OCR...');
+                const token = await getBackendAuthToken();
+                const resp = await fetchWithTimeout(`${BACKEND_BASE_URL}/api/admin/ocr-process/${encodeURIComponent(subId)}`, {
+                    method: 'POST',
+                    headers: { Authorization: `Bearer ${token}` }
+                }, 20000);
+                const ocrData = await resp.json().catch(() => ({}));
+                showNotification(ocrData.ok ? `OCR complete: ${(ocrData.ocr?.text || '').slice(0, 80)}` : 'OCR failed');
+            });
+
+            bindAction('modal-check-btn', async () => {
+                showNotification('Checking Live list...');
+                const token = await getBackendAuthToken();
+                const resp = await fetchWithTimeout(`${BACKEND_BASE_URL}/api/admin/scraper/check-review`, {
+                    method: 'POST',
+                    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        submissionId: subId,
+                        taskLink: s.task_link || '',
+                        assignedComment: s.assigned_comment || '',
+                        appName: s.app_name || ''
+                    })
+                }, 10000);
+                const resData = await resp.json().catch(() => ({}));
+                if (resData.ok && resData.result) {
+                    if (resData.result.found) {
+                        showNotification('Review verified in Live List!');
+                    } else {
+                        showNotification('Not found in Live List.', true);
+                    }
+                } else {
+                    showNotification('Live check failed.', true);
+                }
+            });
         };
 
         window.extractReviewerName = async (ocrText, targetComment) => {
@@ -7423,80 +7670,25 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                 const dateStr = adminSubmissionsView.selectedDate;
                 const appKey = adminSubmissionsView.selectedApp;
                 const finalSubs = (grouped[dateStr]?.[appKey]?.items || []);
+                window.currentActiveSubmissions = finalSubs; // Cache list for detail modal
 
-                let cardsHtml = finalSubs.map(s => {
-                    const statusColor = s.manual_status === 'approved' ? 'green' : s.manual_status === 'rejected' ? 'red' : 'yellow';
-                    const payoutBadge = s.payout_status === 'paid' ? '<span class="rounded-full bg-cyan-100 dark:bg-cyan-900/30 px-2 py-0.5 text-[9px] font-black text-cyan-700 dark:text-cyan-300">PAID</span>' : '';
-                    const ocrBadge = s.ocr_status === 'completed' ? '🟢' : s.ocr_status === 'failed' ? '🔴' : '⏳';
-                    const timeStr = s.submitted_at ? new Date(s.submitted_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }) : 'Unknown';
+                let cardsHtml = `<div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">`;
+                cardsHtml += finalSubs.map((s, idx) => {
+                    const statusColor = s.manual_status === 'approved' ? 'emerald' : s.manual_status === 'rejected' ? 'rose' : 'amber';
+                    const name = s.ocr_extracted_name || s.user_name || 'User';
+                    const statusTextColor = s.manual_status === 'approved' ? 'emerald' : s.manual_status === 'rejected' ? 'rose' : 'amber';
                     
-                    let details = {};
-                    try { details = s.details_json ? JSON.parse(s.details_json) : {}; } catch {}
-                    const gmailLogoUrl = details.gmailLogoUrl || '';
-                    const gmailName = s.ocr_extracted_name || '';
-
-                    let liveBadge = '';
-                    if (s.scraper_status === 'live_confirmed') {
-                        liveBadge = '<span class="rounded-full bg-emerald-100 dark:bg-emerald-900/30 px-2 py-0.5 text-[9px] font-black text-emerald-700 dark:text-emerald-300">🟢 LIVE</span>';
-                    } else if (s.scraper_status === 'not_live') {
-                        liveBadge = '<span class="rounded-full bg-rose-100 dark:bg-rose-900/30 px-2 py-0.5 text-[9px] font-black text-rose-700 dark:text-rose-300">🔴 NOT LIVE</span>';
-                    } else {
-                        liveBadge = '<span class="rounded-full bg-gray-150 dark:bg-gray-700 px-2 py-0.5 text-[9px] font-black text-gray-500 dark:text-gray-400">⏳ UNCHECKED</span>';
-                    }
-
                     return `
-                    <div class="px-4 py-3 bg-white dark:bg-gray-800 border border-gray-150 dark:border-gray-700 rounded-2xl space-y-2 text-left shadow-sm">
-                        <div class="flex items-center gap-2">
-                            <div class="min-w-0 flex-1">
-                                <p class="text-sm font-bold truncate">${escapeHtml(s.user_name || s.user_email || 'User')}</p>
-                                <p class="text-[10px] text-gray-450">${escapeHtml(s.user_email || '')} · ${timeStr}</p>
-                            </div>
-                            <span class="rounded-full bg-${statusColor}-100 dark:bg-${statusColor}-900/30 px-2 py-0.5 text-[9px] font-black text-${statusColor}-700 dark:text-${statusColor}-300 uppercase">${escapeHtml(s.manual_status)}</span>
-                            ${payoutBadge}
-                        </div>
-                        <div class="flex items-center justify-between text-[10px] text-gray-500">
-                            <span>OCR Status: ${ocrBadge}</span>
-                            <span>Submitted: ${timeStr}</span>
-                        </div>
-                        <div class="rounded-xl bg-gray-50 dark:bg-gray-900/50 p-2.5 text-xs border border-gray-100 dark:border-gray-700 space-y-2">
-                            <div>
-                                <p class="text-[9px] font-black uppercase text-gray-400">Assigned Comment</p>
-                                <p class="mt-0.5 font-bold text-gray-800 dark:text-gray-200 italic">"${escapeHtml(s.assigned_comment || '')}"</p>
-                            </div>
-                            ${(s.ocr_extracted_text || s.ocrExtractedText) ? `
-                                <div class="border-t border-gray-200/50 dark:border-gray-700/50 pt-1.5">
-                                    <p class="text-[9px] font-black uppercase text-purple-500">OCR Extracted Text</p>
-                                    <p class="mt-0.5 text-gray-700 dark:text-gray-300 font-medium whitespace-pre-wrap max-h-20 overflow-y-auto bg-white dark:bg-gray-800 p-1.5 rounded-lg border border-gray-100 dark:border-gray-700 font-mono text-[10px]">${escapeHtml(s.ocr_extracted_text || s.ocrExtractedText)}</p>
-                                </div>
-                            ` : ''}
-                        </div>
-                        <div class="flex items-center gap-2 border-t border-gray-100 dark:border-gray-700 pt-2 mt-1">
-                            ${gmailLogoUrl ? `<img src="${escapeHtml(gmailLogoUrl)}" alt="Gmail avatar" class="h-6 w-6 rounded-full border border-gray-200 dark:border-gray-600 object-cover shrink-0" loading="lazy">` : `<span class="flex h-6 w-6 items-center justify-center rounded-full bg-gray-100 dark:bg-gray-700 text-[9px] font-bold text-gray-400 dark:text-gray-300 shrink-0">G</span>`}
-                            <div class="min-w-0 flex-1">
-                                <p class="text-xs font-semibold truncate text-gray-700 dark:text-gray-300">Gmail reviewer: <span class="font-bold text-gray-900 dark:text-white">${escapeHtml(gmailName || 'Not parsed yet')}</span></p>
-                            </div>
-                            ${liveBadge}
-                        </div>
-                        ${s.screenshot_url ? `<div class="mt-1 space-y-1">
-                            <div class="relative inline-block">
-                                <img src="${escapeHtml(s.screenshot_url)}" alt="Screenshot" class="h-28 w-auto rounded-xl border-2 border-gray-200 dark:border-gray-600 cursor-pointer object-cover shadow-sm hover:shadow-md hover:scale-[1.02] transition" onclick="showScreenshotLightbox('${escapeHtml(s.screenshot_url)}', '${escapeHtml(s.view_url || s.screenshot_view_url || '')}')">
-                                <span class="absolute -bottom-1 -right-1 rounded-full bg-blue-600 p-1"><svg class="h-3 w-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0zM10 7v3m0 0v3m0-3h3m-3 0H7"></path></svg></span>
-                            </div>
-                            ${s.drive_path ? `<p class="text-[9px] text-blue-400">📁 ${escapeHtml(s.drive_path)}</p>` : ''}
-                        </div>` : '<p class="text-[10px] text-red-400 italic">⚠️ No screenshot uploaded</p>'}
-                        <div class="flex flex-wrap gap-1.5 pt-1">
-                            ${s.manual_status === 'pending' ? `
-                                <button data-action="approve-submission" data-subid="${s.id}" class="rounded-lg bg-green-600 px-3 py-1.5 text-[10px] font-black text-white hover:bg-green-700 transition">✅ Approve</button>
-                                <button data-action="reject-submission" data-subid="${s.id}" class="rounded-lg bg-red-600 px-3 py-1.5 text-[10px] font-black text-white hover:bg-red-700 transition">❌ Reject</button>
-                            ` : ''}
-                            ${s.manual_status === 'approved' && s.payout_status !== 'paid' ? `
-                                <button data-action="pay-submission" data-subid="${s.id}" class="rounded-lg bg-cyan-600 px-3 py-1.5 text-[10px] font-black text-white hover:bg-cyan-700 transition">💰 Pay Now</button>
-                            ` : ''}
-                            <button data-action="ocr-submission" data-subid="${s.id}" class="rounded-lg bg-purple-600 px-3 py-1.5 text-[10px] font-black text-white hover:bg-purple-700 transition">🤖 OCR</button>
-                            <button data-action="scraper-submission" data-subid="${s.id}" data-tasklink="${escapeHtml(s.task_link || '')}" data-comment="${escapeHtml(s.assigned_comment || '')}" data-appname="${escapeHtml(s.app_name || '')}" class="rounded-lg bg-indigo-600 px-3 py-1.5 text-[10px] font-black text-white hover:bg-indigo-700 transition">🔎 Check</button>
+                    <div class="group relative aspect-[9/16] overflow-hidden rounded-2xl border border-gray-150 dark:border-gray-800 bg-gray-100 dark:bg-gray-950 cursor-pointer shadow-sm hover:shadow-md hover:border-orange-500 transition-all select-none" data-action="open-modal" data-index="${idx}">
+                        <img src="${escapeHtml(s.screenshot_url)}" alt="Screenshot" class="h-full w-full object-cover transition duration-300 group-hover:scale-105" loading="lazy">
+                        <span class="absolute top-2.5 right-2.5 rounded-full px-2 py-0.5 text-[8px] font-black uppercase text-${statusTextColor}-700 bg-${statusTextColor}-100/90 dark:text-${statusTextColor}-300 dark:bg-${statusTextColor}-900/80 backdrop-blur-sm border border-${statusTextColor}-200/50">${escapeHtml(s.manual_status)}</span>
+                        <div class="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/90 via-black/45 to-transparent p-3 text-left">
+                            <p class="truncate text-[10px] font-black text-white">${escapeHtml(name)}</p>
+                            <p class="truncate text-[8px] text-white/70">${escapeHtml(s.user_email || '')}</p>
                         </div>
                     </div>`;
                 }).join('');
+                cardsHtml += `</div>`;
 
                 html = `
                 <div class="flex items-center gap-2 text-xs font-black text-gray-500 mb-4 bg-gray-50 dark:bg-gray-900/50 p-3 rounded-2xl border border-gray-150 dark:border-gray-800 flex-wrap">
@@ -7506,9 +7698,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                     <span class="text-gray-300">/</span>
                     <span class="text-gray-700 dark:text-gray-300 font-black truncate max-w-[150px]">${escapeHtml(grouped[dateStr]?.[appKey]?.taskName || appKey)}</span>
                 </div>
-                <div class="space-y-3">
-                    ${cardsHtml || '<p class="text-center text-sm text-gray-400 py-8">No submissions found in this folder.</p>'}
-                </div>`;
+                ${finalSubs.length === 0 ? '<p class="text-center text-sm text-gray-400 py-8">No submissions found in this folder.</p>' : cardsHtml}`;
             }
 
             listEl.innerHTML = html;
@@ -7543,6 +7733,12 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                     adminSubmissionsView.view = 'submissions';
                     adminSubmissionsView.selectedApp = e.currentTarget.dataset.app;
                     renderAdminSubmissions();
+                };
+            });
+            listEl.querySelectorAll('[data-action="open-modal"]').forEach(el => {
+                el.onclick = (e) => {
+                    const idx = Number(e.currentTarget.dataset.index);
+                    window.showAdminSubmissionDetailModal(idx);
                 };
             });
 
