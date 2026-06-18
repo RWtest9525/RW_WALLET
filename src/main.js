@@ -7103,6 +7103,9 @@ ${ocrText}`;
                             screenshot_url: data.screenshotUrl || '',
                             manual_status: data.manualStatus || 'pending',
                             ocr_status: data.ocrStatus || 'pending',
+                            ocr_extracted_name: data.ocrExtractedName || '',
+                            ocr_extracted_text: data.ocrExtractedText || '',
+                            details_json: JSON.stringify({ gmailLogoUrl: data.ocrExtractedLogoUrl || '' }),
                             scraper_status: data.scraperStatus || 'not_configured',
                             payout_status: data.payoutStatus || 'pending',
                             reward: Number(data.reward || 0),
@@ -7224,14 +7227,26 @@ ${ocrText}`;
                                             <span class="rounded-full bg-${statusColor}-100 dark:bg-${statusColor}-900/30 px-2 py-0.5 text-[9px] font-black text-${statusColor}-700 dark:text-${statusColor}-300 uppercase">${escapeHtml(s.manual_status)}</span>
                                             ${payoutBadge}
                                         </div>
-                                        <div class="flex items-center gap-2 text-[10px] text-gray-500">
-                                            <span>💬 ${escapeHtml(s.assigned_comment || '')}</span>
-                                            <span>OCR: ${ocrBadge}</span>
+                                        <div class="flex items-center justify-between text-[10px] text-gray-500">
+                                            <span>OCR Status: ${ocrBadge}</span>
+                                            <span>Submitted: ${timeStr}</span>
+                                        </div>
+                                        <div class="rounded-xl bg-gray-50 dark:bg-gray-900/50 p-2.5 text-xs border border-gray-100 dark:border-gray-700 space-y-2">
+                                            <div>
+                                                <p class="text-[9px] font-black uppercase text-gray-400">Assigned Comment</p>
+                                                <p class="mt-0.5 font-bold text-gray-800 dark:text-gray-200 italic">"${escapeHtml(s.assigned_comment || '')}"</p>
+                                            </div>
+                                            ${(s.ocr_extracted_text || s.ocrExtractedText) ? `
+                                                <div class="border-t border-gray-200/50 dark:border-gray-700/50 pt-1.5">
+                                                    <p class="text-[9px] font-black uppercase text-purple-500">OCR Extracted Text</p>
+                                                    <p class="mt-0.5 text-gray-700 dark:text-gray-300 font-medium whitespace-pre-wrap max-h-20 overflow-y-auto bg-white dark:bg-gray-800 p-1.5 rounded-lg border border-gray-100 dark:border-gray-700 font-mono text-[10px]">${escapeHtml(s.ocr_extracted_text || s.ocrExtractedText)}</p>
+                                                </div>
+                                            ` : ''}
                                         </div>
                                         <div class="flex items-center gap-2 border-t border-gray-100 dark:border-gray-700 pt-2 mt-1">
                                             ${gmailLogoUrl ? `<img src="${escapeHtml(gmailLogoUrl)}" alt="Gmail avatar" class="h-6 w-6 rounded-full border border-gray-200 dark:border-gray-600 object-cover shrink-0" loading="lazy">` : `<span class="flex h-6 w-6 items-center justify-center rounded-full bg-gray-100 dark:bg-gray-700 text-[9px] font-bold text-gray-400 dark:text-gray-300 shrink-0">G</span>`}
                                             <div class="min-w-0 flex-1">
-                                                <p class="text-xs font-semibold truncate text-gray-700 dark:text-gray-300">Gmail: <span class="font-bold text-gray-900 dark:text-white">${escapeHtml(gmailName || 'Not parsed yet')}</span></p>
+                                                <p class="text-xs font-semibold truncate text-gray-700 dark:text-gray-300">Gmail reviewer: <span class="font-bold text-gray-900 dark:text-white">${escapeHtml(gmailName || 'Not parsed yet')}</span></p>
                                             </div>
                                             ${liveBadge}
                                         </div>
