@@ -2877,24 +2877,82 @@ ${memoriesContext}`
       const { submissionId, taskLink, assignedComment, appName } = req.body;
       if (!submissionId) return res.status(400).json({ ok: false, error: 'SUBMISSION_ID_REQUIRED' });
 
-      const isPlayStore = String(taskLink || '').includes('play.google.com');
-      let scraperResult = {
-        checked: true,
-        isPlayStore,
-        found: false,
-        message: isPlayStore
-          ? 'Play Store review check requires external Python scraper. Run your scraper script and update via PATCH endpoint.'
-          : 'Non-Play-Store link — manual verification required.',
-        checkedAt: nowMs()
-      };
+      // Retrieve submission from D1
+      const sub = await d1.first('SELECT * FROM task_submissions WHERE id = ? LIMIT 1', [submissionId]);
+      if (!sub) return res.status(404).json({ ok: false, error: 'SUBMISSION_NOT_FOUND' });
 
-      const newStatus = isPlayStore ? 'awaiting_scraper' : 'not_applicable';
-      await updateTaskSubmission(d1, submissionId, {
-        scraperStatus: newStatus,
-        scraperResultJson: scraperResult
-      });
+      const appNameLower = String(sub.app_name || appName || '').trim().toLowerCase();
+      const liveList = await d1.first(
+        'SELECT * FROM live_lists WHERE LOWER(app_name) = ? ORDER BY date DESC LIMIT 1',
+        [appNameLower]
+      );
 
-      res.json({ ok: true, result: scraperResult });
+      let isLive = false;
+      let matchSource = '';
+      if (liveList && sub.ocr_extracted_name && sub.ocr_extracted_name.toLowerCase() !== 'unknown user') {
+        const lines = liveList.content.split(/\r?\n/).map(l => l.trim().toLowerCase()).filter(Boolean);
+        const nameClean = sub.ocr_extracted_name.trim().toLowerCase();
+        // Check fuzzy matching
+        isLive = lines.some(line => line.includes(nameClean) || nameClean.includes(line));
+        if (isLive) matchSource = 'live_list';
+      }
+
+      const isPlayStore = String(sub.task_link || taskLink || '').includes('play.google.com');
+
+      if (isLive) {
+        // Automatically confirm and approve submission
+        const scraperResult = {
+          checked: true,
+          isPlayStore,
+          found: true,
+          source: matchSource,
+          message: 'Review verified: Reviewer found in Active Reviewers List!',
+          checkedAt: nowMs()
+        };
+
+        await updateTaskSubmission(d1, submissionId, {
+          scraperStatus: 'live_confirmed',
+          manualStatus: 'approved',
+          verifiedAt: nowMs(),
+          scraperResultJson: scraperResult
+        });
+
+        // Sync to Firestore
+        const firestoreSubRef = db.doc(`artifacts/digital-wallet-prod/public/data/task_submissions/${submissionId}`);
+        await firestoreSubRef.update({
+          scraperStatus: 'live_confirmed',
+          manualStatus: 'approved',
+          status: 'approved',
+          verifiedAt: admin.firestore.FieldValue.serverTimestamp()
+        }).catch(e => console.error(`[Scraper-Check] Firestore sync failed for ${submissionId}:`, e));
+
+        return res.json({ ok: true, result: scraperResult });
+      } else {
+        // Not found in live list
+        const scraperResult = {
+          checked: true,
+          isPlayStore,
+          found: false,
+          message: isPlayStore
+            ? 'Not found in Active Reviewers List. Running Play Store check requires python scraper or manual confirm.'
+            : 'Non-Play-Store link or not found in reviewer list — manual verification required.',
+          checkedAt: nowMs()
+        };
+
+        const newStatus = isPlayStore ? 'not_live' : 'not_applicable';
+        await updateTaskSubmission(d1, submissionId, {
+          scraperStatus: newStatus,
+          scraperResultJson: scraperResult
+        });
+
+        // Sync to Firestore
+        const firestoreSubRef = db.doc(`artifacts/digital-wallet-prod/public/data/task_submissions/${submissionId}`);
+        await firestoreSubRef.update({
+          scraperStatus: newStatus
+        }).catch(e => console.error(`[Scraper-Check] Firestore sync failed for ${submissionId}:`, e));
+
+        return res.json({ ok: true, result: scraperResult });
+      }
     } catch (error) {
       console.error('Scraper check failed:', error);
       res.status(500).json({ ok: false, error: 'SCRAPER_CHECK_FAILED' });

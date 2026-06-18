@@ -5548,24 +5548,11 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                             throw new Error('Your comment is wrong. Copy the same comment as given.');
                         }
 
-                        // 3. Extract reviewer's Gmail name using Puter Chat AI
+                        // 3. Extract reviewer's Gmail name using local proximity helper
                         if (submitBtn) submitBtn.textContent = 'Extracting Name...';
                         let gmailName = 'Unknown User';
                         try {
-                            const namePrompt = `Below is the OCR text extracted from a Google Play/Maps review screenshot. Identify the reviewer's name (the person who wrote the review).
-Rules:
-- Respond ONLY with the name of the reviewer (e.g. "John Doe").
-- Do NOT include any greeting, explanation, markdown, or punctuation.
-- If you cannot find the name, respond with "Unknown User".
-
-OCR text:
-${ocrText}`;
-                            const chatResponse = await puter.ai.chat(namePrompt);
-                            if (chatResponse && chatResponse.message && chatResponse.message.content) {
-                                gmailName = chatResponse.message.content.trim().replace(/^"|"$/g, '');
-                            } else if (typeof chatResponse === 'string') {
-                                gmailName = chatResponse.trim().replace(/^"|"$/g, '');
-                            }
+                            gmailName = await window.extractReviewerName(ocrText, targetComment);
                         } catch (chatErr) {
                             console.warn('Failed to extract name:', chatErr);
                         }
@@ -5766,24 +5753,11 @@ ${ocrText}`;
                                 throw new Error('Comment mismatch or verification failed');
                             }
 
-                            // 3. Extract reviewer's Gmail name using Puter Chat AI
+                            // 3. Extract reviewer's Gmail name using local proximity helper
                             if (statusEl) statusEl.textContent = 'Extracting Name...';
                             let gmailName = 'Unknown User';
                             try {
-                                const namePrompt = `Below is the OCR text extracted from a Google Play/Maps review screenshot. Identify the reviewer's name (the person who wrote the review).
-Rules:
-- Respond ONLY with the name of the reviewer (e.g. "John Doe").
-- Do NOT include any greeting, explanation, markdown, or punctuation.
-- If you cannot find the name, respond with "Unknown User".
-
-OCR text:
-${ocrText}`;
-                                const chatResponse = await puter.ai.chat(namePrompt);
-                                if (chatResponse && chatResponse.message && chatResponse.message.content) {
-                                    gmailName = chatResponse.message.content.trim().replace(/^"|"$/g, '');
-                                } else if (typeof chatResponse === 'string') {
-                                    gmailName = chatResponse.trim().replace(/^"|"$/g, '');
-                                }
+                                gmailName = await window.extractReviewerName(ocrText, matchedComment);
                             } catch (chatErr) {
                                 console.warn('Failed to extract name:', chatErr);
                             }
@@ -7021,13 +6995,113 @@ ${ocrText}`;
             };
         };
 
+        // Global Screenshot Lightbox and OCR extraction helper
+        window.showScreenshotLightbox = function(url, driveUrl) {
+            const existing = document.getElementById('screenshot-lightbox-overlay');
+            if (existing) existing.remove();
+
+            const overlay = document.createElement('div');
+            overlay.id = 'screenshot-lightbox-overlay';
+            overlay.className = 'fixed inset-0 z-[9999] flex flex-col items-center justify-center bg-black/90 p-4 transition-all duration-300';
+            
+            overlay.innerHTML = `
+                <div class="relative max-w-full max-h-[85vh] flex items-center justify-center">
+                    <img src="${url}" alt="Screenshot Zoom" class="max-w-full max-h-[85vh] object-contain rounded-xl border border-gray-800 shadow-2xl transition-transform duration-300 hover:scale-[1.01]">
+                </div>
+                <div class="mt-4 flex items-center gap-3 bg-gray-900/85 px-4 py-2.5 rounded-2xl border border-gray-800 backdrop-blur-md">
+                    <a href="${url}" target="_blank" class="rounded-xl bg-orange-600 px-4 py-2 text-xs font-black text-white hover:bg-orange-700 transition">🌐 Open Original</a>
+                    ${driveUrl ? `<a href="${driveUrl}" target="_blank" class="rounded-xl bg-blue-600 px-4 py-2 text-xs font-black text-white hover:bg-blue-700 transition">📁 Open in Drive</a>` : ''}
+                    <button id="lightbox-close-btn" class="rounded-xl bg-gray-700 px-4 py-2 text-xs font-black text-white hover:bg-gray-650 transition">✕ Close</button>
+                </div>
+            `;
+
+            document.body.appendChild(overlay);
+
+            overlay.onclick = (e) => {
+                if (e.target === overlay) overlay.remove();
+            };
+            const closeBtn = document.getElementById('lightbox-close-btn');
+            if (closeBtn) {
+                closeBtn.onclick = () => overlay.remove();
+            }
+        };
+
+        window.extractReviewerName = async (ocrText, targetComment) => {
+            if (!ocrText) return 'Unknown User';
+            try {
+                const lines = ocrText.split('\n').map(l => l.trim()).filter(Boolean);
+                const cleanStr = (s) => String(s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+                const targetCleaned = cleanStr(targetComment);
+
+                let commentIndex = -1;
+                for (let i = 0; i < lines.length; i++) {
+                    if (cleanStr(lines[i]).includes(targetCleaned) || targetCleaned.includes(cleanStr(lines[i]))) {
+                        commentIndex = i;
+                        break;
+                    }
+                }
+
+                if (commentIndex > 0) {
+                    for (let offset = 1; offset <= 3; offset++) {
+                        const idx = commentIndex - offset;
+                        if (idx < 0) break;
+                        const line = lines[idx];
+                        const lower = line.toLowerCase();
+                        if (
+                            lower.includes('★') ||
+                            lower.includes('star') ||
+                            /^[0-9]\s*\/\s*[0-9]/.test(lower) ||
+                            lower.includes('ago') ||
+                            lower.includes('edited') ||
+                            lower.includes('helpful') ||
+                            line.length < 2 ||
+                            line.length > 50
+                        ) {
+                            continue;
+                        }
+                        return line;
+                    }
+                }
+
+                const namePrompt = `Below is the OCR text extracted from a Google Play/Maps review screenshot. Identify the reviewer's name (the person who wrote the review).
+Rules:
+- Respond ONLY with the name of the reviewer (e.g. "John Doe").
+- Do NOT include any greeting, explanation, markdown, or punctuation.
+- If you cannot find the name, respond with "Unknown User".
+
+OCR text:
+` + ocrText;
+                const chatResponse = await puter.ai.chat(namePrompt);
+                let gmailName = 'Unknown User';
+                if (chatResponse && chatResponse.message && chatResponse.message.content) {
+                    gmailName = chatResponse.message.content.trim().replace(/^"|"$/g, '');
+                } else if (typeof chatResponse === 'string') {
+                    gmailName = chatResponse.trim().replace(/^"|"$/g, '');
+                }
+                return gmailName;
+            } catch (err) {
+                console.warn('extractReviewerName failed:', err);
+                return 'Unknown User';
+            }
+        };
+
         // ==================== ADMIN TASK SUBMISSIONS PAGE ====================
         let adminSubmissionsCache = [];
         let adminSubmissionsLoading = false;
+        let adminSubmissionsView = {
+            view: 'dates',
+            selectedDate: null,
+            selectedApp: null
+        };
 
         const showAdminTaskSubmissionsPage = async () => {
             if (!currentUser || currentUser.uid !== ADMIN_UID) return showNotification('Admin access only.', true);
             currentMainSection = 'admin';
+            adminSubmissionsView = {
+                view: 'dates',
+                selectedDate: null,
+                selectedApp: null
+            };
             const content = `
                 ${getPageHeader('Task Submissions')}
                 <div class="max-w-5xl mx-auto space-y-4 pb-24">
@@ -7143,7 +7217,7 @@ ${ocrText}`;
                 );
             }
 
-            // Update counts
+            // Update counts on top metrics
             const total = adminSubmissionsCache.length;
             const pending = adminSubmissionsCache.filter(s => s.manual_status === 'pending').length;
             const approved = adminSubmissionsCache.filter(s => s.manual_status === 'approved').length;
@@ -7157,7 +7231,7 @@ ${ocrText}`;
             if (approvedEl) approvedEl.textContent = approved;
             if (paidEl) paidEl.textContent = paid;
 
-            // Group by Date first, then by App
+            // Group filtered submissions by Date and App
             const getSubmissionDateStr = (submittedAt) => {
                 if (!submittedAt) return 'Unknown Date';
                 const d = new Date(timestampToMillis(submittedAt));
@@ -7170,131 +7244,216 @@ ${ocrText}`;
                 const appKey = s.app_name || s.appName || s.task_id || 'unknown';
                 if (!grouped[dateKey]) grouped[dateKey] = {};
                 if (!grouped[dateKey][appKey]) {
-                    grouped[dateKey][appKey] = { taskName: s.app_name || s.appName || appKey, taskLink: s.task_link || s.taskLink || '', reward: s.reward || 0, items: [] };
+                    grouped[dateKey][appKey] = {
+                        taskName: s.app_name || s.appName || appKey,
+                        taskLink: s.task_link || s.taskLink || '',
+                        reward: s.reward || 0,
+                        items: []
+                    };
                 }
                 grouped[dateKey][appKey].items.push(s);
             });
 
-            if (!Object.keys(grouped).length) {
-                listEl.innerHTML = '<p class="rounded-2xl border border-dashed border-gray-200 py-8 text-center text-sm font-semibold text-gray-500 dark:border-gray-700 dark:text-gray-400">No submissions found.</p>';
-                return;
-            }
+            const sortedDates = Object.keys(grouped).sort((a, b) => {
+                if (a === 'Unknown Date') return 1;
+                if (b === 'Unknown Date') return -1;
+                const [da, ma, ya] = a.split('-').map(Number);
+                const [db, mb, yb] = b.split('-').map(Number);
+                return new Date(yb, mb - 1, db) - new Date(ya, ma - 1, da);
+            });
 
-            listEl.innerHTML = Object.entries(grouped).map(([dateStr, dateGroup]) => {
-                const totalSubsForDate = Object.values(dateGroup).reduce((sum, app) => sum + app.items.length, 0);
-                const safeDateId = `date-group-${dateStr.replace(/[^a-zA-Z0-9]/g, '-')}`;
-                
-                const appsHtml = Object.entries(dateGroup).map(([appKey, appGroup]) => {
-                    const safeAppId = `app-group-${dateStr.replace(/[^a-zA-Z0-9]/g, '-')}-${appKey.replace(/[^a-zA-Z0-9]/g, '-')}`;
+            let html = '';
+
+            if (adminSubmissionsView.view === 'dates') {
+                let foldersHtml = sortedDates.map(dateStr => {
+                    const dateGroup = grouped[dateStr];
+                    const totalCount = Object.values(dateGroup).reduce((sum, app) => sum + app.items.length, 0);
+                    const pendingCount = Object.values(dateGroup).reduce((sum, app) => sum + app.items.filter(s => s.manual_status === 'pending').length, 0);
+                    
                     return `
-                        <div class="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 overflow-hidden mt-2">
-                            <div class="flex items-center gap-3 px-4 py-2 bg-gray-50 dark:bg-gray-900 border-b border-gray-100 dark:border-gray-700">
-                                <span class="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-cyan-100 dark:bg-cyan-900/30 text-[10px] font-black text-cyan-600">${appGroup.items.length}</span>
-                                <div class="min-w-0 flex-1">
-                                    <p class="truncate text-xs font-extrabold text-gray-800 dark:text-gray-200">${escapeHtml(appGroup.taskName)}</p>
-                                    <p class="text-[9px] text-gray-450">₹${appGroup.reward} reward</p>
-                                </div>
-                                <button onclick="document.getElementById('${safeAppId}')?.classList.toggle('hidden')" class="rounded-lg bg-gray-200 dark:bg-gray-750 px-2 py-0.5 text-[10px] font-bold">▼</button>
+                        <div class="flex items-center gap-3 rounded-2xl border border-gray-150 dark:border-gray-800 bg-white dark:bg-gray-800 p-4 hover:border-orange-500 hover:shadow-md cursor-pointer transition select-none" data-action="select-date" data-date="${escapeHtml(dateStr)}">
+                            <div class="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-orange-100 dark:bg-orange-900/35 text-2xl">
+                                📁
                             </div>
-                            <div id="${safeAppId}" class="divide-y divide-gray-100 dark:divide-gray-700 hidden">
-                                ${appGroup.items.map(s => {
-                                    const statusColor = s.manual_status === 'approved' ? 'green' : s.manual_status === 'rejected' ? 'red' : 'yellow';
-                                    const payoutBadge = s.payout_status === 'paid' ? '<span class="rounded-full bg-cyan-100 dark:bg-cyan-900/30 px-2 py-0.5 text-[9px] font-black text-cyan-700 dark:text-cyan-300">PAID</span>' : '';
-                                    const ocrBadge = s.ocr_status === 'completed' ? '🟢' : s.ocr_status === 'failed' ? '🔴' : '⏳';
-                                    const timeStr = s.submitted_at ? new Date(s.submitted_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }) : 'Unknown';
-                                    
-                                    let details = {};
-                                    try { details = s.details_json ? JSON.parse(s.details_json) : {}; } catch {}
-                                    const gmailLogoUrl = details.gmailLogoUrl || '';
-                                    const gmailName = s.ocr_extracted_name || '';
-
-                                    let liveBadge = '';
-                                    if (s.scraper_status === 'live_confirmed') {
-                                        liveBadge = '<span class="rounded-full bg-emerald-100 dark:bg-emerald-900/30 px-2 py-0.5 text-[9px] font-black text-emerald-700 dark:text-emerald-300">🟢 LIVE</span>';
-                                    } else if (s.scraper_status === 'not_live') {
-                                        liveBadge = '<span class="rounded-full bg-rose-100 dark:bg-rose-900/30 px-2 py-0.5 text-[9px] font-black text-rose-700 dark:text-rose-300">🔴 NOT LIVE</span>';
-                                    } else {
-                                        liveBadge = '<span class="rounded-full bg-gray-150 dark:bg-gray-700 px-2 py-0.5 text-[9px] font-black text-gray-500 dark:text-gray-400">⏳ UNCHECKED</span>';
-                                    }
-
-                                    return `
-                                    <div class="px-4 py-3 bg-white dark:bg-gray-800 space-y-2 text-left">
-                                        <div class="flex items-center gap-2">
-                                            <div class="min-w-0 flex-1">
-                                                <p class="text-sm font-bold truncate">${escapeHtml(s.user_name || s.user_email || 'User')}</p>
-                                                <p class="text-[10px] text-gray-400">${escapeHtml(s.user_email || '')} · ${timeStr}</p>
-                                            </div>
-                                            <span class="rounded-full bg-${statusColor}-100 dark:bg-${statusColor}-900/30 px-2 py-0.5 text-[9px] font-black text-${statusColor}-700 dark:text-${statusColor}-300 uppercase">${escapeHtml(s.manual_status)}</span>
-                                            ${payoutBadge}
-                                        </div>
-                                        <div class="flex items-center justify-between text-[10px] text-gray-500">
-                                            <span>OCR Status: ${ocrBadge}</span>
-                                            <span>Submitted: ${timeStr}</span>
-                                        </div>
-                                        <div class="rounded-xl bg-gray-50 dark:bg-gray-900/50 p-2.5 text-xs border border-gray-100 dark:border-gray-700 space-y-2">
-                                            <div>
-                                                <p class="text-[9px] font-black uppercase text-gray-400">Assigned Comment</p>
-                                                <p class="mt-0.5 font-bold text-gray-800 dark:text-gray-200 italic">"${escapeHtml(s.assigned_comment || '')}"</p>
-                                            </div>
-                                            ${(s.ocr_extracted_text || s.ocrExtractedText) ? `
-                                                <div class="border-t border-gray-200/50 dark:border-gray-700/50 pt-1.5">
-                                                    <p class="text-[9px] font-black uppercase text-purple-500">OCR Extracted Text</p>
-                                                    <p class="mt-0.5 text-gray-700 dark:text-gray-300 font-medium whitespace-pre-wrap max-h-20 overflow-y-auto bg-white dark:bg-gray-800 p-1.5 rounded-lg border border-gray-100 dark:border-gray-700 font-mono text-[10px]">${escapeHtml(s.ocr_extracted_text || s.ocrExtractedText)}</p>
-                                                </div>
-                                            ` : ''}
-                                        </div>
-                                        <div class="flex items-center gap-2 border-t border-gray-100 dark:border-gray-700 pt-2 mt-1">
-                                            ${gmailLogoUrl ? `<img src="${escapeHtml(gmailLogoUrl)}" alt="Gmail avatar" class="h-6 w-6 rounded-full border border-gray-200 dark:border-gray-600 object-cover shrink-0" loading="lazy">` : `<span class="flex h-6 w-6 items-center justify-center rounded-full bg-gray-100 dark:bg-gray-700 text-[9px] font-bold text-gray-400 dark:text-gray-300 shrink-0">G</span>`}
-                                            <div class="min-w-0 flex-1">
-                                                <p class="text-xs font-semibold truncate text-gray-700 dark:text-gray-300">Gmail reviewer: <span class="font-bold text-gray-900 dark:text-white">${escapeHtml(gmailName || 'Not parsed yet')}</span></p>
-                                            </div>
-                                            ${liveBadge}
-                                        </div>
-                                        ${s.screenshot_url ? `<div class="mt-1 space-y-1">
-                                            <div class="relative inline-block">
-                                                <img src="${escapeHtml(s.screenshot_url)}" alt="Screenshot" class="h-28 w-auto rounded-xl border-2 border-gray-200 dark:border-gray-600 cursor-pointer object-cover shadow-sm hover:shadow-md hover:scale-[1.02] transition" onclick="(function(){var o=document.createElement('div');o.id='ss-overlay-'+Date.now();o.className='fixed inset-0 z-[9999] flex items-center justify-center bg-black/80 p-4';o.onclick=function(e){if(e.target===o)o.remove()};o.innerHTML='<div class=\\'relative max-w-3xl max-h-[90vh]\\' onclick=\\'event.stopPropagation()\\'><img src=\\'${escapeHtml(s.screenshot_url)}\\' class=\\'max-w-full max-h-[85vh] rounded-2xl shadow-2xl object-contain\\'/><div class=\\'mt-2 flex gap-2 justify-center\\'><a href=\\'${escapeHtml(s.screenshot_url)}\\' target=\\'_blank\\' class=\\'rounded-xl bg-white/20 px-4 py-2 text-xs font-bold text-white hover:bg-white/30 transition\\'>Open Full Image ↗</a>${s.view_url ? `<a href=\\'${escapeHtml(s.view_url)}\\' target=\\'_blank\\' class=\\'rounded-xl bg-blue-600 px-4 py-2 text-xs font-bold text-white hover:bg-blue-700 transition\\'>Open in Drive ↗</a>` : ''}<button onclick=\\'this.closest(\\\"[id^=ss-overlay]\\\").remove()\\' class=\\'rounded-xl bg-red-600 px-4 py-2 text-xs font-bold text-white hover:bg-red-700 transition\\'>Close ✕</button></div></div>';document.body.appendChild(o)})()">
-                                                <span class="absolute -bottom-1 -right-1 rounded-full bg-blue-600 p-1"><svg class="h-3 w-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0zM10 7v3m0 0v3m0-3h3m-3 0H7"></path></svg></span>
-                                            </div>
-                                            ${s.drive_path ? `<p class="text-[9px] text-blue-400">📁 ${escapeHtml(s.drive_path)}</p>` : ''}
-                                        </div>` : '<p class="text-[10px] text-red-400 italic">⚠️ No screenshot uploaded</p>'}
-                                        <div class="flex flex-wrap gap-1.5 pt-1">
-                                            ${s.manual_status === 'pending' ? `
-                                                <button data-action="approve-submission" data-subid="${s.id}" class="rounded-lg bg-green-600 px-3 py-1.5 text-[10px] font-black text-white hover:bg-green-700 transition">✅ Approve</button>
-                                                <button data-action="reject-submission" data-subid="${s.id}" class="rounded-lg bg-red-600 px-3 py-1.5 text-[10px] font-black text-white hover:bg-red-700 transition">❌ Reject</button>
-                                            ` : ''}
-                                            ${s.manual_status === 'approved' && s.payout_status !== 'paid' ? `
-                                                <button data-action="pay-submission" data-subid="${s.id}" class="rounded-lg bg-cyan-600 px-3 py-1.5 text-[10px] font-black text-white hover:bg-cyan-700 transition">💰 Pay Now</button>
-                                            ` : ''}
-                                            <button data-action="ocr-submission" data-subid="${s.id}" class="rounded-lg bg-purple-600 px-3 py-1.5 text-[10px] font-black text-white hover:bg-purple-700 transition">🤖 OCR</button>
-                                            <button data-action="scraper-submission" data-subid="${s.id}" data-tasklink="${escapeHtml(s.task_link || '')}" data-comment="${escapeHtml(s.assigned_comment || '')}" data-appname="${escapeHtml(s.app_name || '')}" class="rounded-lg bg-indigo-600 px-3 py-1.5 text-[10px] font-black text-white hover:bg-indigo-700 transition">🔎 Check</button>
-                                        </div>
-                                    </div>`;
-                                }).join('')}
+                            <div class="min-w-0 flex-1">
+                                <p class="text-sm font-extrabold text-gray-850 dark:text-white">${escapeHtml(dateStr)}</p>
+                                <p class="text-[10px] text-gray-450">${totalCount} submissions ${pendingCount > 0 ? `· <span class="text-amber-500 font-bold">${pendingCount} pending</span>` : ''}</p>
                             </div>
-                        </div>
-                    `;
+                            <svg class="h-4 w-4 text-gray-450 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M9 5l7 7-7 7"></path></svg>
+                        </div>`;
                 }).join('');
 
-                return `
-                    <div class="rounded-2xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 overflow-hidden p-3 space-y-2 mt-3 text-left">
-                        <div class="flex items-center justify-between border-b border-gray-200 dark:border-gray-700 pb-2">
-                            <div class="flex items-center gap-2">
-                                <span class="text-sm">📅</span>
-                                <span class="font-extrabold text-sm text-gray-900 dark:text-white">${dateStr}</span>
-                                <span class="rounded-full bg-orange-100 dark:bg-orange-900/30 px-2.5 py-0.5 text-[10px] font-black text-orange-700 dark:text-orange-300">${totalSubsForDate} submissions</span>
-                            </div>
-                            <button onclick="document.getElementById('${safeDateId}')?.classList.toggle('hidden')" class="rounded-lg bg-gray-200 dark:bg-gray-700 px-2.5 py-1 text-xs font-bold">▼</button>
-                        </div>
-                        <div id="${safeDateId}" class="space-y-1">
-                            ${appsHtml}
-                        </div>
-                    </div>
-                `;
-            }).join('');
+                html = `
+                <div class="flex items-center gap-2 text-xs font-black text-gray-500 mb-4 bg-gray-50 dark:bg-gray-900/50 p-3 rounded-2xl border border-gray-150 dark:border-gray-800 flex-wrap">
+                    <span class="text-orange-500 font-black">📂 Root</span>
+                </div>
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    ${foldersHtml || '<p class="text-center text-sm text-gray-400 py-8 col-span-2">No submission dates found.</p>'}
+                </div>`;
 
-            // Attach submission action handlers
-            listEl.querySelectorAll('[data-action]').forEach(btn => {
-                btn.addEventListener('click', async (e) => {
+            } else if (adminSubmissionsView.view === 'apps') {
+                const dateStr = adminSubmissionsView.selectedDate;
+                const dateGroup = grouped[dateStr] || {};
+                const sortedApps = Object.keys(dateGroup).sort((a, b) => a.localeCompare(b));
+
+                let foldersHtml = sortedApps.map(appKey => {
+                    const appGroup = dateGroup[appKey];
+                    const totalCount = appGroup.items.length;
+                    const pendingCount = appGroup.items.filter(s => s.manual_status === 'pending').length;
+
+                    return `
+                        <div class="flex items-center gap-3 rounded-2xl border border-gray-150 dark:border-gray-800 bg-white dark:bg-gray-800 p-4 hover:border-orange-500 hover:shadow-md cursor-pointer transition select-none" data-action="select-app" data-app="${escapeHtml(appKey)}">
+                            <div class="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-cyan-100 dark:bg-cyan-900/35 text-2xl">
+                                📱
+                            </div>
+                            <div class="min-w-0 flex-1">
+                                <p class="truncate text-sm font-extrabold text-gray-850 dark:text-white">${escapeHtml(appGroup.taskName)}</p>
+                                <p class="text-[10px] text-gray-450">${totalCount} items ${pendingCount > 0 ? `· <span class="text-amber-500 font-bold">${pendingCount} pending</span>` : ''}</p>
+                            </div>
+                            <svg class="h-4 w-4 text-gray-450 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M9 5l7 7-7 7"></path></svg>
+                        </div>`;
+                }).join('');
+
+                html = `
+                <div class="flex items-center gap-2 text-xs font-black text-gray-500 mb-4 bg-gray-50 dark:bg-gray-900/50 p-3 rounded-2xl border border-gray-150 dark:border-gray-800 flex-wrap">
+                    <span class="text-orange-500 cursor-pointer hover:underline" data-action="explore-root">📂 Root</span>
+                    <span class="text-gray-300">/</span>
+                    <span class="text-gray-700 dark:text-gray-300 font-black">${escapeHtml(dateStr)}</span>
+                </div>
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    ${foldersHtml || '<p class="text-center text-sm text-gray-400 py-8 col-span-2">No app folders found.</p>'}
+                </div>`;
+
+            } else if (adminSubmissionsView.view === 'submissions') {
+                const dateStr = adminSubmissionsView.selectedDate;
+                const appKey = adminSubmissionsView.selectedApp;
+                const finalSubs = (grouped[dateStr]?.[appKey]?.items || []);
+
+                let cardsHtml = finalSubs.map(s => {
+                    const statusColor = s.manual_status === 'approved' ? 'green' : s.manual_status === 'rejected' ? 'red' : 'yellow';
+                    const payoutBadge = s.payout_status === 'paid' ? '<span class="rounded-full bg-cyan-100 dark:bg-cyan-900/30 px-2 py-0.5 text-[9px] font-black text-cyan-700 dark:text-cyan-300">PAID</span>' : '';
+                    const ocrBadge = s.ocr_status === 'completed' ? '🟢' : s.ocr_status === 'failed' ? '🔴' : '⏳';
+                    const timeStr = s.submitted_at ? new Date(s.submitted_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }) : 'Unknown';
+                    
+                    let details = {};
+                    try { details = s.details_json ? JSON.parse(s.details_json) : {}; } catch {}
+                    const gmailLogoUrl = details.gmailLogoUrl || '';
+                    const gmailName = s.ocr_extracted_name || '';
+
+                    let liveBadge = '';
+                    if (s.scraper_status === 'live_confirmed') {
+                        liveBadge = '<span class="rounded-full bg-emerald-100 dark:bg-emerald-900/30 px-2 py-0.5 text-[9px] font-black text-emerald-700 dark:text-emerald-300">🟢 LIVE</span>';
+                    } else if (s.scraper_status === 'not_live') {
+                        liveBadge = '<span class="rounded-full bg-rose-100 dark:bg-rose-900/30 px-2 py-0.5 text-[9px] font-black text-rose-700 dark:text-rose-300">🔴 NOT LIVE</span>';
+                    } else {
+                        liveBadge = '<span class="rounded-full bg-gray-150 dark:bg-gray-700 px-2 py-0.5 text-[9px] font-black text-gray-500 dark:text-gray-400">⏳ UNCHECKED</span>';
+                    }
+
+                    return `
+                    <div class="px-4 py-3 bg-white dark:bg-gray-800 border border-gray-150 dark:border-gray-700 rounded-2xl space-y-2 text-left shadow-sm">
+                        <div class="flex items-center gap-2">
+                            <div class="min-w-0 flex-1">
+                                <p class="text-sm font-bold truncate">${escapeHtml(s.user_name || s.user_email || 'User')}</p>
+                                <p class="text-[10px] text-gray-450">${escapeHtml(s.user_email || '')} · ${timeStr}</p>
+                            </div>
+                            <span class="rounded-full bg-${statusColor}-100 dark:bg-${statusColor}-900/30 px-2 py-0.5 text-[9px] font-black text-${statusColor}-700 dark:text-${statusColor}-300 uppercase">${escapeHtml(s.manual_status)}</span>
+                            ${payoutBadge}
+                        </div>
+                        <div class="flex items-center justify-between text-[10px] text-gray-500">
+                            <span>OCR Status: ${ocrBadge}</span>
+                            <span>Submitted: ${timeStr}</span>
+                        </div>
+                        <div class="rounded-xl bg-gray-50 dark:bg-gray-900/50 p-2.5 text-xs border border-gray-100 dark:border-gray-700 space-y-2">
+                            <div>
+                                <p class="text-[9px] font-black uppercase text-gray-400">Assigned Comment</p>
+                                <p class="mt-0.5 font-bold text-gray-800 dark:text-gray-200 italic">"${escapeHtml(s.assigned_comment || '')}"</p>
+                            </div>
+                            ${(s.ocr_extracted_text || s.ocrExtractedText) ? `
+                                <div class="border-t border-gray-200/50 dark:border-gray-700/50 pt-1.5">
+                                    <p class="text-[9px] font-black uppercase text-purple-500">OCR Extracted Text</p>
+                                    <p class="mt-0.5 text-gray-700 dark:text-gray-300 font-medium whitespace-pre-wrap max-h-20 overflow-y-auto bg-white dark:bg-gray-800 p-1.5 rounded-lg border border-gray-100 dark:border-gray-700 font-mono text-[10px]">${escapeHtml(s.ocr_extracted_text || s.ocrExtractedText)}</p>
+                                </div>
+                            ` : ''}
+                        </div>
+                        <div class="flex items-center gap-2 border-t border-gray-100 dark:border-gray-700 pt-2 mt-1">
+                            ${gmailLogoUrl ? `<img src="${escapeHtml(gmailLogoUrl)}" alt="Gmail avatar" class="h-6 w-6 rounded-full border border-gray-200 dark:border-gray-600 object-cover shrink-0" loading="lazy">` : `<span class="flex h-6 w-6 items-center justify-center rounded-full bg-gray-100 dark:bg-gray-700 text-[9px] font-bold text-gray-400 dark:text-gray-300 shrink-0">G</span>`}
+                            <div class="min-w-0 flex-1">
+                                <p class="text-xs font-semibold truncate text-gray-700 dark:text-gray-300">Gmail reviewer: <span class="font-bold text-gray-900 dark:text-white">${escapeHtml(gmailName || 'Not parsed yet')}</span></p>
+                            </div>
+                            ${liveBadge}
+                        </div>
+                        ${s.screenshot_url ? `<div class="mt-1 space-y-1">
+                            <div class="relative inline-block">
+                                <img src="${escapeHtml(s.screenshot_url)}" alt="Screenshot" class="h-28 w-auto rounded-xl border-2 border-gray-200 dark:border-gray-600 cursor-pointer object-cover shadow-sm hover:shadow-md hover:scale-[1.02] transition" onclick="showScreenshotLightbox('${escapeHtml(s.screenshot_url)}', '${escapeHtml(s.view_url || s.screenshot_view_url || '')}')">
+                                <span class="absolute -bottom-1 -right-1 rounded-full bg-blue-600 p-1"><svg class="h-3 w-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0zM10 7v3m0 0v3m0-3h3m-3 0H7"></path></svg></span>
+                            </div>
+                            ${s.drive_path ? `<p class="text-[9px] text-blue-400">📁 ${escapeHtml(s.drive_path)}</p>` : ''}
+                        </div>` : '<p class="text-[10px] text-red-400 italic">⚠️ No screenshot uploaded</p>'}
+                        <div class="flex flex-wrap gap-1.5 pt-1">
+                            ${s.manual_status === 'pending' ? `
+                                <button data-action="approve-submission" data-subid="${s.id}" class="rounded-lg bg-green-600 px-3 py-1.5 text-[10px] font-black text-white hover:bg-green-700 transition">✅ Approve</button>
+                                <button data-action="reject-submission" data-subid="${s.id}" class="rounded-lg bg-red-600 px-3 py-1.5 text-[10px] font-black text-white hover:bg-red-700 transition">❌ Reject</button>
+                            ` : ''}
+                            ${s.manual_status === 'approved' && s.payout_status !== 'paid' ? `
+                                <button data-action="pay-submission" data-subid="${s.id}" class="rounded-lg bg-cyan-600 px-3 py-1.5 text-[10px] font-black text-white hover:bg-cyan-700 transition">💰 Pay Now</button>
+                            ` : ''}
+                            <button data-action="ocr-submission" data-subid="${s.id}" class="rounded-lg bg-purple-600 px-3 py-1.5 text-[10px] font-black text-white hover:bg-purple-700 transition">🤖 OCR</button>
+                            <button data-action="scraper-submission" data-subid="${s.id}" data-tasklink="${escapeHtml(s.task_link || '')}" data-comment="${escapeHtml(s.assigned_comment || '')}" data-appname="${escapeHtml(s.app_name || '')}" class="rounded-lg bg-indigo-600 px-3 py-1.5 text-[10px] font-black text-white hover:bg-indigo-700 transition">🔎 Check</button>
+                        </div>
+                    </div>`;
+                }).join('');
+
+                html = `
+                <div class="flex items-center gap-2 text-xs font-black text-gray-500 mb-4 bg-gray-50 dark:bg-gray-900/50 p-3 rounded-2xl border border-gray-150 dark:border-gray-800 flex-wrap">
+                    <span class="text-orange-500 cursor-pointer hover:underline" data-action="explore-root">📂 Root</span>
+                    <span class="text-gray-300">/</span>
+                    <span class="text-orange-500 cursor-pointer hover:underline" data-action="explore-date" data-date="${escapeHtml(dateStr)}">${escapeHtml(dateStr)}</span>
+                    <span class="text-gray-300">/</span>
+                    <span class="text-gray-700 dark:text-gray-300 font-black truncate max-w-[150px]">${escapeHtml(grouped[dateStr]?.[appKey]?.taskName || appKey)}</span>
+                </div>
+                <div class="space-y-3">
+                    ${cardsHtml || '<p class="text-center text-sm text-gray-400 py-8">No submissions found in this folder.</p>'}
+                </div>`;
+            }
+
+            listEl.innerHTML = html;
+
+            // Bind Navigation Click Listeners
+            listEl.querySelectorAll('[data-action="explore-root"]').forEach(el => {
+                el.onclick = () => {
+                    adminSubmissionsView.view = 'dates';
+                    adminSubmissionsView.selectedDate = null;
+                    adminSubmissionsView.selectedApp = null;
+                    renderAdminSubmissions();
+                };
+            });
+            listEl.querySelectorAll('[data-action="explore-date"]').forEach(el => {
+                el.onclick = (e) => {
+                    adminSubmissionsView.view = 'apps';
+                    adminSubmissionsView.selectedDate = e.currentTarget.dataset.date;
+                    adminSubmissionsView.selectedApp = null;
+                    renderAdminSubmissions();
+                };
+            });
+            listEl.querySelectorAll('[data-action="select-date"]').forEach(el => {
+                el.onclick = (e) => {
+                    adminSubmissionsView.view = 'apps';
+                    adminSubmissionsView.selectedDate = e.currentTarget.dataset.date;
+                    adminSubmissionsView.selectedApp = null;
+                    renderAdminSubmissions();
+                };
+            });
+            listEl.querySelectorAll('[data-action="select-app"]').forEach(el => {
+                el.onclick = (e) => {
+                    adminSubmissionsView.view = 'submissions';
+                    adminSubmissionsView.selectedApp = e.currentTarget.dataset.app;
+                    renderAdminSubmissions();
+                };
+            });
+
+            // Bind action buttons click handlers
+            listEl.querySelectorAll('button[data-action]').forEach(btn => {
+                btn.onclick = async (e) => {
                     const action = e.currentTarget.dataset.action;
                     const subId = e.currentTarget.dataset.subid;
                     if (!subId) return;
@@ -7330,22 +7489,32 @@ ${ocrText}`;
                             const ocrData = await resp.json().catch(() => ({}));
                             showNotification(ocrData.ok ? `OCR complete: ${(ocrData.ocr?.text || '').slice(0, 80)}` : 'OCR failed');
                         } else if (action === 'scraper-submission') {
+                            showNotification('Checking Live list...');
                             const taskLink = e.currentTarget.dataset.tasklink || '';
                             const assignedComment = e.currentTarget.dataset.comment || '';
                             const appName = e.currentTarget.dataset.appname || '';
-                            await fetchWithTimeout(`${BACKEND_BASE_URL}/api/admin/scraper/check-review`, {
+                            const resp = await fetchWithTimeout(`${BACKEND_BASE_URL}/api/admin/scraper/check-review`, {
                                 method: 'POST',
                                 headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
                                 body: JSON.stringify({ submissionId: subId, taskLink, assignedComment, appName })
                             }, 10000);
-                            showNotification('Scraper check initiated.');
+                            const resData = await resp.json().catch(() => ({}));
+                            if (resData.ok && resData.result) {
+                                if (resData.result.found) {
+                                    showNotification('Review verified in Live List!');
+                                } else {
+                                    showNotification('Not found in Live List.', true);
+                                }
+                            } else {
+                                showNotification('Live check failed.', true);
+                            }
                         }
                         await loadAdminSubmissions();
                     } catch (err) {
                         console.error('Submission action failed:', err);
                         showNotification('Action failed. Please try again.', true);
                     }
-                });
+                };
             });
         };
 
