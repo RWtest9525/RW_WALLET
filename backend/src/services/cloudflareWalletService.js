@@ -2306,8 +2306,10 @@ ${memoriesContext}`
   });
 
   // ── Screenshot Upload Endpoint ───────────────────────────────────────────
+  // ── Screenshot Upload Endpoint ───────────────────────────────────────────
   app.post('/api/uploads/task-screenshot', requireHttpAuth, rateLimit({ windowMs: 60000, maxRequests: 10 }), async (req, res) => {
     try {
+      const db = admin.firestore();
       const declaredSize = Number(req.headers['content-length'] || req.query.size || 0);
       if (declaredSize > TASK_SCREENSHOT_MAX_BYTES) {
         return res.status(413).json({ ok: false, error: 'UPLOAD_TOO_LARGE' });
@@ -2326,46 +2328,250 @@ ${memoriesContext}`
 
       const ext = getLoanDocumentExtension(originalName, contentType);
       const userSegment = sanitizePathSegment(req.auth.sub);
-      const timestamp = Date.now();
-      const fileName = `${timestamp}-${taskId}-${sanitizeUploadFileName(path.basename(originalName, path.extname(originalName)))}${ext}`;
 
-      // Try Google Drive first (free 2TB storage)
-      const driveFolderId = process.env.GOOGLE_DRIVE_FOLDER_ID;
-      if (driveFolderId && (process.env.GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON || process.env.FIREBASE_SERVICE_ACCOUNT_JSON)) {
-        try {
-          const driveResult = await uploadToGoogleDrive(body, fileName, contentType, driveFolderId, { appName });
-          console.log(`Screenshot uploaded to Google Drive: ${driveResult.dateFolderName}/${driveResult.appFolderName}/${driveResult.name} (${body.length} bytes)`);
-          return res.json({
-            ok: true,
-            screenshot: {
-              name: originalName,
-              size: body.length,
-              type: contentType,
-              key: `gdrive:${driveResult.fileId}`,
-              url: driveResult.directUrl,
-              viewUrl: driveResult.viewUrl,
-              thumbnailUrl: driveResult.thumbnailUrl,
-              drivePath: `${driveResult.dateFolderName}/${driveResult.appFolderName}`,
-              storage: 'google_drive',
-              uploadedAt: nowMs()
-            }
-          });
-        } catch (driveError) {
-          console.error('Google Drive upload failed, falling back to R2:', driveError.message);
+      // --- OCR PRE-VERIFICATION ---
+      // 1. Fetch Task data from Firestore
+      const taskDoc = await db.doc(`artifacts/digital-wallet-prod/public/data/tasks/${taskId}`).get();
+      if (!taskDoc.exists) {
+        return res.status(404).json({ ok: false, error: 'TASK_NOT_FOUND', detail: 'The requested task was not found.' });
+      }
+      const taskData = taskDoc.data();
+
+      // 2. Fetch User data to determine tier/role
+      const userDoc = await db.doc(`artifacts/digital-wallet-prod/public/data/users/${req.auth.sub}`).get();
+      const userData = userDoc.data() || {};
+      const userTier = userData.taskTier || (userData.bulkTaskMode || userData.isBulkTaskUser ? 'bulker' : 'single');
+      const isBulk = (userTier === 'bulker' || userTier === 'super_bulker');
+
+      // 3. Get comment pool for the task
+      const getTaskCommentPool = (t = {}) => {
+        const src = Array.isArray(t.reviewComments) && t.reviewComments.length
+            ? t.reviewComments
+            : String(t.reviewComment || t.commentToCopy || t.reviewText || t.copyText || 'good app').split(/\r?\n/);
+        return src.map(v => String(v || '').trim()).filter(Boolean);
+      };
+      const commentPool = getTaskCommentPool(taskData);
+
+      // 4. Calculate remaining comments
+      let targetComments = [];
+      if (isBulk) {
+        // Query D1 today submissions
+        const todayStart = (() => {
+          const d = new Date();
+          const istTime = d.getTime() + (5.5 * 60 * 60 * 1000);
+          const istDate = new Date(istTime);
+          const startOfTodayIST = Date.UTC(istDate.getUTCFullYear(), istDate.getUTCMonth(), istDate.getUTCDate(), 0, 0, 0, 0);
+          return startOfTodayIST - (5.5 * 60 * 60 * 1000);
+        })();
+
+        const todaySubmissions = await d1.all(
+          `SELECT assigned_comment FROM task_submissions WHERE task_id = ? AND user_id = ? AND submitted_at >= ?`,
+          [taskId, req.auth.sub, todayStart]
+        ).catch(() => []);
+        const submittedComments = new Set(todaySubmissions.map(s => String(s.assigned_comment || '').trim()));
+        targetComments = commentPool.filter(c => !submittedComments.has(String(c).trim()));
+        
+        if (targetComments.length === 0) {
+          return res.status(400).json({ ok: false, error: 'NO_COMMENTS_REMAINING', detail: 'All comments for this task have already been submitted.' });
+        }
+      } else {
+        // Single user gets their active reservation comment or falls back
+        const reservation = await d1.first(
+          `SELECT comment FROM task_comment_reservations WHERE task_id = ? AND user_id = ? AND status = 'reserved' AND expires_at > ? LIMIT 1`,
+          [taskId, req.auth.sub, Date.now()]
+        ).catch(() => null);
+        const targetComment = reservation ? reservation.comment : (req.query.assignedComment || commentPool[0]);
+        targetComments = [targetComment];
+      }
+
+      // 5. Run Tesseract OCR synchronously on buffer
+      let ocrText = '';
+      let ocrConfidence = 0;
+      let ocrResult = null;
+      try {
+        ocrResult = await Tesseract.recognize(body, 'eng');
+        ocrText = (ocrResult.data.text || '').trim();
+        ocrConfidence = (ocrResult.data.confidence || 0) / 100;
+      } catch (ocrErr) {
+        console.error('[OCR-Upload] Tesseract OCR failed:', ocrErr);
+        return res.status(500).json({ ok: false, error: 'OCR_FAILED', detail: 'Screenshot text recognition failed' });
+      }
+
+      // 6. Match comment
+      const cleanStr = (s) => String(s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+      const cleanedOcrText = cleanStr(ocrText);
+      let matchedComment = null;
+      let foundLineIndex = -1;
+
+      for (const comment of targetComments) {
+        const cleanedComment = cleanStr(comment);
+        if (cleanedOcrText.includes(cleanedComment)) {
+          matchedComment = comment;
+          break;
         }
       }
 
-      // Fallback to R2
-      if (r2 && process.env.CLOUDFLARE_R2_BUCKET && process.env.CLOUDFLARE_R2_PUBLIC_BASE_URL) {
-        const key = `task-screenshots/${userSegment}/${fileName}`;
-        const url = await putR2Object(r2, key, body, contentType);
-        return res.json({
-          ok: true,
-          screenshot: { name: originalName, size: body.length, type: contentType, key, url, storage: 'r2', uploadedAt: nowMs() }
+      const lines = ocrResult.data.lines || [];
+      if (!matchedComment) {
+        // Line-by-line fallback
+        for (const comment of targetComments) {
+          const cleanedComment = cleanStr(comment);
+          for (let j = 0; j < lines.length; j++) {
+            const cleanedLine = cleanStr(lines[j].text);
+            if (cleanedLine && (cleanedLine.includes(cleanedComment) || cleanedComment.includes(cleanedLine) || (cleanedComment.length > 5 && cleanedLine.length > 5 && cleanedLine.indexOf(cleanedComment.slice(0, 10)) !== -1))) {
+              matchedComment = comment;
+              foundLineIndex = j;
+              break;
+            }
+          }
+          if (matchedComment) break;
+        }
+      }
+
+      if (!matchedComment) {
+        console.warn(`[OCR-Upload] Comment mismatch for user ${req.auth.sub}. OCR: "${ocrText}"`);
+        return res.status(400).json({
+          ok: false,
+          error: 'COMMENT_NOT_MATCHED',
+          detail: 'Your comment is wrong. Copy the same comment as given.'
         });
       }
 
-      return res.status(503).json({ ok: false, error: 'NO_STORAGE_CONFIGURED' });
+      if (matchedComment && foundLineIndex === -1) {
+        const cleanedComment = cleanStr(matchedComment);
+        for (let j = 0; j < lines.length; j++) {
+          const cleanedLine = cleanStr(lines[j].text);
+          if (cleanedLine && (cleanedLine.includes(cleanedComment) || cleanedComment.includes(cleanedLine) || (cleanedComment.length > 5 && cleanedLine.length > 5 && cleanedLine.indexOf(cleanedComment.slice(0, 10)) !== -1))) {
+            foundLineIndex = j;
+            break;
+          }
+        }
+      }
+
+      // 7. Extract name and crop avatar logo
+      let nameLine = null;
+      let gmailName = 'Unknown User';
+      let gmailLogoUrl = '';
+
+      if (foundLineIndex !== -1) {
+        for (let k = foundLineIndex - 1; k >= Math.max(0, foundLineIndex - 3); k--) {
+          const txt = lines[k].text.trim();
+          const isRatingOrDate = /^[0-9★☆\s]+$/.test(txt) || txt.toLowerCase().includes('ago') || txt.toLowerCase().includes('edited') || /\d/.test(txt) && (txt.includes('/') || txt.includes('-'));
+          if (txt && !isRatingOrDate && txt.length > 2 && txt.length < 50) {
+            nameLine = lines[k];
+            break;
+          }
+        }
+        if (!nameLine && foundLineIndex >= 2) nameLine = lines[foundLineIndex - 2];
+        if (!nameLine && foundLineIndex >= 1) nameLine = lines[foundLineIndex - 1];
+      }
+
+      if (!nameLine) {
+        for (let j = 0; j < Math.min(lines.length, 10); j++) {
+          const txt = lines[j].text.trim();
+          const isRatingOrDate = /^[0-9★☆\s]+$/.test(txt) || txt.toLowerCase().includes('ago') || txt.toLowerCase().includes('edited') || txt.length < 3 || txt.length > 40;
+          if (txt && !isRatingOrDate) {
+            nameLine = lines[j];
+            break;
+          }
+        }
+      }
+
+      const safeComment = matchedComment.slice(0, 30).replace(/[<>:"/\\|?*]+/g, '_').trim();
+      if (nameLine) {
+        gmailName = nameLine.text.trim().replace(/[\r\n]+/g, ' ');
+        try {
+          const image = await Jimp.read(body);
+          const imgWidth = image.bitmap.width;
+          const imgHeight = image.bitmap.height;
+          const bbox = nameLine.bbox;
+          if (bbox) {
+            const cropX = Math.max(0, Math.min(bbox.x0 - 85, imgWidth - 75));
+            const cropY = Math.max(0, Math.min(bbox.y0 - 15, imgHeight - 75));
+            const cropW = Math.min(75, imgWidth - cropX);
+            const cropH = Math.min(75, imgHeight - cropY);
+            if (cropW > 10 && cropH > 10) {
+              const avatar = image.clone().crop(cropX, cropY, cropW, cropH);
+              const avatarBuffer = await avatar.getBufferAsync(Jimp.MIME_JPEG);
+              const safeGmailName = gmailName.replace(/[<>:"/\\|?*]+/g, '_').trim().slice(0, 30) || 'Unknown';
+              const avatarFileName = `${safeGmailName} - ${safeComment} (logo).jpg`;
+
+              const driveFolderId = process.env.GOOGLE_DRIVE_FOLDER_ID;
+              if (driveFolderId && (process.env.GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON || process.env.FIREBASE_SERVICE_ACCOUNT_JSON)) {
+                try {
+                  const driveResult = await uploadToGoogleDrive(avatarBuffer, avatarFileName, 'image/jpeg', driveFolderId, { appName });
+                  gmailLogoUrl = driveResult.directUrl;
+                } catch (driveErr) {
+                  console.error('[OCR-Upload] Avatar Drive upload failed:', driveErr.message);
+                }
+              }
+              if (!gmailLogoUrl && r2 && process.env.CLOUDFLARE_R2_BUCKET) {
+                const key = `task-screenshots/avatars/${req.auth.sub}/${avatarFileName}`;
+                gmailLogoUrl = await putR2Object(r2, key, avatarBuffer, 'image/jpeg');
+              }
+            }
+          }
+        } catch (cropErr) {
+          console.error('[OCR-Upload] Avatar cropping failed:', cropErr);
+        }
+      }
+
+      // 8. Upload Full Screenshot with Date/App nested naming structure
+      const safeGmailName = gmailName.replace(/[<>:"/\\|?*]+/g, '_').trim().slice(0, 30) || 'Unknown';
+      const screenshotFileName = `${safeGmailName} - ${safeComment} (screenshot)${ext}`;
+
+      let screenshotResult = {};
+      const driveFolderId = process.env.GOOGLE_DRIVE_FOLDER_ID;
+      if (driveFolderId && (process.env.GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON || process.env.FIREBASE_SERVICE_ACCOUNT_JSON)) {
+        try {
+          const driveResult = await uploadToGoogleDrive(body, screenshotFileName, contentType, driveFolderId, { appName });
+          screenshotResult = {
+            name: originalName,
+            size: body.length,
+            type: contentType,
+            key: `gdrive:${driveResult.fileId}`,
+            url: driveResult.directUrl,
+            viewUrl: driveResult.viewUrl,
+            thumbnailUrl: driveResult.thumbnailUrl,
+            drivePath: `${driveResult.dateFolderName}/${driveResult.appFolderName}`,
+            storage: 'google_drive',
+            uploadedAt: nowMs()
+          };
+        } catch (driveError) {
+          console.error('[OCR-Upload] Google Drive upload failed, falling back to R2:', driveError.message);
+        }
+      }
+
+      if (!screenshotResult.url && r2 && process.env.CLOUDFLARE_R2_BUCKET && process.env.CLOUDFLARE_R2_PUBLIC_BASE_URL) {
+        const key = `task-screenshots/${userSegment}/${screenshotFileName}`;
+        const url = await putR2Object(r2, key, body, contentType);
+        screenshotResult = {
+          name: originalName,
+          size: body.length,
+          type: contentType,
+          key,
+          url,
+          storage: 'r2',
+          uploadedAt: nowMs()
+        };
+      }
+
+      if (!screenshotResult.url) {
+        return res.status(503).json({ ok: false, error: 'NO_STORAGE_CONFIGURED' });
+      }
+
+      res.json({
+        ok: true,
+        screenshot: screenshotResult,
+        verification: {
+          ocrStatus: 'completed',
+          ocrText: ocrText.slice(0, 4000),
+          ocrConfidence,
+          gmailName: gmailName.slice(0, 200),
+          gmailLogoUrl,
+          matchedComment
+        }
+      });
     } catch (error) {
       if (error?.code === 'UPLOAD_TOO_LARGE') return res.status(413).json({ ok: false, error: 'UPLOAD_TOO_LARGE' });
       console.error('Task screenshot upload failed:', error);
@@ -2383,82 +2589,137 @@ ${memoriesContext}`
         return res.status(400).json({ ok: false, error: 'SCREENSHOT_REQUIRED' });
       }
 
-      // 1. Download image from URL synchronously
-      let imgBuffer;
-      try {
-        const imgResponse = await fetch(screenshotUrl);
-        if (!imgResponse.ok) throw new Error(`Status ${imgResponse.status}`);
-        imgBuffer = Buffer.from(await imgResponse.arrayBuffer());
-      } catch (err) {
-        console.error('[OCR-Submit] Image fetch failed:', err);
-        return res.status(400).json({ ok: false, error: 'SCREENSHOT_FETCH_FAILED', detail: 'Could not retrieve screenshot for validation' });
-      }
+      let ocrText = req.body.ocrExtractedText || '';
+      let ocrConfidence = req.body.ocrConfidence || 0;
+      let gmailName = req.body.ocrExtractedName || '';
+      let gmailLogoUrl = req.body.details?.gmailLogoUrl || '';
+      let ocrStatus = req.body.ocrStatus || 'pending';
+      let matched = !!ocrText;
 
-      // 2. Run Tesseract OCR synchronously
-      let ocrText = '';
-      let ocrConfidence = 0;
-      let matched = false;
-      let nameLine = null;
-      let data = null;
-
-      try {
-        const ocrResult = await Tesseract.recognize(imgBuffer, 'eng');
-        data = ocrResult.data;
-        ocrText = (data.text || '').trim();
-        ocrConfidence = (data.confidence || 0) / 100;
-      } catch (ocrErr) {
-        console.error('[OCR-Submit] Tesseract OCR failed:', ocrErr);
-        return res.status(500).json({ ok: false, error: 'OCR_FAILED', detail: 'Screenshot text recognition failed' });
-      }
-
-      const cleanStr = (s) => String(s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
-      const cleanedComment = cleanStr(assignedComment);
-
-      if (data && data.lines && data.lines.length > 0) {
-        let foundIndex = -1;
-        for (let j = 0; j < data.lines.length; j++) {
-          const cleanedLine = cleanStr(data.lines[j].text);
-          if (cleanedLine && (cleanedLine.includes(cleanedComment) || cleanedComment.includes(cleanedLine) || (cleanedComment.length > 5 && cleanedLine.length > 5 && cleanedLine.indexOf(cleanedComment.slice(0, 10)) !== -1))) {
-            matched = true;
-            foundIndex = j;
-            break;
-          }
-        }
-
-        if (foundIndex !== -1) {
-          // Look for reviewer name 1-3 lines above comment line
-          for (let k = foundIndex - 1; k >= Math.max(0, foundIndex - 3); k--) {
-            const txt = data.lines[k].text.trim();
-            const isRatingOrDate = /^[0-9★☆\s]+$/.test(txt) || txt.toLowerCase().includes('ago') || txt.toLowerCase().includes('edited') || /\d/.test(txt) && (txt.includes('/') || txt.includes('-'));
-            if (txt && !isRatingOrDate && txt.length > 2 && txt.length < 50) {
-              nameLine = data.lines[k];
-              break;
-            }
-          }
-          if (!nameLine && foundIndex >= 2) nameLine = data.lines[foundIndex - 2];
-          if (!nameLine && foundIndex >= 1) nameLine = data.lines[foundIndex - 1];
-        }
-
-        // Fallback: search first 10 lines
-        if (!nameLine) {
-          for (let j = 0; j < Math.min(data.lines.length, 10); j++) {
-            const txt = data.lines[j].text.trim();
-            const isRatingOrDate = /^[0-9★☆\s]+$/.test(txt) || txt.toLowerCase().includes('ago') || txt.toLowerCase().includes('edited') || txt.length < 3 || txt.length > 40;
-            if (txt && !isRatingOrDate) {
-              nameLine = data.lines[j];
-              break;
-            }
-          }
-        }
-      }
-
+      // Only run OCR if it wasn't pre-verified and passed from client
       if (!matched) {
-        console.warn(`[OCR-Submit] Comment mismatch for user ${userId}. Assigned comment: "${assignedComment}". OCR Extracted: "${ocrText}"`);
-        return res.status(400).json({
-          ok: false,
-          error: 'COMMENT_NOT_MATCHED',
-          detail: 'Your comment is wrong. Copy the same comment as given.'
-        });
+        // 1. Download image from URL synchronously
+        let imgBuffer;
+        try {
+          const imgResponse = await fetch(screenshotUrl);
+          if (!imgResponse.ok) throw new Error(`Status ${imgResponse.status}`);
+          imgBuffer = Buffer.from(await imgResponse.arrayBuffer());
+        } catch (err) {
+          console.error('[OCR-Submit] Image fetch failed:', err);
+          return res.status(400).json({ ok: false, error: 'SCREENSHOT_FETCH_FAILED', detail: 'Could not retrieve screenshot for validation' });
+        }
+
+        // 2. Run Tesseract OCR synchronously
+        let data = null;
+        try {
+          const ocrResult = await Tesseract.recognize(imgBuffer, 'eng');
+          data = ocrResult.data;
+          ocrText = (data.text || '').trim();
+          ocrConfidence = (data.confidence || 0) / 100;
+        } catch (ocrErr) {
+          console.error('[OCR-Submit] Tesseract OCR failed:', ocrErr);
+          return res.status(500).json({ ok: false, error: 'OCR_FAILED', detail: 'Screenshot text recognition failed' });
+        }
+
+        const cleanStr = (s) => String(s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+        const cleanedComment = cleanStr(assignedComment);
+
+        if (data && data.lines && data.lines.length > 0) {
+          let foundIndex = -1;
+          for (let j = 0; j < data.lines.length; j++) {
+            const cleanedLine = cleanStr(data.lines[j].text);
+            if (cleanedLine && (cleanedLine.includes(cleanedComment) || cleanedComment.includes(cleanedLine) || (cleanedComment.length > 5 && cleanedLine.length > 5 && cleanedLine.indexOf(cleanedComment.slice(0, 10)) !== -1))) {
+              matched = true;
+              foundIndex = j;
+              break;
+            }
+          }
+
+          let nameLine = null;
+          if (foundIndex !== -1) {
+            // Look for reviewer name 1-3 lines above comment line
+            for (let k = foundIndex - 1; k >= Math.max(0, foundIndex - 3); k--) {
+              const txt = data.lines[k].text.trim();
+              const isRatingOrDate = /^[0-9★☆\s]+$/.test(txt) || txt.toLowerCase().includes('ago') || txt.toLowerCase().includes('edited') || /\d/.test(txt) && (txt.includes('/') || txt.includes('-'));
+              if (txt && !isRatingOrDate && txt.length > 2 && txt.length < 50) {
+                nameLine = data.lines[k];
+                break;
+              }
+            }
+            if (!nameLine && foundIndex >= 2) nameLine = data.lines[foundIndex - 2];
+            if (!nameLine && foundIndex >= 1) nameLine = data.lines[foundIndex - 1];
+          }
+
+          // Fallback: search first 10 lines
+          if (!nameLine) {
+            for (let j = 0; j < Math.min(data.lines.length, 10); j++) {
+              const txt = data.lines[j].text.trim();
+              const isRatingOrDate = /^[0-9★☆\s]+$/.test(txt) || txt.toLowerCase().includes('ago') || txt.toLowerCase().includes('edited') || txt.length < 3 || txt.length > 40;
+              if (txt && !isRatingOrDate) {
+                nameLine = data.lines[j];
+                break;
+              }
+            }
+          }
+
+          if (nameLine) {
+            gmailName = nameLine.text.trim().replace(/[\r\n]+/g, ' ');
+            // Crop Gmail profile avatar using Jimp synchronously
+            try {
+              const image = await Jimp.read(imgBuffer);
+              const imgWidth = image.bitmap.width;
+              const imgHeight = image.bitmap.height;
+              const bbox = nameLine.bbox;
+
+              if (bbox) {
+                const cropX = Math.max(0, Math.min(bbox.x0 - 85, imgWidth - 75));
+                const cropY = Math.max(0, Math.min(bbox.y0 - 15, imgHeight - 75));
+                const cropW = Math.min(75, imgWidth - cropX);
+                const cropH = Math.min(75, imgHeight - cropY);
+
+                if (cropW > 10 && cropH > 10) {
+                  const avatar = image.clone().crop(cropX, cropY, cropW, cropH);
+                  const avatarBuffer = await avatar.getBufferAsync(Jimp.MIME_JPEG);
+                  const safeComment = assignedComment.slice(0, 30).replace(/[<>:"/\\|?*]+/g, '_').trim();
+                  const safeGmailName = gmailName.replace(/[<>:"/\\|?*]+/g, '_').trim().slice(0, 30) || 'Unknown';
+                  const avatarFileName = `${safeGmailName} - ${safeComment} (logo).jpg`;
+
+                  const driveFolderId = process.env.GOOGLE_DRIVE_FOLDER_ID;
+                  if (driveFolderId && (process.env.GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON || process.env.FIREBASE_SERVICE_ACCOUNT_JSON)) {
+                    try {
+                      const driveResult = await uploadToGoogleDrive(avatarBuffer, avatarFileName, 'image/jpeg', driveFolderId, { appName });
+                      gmailLogoUrl = driveResult.directUrl;
+                    } catch (driveErr) {
+                      console.error('[OCR-Submit] Avatar Drive upload failed:', driveErr.message);
+                    }
+                  }
+
+                  if (!gmailLogoUrl && r2 && process.env.CLOUDFLARE_R2_BUCKET) {
+                    const key = `task-screenshots/avatars/${userId}/${avatarFileName}`;
+                    gmailLogoUrl = await putR2Object(r2, key, avatarBuffer, 'image/jpeg');
+                  }
+                }
+              }
+            } catch (cropErr) {
+              console.error('[OCR-Submit] Avatar cropping failed:', cropErr);
+            }
+          }
+        }
+
+        if (!matched) {
+          console.warn(`[OCR-Submit] Comment mismatch for user ${userId}. Assigned comment: "${assignedComment}". OCR Extracted: "${ocrText}"`);
+          return res.status(400).json({
+            ok: false,
+            error: 'COMMENT_NOT_MATCHED',
+            detail: 'Your comment is wrong. Copy the same comment as given.'
+          });
+        }
+        
+        ocrStatus = 'completed';
+      }
+
+      if (!gmailName) {
+        gmailName = 'Unknown User';
       }
 
       // 3. Save task submission to D1
@@ -2468,68 +2729,26 @@ ${memoriesContext}`
         await markReservationSubmitted(d1, req.body.reservationId).catch(e => console.warn('Reservation mark failed:', e));
       }
 
-      // 4. Crop Gmail profile avatar using Jimp synchronously (since we already have the nameLine and image buffer)
-      let gmailName = nameLine ? nameLine.text.trim().replace(/[\r\n]+/g, ' ') : 'Unknown User';
-      let gmailLogoUrl = '';
-
-      if (nameLine) {
-        try {
-          const image = await Jimp.read(imgBuffer);
-          const imgWidth = image.bitmap.width;
-          const imgHeight = image.bitmap.height;
-          const bbox = nameLine.bbox;
-
-          if (bbox) {
-            const cropX = Math.max(0, Math.min(bbox.x0 - 85, imgWidth - 75));
-            const cropY = Math.max(0, Math.min(bbox.y0 - 15, imgHeight - 75));
-            const cropW = Math.min(75, imgWidth - cropX);
-            const cropH = Math.min(75, imgHeight - cropY);
-
-            if (cropW > 10 && cropH > 10) {
-              const avatar = image.clone().crop(cropX, cropY, cropW, cropH);
-              const avatarBuffer = await avatar.getBufferAsync(Jimp.MIME_JPEG);
-              const timestamp = Date.now();
-              const avatarFileName = `${timestamp}-${submissionId}-avatar.jpg`;
-
-              const driveFolderId = process.env.GOOGLE_DRIVE_FOLDER_ID;
-              if (driveFolderId && (process.env.GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON || process.env.FIREBASE_SERVICE_ACCOUNT_JSON)) {
-                try {
-                  const driveResult = await uploadToGoogleDrive(avatarBuffer, avatarFileName, 'image/jpeg', driveFolderId, { appName: 'Avatars' });
-                  gmailLogoUrl = driveResult.directUrl;
-                } catch (driveErr) {
-                  console.error('[OCR-Submit] Avatar Drive upload failed:', driveErr.message);
-                }
-              }
-
-              if (!gmailLogoUrl && r2 && process.env.CLOUDFLARE_R2_BUCKET) {
-                const key = `task-screenshots/avatars/${userId}/${avatarFileName}`;
-                gmailLogoUrl = await putR2Object(r2, key, avatarBuffer, 'image/jpeg');
-              }
-            }
-          }
-        } catch (cropErr) {
-          console.error('[OCR-Submit] Avatar cropping failed:', cropErr);
-        }
-      }
-
       const details = {};
       try {
         if (req.body.details) {
           Object.assign(details, req.body.details);
         }
       } catch {}
-      details.gmailLogoUrl = gmailLogoUrl;
+      if (gmailLogoUrl) {
+        details.gmailLogoUrl = gmailLogoUrl;
+      }
 
       // Update OCR fields directly in D1
       await updateTaskSubmission(d1, submissionId, {
-        ocrStatus: 'completed',
+        ocrStatus,
         ocrExtractedText: ocrText.slice(0, 4000),
         ocrExtractedName: gmailName.slice(0, 200),
         ocrConfidence,
         detailsJson: details
       });
 
-      console.log(`[OCR-Submit] Synchronous verification and save completed for ${submissionId}`);
+      console.log(`[OCR-Submit] Save completed for ${submissionId}`);
       res.json({ ok: true, submissionId });
     } catch (error) {
       console.error('[OCR-Submit] Task submission save failed:', error);

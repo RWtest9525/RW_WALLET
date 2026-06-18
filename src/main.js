@@ -5255,17 +5255,86 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             setBottomNavActive('bottom-task-btn');
         };
 
-        const showUserTaskDetailsPage = (taskId) => {
+        const showUserTaskDetailsPage = async (taskId) => {
             const task = allTasksCache.find(item => item.id === taskId);
             if (!task) return showNotification('Task not found. Please refresh tasks.', true);
             if (getAdminTaskEffectiveStatus(task) !== 'active') return showNotification('This task is closed.', true);
+            
+            showLoading();
+            const isBulk = isBulkTaskUser();
             const reward = task.rate || task.reward || 0;
             const taskTitle = task.title || 'Task Mission';
             const appName = task.appName || taskTitle;
             const commentPool = getTaskCommentPool(task);
-            const reviewText = commentPool[0] || 'good app';
             const taskLink = task.taskLink || task.link || task.url || '';
             const image = task.imageUrl || task.logoUrl || task.iconUrl || 'https://cdn-icons-png.flaticon.com/512/3176/3176366.png';
+            
+            let submittedComments = [];
+            if (isBulk) {
+                try {
+                    const todayStart = getStartOfTodayMillis();
+                    const snap = await getDocs(query(
+                        collection(db, `artifacts/${appId}/public/data/task_submissions`),
+                        where('userId', '==', currentUser.uid),
+                        where('taskId', '==', taskId)
+                    ));
+                    snap.docs.forEach(docSnap => {
+                        const data = docSnap.data();
+                        const submittedAt = timestampToMillis(data.submittedAt || data.createdAt || data.timestamp);
+                        if (submittedAt >= todayStart && data.assignedComment) {
+                            submittedComments.push(String(data.assignedComment).trim());
+                        }
+                    });
+                } catch (err) {
+                    console.warn('Failed to load submitted comments:', err);
+                }
+            }
+            hideLoading();
+
+            const selectDeterministicComment = (pool, userId, taskId) => {
+                let hash = 0;
+                const str = userId + taskId;
+                for (let i = 0; i < str.length; i++) {
+                    hash = str.charCodeAt(i) + ((hash << 5) - hash);
+                }
+                const index = Math.abs(hash) % pool.length;
+                return { comment: pool[index], index };
+            };
+            const preSelected = selectDeterministicComment(commentPool, currentUser.uid, task.id);
+            const initialComment = preSelected.comment;
+
+            let step2Html = '';
+            if (isBulk) {
+                step2Html = `
+                    <div class="space-y-2 text-left">
+                        <p class="text-xs text-gray-500 mb-2 font-bold">Copy the comments you want to review. Already submitted reviews are marked:</p>
+                        ${commentPool.map((comment, idx) => {
+                            const isSubmitted = submittedComments.includes(String(comment).trim());
+                            return `
+                                <div class="flex items-center justify-between gap-3 p-3 bg-slate-50 dark:bg-slate-900 rounded-xl border ${isSubmitted ? 'border-green-200 bg-green-50/50 dark:border-green-900/30' : 'border-gray-200 dark:border-gray-700'}">
+                                    <p class="text-xs font-bold text-gray-900 dark:text-white flex-1 italic text-left">${escapeHtml(comment)}</p>
+                                    ${isSubmitted 
+                                        ? `<span class="text-xs font-bold text-green-600 dark:text-green-400 shrink-0">Submitted ✅</span>`
+                                        : `<button type="button" data-action="copy-comment" data-comment="${escapeHtml(comment)}" class="rounded-lg bg-slate-900 px-3 py-1.5 text-[10px] font-black text-white hover:bg-slate-800 transition shrink-0">Copy</button>`
+                                    }
+                                </div>
+                            `;
+                        }).join('')}
+                    </div>
+                `;
+            } else {
+                step2Html = `
+                    <div class="rounded-2xl border border-dashed border-slate-200 bg-slate-50 p-4 text-center dark:border-slate-700 dark:bg-slate-900">
+                        <p id="task-assigned-review-text" class="mb-2 text-sm font-bold italic text-slate-950 dark:text-white">"${escapeHtml(initialComment)}"</p>
+                        <p id="task-reservation-timer" class="mb-4 text-[11px] font-black uppercase tracking-wide text-blue-600 dark:text-blue-300">Reserving review lock...</p>
+                        <button id="task-copy-review-btn" class="flex w-full items-center justify-center gap-2 rounded-xl bg-slate-950 px-4 py-3 text-xs font-black uppercase tracking-wide text-white">
+                            <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16h8M8 12h8m-7 8h6a2 2 0 0 0 2-2V7l-5-5H9a2 2 0 0 0-2 2v16z"></path></svg>
+                            Copy Assigned Review
+                        </button>
+                    </div>
+                `;
+            }
+
             const content = `
                 <header class="mb-4 flex items-center justify-between bg-white dark:bg-gray-800 px-4 py-3 shadow-sm page-header-fixed">
                     <div class="flex items-center gap-3">
@@ -5313,23 +5382,17 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                                 </div>
                                 <div>
                                     <p class="mb-2 text-[10px] font-black uppercase tracking-widest text-slate-500"><span class="mr-2 rounded-full bg-slate-100 px-2 py-1">2</span> Copy & Review</p>
-                                    <div class="rounded-2xl border border-dashed border-slate-200 bg-slate-50 p-4 text-center dark:border-slate-700 dark:bg-slate-900">
-                                        <p id="task-assigned-review-text" class="mb-2 text-sm font-bold italic text-slate-950 dark:text-white">Tap copy to reserve your review comment.</p>
-                                        <p id="task-reservation-timer" class="mb-4 text-[11px] font-black uppercase tracking-wide text-blue-600 dark:text-blue-300">5 minute lock starts after copy</p>
-                                        <button id="task-copy-review-btn" class="flex w-full items-center justify-center gap-2 rounded-xl bg-slate-950 px-4 py-3 text-xs font-black uppercase tracking-wide text-white">
-                                            <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16h8M8 12h8m-7 8h6a2 2 0 0 0 2-2V7l-5-5H9a2 2 0 0 0-2 2v16z"></path></svg>
-                                            Reserve & Copy Review
-                                        </button>
-                                    </div>
+                                    ${step2Html}
                                 </div>
                                 <div>
                                     <p class="mb-2 text-[10px] font-black uppercase tracking-widest text-slate-500"><span class="mr-2 rounded-full bg-slate-100 px-2 py-1">3</span> Upload Proof</p>
                                     <label class="flex min-h-32 cursor-pointer flex-col items-center justify-center rounded-2xl border border-dashed border-slate-200 bg-white p-5 text-center dark:border-slate-700 dark:bg-slate-900">
-                                        <input id="task-proof-input" type="file" accept="image/*" class="hidden">
+                                        <input id="task-proof-input" type="file" accept="image/*" class="hidden" ${isBulk ? 'multiple' : ''}>
                                         <svg class="h-6 w-6 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 16V4m0 0-4 4m4-4 4 4M4 16v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"></path></svg>
-                                        <span id="task-proof-label" class="mt-2 text-[10px] font-black uppercase text-slate-600 dark:text-slate-200">Select Screenshot</span>
+                                        <span id="task-proof-label" class="mt-2 text-[10px] font-black uppercase text-slate-600 dark:text-slate-200">${isBulk ? 'Select Screenshot(s)' : 'Select Screenshot'}</span>
                                         <span class="text-[10px] text-slate-400">Duplicate screenshots will be detected</span>
                                     </label>
+                                    <div id="task-files-list" class="mt-3 space-y-2 hidden text-left"></div>
                                 </div>
                                 <button id="task-submit-mission-btn" class="flex w-full items-center justify-center gap-2 rounded-xl bg-slate-950 px-4 py-4 text-sm font-black uppercase tracking-wide text-white disabled:bg-slate-400" disabled>Submit Mission</button>
                             </div>
@@ -5337,13 +5400,16 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                     </div>
                 </div>
                 ${getPageFooter()}`;
+                
             showPage(content, { returnTo: 'task', keepBottomNav: true, onBack: showUserTaskPage });
             setBottomNavActive('bottom-task-btn');
+            
             activeTaskReservation = null;
             if (activeTaskReservationTimer) {
                 clearInterval(activeTaskReservationTimer);
                 activeTaskReservationTimer = null;
             }
+
             const updateReservationUi = (reservation) => {
                 activeTaskReservation = reservation;
                 const commentEl = document.getElementById('task-assigned-review-text');
@@ -5351,6 +5417,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                 const copyBtn = document.getElementById('task-copy-review-btn');
                 if (commentEl) commentEl.textContent = `"${reservation.comment}"`;
                 if (copyBtn) copyBtn.textContent = 'Copy Assigned Review Again';
+                
                 const tick = () => {
                     const expiresAt = timestampToMillis(reservation.expiresAt);
                     const remaining = Math.max(0, expiresAt - Date.now());
@@ -5368,172 +5435,398 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                 if (activeTaskReservationTimer) clearInterval(activeTaskReservationTimer);
                 activeTaskReservationTimer = setInterval(tick, 1000);
             };
+
+            // Setup buttons
             const downloadBtn = document.getElementById('task-download-btn');
             downloadBtn.onclick = () => taskLink ? window.open(taskLink, '_blank', 'noopener') : showNotification('Task link is not added yet.', true);
-            document.getElementById('task-copy-review-btn').onclick = async () => {
-                try {
-                    const reservation = await reserveTaskReviewComment(task);
-                    updateReservationUi(reservation);
-                    await navigator.clipboard.writeText(reservation.comment);
-                    showNotification('Review reserved and copied.');
-                } catch (error) {
-                    console.error('Review reserve/copy failed:', error);
-                    showNotification(error.message || 'Copy failed. Please try again.', true);
-                }
-            };
-            document.getElementById('task-proof-input').onchange = (event) => {
-                const file = event.target.files?.[0];
-                document.getElementById('task-proof-label').textContent = file ? file.name : 'Select Screenshot';
-                document.getElementById('task-submit-mission-btn').disabled = !file;
-            };
-            document.getElementById('task-submit-mission-btn').onclick = async () => {
-                const file = document.getElementById('task-proof-input')?.files?.[0];
-                if (!file) return showNotification('Please select screenshot proof first.', true);
-                const expiresAt = timestampToMillis(activeTaskReservation?.expiresAt);
-                if (!activeTaskReservation?.comment || !expiresAt || expiresAt <= Date.now()) {
-                    return showNotification('Please copy and reserve a review comment before submitting.', true);
-                }
-                const submitBtn = document.getElementById('task-submit-mission-btn');
-                if (submitBtn) { submitBtn.disabled = true; submitBtn.textContent = 'Uploading...'; }
-                try {
-                    let screenshotUrl = '';
-                    let screenshotKey = '';
-                    let screenshotViewUrl = '';
-                    let screenshotDrivePath = '';
 
-                    // Step 1: Upload screenshot to Google Drive (or R2 fallback)
+            if (isBulk) {
+                // Attach copy listeners
+                document.querySelectorAll('[data-action="copy-comment"]').forEach(btn => {
+                    btn.onclick = async (e) => {
+                        const text = e.target.dataset.comment;
+                        try {
+                            await navigator.clipboard.writeText(text);
+                            showNotification('Comment copied!');
+                        } catch (err) {
+                            showNotification('Failed to copy. Please copy manually.', true);
+                        }
+                    };
+                });
+            } else {
+                // Background reserve
+                const initBackgroundReservation = async () => {
                     try {
-                        const token = await getBackendAuthToken();
-                        const params = new URLSearchParams({
-                            taskId: task.id,
-                            fileName: file.name,
-                            appName: appName || task.appName || task.title || 'Unknown App'
-                        });
-                        const uploadResponse = await fetchWithTimeout(`${BACKEND_BASE_URL}/api/uploads/task-screenshot?${params.toString()}`, {
-                            method: 'POST',
-                            headers: {
-                                Authorization: `Bearer ${token}`,
-                                'Content-Type': file.type || 'image/jpeg',
-                                'Content-Length': String(file.size)
-                            },
-                            body: file
-                        }, 30000);
-                        const uploadData = await uploadResponse.json().catch(() => ({}));
-                        if (uploadResponse.ok && uploadData.ok && uploadData.screenshot) {
+                        const reservation = await reserveTaskReviewComment(task);
+                        updateReservationUi(reservation);
+                    } catch (error) {
+                        console.warn('Background reservation failed:', error);
+                        const timerEl = document.getElementById('task-reservation-timer');
+                        if (timerEl) timerEl.textContent = 'Failed to lock reservation. Try copying again.';
+                    }
+                };
+                initBackgroundReservation();
+
+                document.getElementById('task-copy-review-btn').onclick = async () => {
+                    // Copy initial pre-selected comment instantly to prevent browser blocking!
+                    const targetComment = activeTaskReservation?.comment || initialComment;
+                    try {
+                        await navigator.clipboard.writeText(targetComment);
+                        showNotification('Review comment copied.');
+                    } catch (err) {
+                        showNotification('Copy failed. Try copying manually.', true);
+                    }
+                    
+                    // Call reserve in background/foreground to refresh or make sure it is locked
+                    try {
+                        const reservation = await reserveTaskReviewComment(task);
+                        updateReservationUi(reservation);
+                    } catch (error) {
+                        console.error('Review reserve failed:', error);
+                    }
+                };
+            }
+
+            // File select handling
+            const fileInput = document.getElementById('task-proof-input');
+            const filesListEl = document.getElementById('task-files-list');
+            const submitBtn = document.getElementById('task-submit-mission-btn');
+            
+            fileInput.onchange = (event) => {
+                const files = Array.from(event.target.files || []);
+                if (files.length === 0) {
+                    if (filesListEl) filesListEl.classList.add('hidden');
+                    submitBtn.disabled = true;
+                    return;
+                }
+                
+                if (isBulk) {
+                    filesListEl.classList.remove('hidden');
+                    filesListEl.innerHTML = files.map((file, idx) => `
+                        <div id="file-item-${idx}" class="flex items-center justify-between p-2.5 bg-gray-50 dark:bg-gray-900 border border-gray-100 dark:border-gray-700 rounded-xl">
+                            <span class="text-xs font-semibold truncate max-w-[70%] text-gray-700 dark:text-gray-300">${escapeHtml(file.name)}</span>
+                            <span id="file-status-${idx}" class="text-[10px] font-black uppercase text-amber-500 shrink-0">Ready</span>
+                        </div>
+                    `).join('');
+                } else {
+                    document.getElementById('task-proof-label').textContent = files[0].name;
+                }
+                submitBtn.disabled = false;
+            };
+
+            // Submit handler
+            submitBtn.onclick = async () => {
+                const files = Array.from(fileInput.files || []);
+                if (files.length === 0) return showNotification('Please select screenshot proof first.', true);
+                
+                if (!isBulk) {
+                    // Single User Flow
+                    const expiresAt = timestampToMillis(activeTaskReservation?.expiresAt);
+                    if (!activeTaskReservation?.comment || !expiresAt || expiresAt <= Date.now()) {
+                        return showNotification('Please copy and reserve a review comment before submitting.', true);
+                    }
+                    
+                    if (submitBtn) { submitBtn.disabled = true; submitBtn.textContent = 'Uploading...'; }
+                    const file = files[0];
+                    try {
+                        let screenshotUrl = '';
+                        let screenshotKey = '';
+                        let screenshotViewUrl = '';
+                        let screenshotDrivePath = '';
+                        
+                        // Step 1: Upload and pre-verify comment synchronously on backend
+                        try {
+                            const token = await getBackendAuthToken();
+                            const params = new URLSearchParams({
+                                taskId: task.id,
+                                fileName: file.name,
+                                appName: appName || task.appName || task.title || 'Unknown App',
+                                assignedComment: activeTaskReservation.comment
+                            });
+                            const uploadResponse = await fetchWithTimeout(`${BACKEND_BASE_URL}/api/uploads/task-screenshot?${params.toString()}`, {
+                                method: 'POST',
+                                headers: {
+                                    Authorization: `Bearer ${token}`,
+                                    'Content-Type': file.type || 'image/jpeg',
+                                    'Content-Length': String(file.size)
+                                },
+                                body: file
+                            }, 35000); // 35s timeout
+                            
+                            const uploadData = await uploadResponse.json().catch(() => ({}));
+                            if (!uploadResponse.ok || !uploadData.ok) {
+                                throw new Error(uploadData.detail || uploadData.error || 'Upload failed');
+                            }
+                            
+                            const verification = uploadData.verification;
+                            if (!verification) {
+                                throw new Error('Verification data missing');
+                            }
+                            
                             screenshotUrl = uploadData.screenshot.url || '';
                             screenshotKey = uploadData.screenshot.key || '';
                             screenshotViewUrl = uploadData.screenshot.viewUrl || '';
                             screenshotDrivePath = uploadData.screenshot.drivePath || '';
-                        }
-                    } catch (uploadErr) {
-                        console.warn('Screenshot upload failed (continuing with Firebase-only):', uploadErr);
-                    }
-                    
-                    if (submitBtn) { submitBtn.disabled = true; submitBtn.textContent = 'Verifying screenshot...'; }
-
-                    // Step 2: Create D1 task submission record (with synchronous OCR)
-                    const reservationId = activeTaskReservation.id || getTaskReservationDocId(task.id, currentUser.uid);
-                    let submissionId = `sub_${task.id.slice(0, 12)}_${currentUser.uid.slice(0, 12)}_${Date.now()}`;
-                    try {
-                        const token = await getBackendAuthToken();
-                        const response = await fetchWithTimeout(`${BACKEND_BASE_URL}/api/task-submissions`, {
-                            method: 'POST',
-                            headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-                            body: JSON.stringify({
-                                id: submissionId,
-                                taskId: task.id,
-                                reservationId,
-                                assignedComment: activeTaskReservation.comment,
-                                screenshotUrl,
-                                screenshotKey,
-                                screenshotViewUrl,
-                                screenshotDrivePath,
-                                reward: Number(reward || 0),
-                                taskLink,
-                                appName,
-                                userName: currentUserData?.name || currentUser.email || 'User',
-                                userEmail: currentUser.email || currentUserData?.email || '',
-                                payoutDelayDays: Number(task.paymentDelayDays || task.paymentDays || 7)
-                            })
-                        }, 25000); // 25s for synchronous OCR
-                        
-                        const resData = await response.json().catch(() => ({}));
-                        if (!response.ok) {
-                            if (resData.error === 'COMMENT_NOT_MATCHED') {
-                                throw new Error('Your comment is wrong. Copy the same comment as given.');
-                            } else {
+                            
+                            if (submitBtn) submitBtn.textContent = 'Submitting...';
+                            
+                            // Step 2: D1 submission save (pre-verified bypass)
+                            const reservationId = activeTaskReservation.id || getTaskReservationDocId(task.id, currentUser.uid);
+                            const submissionId = `sub_${task.id.slice(0, 12)}_${currentUser.uid.slice(0, 12)}_${Date.now()}`;
+                            
+                            const submitResponse = await fetchWithTimeout(`${BACKEND_BASE_URL}/api/task-submissions`, {
+                                method: 'POST',
+                                headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+                                body: JSON.stringify({
+                                    id: submissionId,
+                                    taskId: task.id,
+                                    reservationId,
+                                    assignedComment: activeTaskReservation.comment,
+                                    screenshotUrl,
+                                    screenshotKey,
+                                    screenshotViewUrl,
+                                    screenshotDrivePath,
+                                    reward: Number(reward || 0),
+                                    taskLink,
+                                    appName,
+                                    userName: currentUserData?.name || currentUser.email || 'User',
+                                    userEmail: currentUser.email || currentUserData?.email || '',
+                                    payoutDelayDays: Number(task.paymentDelayDays || task.paymentDays || 7),
+                                    ocrStatus: 'completed',
+                                    ocrExtractedName: verification.gmailName,
+                                    ocrExtractedText: verification.ocrText,
+                                    ocrConfidence: verification.ocrConfidence,
+                                    details: { gmailLogoUrl: verification.gmailLogoUrl }
+                                })
+                            }, 10000);
+                            
+                            const resData = await submitResponse.json().catch(() => ({}));
+                            if (!submitResponse.ok || !resData.ok) {
                                 throw new Error(resData.detail || resData.error || 'Submission failed');
                             }
+                            
+                            // Step 3: Firebase save
+                            await setDoc(doc(db, `artifacts/${appId}/public/data/task_submissions`, submissionId), {
+                                id: submissionId,
+                                taskId: task.id,
+                                taskCode: task.taskCode || task.id,
+                                taskTitle,
+                                taskFamily: getAdminTaskFamily(task),
+                                taskSubtype: getAdminTaskSubtype(task),
+                                taskSubtypeLabel: task.taskSubtypeLabel || getAdminTaskSubtypeMeta(getAdminTaskFamily(task), getAdminTaskSubtype(task)).label,
+                                appName,
+                                appLogoUrl: image,
+                                taskLink,
+                                userId: currentUser.uid,
+                                userName: currentUserData?.name || currentUser.email || 'User',
+                                userEmail: currentUser.email || currentUserData?.email || '',
+                                userMobile: currentUserData?.mobile || '',
+                                reward: Number(reward || 0),
+                                assignedComment: activeTaskReservation.comment,
+                                assignedCommentIndex: activeTaskReservation.commentIndex ?? 0,
+                                reservationId,
+                                reservationExpiresAt: activeTaskReservation.expiresAt,
+                                screenshotUrl,
+                                screenshotKey,
+                                proofFileName: file.name,
+                                proofFileSize: file.size,
+                                proofMimeType: file.type || 'image/*',
+                                status: 'pending_manual_verification',
+                                manualStatus: 'pending',
+                                autoStatus: 'waiting_scraper',
+                                verificationMode: 'manual_and_auto_ready',
+                                ocrStatus: 'completed',
+                                ocrExtractedName: verification.gmailName,
+                                ocrExtractedComment: activeTaskReservation.comment,
+                                ocrExtractedLogoUrl: verification.gmailLogoUrl,
+                                scraperStatus: 'not_configured',
+                                payoutStatus: 'pending',
+                                submittedAt: serverTimestamp()
+                            });
+                            
+                            await setDoc(doc(db, `artifacts/${appId}/public/data/task_comment_reservations`, reservationId), {
+                                status: 'submitted',
+                                submittedAt: serverTimestamp()
+                            }, { merge: true });
+                            
+                            // Mark reservation as submitted on backend (non-blocking)
+                            fetchWithTimeout(`${BACKEND_BASE_URL}/api/task-reservations/${encodeURIComponent(reservationId)}/submit`, {
+                                method: 'POST',
+                                headers: { Authorization: `Bearer ${token}` }
+                            }, 5000).catch(() => {});
+                            
+                            userTaskSubmissionIds.add(task.id);
+                            userTaskTodaySubmissionIds.add(task.id);
+                            showNotification('Mission submitted for admin review.');
+                            showUserTaskPage();
+                            
+                        } catch (err) {
+                            showNotification(err.message || 'Validation failed. Please check your screenshot.', true);
+                            if (submitBtn) { submitBtn.disabled = false; submitBtn.textContent = 'Submit Mission'; }
                         }
-                        if (resData.submissionId) {
-                            submissionId = resData.submissionId;
-                        }
-
-                        // Mark reservation as submitted on backend
-                        const token2 = await getBackendAuthToken();
-                        fetchWithTimeout(`${BACKEND_BASE_URL}/api/task-reservations/${encodeURIComponent(reservationId)}/submit`, {
-                            method: 'POST',
-                            headers: { Authorization: `Bearer ${token2}` }
-                        }, 5000).catch(e => console.warn('Backend reservation mark failed:', e));
-                    } catch (backendErr) {
-                        console.error('D1 submission save failed:', backendErr);
-                        showNotification(backendErr.message || 'Validation failed. Please check your screenshot.', true);
+                    } catch (error) {
+                        console.error('Task submission failed:', error);
+                        showNotification('Could not submit mission. Please contact admin.', true);
                         if (submitBtn) { submitBtn.disabled = false; submitBtn.textContent = 'Submit Mission'; }
-                        return; // Stop execution here! Do not proceed to Firebase.
                     }
-
-                    if (submitBtn) submitBtn.textContent = 'Submitting...';
-
-                    // Step 3: Firebase submission (always, for backwards compatibility, with aligned ID)
-                    await setDoc(doc(db, `artifacts/${appId}/public/data/task_submissions`, submissionId), {
-                        id: submissionId,
-                        taskId: task.id,
-                        taskCode: task.taskCode || task.id,
-                        taskTitle,
-                        taskFamily: getAdminTaskFamily(task),
-                        taskSubtype: getAdminTaskSubtype(task),
-                        taskSubtypeLabel: task.taskSubtypeLabel || getAdminTaskSubtypeMeta(getAdminTaskFamily(task), getAdminTaskSubtype(task)).label,
-                        appName,
-                        appLogoUrl: image,
-                        taskLink,
-                        userId: currentUser.uid,
-                        userName: currentUserData?.name || currentUser.email || 'User',
-                        userEmail: currentUser.email || currentUserData?.email || '',
-                        userMobile: currentUserData?.mobile || '',
-                        reward: Number(reward || 0),
-                        assignedComment: activeTaskReservation.comment,
-                        assignedCommentIndex: activeTaskReservation.commentIndex ?? 0,
-                        reservationId,
-                        reservationExpiresAt: activeTaskReservation.expiresAt,
-                        screenshotUrl,
-                        screenshotKey,
-                        proofFileName: file.name,
-                        proofFileSize: file.size,
-                        proofMimeType: file.type || 'image/*',
-                        status: 'pending_manual_verification',
-                        manualStatus: 'pending',
-                        autoStatus: 'waiting_scraper',
-                        verificationMode: 'manual_and_auto_ready',
-                        ocrStatus: 'completed',
-                        ocrExtractedName: '',
-                        ocrExtractedComment: activeTaskReservation.comment,
-                        ocrExtractedLogoUrl: '',
-                        scraperStatus: 'not_configured',
-                        payoutStatus: 'pending',
-                        submittedAt: serverTimestamp()
-                    });
-                    await setDoc(doc(db, `artifacts/${appId}/public/data/task_comment_reservations`, reservationId), {
-                        status: 'submitted',
-                        submittedAt: serverTimestamp()
-                    }, { merge: true });
-                    userTaskSubmissionIds.add(task.id);
-                    userTaskTodaySubmissionIds.add(task.id);
-                    showNotification('Mission submitted for admin review.');
-                    showUserTaskPage();
-                } catch (error) {
-                    console.error('Task submission failed:', error);
-                    showNotification('Could not submit mission. Please contact admin.', true);
-                    if (submitBtn) { submitBtn.disabled = false; submitBtn.textContent = 'Submit Mission'; }
+                } else {
+                    // Bulk User Flow
+                    if (submitBtn) { submitBtn.disabled = true; submitBtn.textContent = 'Uploading...'; }
+                    let successCount = 0;
+                    let failCount = 0;
+                    
+                    for (let i = 0; i < files.length; i++) {
+                        const file = files[i];
+                        const statusEl = document.getElementById(`file-status-${i}`);
+                        const itemEl = document.getElementById(`file-item-${i}`);
+                        
+                        if (statusEl) {
+                            statusEl.textContent = 'Verifying...';
+                            statusEl.className = 'text-[10px] font-black uppercase text-blue-500 shrink-0';
+                        }
+                        if (itemEl) {
+                            itemEl.className = 'flex items-center justify-between p-2.5 bg-blue-50/50 dark:bg-blue-900/10 border border-blue-200 dark:border-blue-800 rounded-xl';
+                        }
+                        
+                        try {
+                            const token = await getBackendAuthToken();
+                            const params = new URLSearchParams({
+                                taskId: task.id,
+                                fileName: file.name,
+                                appName: appName || task.appName || task.title || 'Unknown App',
+                                isBulk: 'true'
+                            });
+                            
+                            // 1. Upload and pre-verify screenshot on backend
+                            const uploadResponse = await fetchWithTimeout(`${BACKEND_BASE_URL}/api/uploads/task-screenshot?${params.toString()}`, {
+                                method: 'POST',
+                                headers: {
+                                    Authorization: `Bearer ${token}`,
+                                    'Content-Type': file.type || 'image/jpeg',
+                                    'Content-Length': String(file.size)
+                                },
+                                body: file
+                            }, 35000); // 35s timeout
+                            
+                            const uploadData = await uploadResponse.json().catch(() => ({}));
+                            if (!uploadResponse.ok || !uploadData.ok) {
+                                throw new Error(uploadData.detail || uploadData.error || 'Upload failed');
+                            }
+                            
+                            const verification = uploadData.screenshot ? uploadData.verification : null;
+                            if (!verification || !verification.matchedComment) {
+                                throw new Error('Comment mismatch or verification failed');
+                            }
+                            
+                            const screenshotUrl = uploadData.screenshot.url || '';
+                            const screenshotKey = uploadData.screenshot.key || '';
+                            const screenshotViewUrl = uploadData.screenshot.viewUrl || '';
+                            const screenshotDrivePath = uploadData.screenshot.drivePath || '';
+                            
+                            if (statusEl) statusEl.textContent = 'Saving...';
+                            
+                            // 2. Submit task details (bypass OCR)
+                            const submissionId = `sub_${task.id.slice(0, 12)}_${currentUser.uid.slice(0, 12)}_${Date.now()}`;
+                            const submitResponse = await fetchWithTimeout(`${BACKEND_BASE_URL}/api/task-submissions`, {
+                                method: 'POST',
+                                headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+                                body: JSON.stringify({
+                                    id: submissionId,
+                                    taskId: task.id,
+                                    assignedComment: verification.matchedComment,
+                                    screenshotUrl,
+                                    screenshotKey,
+                                    screenshotViewUrl,
+                                    screenshotDrivePath,
+                                    reward: Number(reward || 0),
+                                    taskLink,
+                                    appName,
+                                    userName: currentUserData?.name || currentUser.email || 'User',
+                                    userEmail: currentUser.email || currentUserData?.email || '',
+                                    payoutDelayDays: Number(task.paymentDelayDays || task.paymentDays || 7),
+                                    ocrStatus: 'completed',
+                                    ocrExtractedName: verification.gmailName,
+                                    ocrExtractedText: verification.ocrText,
+                                    ocrConfidence: verification.ocrConfidence,
+                                    details: { gmailLogoUrl: verification.gmailLogoUrl }
+                                })
+                            }, 10000);
+                            
+                            const resData = await submitResponse.json().catch(() => ({}));
+                            if (!submitResponse.ok || !resData.ok) {
+                                throw new Error(resData.detail || resData.error || 'Submission failed');
+                            }
+                            
+                            // 3. Save to Firebase
+                            await setDoc(doc(db, `artifacts/${appId}/public/data/task_submissions`, submissionId), {
+                                id: submissionId,
+                                taskId: task.id,
+                                taskCode: task.taskCode || task.id,
+                                taskTitle,
+                                taskFamily: getAdminTaskFamily(task),
+                                taskSubtype: getAdminTaskSubtype(task),
+                                taskSubtypeLabel: task.taskSubtypeLabel || getAdminTaskSubtypeMeta(getAdminTaskFamily(task), getAdminTaskSubtype(task)).label,
+                                appName,
+                                appLogoUrl: image,
+                                taskLink,
+                                userId: currentUser.uid,
+                                userName: currentUserData?.name || currentUser.email || 'User',
+                                userEmail: currentUser.email || currentUserData?.email || '',
+                                userMobile: currentUserData?.mobile || '',
+                                reward: Number(reward || 0),
+                                assignedComment: verification.matchedComment,
+                                screenshotUrl,
+                                screenshotKey,
+                                proofFileName: file.name,
+                                proofFileSize: file.size,
+                                proofMimeType: file.type || 'image/*',
+                                status: 'pending_manual_verification',
+                                manualStatus: 'pending',
+                                autoStatus: 'waiting_scraper',
+                                verificationMode: 'manual_and_auto_ready',
+                                ocrStatus: 'completed',
+                                ocrExtractedName: verification.gmailName,
+                                ocrExtractedComment: verification.matchedComment,
+                                ocrExtractedLogoUrl: verification.gmailLogoUrl,
+                                scraperStatus: 'not_configured',
+                                payoutStatus: 'pending',
+                                submittedAt: serverTimestamp()
+                            });
+                            
+                            if (statusEl) {
+                                statusEl.textContent = 'Success ✅';
+                                statusEl.className = 'text-[10px] font-black uppercase text-green-600 shrink-0';
+                            }
+                            if (itemEl) {
+                                itemEl.className = 'flex items-center justify-between p-2.5 bg-green-50/50 dark:bg-green-900/10 border border-green-200 dark:border-green-800 rounded-xl';
+                            }
+                            successCount++;
+                        } catch (err) {
+                            console.error(`File ${file.name} failed:`, err);
+                            if (statusEl) {
+                                statusEl.textContent = 'Failed ❌';
+                                statusEl.title = err.message;
+                                statusEl.className = 'text-[10px] font-black uppercase text-red-600 shrink-0 cursor-help';
+                            }
+                            if (itemEl) {
+                                itemEl.className = 'flex items-center justify-between p-2.5 bg-red-50/50 dark:bg-red-900/10 border border-red-200 dark:border-red-800 rounded-xl';
+                            }
+                            failCount++;
+                        }
+                    }
+                    
+                    showNotification(`Submissions completed. Success: ${successCount}, Failed: ${failCount}`);
+                    
+                    if (failCount === 0) {
+                        userTaskSubmissionIds.add(task.id);
+                        userTaskTodaySubmissionIds.add(task.id);
+                        showUserTaskPage();
+                    } else {
+                        if (submitBtn) {
+                            submitBtn.disabled = false;
+                            submitBtn.textContent = 'Submit Remaining';
+                        }
+                    }
                 }
             };
         };
@@ -5605,12 +5898,16 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             });
             return unique.length ? unique : ['good app'];
         };
-        const isBulkTaskUser = () => !!(
-            currentUserData?.bulkTaskMode ||
-            currentUserData?.taskBulkMode ||
-            currentUserData?.isBulkTaskUser ||
-            currentUser?.uid === ADMIN_UID
-        );
+        const getTaskTier = (u) => {
+            if (!u) return 'single';
+            if (u.taskTier) return u.taskTier;
+            if (u.bulkTaskMode || u.isBulkTaskUser) return 'bulker';
+            return 'single';
+        };
+        const isBulkTaskUser = () => {
+            const tier = getTaskTier(currentUserData);
+            return tier === 'bulker' || tier === 'super_bulker' || currentUser?.uid === ADMIN_UID;
+        };
         const getTaskReservationDocId = (taskId, userId) => getSafeTransactionDocId(`task-reservation-${taskId}-${userId}`);
         const getStartOfTodayMillis = () => {
             const today = new Date();
@@ -6748,12 +7045,22 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             if (approvedEl) approvedEl.textContent = approved;
             if (paidEl) paidEl.textContent = paid;
 
-            // Group by task
+            // Group by Date first, then by App
+            const getSubmissionDateStr = (submittedAt) => {
+                if (!submittedAt) return 'Unknown Date';
+                const d = new Date(timestampToMillis(submittedAt));
+                return `${String(d.getDate()).padStart(2, '0')}-${String(d.getMonth() + 1).padStart(2, '0')}-${d.getFullYear()}`;
+            };
+
             const grouped = {};
             subs.forEach(s => {
-                const key = s.task_id || 'unknown';
-                if (!grouped[key]) grouped[key] = { taskName: s.app_name || key, taskLink: s.task_link || '', reward: s.reward || 0, items: [] };
-                grouped[key].items.push(s);
+                const dateKey = getSubmissionDateStr(s.submitted_at || s.submittedAt);
+                const appKey = s.app_name || s.appName || s.task_id || 'unknown';
+                if (!grouped[dateKey]) grouped[dateKey] = {};
+                if (!grouped[dateKey][appKey]) {
+                    grouped[dateKey][appKey] = { taskName: s.app_name || s.appName || appKey, taskLink: s.task_link || s.taskLink || '', reward: s.reward || 0, items: [] };
+                }
+                grouped[dateKey][appKey].items.push(s);
             });
 
             if (!Object.keys(grouped).length) {
@@ -6761,81 +7068,105 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                 return;
             }
 
-            listEl.innerHTML = Object.entries(grouped).map(([taskId, group]) => `
-                <div class="rounded-2xl border border-gray-100 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 overflow-hidden">
-                    <div class="flex items-center gap-3 px-4 py-3 bg-white dark:bg-gray-800 border-b border-gray-100 dark:border-gray-700">
-                        <span class="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-orange-100 dark:bg-orange-900/30 text-xs font-black text-orange-600">${group.items.length}</span>
-                        <div class="min-w-0 flex-1">
-                            <p class="truncate text-sm font-extrabold">${escapeHtml(group.taskName)}</p>
-                            <p class="text-[10px] text-gray-400">₹${group.reward} reward · ${taskId.slice(0, 12)}</p>
+            listEl.innerHTML = Object.entries(grouped).map(([dateStr, dateGroup]) => {
+                const totalSubsForDate = Object.values(dateGroup).reduce((sum, app) => sum + app.items.length, 0);
+                const safeDateId = `date-group-${dateStr.replace(/[^a-zA-Z0-9]/g, '-')}`;
+                
+                const appsHtml = Object.entries(dateGroup).map(([appKey, appGroup]) => {
+                    const safeAppId = `app-group-${dateStr.replace(/[^a-zA-Z0-9]/g, '-')}-${appKey.replace(/[^a-zA-Z0-9]/g, '-')}`;
+                    return `
+                        <div class="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 overflow-hidden mt-2">
+                            <div class="flex items-center gap-3 px-4 py-2 bg-gray-50 dark:bg-gray-900 border-b border-gray-100 dark:border-gray-700">
+                                <span class="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-cyan-100 dark:bg-cyan-900/30 text-[10px] font-black text-cyan-600">${appGroup.items.length}</span>
+                                <div class="min-w-0 flex-1">
+                                    <p class="truncate text-xs font-extrabold text-gray-800 dark:text-gray-200">${escapeHtml(appGroup.taskName)}</p>
+                                    <p class="text-[9px] text-gray-450">₹${appGroup.reward} reward</p>
+                                </div>
+                                <button onclick="document.getElementById('${safeAppId}')?.classList.toggle('hidden')" class="rounded-lg bg-gray-200 dark:bg-gray-750 px-2 py-0.5 text-[10px] font-bold">▼</button>
+                            </div>
+                            <div id="${safeAppId}" class="divide-y divide-gray-100 dark:divide-gray-700 hidden">
+                                ${appGroup.items.map(s => {
+                                    const statusColor = s.manual_status === 'approved' ? 'green' : s.manual_status === 'rejected' ? 'red' : 'yellow';
+                                    const payoutBadge = s.payout_status === 'paid' ? '<span class="rounded-full bg-cyan-100 dark:bg-cyan-900/30 px-2 py-0.5 text-[9px] font-black text-cyan-700 dark:text-cyan-300">PAID</span>' : '';
+                                    const ocrBadge = s.ocr_status === 'completed' ? '🟢' : s.ocr_status === 'failed' ? '🔴' : '⏳';
+                                    const timeStr = s.submitted_at ? new Date(s.submitted_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }) : 'Unknown';
+                                    
+                                    let details = {};
+                                    try { details = s.details_json ? JSON.parse(s.details_json) : {}; } catch {}
+                                    const gmailLogoUrl = details.gmailLogoUrl || '';
+                                    const gmailName = s.ocr_extracted_name || '';
+
+                                    let liveBadge = '';
+                                    if (s.scraper_status === 'live_confirmed') {
+                                        liveBadge = '<span class="rounded-full bg-emerald-100 dark:bg-emerald-900/30 px-2 py-0.5 text-[9px] font-black text-emerald-700 dark:text-emerald-300">🟢 LIVE</span>';
+                                    } else if (s.scraper_status === 'not_live') {
+                                        liveBadge = '<span class="rounded-full bg-rose-100 dark:bg-rose-900/30 px-2 py-0.5 text-[9px] font-black text-rose-700 dark:text-rose-300">🔴 NOT LIVE</span>';
+                                    } else {
+                                        liveBadge = '<span class="rounded-full bg-gray-150 dark:bg-gray-700 px-2 py-0.5 text-[9px] font-black text-gray-500 dark:text-gray-400">⏳ UNCHECKED</span>';
+                                    }
+
+                                    return `
+                                    <div class="px-4 py-3 bg-white dark:bg-gray-800 space-y-2 text-left">
+                                        <div class="flex items-center gap-2">
+                                            <div class="min-w-0 flex-1">
+                                                <p class="text-sm font-bold truncate">${escapeHtml(s.user_name || s.user_email || 'User')}</p>
+                                                <p class="text-[10px] text-gray-400">${escapeHtml(s.user_email || '')} · ${timeStr}</p>
+                                            </div>
+                                            <span class="rounded-full bg-${statusColor}-100 dark:bg-${statusColor}-900/30 px-2 py-0.5 text-[9px] font-black text-${statusColor}-700 dark:text-${statusColor}-300 uppercase">${escapeHtml(s.manual_status)}</span>
+                                            ${payoutBadge}
+                                        </div>
+                                        <div class="flex items-center gap-2 text-[10px] text-gray-500">
+                                            <span>💬 ${escapeHtml(s.assigned_comment || '')}</span>
+                                            <span>OCR: ${ocrBadge}</span>
+                                        </div>
+                                        <div class="flex items-center gap-2 border-t border-gray-100 dark:border-gray-700 pt-2 mt-1">
+                                            ${gmailLogoUrl ? `<img src="${escapeHtml(gmailLogoUrl)}" alt="Gmail avatar" class="h-6 w-6 rounded-full border border-gray-200 dark:border-gray-600 object-cover shrink-0" loading="lazy">` : `<span class="flex h-6 w-6 items-center justify-center rounded-full bg-gray-100 dark:bg-gray-700 text-[9px] font-bold text-gray-400 dark:text-gray-300 shrink-0">G</span>`}
+                                            <div class="min-w-0 flex-1">
+                                                <p class="text-xs font-semibold truncate text-gray-700 dark:text-gray-300">Gmail: <span class="font-bold text-gray-900 dark:text-white">${escapeHtml(gmailName || 'Not parsed yet')}</span></p>
+                                            </div>
+                                            ${liveBadge}
+                                        </div>
+                                        ${s.screenshot_url ? `<div class="mt-1 space-y-1">
+                                            <div class="relative inline-block">
+                                                <img src="${escapeHtml(s.screenshot_url)}" alt="Screenshot" class="h-28 w-auto rounded-xl border-2 border-gray-200 dark:border-gray-600 cursor-pointer object-cover shadow-sm hover:shadow-md hover:scale-[1.02] transition" onclick="(function(){var o=document.createElement('div');o.id='ss-overlay-'+Date.now();o.className='fixed inset-0 z-[9999] flex items-center justify-center bg-black/80 p-4';o.onclick=function(e){if(e.target===o)o.remove()};o.innerHTML='<div class=\\'relative max-w-3xl max-h-[90vh]\\' onclick=\\'event.stopPropagation()\\'><img src=\\'${escapeHtml(s.screenshot_url)}\\' class=\\'max-w-full max-h-[85vh] rounded-2xl shadow-2xl object-contain\\'/><div class=\\'mt-2 flex gap-2 justify-center\\'><a href=\\'${escapeHtml(s.screenshot_url)}\\' target=\\'_blank\\' class=\\'rounded-xl bg-white/20 px-4 py-2 text-xs font-bold text-white hover:bg-white/30 transition\\'>Open Full Image ↗</a>${s.view_url ? `<a href=\\'${escapeHtml(s.view_url)}\\' target=\\'_blank\\' class=\\'rounded-xl bg-blue-600 px-4 py-2 text-xs font-bold text-white hover:bg-blue-700 transition\\'>Open in Drive ↗</a>` : ''}<button onclick=\\'this.closest(\\\"[id^=ss-overlay]\\\").remove()\\' class=\\'rounded-xl bg-red-600 px-4 py-2 text-xs font-bold text-white hover:bg-red-700 transition\\'>Close ✕</button></div></div>';document.body.appendChild(o)})()">
+                                                <span class="absolute -bottom-1 -right-1 rounded-full bg-blue-600 p-1"><svg class="h-3 w-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0zM10 7v3m0 0v3m0-3h3m-3 0H7"></path></svg></span>
+                                            </div>
+                                            ${s.drive_path ? `<p class="text-[9px] text-blue-400">📁 ${escapeHtml(s.drive_path)}</p>` : ''}
+                                        </div>` : '<p class="text-[10px] text-red-400 italic">⚠️ No screenshot uploaded</p>'}
+                                        <div class="flex flex-wrap gap-1.5 pt-1">
+                                            ${s.manual_status === 'pending' ? `
+                                                <button data-action="approve-submission" data-subid="${s.id}" class="rounded-lg bg-green-600 px-3 py-1.5 text-[10px] font-black text-white hover:bg-green-700 transition">✅ Approve</button>
+                                                <button data-action="reject-submission" data-subid="${s.id}" class="rounded-lg bg-red-600 px-3 py-1.5 text-[10px] font-black text-white hover:bg-red-700 transition">❌ Reject</button>
+                                            ` : ''}
+                                            ${s.manual_status === 'approved' && s.payout_status !== 'paid' ? `
+                                                <button data-action="pay-submission" data-subid="${s.id}" class="rounded-lg bg-cyan-600 px-3 py-1.5 text-[10px] font-black text-white hover:bg-cyan-700 transition">💰 Pay Now</button>
+                                            ` : ''}
+                                            <button data-action="ocr-submission" data-subid="${s.id}" class="rounded-lg bg-purple-600 px-3 py-1.5 text-[10px] font-black text-white hover:bg-purple-700 transition">🤖 OCR</button>
+                                            <button data-action="scraper-submission" data-subid="${s.id}" data-tasklink="${escapeHtml(s.task_link || '')}" data-comment="${escapeHtml(s.assigned_comment || '')}" data-appname="${escapeHtml(s.app_name || '')}" class="rounded-lg bg-indigo-600 px-3 py-1.5 text-[10px] font-black text-white hover:bg-indigo-700 transition">🔎 Check</button>
+                                        </div>
+                                    </div>`;
+                                }).join('')}
+                            </div>
                         </div>
-                        <button onclick="document.getElementById('sub-group-${taskId}')?.classList.toggle('hidden')" class="rounded-lg bg-gray-100 dark:bg-gray-700 px-2 py-1 text-xs font-bold">▼</button>
-                    </div>
-                    <div id="sub-group-${taskId}" class="divide-y divide-gray-100 dark:divide-gray-700">
-                        ${group.items.map(s => {
-                            const statusColor = s.manual_status === 'approved' ? 'green' : s.manual_status === 'rejected' ? 'red' : 'yellow';
-                            const payoutBadge = s.payout_status === 'paid' ? '<span class="rounded-full bg-cyan-100 dark:bg-cyan-900/30 px-2 py-0.5 text-[9px] font-black text-cyan-700 dark:text-cyan-300">PAID</span>' : '';
-                            const ocrBadge = s.ocr_status === 'completed' ? '🟢' : s.ocr_status === 'failed' ? '🔴' : '⏳';
-                            const timeStr = s.submitted_at ? new Date(s.submitted_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }) : 'Unknown';
-                            
-                            let details = {};
-                            try { details = s.details_json ? JSON.parse(s.details_json) : {}; } catch {}
-                            const gmailLogoUrl = details.gmailLogoUrl || '';
-                            const gmailName = s.ocr_extracted_name || '';
+                    `;
+                }).join('');
 
-                            let liveBadge = '';
-                            if (s.scraper_status === 'live_confirmed') {
-                                liveBadge = '<span class="rounded-full bg-emerald-100 dark:bg-emerald-900/30 px-2 py-0.5 text-[9px] font-black text-emerald-700 dark:text-emerald-300">🟢 LIVE</span>';
-                            } else if (s.scraper_status === 'not_live') {
-                                liveBadge = '<span class="rounded-full bg-rose-100 dark:bg-rose-900/30 px-2 py-0.5 text-[9px] font-black text-rose-700 dark:text-rose-300">🔴 NOT LIVE</span>';
-                            } else {
-                                liveBadge = '<span class="rounded-full bg-gray-150 dark:bg-gray-700 px-2 py-0.5 text-[9px] font-black text-gray-500 dark:text-gray-400">⏳ UNCHECKED</span>';
-                            }
-
-                            return `
-                            <div class="px-4 py-3 bg-white dark:bg-gray-800 space-y-2">
-                                <div class="flex items-center gap-2">
-                                    <div class="min-w-0 flex-1">
-                                        <p class="text-sm font-bold truncate">${escapeHtml(s.user_name || s.user_email || 'User')}</p>
-                                        <p class="text-[10px] text-gray-400">${escapeHtml(s.user_email || '')} · ${timeStr}</p>
-                                    </div>
-                                    <span class="rounded-full bg-${statusColor}-100 dark:bg-${statusColor}-900/30 px-2 py-0.5 text-[9px] font-black text-${statusColor}-700 dark:text-${statusColor}-300 uppercase">${escapeHtml(s.manual_status)}</span>
-                                    ${payoutBadge}
-                                </div>
-                                <div class="flex items-center gap-2 text-[10px] text-gray-500">
-                                    <span>💬 ${escapeHtml((s.assigned_comment || '').slice(0, 40))}${(s.assigned_comment || '').length > 40 ? '...' : ''}</span>
-                                    <span>OCR: ${ocrBadge}</span>
-                                </div>
-                                <div class="flex items-center gap-2 border-t border-gray-100 dark:border-gray-700 pt-2 mt-1">
-                                    ${gmailLogoUrl ? `<img src="${escapeHtml(gmailLogoUrl)}" alt="Gmail avatar" class="h-6 w-6 rounded-full border border-gray-200 dark:border-gray-600 object-cover shrink-0" loading="lazy">` : `<span class="flex h-6 w-6 items-center justify-center rounded-full bg-gray-100 dark:bg-gray-700 text-[9px] font-bold text-gray-400 dark:text-gray-300 shrink-0">G</span>`}
-                                    <div class="min-w-0 flex-1">
-                                        <p class="text-xs font-semibold truncate text-gray-700 dark:text-gray-300">Gmail: <span class="font-bold text-gray-900 dark:text-white">${escapeHtml(gmailName || 'Not parsed yet')}</span></p>
-                                    </div>
-                                    ${liveBadge}
-                                </div>
-                                ${s.screenshot_url ? `<div class="mt-1 space-y-1">
-                                    <div class="relative inline-block">
-                                        <img src="${escapeHtml(s.screenshot_url)}" alt="Screenshot" class="h-28 w-auto rounded-xl border-2 border-gray-200 dark:border-gray-600 cursor-pointer object-cover shadow-sm hover:shadow-md hover:scale-[1.02] transition" onclick="(function(){var o=document.createElement('div');o.id='ss-overlay-'+Date.now();o.className='fixed inset-0 z-[9999] flex items-center justify-center bg-black/80 p-4';o.onclick=function(e){if(e.target===o)o.remove()};o.innerHTML='<div class=\\'relative max-w-3xl max-h-[90vh]\\' onclick=\\'event.stopPropagation()\\'><img src=\\'${escapeHtml(s.screenshot_url)}\\' class=\\'max-w-full max-h-[85vh] rounded-2xl shadow-2xl object-contain\\'/><div class=\\'mt-2 flex gap-2 justify-center\\'><a href=\\'${escapeHtml(s.screenshot_url)}\\' target=\\'_blank\\' class=\\'rounded-xl bg-white/20 px-4 py-2 text-xs font-bold text-white hover:bg-white/30 transition\\'>Open Full Image ↗</a>${s.view_url ? `<a href=\\'${escapeHtml(s.view_url)}\\' target=\\'_blank\\' class=\\'rounded-xl bg-blue-600 px-4 py-2 text-xs font-bold text-white hover:bg-blue-700 transition\\'>Open in Drive ↗</a>` : ''}<button onclick=\\'this.closest(\\\"[id^=ss-overlay]\\\").remove()\\' class=\\'rounded-xl bg-red-600 px-4 py-2 text-xs font-bold text-white hover:bg-red-700 transition\\'>Close ✕</button></div></div>';document.body.appendChild(o)})()">
-                                        <span class="absolute -bottom-1 -right-1 rounded-full bg-blue-600 p-1"><svg class="h-3 w-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0zM10 7v3m0 0v3m0-3h3m-3 0H7"></path></svg></span>
-                                    </div>
-                                    ${s.drive_path ? `<p class="text-[9px] text-blue-400">📁 ${escapeHtml(s.drive_path)}</p>` : ''}
-                                </div>` : '<p class="text-[10px] text-red-400 italic">⚠️ No screenshot uploaded</p>'}
-                                <div class="flex flex-wrap gap-1.5 pt-1">
-                                    ${s.manual_status === 'pending' ? `
-                                        <button data-action="approve-submission" data-subid="${s.id}" class="rounded-lg bg-green-600 px-3 py-1.5 text-[10px] font-black text-white hover:bg-green-700 transition">✅ Approve</button>
-                                        <button data-action="reject-submission" data-subid="${s.id}" class="rounded-lg bg-red-600 px-3 py-1.5 text-[10px] font-black text-white hover:bg-red-700 transition">❌ Reject</button>
-                                    ` : ''}
-                                    ${s.manual_status === 'approved' && s.payout_status !== 'paid' ? `
-                                        <button data-action="pay-submission" data-subid="${s.id}" class="rounded-lg bg-cyan-600 px-3 py-1.5 text-[10px] font-black text-white hover:bg-cyan-700 transition">💰 Pay Now</button>
-                                    ` : ''}
-                                    <button data-action="ocr-submission" data-subid="${s.id}" class="rounded-lg bg-purple-600 px-3 py-1.5 text-[10px] font-black text-white hover:bg-purple-700 transition">🤖 OCR</button>
-                                    <button data-action="scraper-submission" data-subid="${s.id}" data-tasklink="${escapeHtml(s.task_link || '')}" data-comment="${escapeHtml(s.assigned_comment || '')}" data-appname="${escapeHtml(s.app_name || '')}" class="rounded-lg bg-indigo-600 px-3 py-1.5 text-[10px] font-black text-white hover:bg-indigo-700 transition">🔎 Check</button>
-                                </div>
-                            </div>`;
-                        }).join('')}
+                return `
+                    <div class="rounded-2xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 overflow-hidden p-3 space-y-2 mt-3 text-left">
+                        <div class="flex items-center justify-between border-b border-gray-200 dark:border-gray-700 pb-2">
+                            <div class="flex items-center gap-2">
+                                <span class="text-sm">📅</span>
+                                <span class="font-extrabold text-sm text-gray-900 dark:text-white">${dateStr}</span>
+                                <span class="rounded-full bg-orange-100 dark:bg-orange-900/30 px-2.5 py-0.5 text-[10px] font-black text-orange-700 dark:text-orange-300">${totalSubsForDate} submissions</span>
+                            </div>
+                            <button onclick="document.getElementById('${safeDateId}')?.classList.toggle('hidden')" class="rounded-lg bg-gray-200 dark:bg-gray-700 px-2.5 py-1 text-xs font-bold">▼</button>
+                        </div>
+                        <div id="${safeDateId}" class="space-y-1">
+                            ${appsHtml}
+                        </div>
                     </div>
-                </div>
-            `).join('');
+                `;
+            }).join('');
 
             // Attach submission action handlers
             listEl.querySelectorAll('[data-action]').forEach(btn => {
@@ -11643,7 +11974,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                             ${isUserApprovalRejected(u) ? '<span class="px-1.5 py-0.5 text-[10px] bg-gray-600 text-white rounded uppercase font-bold">Signup Cancelled</span>' : ''}
                             ${isMinusBalance ? '<span class="px-1.5 py-0.5 text-[10px] bg-red-600 text-white rounded uppercase font-bold">Minus</span>' : ''}
                             ${u.isProProfile ? '<span class="px-1.5 py-0.5 text-[10px] bg-blue-600 text-white rounded-full uppercase font-bold">Pro</span>' : ''}
-                            ${u.bulkTaskMode || u.isBulkTaskUser ? '<span class="px-1.5 py-0.5 text-[10px] bg-purple-600 text-white rounded-full uppercase font-bold">Bulk Tasks</span>' : ''}
+                            ${getTaskTier(u) === 'super_bulker' ? '<span class="px-1.5 py-0.5 text-[10px] bg-amber-500 text-white rounded-full uppercase font-bold">Super Bulker</span>' : getTaskTier(u) === 'bulker' ? '<span class="px-1.5 py-0.5 text-[10px] bg-purple-600 text-white rounded-full uppercase font-bold">Bulker</span>' : '<span class="px-1.5 py-0.5 text-[10px] bg-gray-500 text-white rounded-full uppercase font-bold">Single User</span>'}
                             ${updatedWeb ? '<span class="px-1.5 py-0.5 text-[10px] bg-emerald-600 text-white rounded uppercase font-bold">New Version</span>' : '<span class="px-1.5 py-0.5 text-[10px] bg-amber-500 text-white rounded uppercase font-bold">Old Version</span>'}
                         </div>
                         <p class="text-xs text-gray-500 dark:text-gray-400 truncate">${escapeHtml(u.email || '')}</p>
@@ -11661,7 +11992,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                             <button data-action="edit-user-balance" data-userid="${u.id}" class="w-full text-left px-3 py-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-blue-700 dark:text-blue-300">Edit</button>
                             <button data-action="flag-user" data-userid="${u.id}" data-flagged="${u.isFlagged || false}" class="w-full text-left px-3 py-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-orange-600 dark:text-orange-300">${u.isFlagged ? 'Unflag' : 'Flag'}</button>
                             <button data-action="toggle-pro-user" data-userid="${u.id}" data-pro="${u.isProProfile || false}" class="w-full text-left px-3 py-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-indigo-700 dark:text-indigo-300">${u.isProProfile ? 'Remove Pro' : 'Make Pro'}</button>
-                            <button data-action="toggle-bulk-task-user" data-userid="${u.id}" data-bulk="${u.bulkTaskMode || u.isBulkTaskUser || false}" class="w-full text-left px-3 py-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-purple-700 dark:text-purple-300">${u.bulkTaskMode || u.isBulkTaskUser ? 'Remove Bulk' : 'Bulk Tasks'}</button>
+                            <button data-action="promote-user-tier" data-userid="${u.id}" data-tier="${getTaskTier(u)}" class="w-full text-left px-3 py-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-purple-700 dark:text-purple-300">Set Tier</button>
                             <button data-action="delete-user" data-userid="${u.id}" data-username="${escapeHtml(u.name || u.email || 'User')}" class="w-full text-left px-3 py-2 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/30 text-red-600 dark:text-red-300">Delete</button>
                         </div>
                     </details>
@@ -15286,34 +15617,60 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             };
         };
 
-        const handleToggleBulkTaskUser = (userId, currentlyBulk) => {
+        const handlePromoteUserTaskTier = (userId, currentTier) => {
             const user = allUsersCache.find(u => u.id === userId);
             if (!user) return showNotification('Error: User not found.', true);
-            renderModal(currentlyBulk ? 'Remove Bulk Task Mode' : 'Enable Bulk Task Mode',
-                `<div class="space-y-3">
+            renderModal('Set User Task Tier',
+                `<div class="space-y-4">
                     <div class="rounded-xl bg-gray-100 p-3 dark:bg-gray-700">
                         <p class="font-semibold">${escapeHtml(user.name || 'No Name')}</p>
                         <p class="text-xs text-gray-500 dark:text-gray-300">${escapeHtml(user.email || '')}</p>
                     </div>
-                    <p class="text-sm text-gray-600 dark:text-gray-300">${currentlyBulk ? 'This user will return to the normal 4 task links per day limit.' : 'This user can take review comments in bulk for team work.'}</p>
+                    <p class="text-sm text-gray-600 dark:text-gray-300">Select the task submission tier for this user:</p>
+                    <div class="space-y-2">
+                        <label class="flex items-center gap-2 p-3 bg-gray-50 dark:bg-gray-700/50 rounded-xl border cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700 border-gray-200 dark:border-gray-600">
+                            <input type="radio" name="promote-tier" value="single" ${currentTier === 'single' ? 'checked' : ''}>
+                            <div class="text-left">
+                                <p class="text-sm font-bold">Single User (Normal)</p>
+                                <p class="text-[10px] text-gray-400">Can submit 1 screenshot. Card disappears immediately.</p>
+                            </div>
+                        </label>
+                        <label class="flex items-center gap-2 p-3 bg-gray-50 dark:bg-gray-700/50 rounded-xl border cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700 border-gray-200 dark:border-gray-600">
+                            <input type="radio" name="promote-tier" value="bulker" ${currentTier === 'bulker' ? 'checked' : ''}>
+                            <div class="text-left">
+                                <p class="text-sm font-bold">Bulker</p>
+                                <p class="text-[10px] text-gray-400">Can upload multiple screenshots. Card remains until midnight.</p>
+                            </div>
+                        </label>
+                        <label class="flex items-center gap-2 p-3 bg-gray-50 dark:bg-gray-700/50 rounded-xl border cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700 border-gray-200 dark:border-gray-600">
+                            <input type="radio" name="promote-tier" value="super_bulker" ${currentTier === 'super_bulker' ? 'checked' : ''}>
+                            <div class="text-left">
+                                <p class="text-sm font-bold">Super Bulker</p>
+                                <p class="text-[10px] text-gray-400">Can upload multiple screenshots. Card remains until midnight.</p>
+                            </div>
+                        </label>
+                    </div>
                 </div>`,
                 `<button onclick="window.closeModal()" class="px-4 py-2 text-sm bg-gray-200 dark:bg-gray-600 rounded-lg">Cancel</button>
-                 <button id="confirm-bulk-task-user-btn" class="px-4 py-2 text-sm bg-purple-600 text-white rounded-lg">${currentlyBulk ? 'Remove Bulk' : 'Enable Bulk'}</button>`,
+                 <button id="confirm-set-tier-btn" class="px-4 py-2 text-sm bg-purple-600 text-white rounded-lg">Save Tier</button>`,
                 'max-w-md'
             );
-            document.getElementById('confirm-bulk-task-user-btn').onclick = async () => {
+            document.getElementById('confirm-set-tier-btn').onclick = async () => {
+                const selectedTier = document.querySelector('input[name="promote-tier"]:checked')?.value || 'single';
                 try {
+                    const isBulk = selectedTier === 'bulker' || selectedTier === 'super_bulker';
                     await updateDoc(doc(db, `artifacts/${appId}/public/data/users`, userId), {
-                        bulkTaskMode: !currentlyBulk,
+                        taskTier: selectedTier,
+                        bulkTaskMode: isBulk, // backwards compatibility
                         bulkTaskModeUpdatedAt: serverTimestamp(),
                         bulkTaskModeUpdatedBy: currentUser.uid
                     });
-                    allUsersCache = allUsersCache.map(item => item.id === userId ? { ...item, bulkTaskMode: !currentlyBulk } : item);
+                    allUsersCache = allUsersCache.map(item => item.id === userId ? { ...item, taskTier: selectedTier, bulkTaskMode: isBulk } : item);
                     if (document.getElementById('admin-users-list-page')) updateAdminUserListView();
                     window.closeModal();
-                    showNotification(currentlyBulk ? 'Bulk task mode removed.' : 'Bulk task mode enabled.');
+                    showNotification(`User promoted to ${selectedTier.toUpperCase()}.`);
                 } catch (error) {
-                    console.error('Bulk task mode update failed:', error);
+                    console.error('Update task tier failed:', error);
                     showNotification(`Error: ${error.message}`, true);
                 }
             };
@@ -16035,8 +16392,10 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                     handleToggleProUser(userid, pro === 'true');
                     break;
 
-                case 'toggle-bulk-task-user':
-                    handleToggleBulkTaskUser(userid, bulk === 'true');
+                case 'promote-user-tier':
+                    const uObj = allUsersCache.find(item => item.id === userid);
+                    const currentTier = uObj ? getTaskTier(uObj) : 'single';
+                    handlePromoteUserTaskTier(userid, currentTier);
                     break;
 
                 case 'delete-user':
