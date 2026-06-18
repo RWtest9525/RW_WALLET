@@ -5526,9 +5526,54 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                         return showNotification('Please copy and reserve a review comment before submitting.', true);
                     }
                     
-                    if (submitBtn) { submitBtn.disabled = true; submitBtn.textContent = 'Uploading...'; }
+                    if (submitBtn) { submitBtn.disabled = true; submitBtn.textContent = 'Running OCR...'; }
                     const file = files[0];
                     try {
+                        // 1. Run Puter OCR client-side
+                        let ocrText = '';
+                        try {
+                            ocrText = await puter.ai.img2txt(file);
+                        } catch (ocrErr) {
+                            console.error('Puter OCR failed:', ocrErr);
+                            throw new Error('Puter OCR failed. Please check internet connection.');
+                        }
+
+                        // 2. Validate comment matches
+                        const cleanStr = (s) => String(s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+                        const cleanedOcrText = cleanStr(ocrText);
+                        const targetComment = activeTaskReservation.comment;
+                        const cleanedComment = cleanStr(targetComment);
+
+                        if (!cleanedOcrText.includes(cleanedComment)) {
+                            throw new Error('Your comment is wrong. Copy the same comment as given.');
+                        }
+
+                        // 3. Extract reviewer's Gmail name using Puter Chat AI
+                        if (submitBtn) submitBtn.textContent = 'Extracting Name...';
+                        let gmailName = 'Unknown User';
+                        try {
+                            const namePrompt = `Below is the OCR text extracted from a Google Play/Maps review screenshot. Identify the reviewer's name (the person who wrote the review).
+Rules:
+- Respond ONLY with the name of the reviewer (e.g. "John Doe").
+- Do NOT include any greeting, explanation, markdown, or punctuation.
+- If you cannot find the name, respond with "Unknown User".
+
+OCR text:
+${ocrText}`;
+                            const chatResponse = await puter.ai.chat(namePrompt);
+                            if (chatResponse && chatResponse.message && chatResponse.message.content) {
+                                gmailName = chatResponse.message.content.trim().replace(/^"|"$/g, '');
+                            } else if (typeof chatResponse === 'string') {
+                                gmailName = chatResponse.trim().replace(/^"|"$/g, '');
+                            }
+                        } catch (chatErr) {
+                            console.warn('Failed to extract name:', chatErr);
+                        }
+
+                        const gmailLogoUrl = `https://ui-avatars.com/api/?name=${encodeURIComponent(gmailName)}&background=random`;
+
+                        if (submitBtn) submitBtn.textContent = 'Uploading...';
+
                         let screenshotUrl = '';
                         let screenshotKey = '';
                         let screenshotViewUrl = '';
@@ -5541,7 +5586,11 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                                 taskId: task.id,
                                 fileName: file.name,
                                 appName: appName || task.appName || task.title || 'Unknown App',
-                                assignedComment: activeTaskReservation.comment
+                                assignedComment: activeTaskReservation.comment,
+                                skipOcr: 'true',
+                                ocrText: ocrText.slice(0, 1000),
+                                gmailName,
+                                gmailLogoUrl
                             });
                             const uploadResponse = await fetchWithTimeout(`${BACKEND_BASE_URL}/api/uploads/task-screenshot?${params.toString()}`, {
                                 method: 'POST',
@@ -5671,7 +5720,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                     }
                 } else {
                     // Bulk User Flow
-                    if (submitBtn) { submitBtn.disabled = true; submitBtn.textContent = 'Uploading...'; }
+                    if (submitBtn) { submitBtn.disabled = true; submitBtn.textContent = 'Running OCR...'; }
                     let successCount = 0;
                     let failCount = 0;
                     
@@ -5689,15 +5738,74 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                         }
                         
                         try {
+                            // 1. Run Puter OCR client-side
+                            if (statusEl) statusEl.textContent = 'Running OCR...';
+                            let ocrText = '';
+                            try {
+                                ocrText = await puter.ai.img2txt(file);
+                            } catch (ocrErr) {
+                                console.error('Puter OCR failed for file:', file.name, ocrErr);
+                                throw new Error('Puter OCR failed');
+                            }
+
+                            // 2. Clean and match comment from remaining comment pool
+                            const cleanStr = (s) => String(s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+                            const cleanedOcrText = cleanStr(ocrText);
+                            const remainingComments = commentPool.filter(c => !submittedComments.includes(String(c).trim()));
+                            
+                            let matchedComment = null;
+                            for (const comment of remainingComments) {
+                                const cleanedComment = cleanStr(comment);
+                                if (cleanedOcrText.includes(cleanedComment)) {
+                                    matchedComment = comment;
+                                    break;
+                                }
+                            }
+                            
+                            if (!matchedComment) {
+                                throw new Error('Comment mismatch or verification failed');
+                            }
+
+                            // 3. Extract reviewer's Gmail name using Puter Chat AI
+                            if (statusEl) statusEl.textContent = 'Extracting Name...';
+                            let gmailName = 'Unknown User';
+                            try {
+                                const namePrompt = `Below is the OCR text extracted from a Google Play/Maps review screenshot. Identify the reviewer's name (the person who wrote the review).
+Rules:
+- Respond ONLY with the name of the reviewer (e.g. "John Doe").
+- Do NOT include any greeting, explanation, markdown, or punctuation.
+- If you cannot find the name, respond with "Unknown User".
+
+OCR text:
+${ocrText}`;
+                                const chatResponse = await puter.ai.chat(namePrompt);
+                                if (chatResponse && chatResponse.message && chatResponse.message.content) {
+                                    gmailName = chatResponse.message.content.trim().replace(/^"|"$/g, '');
+                                } else if (typeof chatResponse === 'string') {
+                                    gmailName = chatResponse.trim().replace(/^"|"$/g, '');
+                                }
+                            } catch (chatErr) {
+                                console.warn('Failed to extract name:', chatErr);
+                            }
+
+                            const gmailLogoUrl = `https://ui-avatars.com/api/?name=${encodeURIComponent(gmailName)}&background=random`;
+
+                            if (statusEl) statusEl.textContent = 'Uploading...';
+
                             const token = await getBackendAuthToken();
                             const params = new URLSearchParams({
                                 taskId: task.id,
                                 fileName: file.name,
                                 appName: appName || task.appName || task.title || 'Unknown App',
-                                isBulk: 'true'
+                                isBulk: 'true',
+                                skipOcr: 'true',
+                                ocrText: ocrText.slice(0, 1000),
+                                gmailName,
+                                gmailLogoUrl,
+                                matchedComment
                             });
                             
-                            // 1. Upload and pre-verify screenshot on backend
+                            // 4. Upload screenshot on backend with OCR bypassed
                             const uploadResponse = await fetchWithTimeout(`${BACKEND_BASE_URL}/api/uploads/task-screenshot?${params.toString()}`, {
                                 method: 'POST',
                                 headers: {
@@ -5725,7 +5833,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                             
                             if (statusEl) statusEl.textContent = 'Saving...';
                             
-                            // 2. Submit task details (bypass OCR)
+                            // 5. Submit task details (bypass OCR)
                             const submissionId = `sub_${task.id.slice(0, 12)}_${currentUser.uid.slice(0, 12)}_${Date.now()}`;
                             const submitResponse = await fetchWithTimeout(`${BACKEND_BASE_URL}/api/task-submissions`, {
                                 method: 'POST',
@@ -5746,8 +5854,8 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                                     payoutDelayDays: Number(task.paymentDelayDays || task.paymentDays || 7),
                                     ocrStatus: 'completed',
                                     ocrExtractedName: verification.gmailName,
-                                    ocrExtractedText: verification.ocrText,
-                                    ocrConfidence: verification.ocrConfidence,
+                                    ocrExtractedText: ocrText,
+                                    ocrConfidence: 1.0,
                                     details: { gmailLogoUrl: verification.gmailLogoUrl }
                                 })
                             }, 10000);
@@ -5757,7 +5865,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                                 throw new Error(resData.detail || resData.error || 'Submission failed');
                             }
                             
-                            // 3. Save to Firebase
+                            // 6. Save to Firebase
                             await setDoc(doc(db, `artifacts/${appId}/public/data/task_submissions`, submissionId), {
                                 id: submissionId,
                                 taskId: task.id,
@@ -5800,6 +5908,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                             if (itemEl) {
                                 itemEl.className = 'flex items-center justify-between p-2.5 bg-green-50/50 dark:bg-green-900/10 border border-green-200 dark:border-green-800 rounded-xl';
                             }
+                            submittedComments.push(matchedComment);
                             successCount++;
                         } catch (err) {
                             console.error(`File ${file.name} failed:`, err);

@@ -2384,137 +2384,152 @@ ${memoriesContext}`
         targetComments = [targetComment];
       }
 
-      // 5. Run Tesseract OCR synchronously on buffer
+      // 5. Run Puter client-side OCR bypass or standard Tesseract OCR
+      const skipOcr = req.query.skipOcr === 'true';
       let ocrText = '';
       let ocrConfidence = 0;
       let ocrResult = null;
-      try {
-        ocrResult = await Tesseract.recognize(body, 'eng');
-        ocrText = (ocrResult.data.text || '').trim();
-        ocrConfidence = (ocrResult.data.confidence || 0) / 100;
-      } catch (ocrErr) {
-        console.error('[OCR-Upload] Tesseract OCR failed:', ocrErr);
-        return res.status(500).json({ ok: false, error: 'OCR_FAILED', detail: 'Screenshot text recognition failed' });
-      }
-
-      // 6. Match comment
-      const cleanStr = (s) => String(s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
-      const cleanedOcrText = cleanStr(ocrText);
       let matchedComment = null;
-      let foundLineIndex = -1;
+      let gmailName = 'Unknown User';
+      let gmailLogoUrl = '';
 
-      for (const comment of targetComments) {
-        const cleanedComment = cleanStr(comment);
-        if (cleanedOcrText.includes(cleanedComment)) {
-          matchedComment = comment;
-          break;
+      if (skipOcr) {
+        ocrText = req.query.ocrText ? String(req.query.ocrText).trim() : '';
+        ocrConfidence = Number(req.query.ocrConfidence || 1.0);
+        gmailName = req.query.gmailName ? String(req.query.gmailName).trim() : 'Unknown User';
+        gmailLogoUrl = req.query.gmailLogoUrl || `https://ui-avatars.com/api/?name=${encodeURIComponent(gmailName)}&background=random`;
+        matchedComment = req.query.matchedComment || req.query.assignedComment || '';
+        if (!matchedComment && targetComments.length > 0) {
+          matchedComment = targetComments[0];
         }
-      }
+      } else {
+        try {
+          ocrResult = await Tesseract.recognize(body, 'eng');
+          ocrText = (ocrResult.data.text || '').trim();
+          ocrConfidence = (ocrResult.data.confidence || 0) / 100;
+        } catch (ocrErr) {
+          console.error('[OCR-Upload] Tesseract OCR failed:', ocrErr);
+          return res.status(500).json({ ok: false, error: 'OCR_FAILED', detail: 'Screenshot text recognition failed' });
+        }
 
-      const lines = ocrResult.data.lines || [];
-      if (!matchedComment) {
-        // Line-by-line fallback
+        // 6. Match comment
+        const cleanStr = (s) => String(s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+        const cleanedOcrText = cleanStr(ocrText);
+        let foundLineIndex = -1;
+
         for (const comment of targetComments) {
           const cleanedComment = cleanStr(comment);
+          if (cleanedOcrText.includes(cleanedComment)) {
+            matchedComment = comment;
+            break;
+          }
+        }
+
+        const lines = ocrResult.data.lines || [];
+        if (!matchedComment) {
+          // Line-by-line fallback
+          for (const comment of targetComments) {
+            const cleanedComment = cleanStr(comment);
+            for (let j = 0; j < lines.length; j++) {
+              const cleanedLine = cleanStr(lines[j].text);
+              if (cleanedLine && (cleanedLine.includes(cleanedComment) || cleanedComment.includes(cleanedLine) || (cleanedComment.length > 5 && cleanedLine.length > 5 && cleanedLine.indexOf(cleanedComment.slice(0, 10)) !== -1))) {
+                matchedComment = comment;
+                foundLineIndex = j;
+                break;
+              }
+            }
+            if (matchedComment) break;
+          }
+        }
+
+        if (!matchedComment) {
+          console.warn(`[OCR-Upload] Comment mismatch for user ${req.auth.sub}. OCR: "${ocrText}"`);
+          return res.status(400).json({
+            ok: false,
+            error: 'COMMENT_NOT_MATCHED',
+            detail: 'Your comment is wrong. Copy the same comment as given.'
+          });
+        }
+
+        if (matchedComment && foundLineIndex === -1) {
+          const cleanedComment = cleanStr(matchedComment);
           for (let j = 0; j < lines.length; j++) {
             const cleanedLine = cleanStr(lines[j].text);
             if (cleanedLine && (cleanedLine.includes(cleanedComment) || cleanedComment.includes(cleanedLine) || (cleanedComment.length > 5 && cleanedLine.length > 5 && cleanedLine.indexOf(cleanedComment.slice(0, 10)) !== -1))) {
-              matchedComment = comment;
               foundLineIndex = j;
               break;
             }
           }
-          if (matchedComment) break;
         }
-      }
 
-      if (!matchedComment) {
-        console.warn(`[OCR-Upload] Comment mismatch for user ${req.auth.sub}. OCR: "${ocrText}"`);
-        return res.status(400).json({
-          ok: false,
-          error: 'COMMENT_NOT_MATCHED',
-          detail: 'Your comment is wrong. Copy the same comment as given.'
-        });
-      }
+        // 7. Extract name and crop avatar logo
+        let nameLine = null;
 
-      if (matchedComment && foundLineIndex === -1) {
-        const cleanedComment = cleanStr(matchedComment);
-        for (let j = 0; j < lines.length; j++) {
-          const cleanedLine = cleanStr(lines[j].text);
-          if (cleanedLine && (cleanedLine.includes(cleanedComment) || cleanedComment.includes(cleanedLine) || (cleanedComment.length > 5 && cleanedLine.length > 5 && cleanedLine.indexOf(cleanedComment.slice(0, 10)) !== -1))) {
-            foundLineIndex = j;
-            break;
-          }
-        }
-      }
-
-      // 7. Extract name and crop avatar logo
-      let nameLine = null;
-      let gmailName = 'Unknown User';
-      let gmailLogoUrl = '';
-
-      if (foundLineIndex !== -1) {
-        for (let k = foundLineIndex - 1; k >= Math.max(0, foundLineIndex - 3); k--) {
-          const txt = lines[k].text.trim();
-          const isRatingOrDate = /^[0-9★☆\s]+$/.test(txt) || txt.toLowerCase().includes('ago') || txt.toLowerCase().includes('edited') || /\d/.test(txt) && (txt.includes('/') || txt.includes('-'));
-          if (txt && !isRatingOrDate && txt.length > 2 && txt.length < 50) {
-            nameLine = lines[k];
-            break;
-          }
-        }
-        if (!nameLine && foundLineIndex >= 2) nameLine = lines[foundLineIndex - 2];
-        if (!nameLine && foundLineIndex >= 1) nameLine = lines[foundLineIndex - 1];
-      }
-
-      if (!nameLine) {
-        for (let j = 0; j < Math.min(lines.length, 10); j++) {
-          const txt = lines[j].text.trim();
-          const isRatingOrDate = /^[0-9★☆\s]+$/.test(txt) || txt.toLowerCase().includes('ago') || txt.toLowerCase().includes('edited') || txt.length < 3 || txt.length > 40;
-          if (txt && !isRatingOrDate) {
-            nameLine = lines[j];
-            break;
-          }
-        }
-      }
-
-      const safeComment = matchedComment.slice(0, 30).replace(/[<>:"/\\|?*]+/g, '_').trim();
-      if (nameLine) {
-        gmailName = nameLine.text.trim().replace(/[\r\n]+/g, ' ');
-        try {
-          const image = await Jimp.read(body);
-          const imgWidth = image.bitmap.width;
-          const imgHeight = image.bitmap.height;
-          const bbox = nameLine.bbox;
-          if (bbox) {
-            const cropX = Math.max(0, Math.min(bbox.x0 - 85, imgWidth - 75));
-            const cropY = Math.max(0, Math.min(bbox.y0 - 15, imgHeight - 75));
-            const cropW = Math.min(75, imgWidth - cropX);
-            const cropH = Math.min(75, imgHeight - cropY);
-            if (cropW > 10 && cropH > 10) {
-              const avatar = image.clone().crop(cropX, cropY, cropW, cropH);
-              const avatarBuffer = await avatar.getBufferAsync(Jimp.MIME_JPEG);
-              const safeGmailName = gmailName.replace(/[<>:"/\\|?*]+/g, '_').trim().slice(0, 30) || 'Unknown';
-              const avatarFileName = `${safeGmailName} - ${safeComment} (logo).jpg`;
-
-              const driveFolderId = process.env.GOOGLE_DRIVE_FOLDER_ID;
-              if (driveFolderId && (process.env.GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON || process.env.FIREBASE_SERVICE_ACCOUNT_JSON)) {
-                try {
-                  const driveResult = await uploadToGoogleDrive(avatarBuffer, avatarFileName, 'image/jpeg', driveFolderId, { appName });
-                  gmailLogoUrl = driveResult.directUrl;
-                } catch (driveErr) {
-                  console.error('[OCR-Upload] Avatar Drive upload failed:', driveErr.message);
-                }
-              }
-              if (!gmailLogoUrl && r2 && process.env.CLOUDFLARE_R2_BUCKET) {
-                const key = `task-screenshots/avatars/${req.auth.sub}/${avatarFileName}`;
-                gmailLogoUrl = await putR2Object(r2, key, avatarBuffer, 'image/jpeg');
-              }
+        if (foundLineIndex !== -1) {
+          for (let k = foundLineIndex - 1; k >= Math.max(0, foundLineIndex - 3); k--) {
+            const txt = lines[k].text.trim();
+            const isRatingOrDate = /^[0-9★☆\s]+$/.test(txt) || txt.toLowerCase().includes('ago') || txt.toLowerCase().includes('edited') || /\d/.test(txt) && (txt.includes('/') || txt.includes('-'));
+            if (txt && !isRatingOrDate && txt.length > 2 && txt.length < 50) {
+              nameLine = lines[k];
+              break;
             }
           }
-        } catch (cropErr) {
-          console.error('[OCR-Upload] Avatar cropping failed:', cropErr);
+          if (!nameLine && foundLineIndex >= 2) nameLine = lines[foundLineIndex - 2];
+          if (!nameLine && foundLineIndex >= 1) nameLine = lines[foundLineIndex - 1];
+        }
+
+        if (!nameLine) {
+          for (let j = 0; j < Math.min(lines.length, 10); j++) {
+            const txt = lines[j].text.trim();
+            const isRatingOrDate = /^[0-9★☆\s]+$/.test(txt) || txt.toLowerCase().includes('ago') || txt.toLowerCase().includes('edited') || txt.length < 3 || txt.length > 40;
+            if (txt && !isRatingOrDate) {
+              nameLine = lines[j];
+              break;
+            }
+          }
+        }
+
+        if (nameLine) {
+          gmailName = nameLine.text.trim().replace(/[\r\n]+/g, ' ');
+          try {
+            const image = await Jimp.read(body);
+            const imgWidth = image.bitmap.width;
+            const imgHeight = image.bitmap.height;
+            const bbox = nameLine.bbox;
+            if (bbox) {
+              const cropX = Math.max(0, Math.min(bbox.x0 - 85, imgWidth - 75));
+              const cropY = Math.max(0, Math.min(bbox.y0 - 15, imgHeight - 75));
+              const cropW = Math.min(75, imgWidth - cropX);
+              const cropH = Math.min(75, imgHeight - cropY);
+              if (cropW > 10 && cropH > 10) {
+                const avatar = image.clone().crop(cropX, cropY, cropW, cropH);
+                const avatarBuffer = await avatar.getBufferAsync(Jimp.MIME_JPEG);
+                const safeComment = matchedComment.slice(0, 30).replace(/[<>:"/\\|?*]+/g, '_').trim();
+                const safeGmailName = gmailName.replace(/[<>:"/\\|?*]+/g, '_').trim().slice(0, 30) || 'Unknown';
+                const avatarFileName = `${safeGmailName} - ${safeComment} (logo).jpg`;
+
+                const driveFolderId = process.env.GOOGLE_DRIVE_FOLDER_ID;
+                if (driveFolderId && (process.env.GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON || process.env.FIREBASE_SERVICE_ACCOUNT_JSON)) {
+                  try {
+                    const driveResult = await uploadToGoogleDrive(avatarBuffer, avatarFileName, 'image/jpeg', driveFolderId, { appName });
+                    gmailLogoUrl = driveResult.directUrl;
+                  } catch (driveErr) {
+                    console.error('[OCR-Upload] Avatar Drive upload failed:', driveErr.message);
+                  }
+                }
+                if (!gmailLogoUrl && r2 && process.env.CLOUDFLARE_R2_BUCKET) {
+                  const key = `task-screenshots/avatars/${req.auth.sub}/${avatarFileName}`;
+                  gmailLogoUrl = await putR2Object(r2, key, avatarBuffer, 'image/jpeg');
+                }
+              }
+            }
+          } catch (cropErr) {
+            console.error('[OCR-Upload] Avatar cropping failed:', cropErr);
+          }
         }
       }
+
+      const safeComment = (matchedComment || 'screenshot').slice(0, 30).replace(/[<>:"/\\|?*]+/g, '_').trim();
 
       // 8. Upload Full Screenshot with Date/App nested naming structure
       const safeGmailName = gmailName.replace(/[<>:"/\\|?*]+/g, '_').trim().slice(0, 30) || 'Unknown';
