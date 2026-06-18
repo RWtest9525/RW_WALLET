@@ -2403,42 +2403,80 @@ ${memoriesContext}`
           matchedComment = targetComments[0];
         }
       } else {
+        let ocrSuccess = false;
+        const ocrApiKey = process.env.OCR_SPACE_API_KEY || 'helloworld';
         try {
-          ocrResult = await Tesseract.recognize(body, 'eng');
-          ocrText = (ocrResult.data.text || '').trim();
-          ocrConfidence = (ocrResult.data.confidence || 0) / 100;
-        } catch (ocrErr) {
-          console.error('[OCR-Upload] Tesseract OCR failed:', ocrErr);
-          return res.status(500).json({ ok: false, error: 'OCR_FAILED', detail: 'Screenshot text recognition failed' });
+          const formData = new FormData();
+          const blob = new Blob([body], { type: contentType });
+          formData.append('file', blob, originalName);
+          formData.append('language', 'eng');
+          formData.append('OCREngine', '2');
+          formData.append('apikey', ocrApiKey);
+
+          const ocrResponse = await fetch('https://api.ocr.space/parse/image', {
+            method: 'POST',
+            body: formData
+          });
+
+          if (ocrResponse.ok) {
+            const ocrData = await ocrResponse.json();
+            if (ocrData.OCRExitCode === 1 && ocrData.ParsedResults && ocrData.ParsedResults.length > 0) {
+              ocrText = ocrData.ParsedResults[0].ParsedText || '';
+              ocrConfidence = 0.99;
+              ocrSuccess = true;
+              console.log('[OCR-Upload] OCR.space Engine 2 completed successfully.');
+            } else {
+              console.warn('[OCR-Upload] OCR.space API returned error exit code:', ocrData.ErrorMessage || ocrData.OCRExitCode);
+            }
+          } else {
+            console.warn('[OCR-Upload] OCR.space HTTP error:', ocrResponse.status);
+          }
+        } catch (err) {
+          console.warn('[OCR-Upload] OCR.space API call failed, falling back to Tesseract:', err.message);
         }
 
-        // 6. Match comment
-        const cleanStr = (s) => String(s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
-        const cleanedOcrText = cleanStr(ocrText);
-        let foundLineIndex = -1;
-
-        for (const comment of targetComments) {
-          const cleanedComment = cleanStr(comment);
-          if (cleanedOcrText.includes(cleanedComment)) {
-            matchedComment = comment;
-            break;
+        let tesseractLines = [];
+        if (!ocrSuccess) {
+          try {
+            ocrResult = await Tesseract.recognize(body, 'eng');
+            ocrText = (ocrResult.data.text || '').trim();
+            ocrConfidence = (ocrResult.data.confidence || 0) / 100;
+            tesseractLines = ocrResult.data.lines || [];
+            console.log('[OCR-Upload] Tesseract fallback completed.');
+          } catch (ocrErr) {
+            console.error('[OCR-Upload] Tesseract OCR failed:', ocrErr);
+            return res.status(500).json({ ok: false, error: 'OCR_FAILED', detail: 'Screenshot text recognition failed' });
           }
         }
 
-        const lines = ocrResult.data.lines || [];
-        if (!matchedComment) {
-          // Line-by-line fallback
-          for (const comment of targetComments) {
-            const cleanedComment = cleanStr(comment);
-            for (let j = 0; j < lines.length; j++) {
-              const cleanedLine = cleanStr(lines[j].text);
-              if (cleanedLine && (cleanedLine.includes(cleanedComment) || cleanedComment.includes(cleanedLine) || (cleanedComment.length > 5 && cleanedLine.length > 5 && cleanedLine.indexOf(cleanedComment.slice(0, 10)) !== -1))) {
-                matchedComment = comment;
-                foundLineIndex = j;
-                break;
-              }
+        // 6. Match comment (first 2 words check with merged fallback)
+        const cleanStr = (s) => String(s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+        const ocrTextLower = ocrText.toLowerCase().replace(/[^a-z0-9\s]/g, '');
+        
+        for (const comment of targetComments) {
+          const expectedCommentWords = String(comment || '').trim().split(/\s+/).filter(Boolean);
+          let matchFound = false;
+
+          if (expectedCommentWords.length >= 2) {
+            const word1 = cleanStr(expectedCommentWords[0]);
+            const word2 = cleanStr(expectedCommentWords[1]);
+            const combined = word1 + word2;
+            const normalizedFullText = ocrTextLower.replace(/\s+/g, '');
+            
+            if (normalizedFullText.includes(combined) || 
+                (ocrTextLower.includes(word1) && ocrTextLower.includes(word2))) {
+              matchFound = true;
             }
-            if (matchedComment) break;
+          } else if (expectedCommentWords.length === 1) {
+            const word1 = cleanStr(expectedCommentWords[0]);
+            if (ocrTextLower.includes(word1)) {
+              matchFound = true;
+            }
+          }
+
+          if (matchFound) {
+            matchedComment = comment;
+            break;
           }
         }
 
@@ -2451,46 +2489,88 @@ ${memoriesContext}`
           });
         }
 
-        if (matchedComment && foundLineIndex === -1) {
-          const cleanedComment = cleanStr(matchedComment);
-          for (let j = 0; j < lines.length; j++) {
-            const cleanedLine = cleanStr(lines[j].text);
-            if (cleanedLine && (cleanedLine.includes(cleanedComment) || cleanedComment.includes(cleanedLine) || (cleanedComment.length > 5 && cleanedLine.length > 5 && cleanedLine.indexOf(cleanedComment.slice(0, 10)) !== -1))) {
-              foundLineIndex = j;
+        // 7. Extract name using older app algorithm (Your review + skip patterns)
+        const lines = ocrText.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+        const skipPatterns = [
+          /^\d{1,2}:\d{2}/,           // Time (e.g., "10:30")
+          /^\d{1,3}%$/,               // Battery percentage
+          /LTE|WIFI|4G|5G|VoLTE|KB\/S/i,  // Carrier + Data speed
+          /Google Play/i,             // "Google Play" header
+          /^Search/i, /^Apps/i, /^Games/i, /^Offers/i,
+          /^Movies/i, /^Books/i,
+          /^Ratings and reviews/i,
+          /^See all reviews/i,
+          /^Post/i, /^Cancel/i,
+          /^Edit your review/i,
+          /^Edit/i,
+          /^Episode/i,
+          /^[★☆* ]+\d{1,2}/,         // Star ratings
+          /^[0-9.]+ stars/,
+          /^[0-9.,]+ reviews/,
+          /^[0-9.]+ [KMG]B/,         // App size
+          /No reviews/i,
+          /VoLTE/i, /KB\/S/i,
+          /Personal into/i,
+          /No data collected/i,
+          /Developer contact/i,
+          /About this app/i,
+          /Rate this app/i,
+          /Tell us what you think/i,
+          /Write a review/i,
+          /Safety/i, /Data privacy/i, /Security/i, /Verified/i,
+        ];
+
+        gmailName = 'Unknown User';
+
+        // STEP 1: Look for "Your review" header in the text
+        const yourReviewPattern = /Your review/i;
+        let yourReviewIdx = -1;
+
+        for (let i = 0; i < lines.length; i++) {
+          if (yourReviewPattern.test(lines[i])) {
+            yourReviewIdx = i;
+            break;
+          }
+        }
+
+        if (yourReviewIdx !== -1) {
+          // Name is usually in the next 3 lines after "Your review"
+          for (let j = 1; j <= 3; j++) {
+            if (yourReviewIdx + j < lines.length) {
+              const line = lines[yourReviewIdx + j];
+              const isSystemLine = skipPatterns.some(p => p.test(line));
+              if (!isSystemLine && line.length > 2 && /[a-zA-Z]/.test(line) && line.length < 35) {
+                gmailName = line;
+                break;
+              }
+            }
+          }
+        }
+
+        // Fallback Logic
+        if (gmailName === 'Unknown User' || gmailName === 'Unknown') {
+          for (const line of lines) {
+            const isSystemLine = skipPatterns.some(p => p.test(line));
+            if (!isSystemLine && line.length > 2 && /[a-zA-Z]/.test(line) && line.length < 35) {
+              gmailName = line;
               break;
             }
           }
         }
 
-        // 7. Extract name and crop avatar logo
+        // Find bbox for Jimp cropping if Tesseract was used
         let nameLine = null;
-
-        if (foundLineIndex !== -1) {
-          for (let k = foundLineIndex - 1; k >= Math.max(0, foundLineIndex - 3); k--) {
-            const txt = lines[k].text.trim();
-            const isRatingOrDate = /^[0-9★☆\s]+$/.test(txt) || txt.toLowerCase().includes('ago') || txt.toLowerCase().includes('edited') || /\d/.test(txt) && (txt.includes('/') || txt.includes('-'));
-            if (txt && !isRatingOrDate && txt.length > 2 && txt.length < 50) {
-              nameLine = lines[k];
-              break;
-            }
-          }
-          if (!nameLine && foundLineIndex >= 2) nameLine = lines[foundLineIndex - 2];
-          if (!nameLine && foundLineIndex >= 1) nameLine = lines[foundLineIndex - 1];
-        }
-
-        if (!nameLine) {
-          for (let j = 0; j < Math.min(lines.length, 10); j++) {
-            const txt = lines[j].text.trim();
-            const isRatingOrDate = /^[0-9★☆\s]+$/.test(txt) || txt.toLowerCase().includes('ago') || txt.toLowerCase().includes('edited') || txt.length < 3 || txt.length > 40;
-            if (txt && !isRatingOrDate) {
-              nameLine = lines[j];
+        if (tesseractLines.length > 0) {
+          const cleanName = cleanStr(gmailName);
+          for (let j = 0; j < tesseractLines.length; j++) {
+            if (cleanStr(tesseractLines[j].text).includes(cleanName)) {
+              nameLine = tesseractLines[j];
               break;
             }
           }
         }
 
         if (nameLine) {
-          gmailName = nameLine.text.trim().replace(/[\r\n]+/g, ' ');
           try {
             const image = await Jimp.read(body);
             const imgWidth = image.bitmap.width;
@@ -2831,6 +2911,7 @@ ${memoriesContext}`
       if (!submission) return res.status(404).json({ ok: false, error: 'SUBMISSION_NOT_FOUND' });
 
       let ocrResult = { text: '', confidence: 0, status: 'completed' };
+      let ocrSuccess = false;
 
       if (submission.screenshot_url) {
         try {
@@ -2839,31 +2920,130 @@ ${memoriesContext}`
           if (!imgResponse.ok) throw new Error(`Image download failed: ${imgResponse.status}`);
           const imgBuffer = Buffer.from(await imgResponse.arrayBuffer());
 
-          // Run Tesseract OCR (free, no API key needed)
-          const { data } = await Tesseract.recognize(imgBuffer, 'eng', {
-            logger: () => {} // suppress progress logs
-          });
+          // Try OCR.space API first
+          const ocrApiKey = process.env.OCR_SPACE_API_KEY || 'helloworld';
+          try {
+            const formData = new FormData();
+            const blob = new Blob([imgBuffer], { type: 'image/jpeg' });
+            formData.append('file', blob, 'screenshot.jpg');
+            formData.append('language', 'eng');
+            formData.append('OCREngine', '2');
+            formData.append('apikey', ocrApiKey);
 
-          ocrResult.text = (data.text || '').trim();
-          ocrResult.confidence = (data.confidence || 0) / 100; // normalize to 0-1
-          ocrResult.status = ocrResult.text ? 'completed' : 'completed';
+            const ocrResponse = await fetch('https://api.ocr.space/parse/image', {
+              method: 'POST',
+              body: formData
+            });
 
-          console.log(`OCR completed for ${req.params.submissionId}: ${ocrResult.text.length} chars, confidence ${(ocrResult.confidence * 100).toFixed(1)}%`);
+            if (ocrResponse.ok) {
+              const ocrData = await ocrResponse.json();
+              if (ocrData.OCRExitCode === 1 && ocrData.ParsedResults && ocrData.ParsedResults.length > 0) {
+                ocrResult.text = (ocrData.ParsedResults[0].ParsedText || '').trim();
+                ocrResult.confidence = 0.99;
+                ocrResult.status = 'completed';
+                ocrSuccess = true;
+                console.log(`[Admin-OCR] OCR.space completed for ${req.params.submissionId}`);
+              }
+            }
+          } catch (spaceErr) {
+            console.warn('[Admin-OCR] OCR.space API failed, falling back to Tesseract:', spaceErr.message);
+          }
+
+          // Fallback to Tesseract
+          if (!ocrSuccess) {
+            const { data } = await Tesseract.recognize(imgBuffer, 'eng', {
+              logger: () => {}
+            });
+            ocrResult.text = (data.text || '').trim();
+            ocrResult.confidence = (data.confidence || 0) / 100;
+            ocrResult.status = ocrResult.text ? 'completed' : 'completed';
+            console.log(`[Admin-OCR] Tesseract fallback completed for ${req.params.submissionId}`);
+          }
         } catch (ocrError) {
-          console.error('Tesseract OCR error:', ocrError);
+          console.error('[Admin-OCR] OCR process error:', ocrError);
           ocrResult = { text: '', confidence: 0, status: 'failed' };
         }
       } else {
         ocrResult = { text: '[No screenshot URL available for OCR]', confidence: 0, status: 'failed' };
       }
 
+      // Extract Name if OCR text is populated
+      let extractedName = submission.ocr_extracted_name || 'Unknown User';
+      if (ocrResult.text) {
+        const lines = ocrResult.text.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+        const skipPatterns = [
+          /^\d{1,2}:\d{2}/,
+          /^\d{1,3}%$/,
+          /LTE|WIFI|4G|5G|VoLTE|KB\/S/i,
+          /Google Play/i,
+          /^Search/i, /^Apps/i, /^Games/i, /^Offers/i,
+          /^Movies/i, /^Books/i,
+          /^Ratings and reviews/i,
+          /^See all reviews/i,
+          /^Post/i, /^Cancel/i,
+          /^Edit your review/i,
+          /^Edit/i,
+          /^Episode/i,
+          /^[★☆* ]+\d{1,2}/,
+          /^[0-9.]+ stars/,
+          /^[0-9.,]+ reviews/,
+          /^[0-9.]+ [KMG]B/,
+          /No reviews/i,
+          /VoLTE/i, /KB\/S/i,
+          /Personal into/i,
+          /No data collected/i,
+          /Developer contact/i,
+          /About this app/i,
+          /Rate this app/i,
+          /Tell us what you think/i,
+          /Write a review/i,
+          /Safety/i, /Data privacy/i, /Security/i, /Verified/i,
+        ];
+
+        let reviewerName = 'Unknown User';
+        const yourReviewPattern = /Your review/i;
+        let yourReviewIdx = -1;
+
+        for (let i = 0; i < lines.length; i++) {
+          if (yourReviewPattern.test(lines[i])) {
+            yourReviewIdx = i;
+            break;
+          }
+        }
+
+        if (yourReviewIdx !== -1) {
+          for (let j = 1; j <= 3; j++) {
+            if (yourReviewIdx + j < lines.length) {
+              const line = lines[yourReviewIdx + j];
+              const isSystemLine = skipPatterns.some(p => p.test(line));
+              if (!isSystemLine && line.length > 2 && /[a-zA-Z]/.test(line) && line.length < 35) {
+                reviewerName = line;
+                break;
+              }
+            }
+          }
+        }
+
+        if (reviewerName === 'Unknown User' || reviewerName === 'Unknown') {
+          for (const line of lines) {
+            const isSystemLine = skipPatterns.some(p => p.test(line));
+            if (!isSystemLine && line.length > 2 && /[a-zA-Z]/.test(line) && line.length < 35) {
+              reviewerName = line;
+              break;
+            }
+          }
+        }
+        extractedName = reviewerName;
+      }
+
       await updateTaskSubmission(d1, req.params.submissionId, {
         ocrStatus: ocrResult.status,
         ocrExtractedText: ocrResult.text.slice(0, 4000),
-        ocrConfidence: ocrResult.confidence
+        ocrConfidence: ocrResult.confidence,
+        ocrExtractedName: extractedName
       });
 
-      res.json({ ok: true, ocr: ocrResult });
+      res.json({ ok: true, ocr: { ...ocrResult, name: extractedName } });
     } catch (error) {
       console.error('OCR processing failed:', error);
       res.status(500).json({ ok: false, error: 'OCR_FAILED' });

@@ -5529,32 +5529,69 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                     if (submitBtn) { submitBtn.disabled = true; submitBtn.textContent = 'Running OCR...'; }
                     const file = files[0];
                     try {
-                        // 1. Run Puter OCR client-side
+                        // 1. Run OCR.space client-side (Engine 2)
                         let ocrText = '';
+                        let clientOcrSuccess = false;
                         try {
-                            ocrText = await puter.ai.img2txt(file);
+                            const formData = new FormData();
+                            formData.append('file', file);
+                            formData.append('language', 'eng');
+                            formData.append('OCREngine', '2');
+                            formData.append('apikey', 'helloworld'); // fallback to free demo key
+
+                            const ocrResponse = await fetch('https://api.ocr.space/parse/image', {
+                                method: 'POST',
+                                body: formData
+                            });
+                            if (ocrResponse.ok) {
+                                const ocrData = await ocrResponse.json();
+                                if (ocrData.OCRExitCode === 1 && ocrData.ParsedResults && ocrData.ParsedResults.length > 0) {
+                                    ocrText = ocrData.ParsedResults[0].ParsedText || '';
+                                    clientOcrSuccess = true;
+                                }
+                            }
                         } catch (ocrErr) {
-                            console.error('Puter OCR failed:', ocrErr);
-                            throw new Error('Puter OCR failed. Please check internet connection.');
+                            console.error('OCR.space client call failed:', ocrErr);
                         }
 
-                        // 2. Validate comment matches
-                        const cleanStr = (s) => String(s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
-                        const cleanedOcrText = cleanStr(ocrText);
-                        const targetComment = activeTaskReservation.comment;
-                        const cleanedComment = cleanStr(targetComment);
-
-                        if (!cleanedOcrText.includes(cleanedComment)) {
-                            throw new Error('Your comment is wrong. Copy the same comment as given.');
-                        }
-
-                        // 3. Extract reviewer's Gmail name using local proximity helper
-                        if (submitBtn) submitBtn.textContent = 'Extracting Name...';
                         let gmailName = 'Unknown User';
-                        try {
-                            gmailName = await window.extractReviewerName(ocrText, targetComment);
-                        } catch (chatErr) {
-                            console.warn('Failed to extract name:', chatErr);
+                        let skipOcr = 'false';
+
+                        if (clientOcrSuccess) {
+                            // 2. Validate comment matches (first 2 words merged/separate fallback)
+                            const cleanStr = (s) => String(s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+                            const ocrTextLower = ocrText.toLowerCase().replace(/[^a-z0-9\s]/g, '');
+                            const targetComment = activeTaskReservation.comment;
+                            const expectedCommentWords = String(targetComment || '').trim().split(/\s+/).filter(Boolean);
+
+                            let matchFound = false;
+                            if (expectedCommentWords.length >= 2) {
+                                const word1 = cleanStr(expectedCommentWords[0]);
+                                const word2 = cleanStr(expectedCommentWords[1]);
+                                const combined = word1 + word2;
+                                const normalizedFullText = ocrTextLower.replace(/\s+/g, '');
+                                if (normalizedFullText.includes(combined) || (ocrTextLower.includes(word1) && ocrTextLower.includes(word2))) {
+                                    matchFound = true;
+                                }
+                            } else if (expectedCommentWords.length === 1) {
+                                const word1 = cleanStr(expectedCommentWords[0]);
+                                if (ocrTextLower.includes(word1)) {
+                                    matchFound = true;
+                                }
+                            }
+
+                            if (!matchFound) {
+                                throw new Error('Your comment is wrong. Copy the same comment as given.');
+                            }
+
+                            // 3. Extract reviewer's Gmail name using proximity helper
+                            if (submitBtn) submitBtn.textContent = 'Extracting Name...';
+                            try {
+                                gmailName = await window.extractReviewerName(ocrText, targetComment);
+                            } catch (chatErr) {
+                                console.warn('Failed to extract name:', chatErr);
+                            }
+                            skipOcr = 'true';
                         }
 
                         const gmailLogoUrl = `https://ui-avatars.com/api/?name=${encodeURIComponent(gmailName)}&background=random`;
@@ -5574,7 +5611,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                                 fileName: file.name,
                                 appName: appName || task.appName || task.title || 'Unknown App',
                                 assignedComment: activeTaskReservation.comment,
-                                skipOcr: 'true',
+                                skipOcr,
                                 ocrText: ocrText.slice(0, 1000),
                                 gmailName,
                                 gmailLogoUrl
@@ -5725,41 +5762,79 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                         }
                         
                         try {
-                            // 1. Run Puter OCR client-side
+                            // 1. Run OCR.space client-side (Engine 2)
                             if (statusEl) statusEl.textContent = 'Running OCR...';
                             let ocrText = '';
+                            let clientOcrSuccess = false;
                             try {
-                                ocrText = await puter.ai.img2txt(file);
-                            } catch (ocrErr) {
-                                console.error('Puter OCR failed for file:', file.name, ocrErr);
-                                throw new Error('Puter OCR failed');
-                            }
+                                const formData = new FormData();
+                                formData.append('file', file);
+                                formData.append('language', 'eng');
+                                formData.append('OCREngine', '2');
+                                formData.append('apikey', 'helloworld'); // fallback to free demo key
 
-                            // 2. Clean and match comment from remaining comment pool
-                            const cleanStr = (s) => String(s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
-                            const cleanedOcrText = cleanStr(ocrText);
-                            const remainingComments = commentPool.filter(c => !submittedComments.includes(String(c).trim()));
-                            
-                            let matchedComment = null;
-                            for (const comment of remainingComments) {
-                                const cleanedComment = cleanStr(comment);
-                                if (cleanedOcrText.includes(cleanedComment)) {
-                                    matchedComment = comment;
-                                    break;
+                                const ocrResponse = await fetch('https://api.ocr.space/parse/image', {
+                                    method: 'POST',
+                                    body: formData
+                                });
+                                if (ocrResponse.ok) {
+                                    const ocrData = await ocrResponse.json();
+                                    if (ocrData.OCRExitCode === 1 && ocrData.ParsedResults && ocrData.ParsedResults.length > 0) {
+                                        ocrText = ocrData.ParsedResults[0].ParsedText || '';
+                                        clientOcrSuccess = true;
+                                    }
                                 }
-                            }
-                            
-                            if (!matchedComment) {
-                                throw new Error('Comment mismatch or verification failed');
+                            } catch (ocrErr) {
+                                console.error('OCR.space client call failed for file:', file.name, ocrErr);
                             }
 
-                            // 3. Extract reviewer's Gmail name using local proximity helper
-                            if (statusEl) statusEl.textContent = 'Extracting Name...';
                             let gmailName = 'Unknown User';
-                            try {
-                                gmailName = await window.extractReviewerName(ocrText, matchedComment);
-                            } catch (chatErr) {
-                                console.warn('Failed to extract name:', chatErr);
+                            let matchedComment = null;
+                            let skipOcr = 'false';
+
+                            if (clientOcrSuccess) {
+                                // 2. Clean and match comment from remaining comment pool (first 2 words merged/separate fallback)
+                                const cleanStr = (s) => String(s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+                                const ocrTextLower = ocrText.toLowerCase().replace(/[^a-z0-9\s]/g, '');
+                                const remainingComments = commentPool.filter(c => !submittedComments.includes(String(c).trim()));
+                                
+                                for (const comment of remainingComments) {
+                                    const expectedCommentWords = String(comment || '').trim().split(/\s+/).filter(Boolean);
+                                    let matchFound = false;
+
+                                    if (expectedCommentWords.length >= 2) {
+                                        const word1 = cleanStr(expectedCommentWords[0]);
+                                        const word2 = cleanStr(expectedCommentWords[1]);
+                                        const combined = word1 + word2;
+                                        const normalizedFullText = ocrTextLower.replace(/\s+/g, '');
+                                        if (normalizedFullText.includes(combined) || (ocrTextLower.includes(word1) && ocrTextLower.includes(word2))) {
+                                            matchFound = true;
+                                        }
+                                    } else if (expectedCommentWords.length === 1) {
+                                        const word1 = cleanStr(expectedCommentWords[0]);
+                                        if (ocrTextLower.includes(word1)) {
+                                            matchFound = true;
+                                        }
+                                    }
+
+                                    if (matchFound) {
+                                        matchedComment = comment;
+                                        break;
+                                    }
+                                }
+                                
+                                if (!matchedComment) {
+                                    throw new Error('Comment mismatch or verification failed');
+                                }
+
+                                // 3. Extract reviewer's Gmail name using proximity helper
+                                if (statusEl) statusEl.textContent = 'Extracting Name...';
+                                try {
+                                    gmailName = await window.extractReviewerName(ocrText, matchedComment);
+                                } catch (chatErr) {
+                                    console.warn('Failed to extract name:', chatErr);
+                                }
+                                skipOcr = 'true';
                             }
 
                             const gmailLogoUrl = `https://ui-avatars.com/api/?name=${encodeURIComponent(gmailName)}&background=random`;
@@ -5772,11 +5847,11 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                                 fileName: file.name,
                                 appName: appName || task.appName || task.title || 'Unknown App',
                                 isBulk: 'true',
-                                skipOcr: 'true',
+                                skipOcr,
                                 ocrText: ocrText.slice(0, 1000),
                                 gmailName,
                                 gmailLogoUrl,
-                                matchedComment
+                                matchedComment: matchedComment || ''
                             });
                             
                             // 4. Upload screenshot on backend with OCR bypassed
@@ -7030,55 +7105,75 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             if (!ocrText) return 'Unknown User';
             try {
                 const lines = ocrText.split('\n').map(l => l.trim()).filter(Boolean);
-                const cleanStr = (s) => String(s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
-                const targetCleaned = cleanStr(targetComment);
+                
+                const skipPatterns = [
+                    /^\d{1,2}:\d{2}/,               // Time (e.g., "10:30")
+                    /^\d{1,3}%$/,                   // Battery percentage
+                    /LTE|WIFI|4G|5G|VoLTE|KB\/S/i,  // Carrier + Data speed
+                    /Google Play/i,                 // "Google Play" header
+                    /^Search/i, /^Apps/i, /^Games/i, /^Offers/i,
+                    /^Movies/i, /^Books/i,
+                    /^Ratings and reviews/i,
+                    /^See all reviews/i,
+                    /^Post/i, /^Cancel/i,
+                    /^Edit your review/i,
+                    /^Edit/i,
+                    /^Episode/i,
+                    /^[★☆* ]+\d{1,2}/,             // Star ratings
+                    /^[0-9.]+ stars/,
+                    /^[0-9.,]+ reviews/,
+                    /^[0-9.]+ [KMG]B/,             // App size
+                    /No reviews/i,
+                    /VoLTE/i, /KB\/S/i,
+                    /Personal into/i,
+                    /No data collected/i,
+                    /Developer contact/i,
+                    /About this app/i,
+                    /Rate this app/i,
+                    /Tell us what you think/i,
+                    /Write a review/i,
+                    /Safety/i, /Data privacy/i, /Security/i, /Verified/i,
+                ];
 
-                let commentIndex = -1;
+                let reviewerName = 'Unknown User';
+
+                // STEP 1: Look for "Your review" header in the text
+                const yourReviewPattern = /Your review/i;
+                let yourReviewIdx = -1;
+
                 for (let i = 0; i < lines.length; i++) {
-                    if (cleanStr(lines[i]).includes(targetCleaned) || targetCleaned.includes(cleanStr(lines[i]))) {
-                        commentIndex = i;
+                    if (yourReviewPattern.test(lines[i])) {
+                        yourReviewIdx = i;
                         break;
                     }
                 }
 
-                if (commentIndex > 0) {
-                    for (let offset = 1; offset <= 3; offset++) {
-                        const idx = commentIndex - offset;
-                        if (idx < 0) break;
-                        const line = lines[idx];
-                        const lower = line.toLowerCase();
-                        if (
-                            lower.includes('★') ||
-                            lower.includes('star') ||
-                            /^[0-9]\s*\/\s*[0-9]/.test(lower) ||
-                            lower.includes('ago') ||
-                            lower.includes('edited') ||
-                            lower.includes('helpful') ||
-                            line.length < 2 ||
-                            line.length > 50
-                        ) {
-                            continue;
+                if (yourReviewIdx !== -1) {
+                    // Name is usually in the next 3 lines after "Your review"
+                    for (let j = 1; j <= 3; j++) {
+                        if (yourReviewIdx + j < lines.length) {
+                            const line = lines[yourReviewIdx + j];
+                            const isSystemLine = skipPatterns.some(p => p.test(line));
+                            if (!isSystemLine && line.length > 2 && /[a-zA-Z]/.test(line) && line.length < 35) {
+                                reviewerName = line;
+                                break;
+                            }
                         }
-                        return line;
                     }
                 }
 
-                const namePrompt = `Below is the OCR text extracted from a Google Play/Maps review screenshot. Identify the reviewer's name (the person who wrote the review).
-Rules:
-- Respond ONLY with the name of the reviewer (e.g. "John Doe").
-- Do NOT include any greeting, explanation, markdown, or punctuation.
-- If you cannot find the name, respond with "Unknown User".
-
-OCR text:
-` + ocrText;
-                const chatResponse = await puter.ai.chat(namePrompt);
-                let gmailName = 'Unknown User';
-                if (chatResponse && chatResponse.message && chatResponse.message.content) {
-                    gmailName = chatResponse.message.content.trim().replace(/^"|"$/g, '');
-                } else if (typeof chatResponse === 'string') {
-                    gmailName = chatResponse.trim().replace(/^"|"$/g, '');
+                // Fallback Logic: first non-system line matching criteria
+                if (reviewerName === 'Unknown User' || reviewerName === 'Unknown') {
+                    for (const line of lines) {
+                        const isSystemLine = skipPatterns.some(p => p.test(line));
+                        if (!isSystemLine && line.length > 2 && /[a-zA-Z]/.test(line) && line.length < 35) {
+                            reviewerName = line;
+                            break;
+                        }
+                    }
                 }
-                return gmailName;
+
+                return reviewerName;
             } catch (err) {
                 console.warn('extractReviewerName failed:', err);
                 return 'Unknown User';
