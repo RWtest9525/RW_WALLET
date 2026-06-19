@@ -3986,6 +3986,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                         ${renderSettingAction('settings-track-income-btn', 'Track Income', 'https://cdn-icons-png.flaticon.com/512/3135/3135706.png', 'emerald')}
                         ${renderSettingAction('settings-invoice-btn', 'Invoice', 'https://cdn-icons-png.flaticon.com/512/337/337946.png', 'yellow')}
                         ${renderSettingAction('settings-task-history-btn', 'Task History', TASK_ICON_URL, 'purple')}
+                        ${renderSettingAction('settings-live-lists-btn', 'Live Lists Verification', 'https://cdn-icons-png.flaticon.com/512/2620/2620743.png', 'indigo')}
                         <button id="settings-theme-btn" class="flex items-center justify-between w-full text-left p-4 bg-gray-100 dark:bg-gray-700 rounded-xl hover:bg-gray-200 dark:hover:bg-gray-600 transition font-medium">
                             <span>Toggle Light/Dark Mode</span>
                         <div class="relative w-5 h-5">
@@ -4017,6 +4018,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             document.getElementById('settings-track-income-btn').onclick = showTrackIncomePage;
             document.getElementById('settings-invoice-btn').onclick = showWithdrawalInvoicesPage;
             document.getElementById('settings-task-history-btn').onclick = showUserTaskHistoryPage;
+            document.getElementById('settings-live-lists-btn').onclick = showUserLiveListsPage;
             document.getElementById('settings-theme-btn').onclick = toggleTheme;
             document.getElementById('settings-logout-btn').onclick = () => signOut(auth);
             if (isAdmin) {
@@ -4112,65 +4114,273 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                     : (s.manual_status === 'rejected' ? 'Rejected' : 'Pending Review');
                 
                 const timeStr = s.submitted_at 
-                    ? new Date(s.submitted_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }) 
+                    ? new Date(s.submitted_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' }) 
                     : 'Unknown';
 
-                let details = {};
-                try { details = s.details_json ? JSON.parse(s.details_json) : {}; } catch {}
-                const gmailLogoUrl = details.gmailLogoUrl || '';
-                const gmailName = s.ocr_extracted_name || '';
-
-                let liveBadge = '';
-                if (s.scraper_status === 'live_confirmed') {
-                    liveBadge = '<span class="rounded-full bg-emerald-100 dark:bg-emerald-900/30 px-2 py-0.5 text-[9px] font-black text-emerald-700 dark:text-emerald-300">🟢 LIVE</span>';
-                } else if (s.scraper_status === 'not_live') {
-                    liveBadge = '<span class="rounded-full bg-rose-100 dark:bg-rose-900/30 px-2 py-0.5 text-[9px] font-black text-rose-700 dark:text-rose-300">🔴 NOT LIVE</span>';
-                } else {
-                    liveBadge = '<span class="rounded-full bg-gray-150 dark:bg-gray-700 px-2 py-0.5 text-[9px] font-black text-gray-500 dark:text-gray-400">⏳ UNCHECKED</span>';
-                }
+                const appLogo = s.app_logo_url || 'https://cdn-icons-png.flaticon.com/512/3176/3176366.png';
 
                 const payoutBadge = s.payout_status === 'paid' 
                     ? '<span class="rounded-full bg-cyan-100 dark:bg-cyan-900/30 px-2 py-0.5 text-[9px] font-black text-cyan-700 dark:text-cyan-300">PAID</span>' 
                     : '';
 
                 return `
-                <div class="bg-white dark:bg-gray-800 p-5 rounded-2xl shadow-md border border-gray-100 dark:border-gray-700 space-y-4">
-                    <div class="flex items-center justify-between gap-2">
-                        <div class="min-w-0">
-                            <h4 class="text-sm font-extrabold text-gray-900 dark:text-white truncate">${escapeHtml(s.app_name || 'Task Submission')}</h4>
-                            <p class="text-[10px] text-gray-400 dark:text-gray-500">${timeStr} · ID: ${s.id.slice(0, 10)}</p>
-                        </div>
-                        <div class="flex items-center gap-1.5 shrink-0">
+                <div class="flex items-center gap-3 bg-white dark:bg-gray-800 p-4 rounded-2xl border border-gray-150 dark:border-gray-700 hover:border-blue-500 hover:shadow-md cursor-pointer transition select-none" onclick="window.showUserTaskHistoryDetail('${s.id}')">
+                    <img src="${escapeHtml(appLogo)}" class="h-10 w-10 rounded-xl object-cover border border-gray-100 dark:border-gray-700 shrink-0" onerror="this.src='https://cdn-icons-png.flaticon.com/512/3176/3176366.png';">
+                    <div class="min-w-0 flex-1">
+                        <h4 class="text-sm font-extrabold text-gray-850 dark:text-white truncate">${escapeHtml(s.app_name || 'Task Submission')}</h4>
+                        <div class="flex items-center gap-1.5 mt-1 flex-wrap">
                             <span class="rounded-full bg-${statusColor}-100 dark:bg-${statusColor}-900/30 px-2 py-0.5 text-[9px] font-black text-${statusColor}-700 dark:text-${statusColor}-300 uppercase">${statusText}</span>
                             ${payoutBadge}
                         </div>
                     </div>
-
-                    <div class="text-xs space-y-1 bg-gray-50 dark:bg-gray-900/50 p-3 rounded-xl border border-gray-100 dark:border-gray-700">
-                        <p class="text-gray-500 dark:text-gray-400 font-medium"><span class="font-bold text-gray-700 dark:text-gray-300">Reward:</span> ₹${s.reward}</p>
-                        <p class="text-gray-500 dark:text-gray-400 font-medium truncate"><span class="font-bold text-gray-700 dark:text-gray-300">Expected Review:</span> "${escapeHtml(s.assigned_comment)}"</p>
+                    <div class="text-right shrink-0">
+                        <p class="text-sm font-black text-blue-600 dark:text-blue-400">₹${s.reward}</p>
+                        <p class="text-[9px] text-gray-400 dark:text-gray-500 font-semibold mt-0.5">${timeStr}</p>
                     </div>
+                </div>`;
+            }).join('');
+        };
 
-                    <div class="flex items-center gap-2 border-t border-gray-100 dark:border-gray-700 pt-3">
-                        ${gmailLogoUrl ? `<img src="${escapeHtml(gmailLogoUrl)}" alt="Gmail avatar" class="h-7 w-7 rounded-full border border-gray-200 dark:border-gray-600 object-cover shrink-0" loading="lazy">` : `<span class="flex h-7 w-7 items-center justify-center rounded-full bg-gray-100 dark:bg-gray-700 text-[10px] font-bold text-gray-400 dark:text-gray-300 shrink-0">G</span>`}
-                        <div class="min-w-0 flex-1">
-                            <p class="text-xs font-semibold truncate text-gray-700 dark:text-gray-300">Reviewer Gmail: <span class="font-bold text-gray-950 dark:text-white">${escapeHtml(gmailName || 'Extracting...')}</span></p>
+        window.showUserTaskHistoryDetail = (submissionId) => {
+            const filter = document.getElementById('user-task-history-filter')?.value || 'all';
+            let subs = [...userTaskHistoryCache];
+            if (filter !== 'all') {
+                if (filter === 'paid') {
+                    subs = subs.filter(s => s.payout_status === 'paid');
+                } else if (filter === 'approved') {
+                    subs = subs.filter(s => s.manual_status === 'approved' && s.payout_status !== 'paid');
+                } else {
+                    subs = subs.filter(s => s.manual_status === filter);
+                }
+            }
+
+            const idx = subs.findIndex(x => x.id === submissionId);
+            if (idx === -1) return;
+            const s = subs[idx];
+
+            const statusColor = s.manual_status === 'approved' ? 'green' : s.manual_status === 'rejected' ? 'red' : 'yellow';
+            const statusText = s.manual_status === 'approved' 
+                ? (s.payout_status === 'paid' ? 'Paid' : 'Approved') 
+                : (s.manual_status === 'rejected' ? 'Rejected' : 'Pending Review');
+
+            const timeStr = s.submitted_at 
+                ? new Date(s.submitted_at).toLocaleString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) 
+                : 'Unknown';
+
+            let details = {};
+            try { details = s.details_json ? JSON.parse(s.details_json) : {}; } catch {}
+            const gmailName = s.ocr_extracted_name || '';
+            const appLogo = s.app_logo_url || 'https://cdn-icons-png.flaticon.com/512/3176/3176366.png';
+
+            let liveBadge = '';
+            if (s.scraper_status === 'live_confirmed') {
+                liveBadge = '<span class="rounded-full bg-emerald-100 dark:bg-emerald-900/30 px-2.5 py-0.5 text-[9px] font-black text-emerald-700 dark:text-emerald-300">🟢 LIVE</span>';
+            } else if (s.scraper_status === 'not_live') {
+                liveBadge = '<span class="rounded-full bg-rose-100 dark:bg-rose-900/30 px-2.5 py-0.5 text-[9px] font-black text-rose-700 dark:text-rose-300">🔴 NOT LIVE</span>';
+            } else {
+                liveBadge = '<span class="rounded-full bg-gray-150 dark:bg-gray-700 px-2.5 py-0.5 text-[9px] font-black text-gray-500 dark:text-gray-400">⏳ UNCHECKED</span>';
+            }
+
+            const isBulker = isBulkTaskUser();
+
+            const statusTextColor = s.manual_status === 'approved' ? 'emerald' : s.manual_status === 'rejected' ? 'rose' : 'amber';
+            const blinkingTag = `
+                <span class="absolute top-3 left-3 rounded-full px-3 py-1 text-[10px] font-black uppercase text-${statusTextColor}-700 bg-${statusTextColor}-100/90 dark:text-${statusTextColor}-300 dark:bg-${statusTextColor}-900/80 backdrop-blur-sm border border-${statusTextColor}-200/50 animate-pulse shadow-md z-10">
+                    ${escapeHtml(statusText)}
+                </span>
+            `;
+
+            let navigationHtml = '';
+            if (isBulker) {
+                navigationHtml = `
+                    <!-- Navigation Arrows for Bulkers -->
+                    ${idx > 0 ? `
+                        <button onclick="window.showUserTaskHistoryDetail('${subs[idx - 1].id}')" class="absolute left-2 top-1/2 -translate-y-1/2 h-10 w-10 flex items-center justify-center rounded-full bg-black/60 hover:bg-black text-white hover:scale-105 active:scale-95 transition shrink-0 z-20 font-black text-lg select-none">
+                            ‹
+                        </button>
+                    ` : ''}
+                    ${idx < subs.length - 1 ? `
+                        <button onclick="window.showUserTaskHistoryDetail('${subs[idx + 1].id}')" class="absolute right-2 top-1/2 -translate-y-1/2 h-10 w-10 flex items-center justify-center rounded-full bg-black/60 hover:bg-black text-white hover:scale-105 active:scale-95 transition shrink-0 z-20 font-black text-lg select-none">
+                            ›
+                        </button>
+                    ` : ''}
+                `;
+            }
+
+            const headerContent = `
+                <header class="flex flex-col mb-4 p-4 bg-white dark:bg-gray-800 shadow-md page-header-fixed">
+                    <div class="flex items-center">
+                        <button onclick="showUserTaskHistoryPage()" class="p-2 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700 mr-2 shrink-0">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5"></path><path d="M12 19l-7-7 7-7"></path></svg>
+                        </button>
+                        <h2 class="text-xl font-bold">Submission Details</h2>
+                    </div>
+                    <div class="pl-12 text-[10px] text-gray-400 font-extrabold uppercase tracking-wider mt-0.5">
+                        Task ID: <span class="font-mono text-gray-500 select-all">${s.task_id || s.id}</span>
+                    </div>
+                </header>
+                <div class="p-4 pt-0">
+            `;
+
+            const detailContent = `
+                ${headerContent}
+                <div class="max-w-xl mx-auto space-y-4 pb-24 px-4">
+                    <!-- Task Info card -->
+                    <div class="bg-white dark:bg-gray-800 p-5 rounded-2xl shadow-md border border-gray-100 dark:border-gray-700 space-y-4">
+                        <div class="flex items-center gap-3">
+                            <img src="${escapeHtml(appLogo)}" class="h-12 w-12 rounded-2xl object-cover border border-gray-100 dark:border-gray-700 shrink-0" onerror="this.src='https://cdn-icons-png.flaticon.com/512/3176/3176366.png';">
+                            <div class="min-w-0 flex-1">
+                                <h3 class="text-base font-extrabold text-gray-900 dark:text-white truncate">${escapeHtml(s.app_name || 'Task Submission')}</h3>
+                                <p class="text-[10px] text-gray-400 dark:text-gray-500 font-semibold mt-0.5">Submitted: ${timeStr}</p>
+                            </div>
+                            <div class="text-right shrink-0">
+                                <p class="text-lg font-black text-blue-600 dark:text-blue-400">₹${s.reward}</p>
+                            </div>
                         </div>
-                        ${liveBadge}
+
+                        <div class="border-t border-gray-100 dark:border-gray-700 pt-3 space-y-2">
+                            <div>
+                                <p class="text-[10px] font-black uppercase text-gray-400 tracking-wider">Assigned Comment</p>
+                                <p class="mt-1.5 text-xs font-bold text-gray-800 dark:text-gray-250 italic">"${escapeHtml(s.assigned_comment || '')}"</p>
+                            </div>
+                            ${gmailName ? `
+                            <div class="pt-1.5">
+                                <p class="text-[10px] font-black uppercase text-gray-400 tracking-wider">Reviewer Gmail / Name</p>
+                                <p class="mt-1 text-xs font-extrabold text-gray-900 dark:text-white flex items-center gap-2">
+                                    ${details.gmailLogoUrl ? `<img src="${escapeHtml(details.gmailLogoUrl)}" class="h-5 w-5 rounded-full object-cover border" loading="lazy">` : `<span class="flex h-5 w-5 items-center justify-center rounded-full bg-gray-100 dark:bg-gray-700 text-[9px] font-bold text-gray-400 dark:text-gray-300 shrink-0">G</span>`}
+                                    <span>${escapeHtml(gmailName)}</span>
+                                </p>
+                            </div>
+                            ` : ''}
+                            <div class="flex items-center gap-2 pt-2 border-t border-gray-100 dark:border-gray-700 mt-2 text-xs">
+                                <span class="text-gray-500 font-semibold">Live Check:</span>
+                                ${liveBadge}
+                            </div>
+                        </div>
                     </div>
 
+                    <!-- Screenshot container -->
                     ${s.screenshot_url ? `
-                    <div class="flex items-center gap-4 border-t border-gray-100 dark:border-gray-700 pt-3">
-                        <div class="relative shrink-0 cursor-pointer group" onclick="openFullscreenScreenshotHistory('${escapeHtml(s.screenshot_url)}')">
-                            <img src="${escapeHtml(s.screenshot_url)}" alt="Screenshot Preview" class="h-24 w-16 rounded-xl border-2 border-gray-100 dark:border-gray-700 object-cover shadow-sm group-hover:scale-102 transition">
-                            <span class="absolute bottom-1 right-1 rounded-full bg-black/60 p-1 text-white"><svg class="h-2.5 w-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0zM10 7v3m0 0v3m0-3h3m-3 0H7"></path></svg></span>
+                    <div class="bg-white dark:bg-gray-800 p-4 rounded-2xl shadow-md border border-gray-100 dark:border-gray-700">
+                        <p class="text-[10px] font-black uppercase text-gray-400 tracking-wider mb-3">Screenshot Proof</p>
+                        <div class="relative overflow-hidden rounded-2xl bg-gray-100 dark:bg-gray-950 flex items-center justify-center max-w-full" style="aspect-ratio: 9/16; max-height: 70vh; margin: 0 auto;">
+                            ${blinkingTag}
+                            ${navigationHtml}
+                            <img src="${escapeHtml(s.screenshot_url)}" alt="Screenshot Proof" class="h-full w-full object-contain cursor-zoom-in" onclick="window.showScreenshotLightbox('${escapeHtml(s.screenshot_url)}', '${escapeHtml(s.screenshot_view_url || '')}')">
                         </div>
-                        <div class="flex-1 min-w-0 space-y-1.5">
-                            <p class="text-xs text-gray-500 dark:text-gray-400 font-medium">Click screenshot to expand full screen.</p>
-                            ${s.task_link ? `<a href="${escapeHtml(s.task_link)}" target="_blank" class="inline-flex items-center gap-1 text-[11px] font-bold text-blue-600 dark:text-blue-400 hover:underline">Play Store Link ↗</a>` : ''}
-                            ${s.screenshot_view_url ? `<a href="${escapeHtml(s.screenshot_view_url)}" target="_blank" class="block text-[10px] text-gray-400 hover:underline">View in Drive Folder 📁</a>` : ''}
+                        <div class="mt-3 flex flex-wrap gap-2 justify-between items-center text-xs">
+                            <span class="text-gray-400">Click image to expand full screen</span>
+                            <div class="flex gap-2">
+                                ${s.task_link ? `<a href="${escapeHtml(s.task_link)}" target="_blank" class="inline-flex items-center gap-1 text-blue-600 dark:text-blue-400 font-bold hover:underline">Play Store Link ↗</a>` : ''}
+                                ${s.screenshot_view_url ? `<a href="${escapeHtml(s.screenshot_view_url)}" target="_blank" class="text-gray-400 hover:underline">Drive 📁</a>` : ''}
+                            </div>
                         </div>
                     </div>` : ''}
+                </div>
+                ${getPageFooter()}
+            `;
+
+            showPage(detailContent, { returnTo: 'task-history', keepBottomNav: true, onBack: showUserTaskHistoryPage });
+        };
+
+        let userLiveListsCache = [];
+        const showUserLiveListsPage = () => {
+            if (!ensureUserSessionReady()) return;
+            const content = `
+                ${getPageHeader('Live Lists Verification')}
+                <div class="max-w-xl mx-auto space-y-4 pb-24 px-4">
+                    <div class="bg-white dark:bg-gray-800 p-5 rounded-2xl shadow-md border border-gray-100 dark:border-gray-700">
+                        <p class="text-xs font-semibold text-gray-500 dark:text-gray-400">
+                            Here you can verify if your reviewer name is listed in the live lists uploaded by the admin for different apps.
+                        </p>
+                        <input type="text" id="user-live-lists-search" placeholder="🔍 Search app name or reviewer name..." class="mt-3 w-full px-4 py-2.5 bg-gray-50 dark:bg-gray-750 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none text-sm border border-gray-100 dark:border-gray-700">
+                    </div>
+                    <div id="user-live-lists-container" class="space-y-4">
+                        <div class="py-8 text-center text-sm text-gray-400">Loading lists...</div>
+                    </div>
+                </div>
+                ${getPageFooter()}`;
+
+            showPage(content, { returnTo: 'settings', keepBottomNav: true });
+            
+            loadUserLiveLists();
+
+            document.getElementById('user-live-lists-search').addEventListener('input', renderUserLiveLists);
+        };
+
+        const loadUserLiveLists = async () => {
+            try {
+                const response = await fetchWithTimeout(`${BACKEND_BASE_URL}/api/lists`, {}, 10000);
+                const data = await response.json().catch(() => ({}));
+                if (data.ok && Array.isArray(data.lists)) {
+                    userLiveListsCache = data.lists;
+                } else {
+                    userLiveListsCache = [];
+                }
+            } catch (err) {
+                console.error('Failed to load live lists:', err);
+                userLiveListsCache = [];
+            }
+            renderUserLiveLists();
+        };
+
+        const renderUserLiveLists = () => {
+            const container = document.getElementById('user-live-lists-container');
+            if (!container) return;
+
+            const searchQuery = String(document.getElementById('user-live-lists-search')?.value || '').trim().toLowerCase();
+            let filtered = [...userLiveListsCache];
+
+            if (searchQuery) {
+                filtered = filtered.filter(item => {
+                    const matchApp = String(item.appName || '').toLowerCase().includes(searchQuery);
+                    const matchNames = String(item.content || '').toLowerCase().includes(searchQuery);
+                    return matchApp || matchNames;
+                });
+            }
+
+            if (filtered.length === 0) {
+                container.innerHTML = `<div class="rounded-2xl border border-dashed border-gray-200 dark:border-gray-700 py-10 text-center text-sm font-semibold text-gray-450 dark:text-gray-500">No matching live lists found.</div>`;
+                return;
+            }
+
+            container.innerHTML = filtered.map((item, idx) => {
+                const formattedDate = item.date ? new Date(item.date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : 'Unknown';
+                const lines = item.content.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+                
+                let highlightedCount = 0;
+                let displayLines = lines;
+                if (searchQuery) {
+                    displayLines = lines.filter(l => l.toLowerCase().includes(searchQuery));
+                    highlightedCount = displayLines.length;
+                }
+
+                return `
+                <div class="bg-white dark:bg-gray-800 p-5 rounded-2xl shadow-md border border-gray-100 dark:border-gray-700 space-y-3">
+                    <div class="flex items-center justify-between gap-2">
+                        <div class="min-w-0">
+                            <h4 class="text-sm font-extrabold text-gray-900 dark:text-white truncate">${escapeHtml(item.appName || 'App Review List')}</h4>
+                            <p class="text-[10px] text-gray-400 dark:text-gray-500 font-semibold mt-0.5">Target Date: ${escapeHtml(formattedDate)}</p>
+                        </div>
+                        <span class="rounded-full bg-indigo-50 dark:bg-indigo-900/30 px-2.5 py-1 text-[10px] font-black text-indigo-600 dark:text-indigo-300 shrink-0">
+                            👥 ${lines.length} Reviewers
+                        </span>
+                    </div>
+
+                    <details class="group rounded-xl border border-gray-100 dark:border-gray-750 bg-gray-50/50 dark:bg-gray-900/10 overflow-hidden" ${searchQuery ? 'open' : ''}>
+                        <summary class="flex items-center justify-between p-3 cursor-pointer text-xs font-bold text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 select-none">
+                            <span>${searchQuery ? `Search Results (${highlightedCount} found)` : 'Show Reviewer Names'}</span>
+                            <svg class="h-3 w-3 transition-transform duration-200 group-open:rotate-180" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M19 9l-7 7-7-7"></path></svg>
+                        </summary>
+                        <div class="px-4 pb-4 pt-2 border-t border-gray-100 dark:border-gray-750 max-h-48 overflow-y-auto space-y-1 font-mono text-[11px] text-gray-700 dark:text-gray-300">
+                            ${displayLines.map(line => {
+                                const highlighted = searchQuery && line.toLowerCase().includes(searchQuery)
+                                    ? `<mark class="bg-yellow-100 dark:bg-yellow-950/50 dark:text-yellow-200 font-bold px-0.5">${escapeHtml(line)}</mark>`
+                                    : escapeHtml(line);
+                                return `<p class="py-0.5 border-b border-gray-100/50 dark:border-gray-800/50 last:border-0">${highlighted}</p>`;
+                            }).join('') || '<p class="text-gray-400 py-1 italic">No matching names.</p>'}
+                        </div>
+                    </details>
                 </div>`;
             }).join('');
         };
