@@ -262,25 +262,29 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             img.src = '/avatars_sheet.png';
             img.onload = () => {
                 try {
-                    const H = img.naturalHeight;
-                    const W = img.naturalWidth;
-                    if (!H || !W) return;
-                    const gridSize = H;
-                    const colWidth = gridSize / 5;
-                    const rowHeight = H / 2;
                     const canvas = document.createElement('canvas');
                     const ctx = canvas.getContext('2d');
                     canvas.width = 180;
                     canvas.height = 180;
+                    
+                    const coords = [
+                        { sx: 0.0, sy: 275.3, size: 250.0 },
+                        { sx: 251.0, sy: 275.3, size: 250.0 },
+                        { sx: 502.0, sy: 275.3, size: 250.0 },
+                        { sx: 752.0, sy: 275.3, size: 250.0 },
+                        { sx: 1003.0, sy: 275.9, size: 250.0 },
+                        { sx: 0.0, sy: 681.5, size: 250.0 },
+                        { sx: 251.0, sy: 681.9, size: 250.0 },
+                        { sx: 502.0, sy: 682.4, size: 250.0 },
+                        { sx: 752.0, sy: 682.9, size: 250.0 },
+                        { sx: 1003.0, sy: 684.3, size: 250.0 }
+                    ];
+
                     const cropped = [];
-                    for (let r = 0; r < 2; r++) {
-                        for (let c = 0; c < 5; c++) {
-                            const sx = c * colWidth;
-                            const sy = r * rowHeight + (rowHeight - colWidth) / 2;
-                            ctx.clearRect(0, 0, 180, 180);
-                            ctx.drawImage(img, sx, sy, colWidth, colWidth, 0, 0, 180, 180);
-                            cropped.push(canvas.toDataURL('image/jpeg', 0.85));
-                        }
+                    for (const coord of coords) {
+                        ctx.clearRect(0, 0, 180, 180);
+                        ctx.drawImage(img, coord.sx, coord.sy, coord.size, coord.size, 0, 0, 180, 180);
+                        cropped.push(canvas.toDataURL('image/jpeg', 0.85));
                     }
                     if (cropped.length === 10) {
                         PREMIUM_AVATARS = cropped;
