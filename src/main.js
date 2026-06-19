@@ -4549,21 +4549,30 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
         const openFullscreenScreenshotHistory = (url) => {
             const overlay = document.createElement('div');
             overlay.id = 'fullscreen-ss-overlay';
-            overlay.className = 'fixed inset-0 z-[10000] flex flex-col items-center justify-center bg-black/95 p-4';
-            overlay.onclick = (e) => {
-                if (e.target === overlay) overlay.remove();
+            overlay.className = 'fixed inset-0 z-[10000] flex flex-col items-center justify-center bg-black/95 p-4 cursor-zoom-out';
+            
+            // Prevent background page from scrolling
+            document.body.style.overflow = 'hidden';
+
+            const removeOverlay = () => {
+                overlay.remove();
+                document.body.style.overflow = '';
             };
+
+            overlay.onclick = removeOverlay;
             overlay.innerHTML = `
-                <div class="relative max-w-3xl max-h-[90vh] flex flex-col items-center" onclick="event.stopPropagation()">
-                    <button onclick="this.closest('#fullscreen-ss-overlay').remove()" class="absolute top-4 right-4 p-3 bg-white/10 hover:bg-white/20 text-white rounded-full transition z-[10001]">
-                        <svg class="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
-                    </button>
+                <div class="relative max-w-3xl max-h-[85vh] flex items-center justify-center">
                     <img src="${url}" class="max-w-full max-h-[80vh] rounded-2xl shadow-2xl object-contain border border-gray-800">
-                    <div class="mt-4 flex gap-2">
-                        <button onclick="this.closest('#fullscreen-ss-overlay').remove()" class="rounded-xl bg-red-600 px-4 py-2.5 text-xs font-bold text-white hover:bg-red-700 transition">Close ✕</button>
-                    </div>
+                </div>
+                <div class="mt-4 flex gap-2 shrink-0" onclick="event.stopPropagation()">
+                    <button id="fullscreen-close-btn" class="rounded-xl bg-gray-700 px-4 py-2.5 text-xs font-bold text-white hover:bg-gray-650 transition">✕ Close</button>
                 </div>`;
             document.body.appendChild(overlay);
+            
+            const closeBtn = document.getElementById('fullscreen-close-btn');
+            if (closeBtn) {
+                closeBtn.onclick = removeOverlay;
+            }
         };
 
         const showAdminLiveListsPage = () => {
@@ -7968,17 +7977,17 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                 ${index > 0 ? `<button id="modal-prev-btn" class="absolute left-2 md:left-6 top-1/2 -translate-y-1/2 h-12 w-12 flex items-center justify-center rounded-full bg-gray-800/60 hover:bg-gray-800 text-white hover:scale-105 active:scale-95 transition shrink-0 z-50 text-xl font-bold">‹</button>` : ''}
 
                 <!-- Container -->
-                <div class="relative w-full max-w-4xl bg-white dark:bg-gray-900 rounded-3xl border border-gray-150 dark:border-gray-850 shadow-2xl overflow-hidden flex flex-col md:flex-row max-h-[90vh]">
+                <div class="relative w-full max-w-4xl bg-white dark:bg-gray-900 rounded-3xl border border-gray-150 dark:border-gray-850 shadow-2xl overflow-y-auto md:overflow-hidden flex flex-col md:flex-row max-h-[90vh]">
                     <!-- Close Button -->
                     <button id="modal-close-btn" class="absolute top-4 right-4 z-50 h-8 w-8 flex items-center justify-center rounded-full bg-black/40 hover:bg-black/60 text-white text-sm font-bold transition">✕</button>
 
                     <!-- Left: Image -->
-                    <div class="flex-1 bg-gray-950 flex items-center justify-center p-4 relative min-h-[40vh] md:min-h-0 max-h-[50vh] md:max-h-none overflow-hidden select-none">
+                    <div class="w-full md:flex-1 bg-gray-950 flex items-center justify-center p-4 relative min-h-[35vh] md:min-h-0 md:max-h-none select-none">
                         <img id="admin-detail-screenshot-img" src="${escapeHtml(s.screenshot_url)}" alt="Screenshot" class="max-w-full max-h-[45vh] md:max-h-[75vh] object-contain rounded-xl border border-gray-800 shadow-lg cursor-zoom-in">
                     </div>
 
                     <!-- Right: Info Panel -->
-                    <div class="w-full md:w-[360px] shrink-0 p-5 flex flex-col justify-between border-t md:border-t-0 md:border-l border-gray-150 dark:border-gray-800 overflow-y-auto bg-gray-50 dark:bg-gray-900/50">
+                    <div class="w-full md:w-[360px] shrink-0 p-5 flex flex-col justify-between border-t md:border-t-0 md:border-l border-gray-150 dark:border-gray-800 md:overflow-y-auto bg-gray-50 dark:bg-gray-900/50">
                         <div class="space-y-4">
                             <!-- Header Info: Status, Gmail Name, Mobile No, Submitted Time -->
                             <div class="text-left bg-white dark:bg-gray-850 p-4 rounded-2xl border border-gray-150 dark:border-gray-800 shadow-sm">
