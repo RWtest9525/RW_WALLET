@@ -7977,17 +7977,17 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                 ${index > 0 ? `<button id="modal-prev-btn" class="absolute left-2 md:left-6 top-1/2 -translate-y-1/2 h-12 w-12 flex items-center justify-center rounded-full bg-gray-800/60 hover:bg-gray-800 text-white hover:scale-105 active:scale-95 transition shrink-0 z-50 text-xl font-bold">‹</button>` : ''}
 
                 <!-- Container -->
-                <div class="relative w-full max-w-4xl bg-white dark:bg-gray-900 rounded-3xl border border-gray-150 dark:border-gray-850 shadow-2xl overflow-y-auto md:overflow-hidden flex flex-col md:flex-row max-h-[90vh]">
+                <div class="relative w-full max-w-2xl bg-white dark:bg-gray-900 rounded-3xl border border-gray-150 dark:border-gray-850 shadow-2xl overflow-y-auto max-h-[90vh]">
                     <!-- Close Button -->
                     <button id="modal-close-btn" class="absolute top-4 right-4 z-50 h-8 w-8 flex items-center justify-center rounded-full bg-black/40 hover:bg-black/60 text-white text-sm font-bold transition">✕</button>
 
                     <!-- Left: Image -->
-                    <div class="w-full md:flex-1 bg-gray-950 flex items-center justify-center p-4 relative min-h-[35vh] md:min-h-0 md:max-h-none select-none">
-                        <img id="admin-detail-screenshot-img" src="${escapeHtml(s.screenshot_url)}" alt="Screenshot" class="max-w-full max-h-[45vh] md:max-h-[75vh] object-contain rounded-xl border border-gray-800 shadow-lg cursor-zoom-in">
+                    <div class="w-full bg-gray-950 flex items-center justify-center p-4 relative select-none">
+                        <img id="admin-detail-screenshot-img" src="${escapeHtml(s.screenshot_url)}" alt="Screenshot" class="max-w-full max-h-[60vh] object-contain rounded-xl border border-gray-800 shadow-lg cursor-zoom-in">
                     </div>
 
                     <!-- Right: Info Panel -->
-                    <div class="w-full md:w-[360px] shrink-0 p-5 flex flex-col justify-between border-t md:border-t-0 md:border-l border-gray-150 dark:border-gray-800 md:overflow-y-auto bg-gray-50 dark:bg-gray-900/50">
+                    <div class="w-full p-5 flex flex-col justify-between border-t border-gray-150 dark:border-gray-800 bg-gray-50 dark:bg-gray-900/50">
                         <div class="space-y-4">
                             <!-- Header Info: Status, Gmail Name, Mobile No, Submitted Time -->
                             <div class="text-left bg-white dark:bg-gray-850 p-4 rounded-2xl border border-gray-150 dark:border-gray-800 shadow-sm">
@@ -8301,21 +8301,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             const content = `
                 ${getPageHeader('Task Submissions')}
                 <div class="max-w-5xl mx-auto space-y-4 pb-24">
-                    <section class="relative overflow-hidden rounded-2xl bg-gradient-to-br from-orange-950 via-amber-900 to-yellow-700 p-5 text-white shadow-xl">
-                        <div class="absolute -right-10 -top-10 h-36 w-36 rounded-full border border-white/15"></div>
-                        <div class="relative">
-                            <p class="text-xs font-black uppercase tracking-wide text-white/65">Admin</p>
-                            <h2 class="mt-1 text-xl font-black">Task Submissions</h2>
-                            <p class="mt-1 text-sm text-white/75">Review, approve, and manage task submissions from users.</p>
-                            <div class="mt-3 grid grid-cols-4 gap-2">
-                                <div class="rounded-xl bg-white/15 px-3 py-2 text-center"><p class="text-[9px] font-bold uppercase text-white/60">Total</p><p id="admin-sub-total" class="text-lg font-black">0</p></div>
-                                <div class="rounded-xl bg-white/15 px-3 py-2 text-center"><p class="text-[9px] font-bold uppercase text-white/60">Pending</p><p id="admin-sub-pending" class="text-lg font-black text-yellow-300">0</p></div>
-                                <div class="rounded-xl bg-white/15 px-3 py-2 text-center"><p class="text-[9px] font-bold uppercase text-white/60">Approved</p><p id="admin-sub-approved" class="text-lg font-black text-green-300">0</p></div>
-                                <div class="rounded-xl bg-white/15 px-3 py-2 text-center"><p class="text-[9px] font-bold uppercase text-white/60">Paid</p><p id="admin-sub-paid" class="text-lg font-black text-cyan-300">0</p></div>
-                            </div>
-                        </div>
-                    </section>
-                    <section class="rounded-2xl border border-gray-100 dark:border-gray-700 bg-white dark:bg-gray-800 p-4 shadow-sm space-y-3">
+                    <section class="rounded-2xl border border-gray-150 dark:border-gray-800 bg-white dark:bg-gray-800 p-4 shadow-sm space-y-3">
                         <div class="flex flex-wrap items-center gap-2">
                             <input id="admin-sub-search" type="text" placeholder="Search user or task..." class="flex-1 min-w-[140px] rounded-xl bg-gray-100 dark:bg-gray-700 px-3 py-2 text-sm font-semibold outline-none focus:ring-2 focus:ring-orange-500">
                             <select id="admin-sub-filter" class="rounded-xl bg-gray-100 dark:bg-gray-700 px-3 py-2 text-sm font-semibold">
@@ -8528,22 +8514,61 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                 const finalSubs = (grouped[dateStr]?.[appKey]?.items || []);
                 window.currentActiveSubmissions = finalSubs; // Cache list for detail modal
 
-                let cardsHtml = `<div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">`;
-                cardsHtml += finalSubs.map((s, idx) => {
-                    const statusColor = s.manual_status === 'approved' ? 'emerald' : s.manual_status === 'rejected' ? 'rose' : 'amber';
-                    const name = s.ocr_extracted_name || s.user_name || 'User';
-                    const statusTextColor = s.manual_status === 'approved' ? 'emerald' : s.manual_status === 'rejected' ? 'rose' : 'amber';
-                    
-                    return `
-                    <div class="group relative aspect-[9/16] overflow-hidden rounded-2xl border border-gray-150 dark:border-gray-800 bg-gray-100 dark:bg-gray-950 cursor-pointer shadow-sm hover:shadow-md hover:border-orange-500 transition-all select-none" data-action="open-modal" data-index="${idx}">
-                        <img src="${escapeHtml(s.screenshot_url)}" alt="Screenshot" class="h-full w-full object-cover transition duration-300 group-hover:scale-105" loading="lazy">
-                        <span class="absolute top-2.5 right-2.5 rounded-full px-2 py-0.5 text-[8px] font-black uppercase text-${statusTextColor}-700 bg-${statusTextColor}-100/90 dark:text-${statusTextColor}-300 dark:bg-${statusTextColor}-900/80 backdrop-blur-sm border border-${statusTextColor}-200/50">${escapeHtml(s.manual_status)}</span>
-                        <div class="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/90 via-black/45 to-transparent p-3 text-left">
-                            <p class="truncate text-[10px] font-black text-white">${escapeHtml(name)}</p>
-                            <p class="truncate text-[8px] text-white/70">${escapeHtml(s.user_email || '')}</p>
+                // Group finalSubs by user_id
+                const userGroups = {};
+                finalSubs.forEach((s, globalIdx) => {
+                    const uId = s.user_id || 'unknown_user';
+                    if (!userGroups[uId]) {
+                        userGroups[uId] = {
+                            userId: uId,
+                            userName: s.user_name || 'Unknown User',
+                            userEmail: s.user_email || 'No email',
+                            items: []
+                        };
+                    }
+                    userGroups[uId].items.push({ ...s, globalIdx });
+                });
+
+                let cardsHtml = `<div class="space-y-5 relative pl-4 border-l-2 border-gray-150 dark:border-gray-800 ml-4 py-2">`;
+                Object.values(userGroups).forEach(group => {
+                    const initials = group.userName ? group.userName.charAt(0).toUpperCase() : '?';
+                    cardsHtml += `
+                    <!-- User Submission Group -->
+                    <div class="relative group text-left">
+                        <!-- Dot Indicator on Timeline -->
+                        <div class="absolute -left-[25px] top-2 h-3.5 w-3.5 rounded-full bg-orange-500 border-4 border-white dark:border-gray-900 group-hover:scale-110 transition shadow-sm z-10"></div>
+                        
+                        <!-- User Identification Tag -->
+                        <div class="flex flex-wrap items-center justify-between gap-2 mb-2 bg-gray-50 dark:bg-gray-850/60 p-2 rounded-xl border border-gray-100 dark:border-gray-800 shadow-sm text-left">
+                            <div class="flex items-center gap-2">
+                                <div class="h-6 w-6 rounded-full bg-orange-100 dark:bg-orange-950 flex items-center justify-center font-black text-orange-600 text-xs shrink-0">
+                                    ${initials}
+                                </div>
+                                <div class="min-w-0">
+                                    <p class="text-xs font-black text-gray-850 dark:text-white truncate">${escapeHtml(group.userName)}</p>
+                                    <p class="text-[9px] text-gray-450 font-semibold truncate mt-0.5">${escapeHtml(group.userEmail)}</p>
+                                </div>
+                            </div>
+                            <span class="text-[9px] font-black px-2 py-0.5 rounded-full bg-orange-100 text-orange-700 dark:bg-orange-950 dark:text-orange-300">
+                                ${group.items.length} file${group.items.length > 1 ? 's' : ''}
+                            </span>
+                        </div>
+                        
+                        <!-- Horizontal Scroll of Tiny Thumbnails -->
+                        <div class="flex flex-wrap gap-2.5 pl-1.5">
+                            ${group.items.map(s => {
+                                const statusTextColor = s.manual_status === 'approved' ? 'emerald' : s.manual_status === 'rejected' ? 'rose' : 'amber';
+                                return `
+                                <div class="relative w-14 h-24 rounded-lg overflow-hidden border border-gray-200 dark:border-gray-800 bg-gray-100 dark:bg-gray-950 cursor-pointer hover:border-orange-500 hover:shadow-md active:scale-95 transition shrink-0" data-action="open-modal" data-index="${s.globalIdx}">
+                                    <img src="${escapeHtml(s.screenshot_url)}" alt="Thumbnail" class="h-full w-full object-cover" loading="lazy">
+                                    <div class="absolute inset-0 bg-black/5 hover:bg-transparent transition"></div>
+                                    <!-- Tiny Status Indicator Badge -->
+                                    <div class="absolute top-1 right-1 h-2.5 w-2.5 rounded-full bg-${statusTextColor}-500 border border-white dark:border-gray-900 shadow-sm" title="Status: ${s.manual_status}"></div>
+                                </div>`;
+                            }).join('')}
                         </div>
                     </div>`;
-                }).join('');
+                });
                 cardsHtml += `</div>`;
 
                 const appName = grouped[dateStr]?.[appKey]?.taskName || appKey;
