@@ -244,6 +244,60 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             showNotification(friendlyErrorMessage(fallback), true);
         };
 
+        const getProfileAvatarUrl = (user) => {
+            if (!user) return 'https://api.dicebear.com/7.x/adventurer/svg?seed=Felix';
+            
+            // 1. Admin always uses the app logo
+            const uId = user.uid || user.id || '';
+            if (uId === ADMIN_UID || uId === 'admin' || user.email === 'admin@gmail.com') {
+                return 'https://i.ibb.co/x8YBYwGG/6233389803554672153.jpg';
+            }
+            
+            // 2. If user has chosen a profile photo, return it
+            if (user.profilePhoto || user.profile_photo || user.avatarUrl || user.avatar_url) {
+                return user.profilePhoto || user.profile_photo || user.avatarUrl || user.avatar_url;
+            }
+            
+            // 3. Fallback: Determine default based on name (male or female)
+            const name = String(user.name || user.userName || user.email || '').toLowerCase().trim();
+            
+            // Common female name keywords, endings, or prefixes
+            const femaleKeywords = [
+                'devi', 'kumari', 'lata', 'seema', 'anita', 'sunita', 'kiran', 'pooja', 'priya', 'neha', 'divya',
+                'kajal', 'jyoti', 'kavita', 'preeti', 'ritu', 'swati', 'sneha', 'alka', 'usha', 'shanti', 'meena',
+                'sushma', 'rekha', 'pinky', 'monika', 'payal', 'asha', 'babita', 'radha', 'sharda', 'mamta', 'sapna',
+                'isha', 'tanya', 'riya', 'ananya', 'rashmi', 'shruti', 'komal', 'arti', 'renu', 'savita', 'geeta',
+                'sita', 'gita', 'anamika', 'archana', 'disha', 'megha', 'nisha', 'prerna', 'richa', 'shweta', 'sheetal',
+                'sakshi', 'simran', 'tanvi', 'vaishali', 'varsha', 'yashaswi', 'girl', 'female', 'woman', 'lady'
+            ];
+            
+            const isFemale = femaleKeywords.some(kw => name.includes(kw)) ||
+                             name.endsWith('a') || name.endsWith('i') || name.endsWith('ee') || name.endsWith('ya') || name.endsWith('y');
+            
+            if (isFemale) {
+                const femaleAvatars = [
+                    'https://api.dicebear.com/7.x/adventurer/svg?seed=Lily',
+                    'https://api.dicebear.com/7.x/adventurer/svg?seed=Sasha',
+                    'https://api.dicebear.com/7.x/adventurer/svg?seed=Zoe',
+                    'https://api.dicebear.com/7.x/adventurer/svg?seed=Mimi',
+                    'https://api.dicebear.com/7.x/adventurer/svg?seed=Patches'
+                ];
+                const charSum = [...name].reduce((sum, char) => sum + char.charCodeAt(0), 0);
+                return femaleAvatars[charSum % femaleAvatars.length];
+            } else {
+                const maleAvatars = [
+                    'https://api.dicebear.com/7.x/adventurer/svg?seed=Felix',
+                    'https://api.dicebear.com/7.x/adventurer/svg?seed=Jack',
+                    'https://api.dicebear.com/7.x/adventurer/svg?seed=Scooter',
+                    'https://api.dicebear.com/7.x/adventurer/svg?seed=Oliver',
+                    'https://api.dicebear.com/7.x/adventurer/svg?seed=Buster'
+                ];
+                const charSum = [...name].reduce((sum, char) => sum + char.charCodeAt(0), 0);
+                return maleAvatars[charSum % maleAvatars.length];
+            }
+        };
+        window.getProfileAvatarUrl = getProfileAvatarUrl;
+
         // --- UI UTILS ---
         const formatCurrency = (amount) => new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR' }).format(amount || 0);
         const numericAmount = (amount) => Number(amount || 0);
@@ -2933,6 +2987,15 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                     document.getElementById('user-balance').textContent = formatCompactBalance(data.balance);
                     updateDollarBalanceDisplay(data.balance);
                     currentUserData = { id: userId, uid: userId, ...data };
+                    
+                    const headerAvatar = document.getElementById('header-profile-avatar');
+                    if (headerAvatar) {
+                        headerAvatar.src = getProfileAvatarUrl(currentUserData);
+                    }
+                    const headerBtn = document.getElementById('header-profile-btn');
+                    if (headerBtn) {
+                        headerBtn.onclick = () => showProfilePage();
+                    }
                     writeJsonCache(getUserCacheKey(userId), sanitizeUserForCache(data, userId));
                     getBackendAuthToken().catch(e => logBackgroundSkip('Backend session warmup skipped', e));
                     preloadSupportChatForUser(userId).catch(e => logBackgroundSkip('Support chat preload skipped', e));
@@ -3857,6 +3920,48 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             const websiteLinks = Array.isArray(currentUserData.websiteLinks) ? currentUserData.websiteLinks.slice(0, 3) : [];
             const activePaymentMethod = focusMethod || normalizeProfilePaymentMethod(currentUserData);
 
+            const currentAvatar = getProfileAvatarUrl(currentUserData);
+            const availableAvatars = [
+                { url: 'https://api.dicebear.com/7.x/adventurer/svg?seed=Felix', label: 'Boy 1' },
+                { url: 'https://api.dicebear.com/7.x/adventurer/svg?seed=Jack', label: 'Boy 2' },
+                { url: 'https://api.dicebear.com/7.x/adventurer/svg?seed=Scooter', label: 'Boy 3' },
+                { url: 'https://api.dicebear.com/7.x/adventurer/svg?seed=Oliver', label: 'Boy 4' },
+                { url: 'https://api.dicebear.com/7.x/adventurer/svg?seed=Buster', label: 'Boy 5' },
+                { url: 'https://api.dicebear.com/7.x/adventurer/svg?seed=Lily', label: 'Girl 1' },
+                { url: 'https://api.dicebear.com/7.x/adventurer/svg?seed=Sasha', label: 'Girl 2' },
+                { url: 'https://api.dicebear.com/7.x/adventurer/svg?seed=Zoe', label: 'Girl 3' },
+                { url: 'https://api.dicebear.com/7.x/adventurer/svg?seed=Mimi', label: 'Girl 4' },
+                { url: 'https://api.dicebear.com/7.x/adventurer/svg?seed=Patches', label: 'Girl 5' }
+            ];
+
+            let avatarGridHtml = '';
+            if (!isAdminProfile) {
+                avatarGridHtml = `
+                <div class="bg-gray-50 dark:bg-gray-900/60 p-4 rounded-2xl border border-gray-150 dark:border-gray-800 space-y-3 text-left">
+                    <p class="text-xs font-black uppercase text-gray-400 tracking-wider">Choose Profile Avatar</p>
+                    <div class="grid grid-cols-5 gap-2">
+                        ${availableAvatars.map(av => {
+                            const isSelected = av.url === currentAvatar;
+                            return `
+                            <div class="avatar-select-option relative cursor-pointer aspect-square rounded-xl overflow-hidden border-2 ${isSelected ? 'border-orange-500 bg-orange-50 dark:bg-orange-950/40' : 'border-transparent bg-gray-100 dark:bg-gray-700 hover:border-gray-300'} p-1 transition" data-avatar-url="${escapeHtml(av.url)}">
+                                <img src="${escapeHtml(av.url)}" alt="${escapeHtml(av.label)}" class="w-full h-full object-contain">
+                                ${isSelected ? '<div class="absolute bottom-0.5 right-0.5 h-3.5 w-3.5 bg-orange-500 rounded-full flex items-center justify-center text-[8px] font-black text-white">✓</div>' : ''}
+                            </div>`;
+                        }).join('')}
+                    </div>
+                    <input type="hidden" id="profile-avatar-url" value="${escapeHtml(currentAvatar)}">
+                </div>`;
+            } else {
+                avatarGridHtml = `
+                <div class="flex items-center gap-3 bg-gray-50 dark:bg-gray-900/60 p-4 rounded-2xl border border-gray-150 dark:border-gray-800 text-left">
+                    <img src="${escapeHtml(currentAvatar)}" class="h-12 w-12 rounded-xl border border-gray-200 dark:border-gray-755 shrink-0 bg-white p-1">
+                    <div>
+                        <p class="text-xs font-black uppercase text-gray-400 tracking-wider">Admin Logo</p>
+                        <h4 class="text-sm font-extrabold text-gray-850 dark:text-white mt-0.5">Application Logo (Fixed)</h4>
+                    </div>
+                </div>`;
+            }
+
             const paymentMethods = [
                 { value: '', label: 'Select Payment Method' },
                 { value: 'upi', label: 'UPI ID' },
@@ -3896,6 +4001,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             const content = `
                 ${getPageHeader('My Profile')}
                 <div class="max-w-lg mx-auto bg-white dark:bg-gray-800 p-6 rounded-xl shadow-md space-y-4">
+                    ${avatarGridHtml}
                     <div class="space-y-1">
                         <label class="text-sm font-medium text-gray-500 dark:text-gray-400">Email Address</label>
                         <input type="email" value="${escapeHtml(currentUserData.email || '')}" class="w-full px-4 py-3 bg-gray-100 dark:bg-gray-700 border-transparent rounded-lg cursor-not-allowed" readonly>
@@ -3943,6 +4049,29 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             }
 
             document.getElementById('save-profile-btn').onclick = handleUpdateProfile;
+
+            if (!isAdminProfile) {
+                const options = document.querySelectorAll('.avatar-select-option');
+                options.forEach(opt => {
+                    opt.onclick = () => {
+                        const chosenUrl = opt.getAttribute('data-avatar-url');
+                        const inputEl = document.getElementById('profile-avatar-url');
+                        if (inputEl) inputEl.value = chosenUrl;
+                        
+                        options.forEach(o => {
+                            o.className = o.className.replace('border-orange-500 bg-orange-50 dark:bg-orange-950/40', 'border-transparent bg-gray-100 dark:bg-gray-700 hover:border-gray-300');
+                            const check = o.querySelector('div');
+                            if (check) check.remove();
+                        });
+                        
+                        opt.className = opt.className.replace('border-transparent bg-gray-100 dark:bg-gray-700 hover:border-gray-300', 'border-orange-500 bg-orange-50 dark:bg-orange-950/40');
+                        const tick = document.createElement('div');
+                        tick.className = 'absolute bottom-0.5 right-0.5 h-3.5 w-3.5 bg-orange-500 rounded-full flex items-center justify-center text-[8px] font-black text-white';
+                        tick.textContent = '✓';
+                        opt.appendChild(tick);
+                    };
+                });
+            }
             document.getElementById('delete-payment-method-btn')?.addEventListener('click', async () => {
                 if (!confirm('Delete saved payment method? You can add a new one after deleting it.')) return;
                 try {
@@ -4071,9 +4200,26 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             if (!ensureUserSessionReady()) return;
             const currentTheme = localStorage.getItem('theme') || 'light';
             const isAdmin = currentUser && currentUser.uid === ADMIN_UID;
+            
+            const userAvatarUrl = getProfileAvatarUrl(currentUserData);
+            const userName = currentUserData?.name || 'User';
+            const userEmail = currentUserData?.email || '';
+            const profileCardHtml = `
+                <div class="flex items-center gap-4 bg-white dark:bg-gray-800 p-5 rounded-2xl shadow-md border border-gray-150 dark:border-gray-700 text-left">
+                    <img src="${escapeHtml(userAvatarUrl)}" class="h-16 w-16 rounded-2xl border border-gray-200 dark:border-gray-750 shrink-0 bg-white p-1" alt="Profile Photo">
+                    <div class="min-w-0 flex-1">
+                        <h3 class="text-lg font-black text-gray-900 dark:text-white truncate">${escapeHtml(userName)}</h3>
+                        <p class="text-xs text-gray-500 dark:text-gray-400 truncate mt-0.5">${escapeHtml(userEmail)}</p>
+                        <span class="inline-flex items-center gap-1 rounded-full bg-blue-50 dark:bg-blue-900/30 px-2.5 py-0.5 text-[9px] font-black text-blue-600 dark:text-blue-300 uppercase mt-2">
+                            ${isAdmin ? 'ADMIN' : 'MEMBER'}
+                        </span>
+                    </div>
+                </div>`;
+
             const content = `
                 ${getPageHeader('Setting', { showBack: false })}
                 <div class="max-w-lg mx-auto space-y-4">
+                    ${profileCardHtml}
                     <div class="bg-white dark:bg-gray-800 p-5 rounded-2xl shadow-md border border-gray-100 dark:border-gray-700 space-y-3">
                         ${renderSettingAction('settings-profile-btn', 'My Profile', 'https://cdn-icons-png.flaticon.com/512/3135/3135715.png', 'blue')}
                         ${renderSettingAction('settings-track-income-btn', 'Track Income', 'https://cdn-icons-png.flaticon.com/512/3135/3135706.png', 'emerald')}
@@ -17392,10 +17538,12 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                     paymentDetails = { email };
                     break;
             }
+            const profilePhoto = document.getElementById('profile-avatar-url')?.value || '';
             const profileUpdate = {
                 name: newName,
                 mobile: newMobile,
                 phoneNumber: newMobile,
+                profilePhoto: profilePhoto || currentUserData?.profilePhoto || '',
                 paymentMethod: paymentMethod,
                 paymentDetails: paymentMethod ? paymentDetails : getProfilePaymentDetails(currentUserData?.paymentMethod || '')
             };
@@ -17466,15 +17614,15 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                 !!party.appLogo ||
                 isReviewsWorldName(party.name || '') ||
                 /admin wallet|rw wallet|digital wallet/i.test(`${party.detail || ''} ${party.name || ''}`);
-            const renderTransactionAvatar = (name, forceAppLogo = false, logoUrl = '') => logoUrl ? `
+            const renderTransactionAvatar = (name, forceAppLogo = false, logoUrl = '', userProfile = null) => logoUrl ? `
                 <div class="w-10 h-10 bg-white dark:bg-gray-700 rounded-full flex items-center justify-center shadow-inner shrink-0 border border-gray-100 dark:border-gray-600 p-1.5">
                     <img src="${logoUrl}" class="w-full h-full object-contain rounded-full" alt="${name}" loading="eager">
                 </div>` : (forceAppLogo || isReviewsWorldName(name)) ? `
                 <div class="shrink-0">
                     <img src="${rwLogoUrl}" class="w-10 h-10 rounded-full border-2 border-gray-100 dark:border-gray-700 shadow-sm object-cover" alt="Reviews World Logo" loading="eager" fetchpriority="high" decoding="sync">
                 </div>` : `
-                <div class="w-10 h-10 bg-purple-100 dark:bg-purple-900/30 rounded-full flex items-center justify-center text-purple-600 dark:text-purple-400 font-bold text-base shadow-inner shrink-0">
-                    ${getInitials(name)}
+                <div class="shrink-0">
+                    <img src="${getProfileAvatarUrl(userProfile || findUserProfile({ name }))}" class="w-10 h-10 rounded-full border border-gray-250 dark:border-gray-700 shadow-sm object-cover bg-white dark:bg-gray-800" alt="${name}" loading="eager">
                 </div>`;
             const findUserProfile = ({ name = '', mobile = '' } = {}) => {
                 const candidates = [
@@ -17657,7 +17805,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                                         </div>
                                         ${fromParty.detail ? `<p class="text-xs text-gray-400 font-mono truncate">${fromParty.detail}</p>` : ''}
                                     </div>
-                                    ${renderTransactionAvatar(fromParty.name, fromParty.appLogo, fromParty.logoUrl)}
+                                    ${renderTransactionAvatar(fromParty.name, fromParty.appLogo, fromParty.logoUrl, isCredit ? senderProfile : viewedUser)}
                                 </div>
 
                                 <!-- My Account -->
@@ -17670,7 +17818,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                                         </div>
                                         ${toParty.detail ? `<p class="text-xs text-gray-400 font-mono truncate">${toParty.detail}</p>` : ''}
                                     </div>
-                                    ${renderTransactionAvatar(toParty.name, toParty.appLogo, toParty.logoUrl)}
+                                    ${renderTransactionAvatar(toParty.name, toParty.appLogo, toParty.logoUrl, isCredit ? viewedUser : recipientProfile)}
                                 </div>
                             </div>
 
