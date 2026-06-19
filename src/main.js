@@ -2630,6 +2630,8 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             userTaskSubmissionIds = new Set();
             userTaskTodaySubmissionIds = new Set();
             userTaskParticipationLoadedFor = '';
+            userTaskHistoryCache = [];
+            userTaskHistoryLoading = false;
             activeTaskReservation = null;
             if (activeTaskReservationTimer) {
                 clearInterval(activeTaskReservationTimer);
@@ -2872,6 +2874,9 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                     preloadSupportChatForUser(userId).catch(e => logBackgroundSkip('Support chat preload skipped', e));
                     preloadNotificationsForUser(userId).catch(e => logBackgroundSkip('Notification preload skipped', e));
                     preloadUserTaskParticipation(userId).catch(e => logBackgroundSkip('Task participation preload skipped', e));
+                    if (userId !== ADMIN_UID && userTaskHistoryCache.length === 0 && !userTaskHistoryLoading) {
+                        loadUserTaskHistory().catch(e => console.error("Prefetch user task history failed:", e));
+                    }
                     const now = Date.now();
                     if (now - lastAutoProcessCheckAt > 60000) {
                         lastAutoProcessCheckAt = now;
@@ -3546,13 +3551,33 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             console.log("Initializing admin data...");
             hydrateAdminDashboardMetricsFromCache();
             hydrateAdminUsersFromCache();
-            initializeAdminUsersRealtime();
-            initializeAdminFundRequestsRealtime();
-            initializeAdminSecondaryRealtime();
-            refreshAdminDashboardCaches().catch(error => console.error("Admin data refresh failed:", error));
+
+            // Defer heavy database listeners and refreshes to unblock UI thread
+            setTimeout(() => {
+                try {
+                    initializeAdminUsersRealtime();
+                } catch (e) { console.error("Error starting users realtime:", e); }
+            }, 300);
+
+            setTimeout(() => {
+                try {
+                    initializeAdminFundRequestsRealtime();
+                } catch (e) { console.error("Error starting fund requests realtime:", e); }
+            }, 600);
+
+            setTimeout(() => {
+                try {
+                    initializeAdminSecondaryRealtime();
+                } catch (e) { console.error("Error starting secondary realtime:", e); }
+            }, 900);
+
+            setTimeout(() => {
+                refreshAdminDashboardCaches().catch(error => console.error("Admin data refresh failed:", error));
+            }, 1500);
+
             setTimeout(() => {
                 loadAdminChatsFromBackend({ silent: true }).catch(error => console.warn("Admin: Cloudflare support chat warmup skipped:", error));
-            }, 1200);
+            }, 2500);
         };
 
         // --- FULL PAGE RENDERERS ---
@@ -4055,6 +4080,9 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                 ${getPageFooter()}`;
 
             showPage(content, { returnTo: 'settings', keepBottomNav: true });
+            if (userTaskHistoryCache && userTaskHistoryCache.length > 0) {
+                renderUserTaskHistory();
+            }
             loadUserTaskHistory();
 
             document.getElementById('user-task-history-filter').onchange = renderUserTaskHistory;
@@ -4301,7 +4329,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                         <div class="relative overflow-hidden rounded-xl bg-gray-50 dark:bg-gray-950 flex items-center justify-center py-2">
                             ${blinkingTag}
                             ${navigationHtml}
-                            <img src="${escapeHtml(s.screenshot_url)}" alt="Screenshot Proof" class="h-32 w-20 rounded-lg border border-gray-200 dark:border-gray-750 object-cover cursor-zoom-in hover:scale-102 transition shadow-sm" onclick="window.showScreenshotLightbox('${escapeHtml(s.screenshot_url)}', '${escapeHtml(s.screenshot_view_url || '')}')">
+                            <img id="user-detail-screenshot-img" src="${escapeHtml(s.screenshot_url)}" alt="Screenshot Proof" class="h-32 w-20 rounded-lg border border-gray-200 dark:border-gray-750 object-cover cursor-zoom-in hover:scale-102 transition shadow-sm">
                         </div>
                         <div class="mt-2 flex justify-between items-center text-[10px] text-gray-400">
                             <span>Click image to expand</span>
@@ -4349,6 +4377,12 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             `;
 
             showPage(detailContent, { returnTo: 'task-history', keepBottomNav: true, onBack: showUserTaskHistoryPage });
+            const userScreenshotImg = document.getElementById('user-detail-screenshot-img');
+            if (userScreenshotImg) {
+                userScreenshotImg.onclick = () => {
+                    window.showScreenshotLightbox(s.screenshot_url, s.screenshot_view_url || '');
+                };
+            }
         };
 
         let userLiveListsCache = [];
@@ -4467,7 +4501,6 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                     </button>
                     <img src="${url}" class="max-w-full max-h-[80vh] rounded-2xl shadow-2xl object-contain border border-gray-800">
                     <div class="mt-4 flex gap-2">
-                        <a href="${url}" target="_blank" class="rounded-xl bg-white/20 px-4 py-2.5 text-xs font-bold text-white hover:bg-white/30 transition">Open Original ↗</a>
                         <button onclick="this.closest('#fullscreen-ss-overlay').remove()" class="rounded-xl bg-red-600 px-4 py-2.5 text-xs font-bold text-white hover:bg-red-700 transition">Close ✕</button>
                     </div>
                 </div>`;
@@ -7523,7 +7556,6 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                     <img src="${url}" alt="Screenshot Zoom" class="max-w-full max-h-[85vh] object-contain rounded-xl border border-gray-800 shadow-2xl transition-transform duration-300 hover:scale-[1.01]">
                 </div>
                 <div class="mt-4 flex items-center gap-3 bg-gray-900/85 px-4 py-2.5 rounded-2xl border border-gray-800 backdrop-blur-md">
-                    <a href="${url}" target="_blank" class="rounded-xl bg-orange-600 px-4 py-2 text-xs font-black text-white hover:bg-orange-700 transition">🌐 Open Original</a>
                     ${driveUrl ? `<a href="${driveUrl}" target="_blank" class="rounded-xl bg-blue-600 px-4 py-2 text-xs font-black text-white hover:bg-blue-700 transition">📁 Open in Drive</a>` : ''}
                     <button id="lightbox-close-btn" class="rounded-xl bg-gray-700 px-4 py-2 text-xs font-black text-white hover:bg-gray-650 transition">✕ Close</button>
                 </div>
@@ -7848,7 +7880,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
 
                     <!-- Left: Image -->
                     <div class="flex-1 bg-gray-950 flex items-center justify-center p-4 relative min-h-[40vh] md:min-h-0 max-h-[50vh] md:max-h-none overflow-hidden select-none">
-                        <img src="${escapeHtml(s.screenshot_url)}" alt="Screenshot" class="max-w-full max-h-[45vh] md:max-h-[75vh] object-contain rounded-xl border border-gray-800 shadow-lg cursor-zoom-in" onclick="window.showScreenshotLightbox('${escapeHtml(s.screenshot_url)}', '${escapeHtml(s.view_url || s.screenshot_view_url || '')}')">
+                        <img id="admin-detail-screenshot-img" src="${escapeHtml(s.screenshot_url)}" alt="Screenshot" class="max-w-full max-h-[45vh] md:max-h-[75vh] object-contain rounded-xl border border-gray-800 shadow-lg cursor-zoom-in">
                     </div>
 
                     <!-- Right: Info Panel -->
@@ -7918,6 +7950,14 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             `;
 
             document.body.appendChild(modal);
+
+            // Bind image lightbox
+            const screenshotImg = document.getElementById('admin-detail-screenshot-img');
+            if (screenshotImg) {
+                screenshotImg.onclick = () => {
+                    window.showScreenshotLightbox(s.screenshot_url, s.view_url || s.screenshot_view_url || '');
+                };
+            }
 
             // Close actions
             const closeModal = () => {
