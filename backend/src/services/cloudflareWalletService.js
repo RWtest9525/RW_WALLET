@@ -2869,26 +2869,26 @@ ${memoriesContext}`
       limit: Math.min(Number(req.query.limit || 200), 500)
     });
 
-    for (const s of submissions) {
-      if (s.task_id) {
-        if (taskLogoCache[s.task_id] === undefined) {
-          try {
-            const taskDoc = await db.doc(`artifacts/digital-wallet-prod/public/data/tasks/${s.task_id}`).get();
-            if (taskDoc.exists) {
-              const taskData = taskDoc.data();
-              taskLogoCache[s.task_id] = taskData.imageUrl || taskData.logoUrl || taskData.iconUrl || '';
-            } else {
-              taskLogoCache[s.task_id] = '';
-            }
-          } catch (err) {
-            console.warn(`[Admin-Submissions] Failed to load task logo for ${s.task_id}:`, err.message);
-            taskLogoCache[s.task_id] = '';
+    const missingTaskIds = [...new Set(submissions.map(s => s.task_id).filter(id => id && taskLogoCache[id] === undefined))];
+    if (missingTaskIds.length > 0) {
+      await Promise.all(missingTaskIds.map(async (taskId) => {
+        try {
+          const taskDoc = await db.doc(`artifacts/digital-wallet-prod/public/data/tasks/${taskId}`).get();
+          if (taskDoc.exists) {
+            const taskData = taskDoc.data();
+            taskLogoCache[taskId] = taskData.imageUrl || taskData.logoUrl || taskData.iconUrl || '';
+          } else {
+            taskLogoCache[taskId] = '';
           }
+        } catch (err) {
+          console.warn(`[Admin-Submissions] Failed to load task logo for ${taskId}:`, err.message);
+          taskLogoCache[taskId] = '';
         }
-        s.app_logo_url = taskLogoCache[s.task_id] || '';
-      } else {
-        s.app_logo_url = '';
-      }
+      }));
+    }
+
+    for (const s of submissions) {
+      s.app_logo_url = s.task_id ? (taskLogoCache[s.task_id] || '') : '';
     }
 
     res.json({ ok: true, submissions });
@@ -3360,10 +3360,34 @@ ${memoriesContext}`
   // User submissions history
   app.get('/api/task-submissions', requireHttpAuth, async (req, res) => {
     try {
+      const db = admin.firestore();
       const submissions = await listTaskSubmissions(d1, {
         userId: req.auth.sub,
         limit: Math.min(Number(req.query.limit || 100), 300)
       });
+
+      const missingTaskIds = [...new Set(submissions.map(s => s.task_id).filter(id => id && taskLogoCache[id] === undefined))];
+      if (missingTaskIds.length > 0) {
+        await Promise.all(missingTaskIds.map(async (taskId) => {
+          try {
+            const taskDoc = await db.doc(`artifacts/digital-wallet-prod/public/data/tasks/${taskId}`).get();
+            if (taskDoc.exists) {
+              const taskData = taskDoc.data();
+              taskLogoCache[taskId] = taskData.imageUrl || taskData.logoUrl || taskData.iconUrl || '';
+            } else {
+              taskLogoCache[taskId] = '';
+            }
+          } catch (err) {
+            console.warn(`[User-Submissions] Failed to load task logo for ${taskId}:`, err.message);
+            taskLogoCache[taskId] = '';
+          }
+        }));
+      }
+
+      for (const s of submissions) {
+        s.app_logo_url = s.task_id ? (taskLogoCache[s.task_id] || '') : '';
+      }
+
       res.json({ ok: true, submissions });
     } catch (error) {
       console.error('List user submissions failed:', error);
