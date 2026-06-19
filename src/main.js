@@ -116,11 +116,15 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
 
                     if (fcmToken) {
                         console.log('FCM Token generated:', fcmToken);
-                        const userDocRef = doc(db, `artifacts/${appId}/public/data/users`, userId);
-                        await updateDoc(userDocRef, {
-                            fcmToken: fcmToken,
-                            fcmTokenUpdatedAt: serverTimestamp()
-                        }).catch(err => console.warn('Failed to update user FCM Token in DB:', err));
+                        if (currentUserData && currentUserData.fcmToken === fcmToken) {
+                            console.log('FCM Token is already up-to-date in DB.');
+                        } else {
+                            const userDocRef = doc(db, `artifacts/${appId}/public/data/users`, userId);
+                            await updateDoc(userDocRef, {
+                                fcmToken: fcmToken,
+                                fcmTokenUpdatedAt: serverTimestamp()
+                            }).catch(err => console.warn('Failed to update user FCM Token in DB:', err));
+                        }
                     } else {
                         console.log('No FCM registration token available.');
                     }
@@ -224,6 +228,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
         let adminMaintenanceInterval = null;
         let maintenanceGateActive = false;
         let whatsNewPopupVisible = false;
+        let pushNotificationsInitialized = false;
 
         const unsubscribers = [];
 
@@ -2722,6 +2727,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             adminNotificationsCache = [];
             adminNotificationSelectedUsers = [];
             adminUsersRealtimeStarted = false;
+            pushNotificationsInitialized = false;
             adminFundRequestsRealtimeStarted = false;
             adminSecondaryRealtimeStarted = false;
             publicHomeRealtimeStarted = false;
@@ -2935,7 +2941,10 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                     if (userId !== ADMIN_UID && userTaskHistoryCache.length === 0 && !userTaskHistoryLoading) {
                         loadUserTaskHistory().catch(e => console.error("Prefetch user task history failed:", e));
                     }
-                    initializePushNotifications(userId).catch(e => console.warn('FCM Warmup failed:', e));
+                    if (!pushNotificationsInitialized) {
+                        pushNotificationsInitialized = true;
+                        initializePushNotifications(userId).catch(e => console.warn('FCM Warmup failed:', e));
+                    }
                     const now = Date.now();
                     if (now - lastAutoProcessCheckAt > 60000) {
                         lastAutoProcessCheckAt = now;
