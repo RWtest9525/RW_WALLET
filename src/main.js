@@ -4806,10 +4806,12 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                             </div>
                             <span class="rounded-2xl px-4 py-2 text-xs font-extrabold ${active ? 'bg-red-500 text-white' : 'bg-emerald-400 text-slate-950'}">${active ? 'LIVE' : 'OPEN'}</span>
                         </div>
+                        ${active ? `
                         <div class="mt-5 rounded-2xl border border-white/15 bg-white/10 px-4 py-3">
-                            <p class="text-xs font-extrabold uppercase text-cyan-100/75" id="admin-maintenance-timer-label">${active ? 'Remaining Time' : 'Selected Duration'}</p>
+                            <p class="text-xs font-extrabold uppercase text-cyan-100/75" id="admin-maintenance-timer-label">Remaining Time</p>
                             <p class="mt-1 text-3xl font-extrabold tabular-nums" id="admin-maintenance-timer-val">${durationValue}</p>
                         </div>
+                        ` : ''}
                     </div>
                     <button id="maintenance-configure-btn" class="w-full rounded-2xl bg-white dark:bg-gray-800 border border-gray-150 dark:border-gray-700 py-3.5 px-4 font-extrabold text-sm text-gray-800 dark:text-white flex items-center justify-between gap-2 shadow-sm hover:scale-[1.01] active:scale-[0.99] transition select-none">
                         <span class="flex items-center gap-2">⚙️ Configure Maintenance Settings</span>
