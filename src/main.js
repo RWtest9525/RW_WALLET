@@ -163,6 +163,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
         let notificationTimeout;
         let appConfigCache = {};
         let maintenanceCountdownTimer = null;
+        let adminMaintenanceInterval = null;
         let maintenanceGateActive = false;
         let whatsNewPopupVisible = false;
 
@@ -2076,6 +2077,10 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
         };
 
         const showPage = (content, options = {}) => {
+            if (adminMaintenanceInterval) {
+                clearInterval(adminMaintenanceInterval);
+                adminMaintenanceInterval = null;
+            }
             lastManualPageOpenAt = Date.now();
             document.getElementById('dashboard-content').classList.add('hidden');
             const pageContainer = document.getElementById('page-container');
@@ -2106,6 +2111,10 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
         };
 
         const hidePage = () => {
+            if (adminMaintenanceInterval) {
+                clearInterval(adminMaintenanceInterval);
+                adminMaintenanceInterval = null;
+            }
             if (activeChatUnsubscribe) {
                 activeChatUnsubscribe();
                 activeChatUnsubscribe = null;
@@ -4547,6 +4556,20 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                     </div>
                 </div>`;
             document.body.appendChild(overlay);
+
+            // Record view in Firestore so admin can track it
+            try {
+                const seenDocRef = doc(db, `artifacts/${appId}/public/data/whats_new_seen/${id}/users`, currentUser.uid);
+                setDoc(seenDocRef, {
+                    userId: currentUser.uid,
+                    name: currentUserData?.name || currentUser.displayName || 'Unknown User',
+                    mobile: currentUserData?.mobile || 'No mobile',
+                    seenAt: serverTimestamp()
+                }, { merge: true }).catch(err => console.warn('whats_new_seen setDoc error:', err));
+            } catch (e) {
+                console.warn("Failed to record What's New view in Firestore:", e);
+            }
+
             whatsNewPopupVisible = true;
         };
 
@@ -4574,8 +4597,8 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                             <span class="rounded-2xl px-4 py-2 text-xs font-extrabold ${active ? 'bg-red-500 text-white' : 'bg-emerald-400 text-slate-950'}">${active ? 'LIVE' : 'OPEN'}</span>
                         </div>
                         <div class="mt-5 rounded-2xl border border-white/15 bg-white/10 px-4 py-3">
-                            <p class="text-xs font-extrabold uppercase text-cyan-100/75">Selected Duration</p>
-                            <p class="mt-1 text-3xl font-extrabold tabular-nums">${durationValue}</p>
+                            <p class="text-xs font-extrabold uppercase text-cyan-100/75" id="admin-maintenance-timer-label">${active ? 'Remaining Time' : 'Selected Duration'}</p>
+                            <p class="mt-1 text-3xl font-extrabold tabular-nums" id="admin-maintenance-timer-val">${durationValue}</p>
                         </div>
                     </div>
                     <div class="rounded-2xl bg-white dark:bg-gray-800 p-5 shadow-md border border-gray-100 dark:border-gray-700 space-y-4">
@@ -4603,7 +4626,41 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                         <button id="maintenance-save-btn" class="rounded-2xl bg-blue-600 px-4 py-4 font-extrabold text-white shadow-lg shadow-blue-200 dark:shadow-none">${active ? 'Update Timer' : 'Start Maintenance'}</button>
                     </div>
                 </div>
-                ${getPageFooter()}`, { returnTo: parentSection, keepBottomNav: true, onBack: handleBack });
+                ${getPageFooter()}`, {
+                returnTo: parentSection,
+                keepBottomNav: true,
+                onBack: () => {
+                    if (adminMaintenanceInterval) {
+                        clearInterval(adminMaintenanceInterval);
+                        adminMaintenanceInterval = null;
+                    }
+                    handleBack();
+                }
+            });
+
+            if (adminMaintenanceInterval) {
+                clearInterval(adminMaintenanceInterval);
+                adminMaintenanceInterval = null;
+            }
+
+            if (active && endMillis) {
+                adminMaintenanceInterval = setInterval(() => {
+                    const diff = endMillis - Date.now();
+                    if (diff <= 0) {
+                        clearInterval(adminMaintenanceInterval);
+                        adminMaintenanceInterval = null;
+                        appConfigCache = { ...appConfigCache, maintenanceEnabled: false, maintenanceEndsAt: null, maintenanceEndsAtMillis: 0 };
+                        rememberAppConfig(appConfigCache);
+                        applyMaintenanceMode();
+                        showMaintenanceSettingsPage();
+                        return;
+                    }
+                    const valEl = document.getElementById('admin-maintenance-timer-val');
+                    if (valEl) {
+                        valEl.textContent = formatMaintenanceCountdown(diff);
+                    }
+                }, 1000);
+            }
 
             const durationInput = document.getElementById('maintenance-duration-input');
             durationInput?.addEventListener('blur', () => {
@@ -4729,12 +4786,83 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                             <p class="mt-2 text-xs text-gray-500 dark:text-gray-400">Saving creates a new update ID, so every user will see it once. After they close it, it will not repeat until you save another update.</p>
                         </div>
                     </div>
+                    
+                    <!-- User Seen Status Section -->
+                    <div class="rounded-2xl border border-gray-100 bg-white p-5 shadow-md dark:border-gray-700 dark:bg-gray-800">
+                        <div class="flex items-center justify-between">
+                            <div>
+                                <h4 class="text-sm font-black text-gray-850 dark:text-white">Seen Status</h4>
+                                <p class="text-[11px] text-gray-450 mt-0.5">Users who opened the app and saw this update.</p>
+                            </div>
+                            <button id="whats-new-seen-btn" class="rounded-xl bg-orange-100 dark:bg-orange-950/40 px-3.5 py-2 text-xs font-black text-orange-600 dark:text-orange-300 hover:bg-orange-200 transition">
+                                👥 View Users (Loading...)
+                            </button>
+                        </div>
+                        <div id="whats-new-seen-list-container" class="mt-4 hidden border-t border-gray-100 dark:border-gray-750 pt-4 max-h-60 overflow-y-auto space-y-2">
+                            <p class="text-center text-xs text-gray-400 py-4">Loading users...</p>
+                        </div>
+                    </div>
+
                     <div class="grid grid-cols-2 gap-3">
-                        <button id="whats-new-disable-btn" class="rounded-2xl bg-gray-100 px-4 py-4 font-black text-gray-700 dark:bg-gray-700 dark:text-gray-100">Turn Off</button>
+                        <button id="whats-new-disable-btn" class="rounded-2xl bg-gray-100 dark:bg-gray-700 px-4 py-4 font-black text-gray-700 dark:bg-gray-700 dark:text-gray-100">Turn Off</button>
                         <button id="whats-new-save-btn" class="rounded-2xl bg-indigo-600 px-4 py-4 font-black text-white shadow-lg shadow-indigo-200 dark:shadow-none">Save & Show</button>
                     </div>
                 </div>
                 ${getPageFooter()}`, { returnTo: parentSection, keepBottomNav: true, onBack: handleBack });
+
+            // Load Seen Users Async
+            const loadWhatsNewSeenUsers = async () => {
+                const id = getWhatsNewId(appConfigCache);
+                const btn = document.getElementById('whats-new-seen-btn');
+                const container = document.getElementById('whats-new-seen-list-container');
+                if (!id) {
+                    if (btn) btn.textContent = '👥 View Users (0)';
+                    if (container) container.innerHTML = '<p class="text-center text-xs text-gray-400 py-4">No update configured.</p>';
+                    return;
+                }
+                try {
+                    const snap = await getDocs(query(
+                        collection(db, `artifacts/${appId}/public/data/whats_new_seen/${id}/users`),
+                        orderBy('seenAt', 'desc')
+                    ));
+                    const users = snap.docs.map(doc => doc.data());
+                    const count = users.length;
+                    if (btn) {
+                        btn.textContent = `👥 View Users (${count})`;
+                    }
+                    if (container) {
+                        if (count === 0) {
+                            container.innerHTML = `<p class="text-center text-xs text-gray-400 py-4">No users have seen this update yet.</p>`;
+                        } else {
+                            container.innerHTML = users.map(u => {
+                                const time = u.seenAt ? new Date(timestampToMillis(u.seenAt)).toLocaleString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }) : 'Unknown';
+                                return `
+                                    <div class="flex items-center justify-between text-xs bg-gray-50/70 dark:bg-gray-900/30 p-2.5 rounded-xl border border-gray-100 dark:border-gray-750">
+                                        <div>
+                                            <p class="font-extrabold text-gray-800 dark:text-white">${escapeHtml(u.name || 'Unknown User')}</p>
+                                            <p class="text-[10px] text-orange-500 font-bold mt-0.5">📱 ${escapeHtml(u.mobile || 'No mobile')}</p>
+                                        </div>
+                                        <span class="text-[9px] text-gray-400 font-semibold">${time}</span>
+                                    </div>
+                                `;
+                            }).join('');
+                        }
+                    }
+                } catch (err) {
+                    console.error("Failed to load seen users:", err);
+                    if (btn) btn.textContent = '👥 View Users (Error)';
+                    if (container) container.innerHTML = '<p class="text-center text-xs text-red-500 py-4">Error loading users.</p>';
+                }
+            };
+
+            loadWhatsNewSeenUsers();
+
+            document.getElementById('whats-new-seen-btn')?.addEventListener('click', () => {
+                const container = document.getElementById('whats-new-seen-list-container');
+                if (container) {
+                    container.classList.toggle('hidden');
+                }
+            });
 
             document.getElementById('whats-new-save-btn')?.addEventListener('click', handleSaveWhatsNewSettings);
             document.getElementById('whats-new-disable-btn')?.addEventListener('click', handleDisableWhatsNew);
