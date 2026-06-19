@@ -244,8 +244,21 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             showNotification(friendlyErrorMessage(fallback), true);
         };
 
+        const PREMIUM_AVATARS = [
+            'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=150&h=150&q=80', // Boy 1
+            'https://images.unsplash.com/photo-1570295999919-56ceb5ecca61?auto=format&fit=crop&w=150&h=150&q=80', // Boy 2
+            'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=150&h=150&q=80', // Boy 3
+            'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=150&h=150&q=80', // Boy 4
+            'https://images.unsplash.com/photo-1522075469751-3a6694fb2f61?auto=format&fit=crop&w=150&h=150&q=80', // Boy 5
+            'https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=150&h=150&q=80', // Girl 1
+            'https://images.unsplash.com/photo-1438761681033-6461ffad8d80?auto=format&fit=crop&w=150&h=150&q=80', // Girl 2
+            'https://images.unsplash.com/photo-1544005313-94ddf0286df2?auto=format&fit=crop&w=150&h=150&q=80', // Girl 3
+            'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=150&h=150&q=80', // Girl 4
+            'https://images.unsplash.com/photo-1517841905240-472988babdf9?auto=format&fit=crop&w=150&h=150&q=80'  // Girl 5
+        ];
+
         const getProfileAvatarUrl = (user) => {
-            if (!user) return 'https://api.dicebear.com/7.x/adventurer/svg?seed=Felix';
+            if (!user) return PREMIUM_AVATARS[0];
             
             // 1. Admin always uses the app logo
             const uId = user.uid || user.id || '';
@@ -275,23 +288,11 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                              name.endsWith('a') || name.endsWith('i') || name.endsWith('ee') || name.endsWith('ya') || name.endsWith('y');
             
             if (isFemale) {
-                const femaleAvatars = [
-                    'https://api.dicebear.com/7.x/adventurer/svg?seed=Lily',
-                    'https://api.dicebear.com/7.x/adventurer/svg?seed=Sasha',
-                    'https://api.dicebear.com/7.x/adventurer/svg?seed=Zoe',
-                    'https://api.dicebear.com/7.x/adventurer/svg?seed=Mimi',
-                    'https://api.dicebear.com/7.x/adventurer/svg?seed=Patches'
-                ];
+                const femaleAvatars = PREMIUM_AVATARS.slice(5, 10);
                 const charSum = [...name].reduce((sum, char) => sum + char.charCodeAt(0), 0);
                 return femaleAvatars[charSum % femaleAvatars.length];
             } else {
-                const maleAvatars = [
-                    'https://api.dicebear.com/7.x/adventurer/svg?seed=Felix',
-                    'https://api.dicebear.com/7.x/adventurer/svg?seed=Jack',
-                    'https://api.dicebear.com/7.x/adventurer/svg?seed=Scooter',
-                    'https://api.dicebear.com/7.x/adventurer/svg?seed=Oliver',
-                    'https://api.dicebear.com/7.x/adventurer/svg?seed=Buster'
-                ];
+                const maleAvatars = PREMIUM_AVATARS.slice(0, 5);
                 const charSum = [...name].reduce((sum, char) => sum + char.charCodeAt(0), 0);
                 return maleAvatars[charSum % maleAvatars.length];
             }
@@ -3921,34 +3922,21 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             const activePaymentMethod = focusMethod || normalizeProfilePaymentMethod(currentUserData);
 
             const currentAvatar = getProfileAvatarUrl(currentUserData);
-            const availableAvatars = [
-                { url: 'https://api.dicebear.com/7.x/adventurer/svg?seed=Felix', label: 'Boy 1' },
-                { url: 'https://api.dicebear.com/7.x/adventurer/svg?seed=Jack', label: 'Boy 2' },
-                { url: 'https://api.dicebear.com/7.x/adventurer/svg?seed=Scooter', label: 'Boy 3' },
-                { url: 'https://api.dicebear.com/7.x/adventurer/svg?seed=Oliver', label: 'Boy 4' },
-                { url: 'https://api.dicebear.com/7.x/adventurer/svg?seed=Buster', label: 'Boy 5' },
-                { url: 'https://api.dicebear.com/7.x/adventurer/svg?seed=Lily', label: 'Girl 1' },
-                { url: 'https://api.dicebear.com/7.x/adventurer/svg?seed=Sasha', label: 'Girl 2' },
-                { url: 'https://api.dicebear.com/7.x/adventurer/svg?seed=Zoe', label: 'Girl 3' },
-                { url: 'https://api.dicebear.com/7.x/adventurer/svg?seed=Mimi', label: 'Girl 4' },
-                { url: 'https://api.dicebear.com/7.x/adventurer/svg?seed=Patches', label: 'Girl 5' }
-            ];
 
             let avatarGridHtml = '';
             if (!isAdminProfile) {
                 avatarGridHtml = `
-                <div class="bg-gray-50 dark:bg-gray-900/60 p-4 rounded-2xl border border-gray-150 dark:border-gray-800 space-y-3 text-left">
-                    <p class="text-xs font-black uppercase text-gray-400 tracking-wider">Choose Profile Avatar</p>
-                    <div class="grid grid-cols-5 gap-2">
-                        ${availableAvatars.map(av => {
-                            const isSelected = av.url === currentAvatar;
-                            return `
-                            <div class="avatar-select-option relative cursor-pointer aspect-square rounded-xl overflow-hidden border-2 ${isSelected ? 'border-orange-500 bg-orange-50 dark:bg-orange-950/40' : 'border-transparent bg-gray-100 dark:bg-gray-700 hover:border-gray-300'} p-1 transition" data-avatar-url="${escapeHtml(av.url)}">
-                                <img src="${escapeHtml(av.url)}" alt="${escapeHtml(av.label)}" class="w-full h-full object-contain">
-                                ${isSelected ? '<div class="absolute bottom-0.5 right-0.5 h-3.5 w-3.5 bg-orange-500 rounded-full flex items-center justify-center text-[8px] font-black text-white">✓</div>' : ''}
-                            </div>`;
-                        }).join('')}
+                <div class="flex flex-col items-center justify-center py-4 bg-gray-50 dark:bg-gray-900/60 rounded-2xl border border-gray-150 dark:border-gray-800">
+                    <div class="relative cursor-pointer group" id="profile-avatar-trigger-btn">
+                        <img id="profile-avatar-preview" src="${escapeHtml(currentAvatar)}" class="h-24 w-24 rounded-full border-4 border-white dark:border-gray-700 shadow-md object-cover bg-white">
+                        <div class="absolute inset-0 bg-black/40 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition duration-200">
+                            <span class="text-[10px] font-black text-white uppercase tracking-wider">Change</span>
+                        </div>
+                        <div class="absolute bottom-0 right-0 bg-blue-600 rounded-full p-2 text-white shadow-sm border border-white dark:border-gray-700">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"></path><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"></path></svg>
+                        </div>
                     </div>
+                    <p class="mt-2 text-xs font-semibold text-gray-500 dark:text-gray-400">Tap photo to choose avatar</p>
                     <input type="hidden" id="profile-avatar-url" value="${escapeHtml(currentAvatar)}">
                 </div>`;
             } else {
@@ -4051,26 +4039,41 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             document.getElementById('save-profile-btn').onclick = handleUpdateProfile;
 
             if (!isAdminProfile) {
-                const options = document.querySelectorAll('.avatar-select-option');
-                options.forEach(opt => {
-                    opt.onclick = () => {
-                        const chosenUrl = opt.getAttribute('data-avatar-url');
-                        const inputEl = document.getElementById('profile-avatar-url');
-                        if (inputEl) inputEl.value = chosenUrl;
-                        
-                        options.forEach(o => {
-                            o.className = o.className.replace('border-orange-500 bg-orange-50 dark:bg-orange-950/40', 'border-transparent bg-gray-100 dark:bg-gray-700 hover:border-gray-300');
-                            const check = o.querySelector('div');
-                            if (check) check.remove();
+                const triggerBtn = document.getElementById('profile-avatar-trigger-btn');
+                if (triggerBtn) {
+                    triggerBtn.onclick = () => {
+                        const activeAvatar = document.getElementById('profile-avatar-url').value;
+                        const modalGridHtml = `
+                            <div class="space-y-4">
+                                <p class="text-xs font-black uppercase text-gray-400 tracking-wider">Select Profile Photo</p>
+                                <div class="grid grid-cols-5 gap-2.5">
+                                    ${PREMIUM_AVATARS.map((url, idx) => {
+                                        const isSelected = url === activeAvatar;
+                                        return `
+                                        <div class="avatar-modal-option relative cursor-pointer aspect-square rounded-2xl overflow-hidden border-2 ${isSelected ? 'border-orange-500 ring-2 ring-orange-500/20 bg-orange-50 dark:bg-orange-950/20' : 'border-gray-200 dark:border-gray-700 hover:border-gray-400'} p-0.5 transition duration-200" data-avatar-url="${escapeHtml(url)}">
+                                            <img src="${escapeHtml(url)}" alt="Avatar ${idx + 1}" class="w-full h-full object-cover rounded-xl bg-gray-50">
+                                            ${isSelected ? '<div class="absolute bottom-1 right-1 h-4 w-4 bg-orange-500 rounded-full flex items-center justify-center text-[9px] font-black text-white">✓</div>' : ''}
+                                        </div>`;
+                                    }).join('')}
+                                </div>
+                            </div>
+                        `;
+                        renderModal('Choose Avatar', modalGridHtml, `
+                            <button onclick="window.closeModal()" class="w-full rounded-xl bg-gray-100 dark:bg-gray-700 py-3 text-sm font-extrabold text-gray-700 dark:text-gray-200">Cancel</button>
+                        `, 'max-w-md');
+
+                        document.querySelectorAll('.avatar-modal-option').forEach(opt => {
+                            opt.onclick = () => {
+                                const chosenUrl = opt.getAttribute('data-avatar-url');
+                                const urlInput = document.getElementById('profile-avatar-url');
+                                const previewImg = document.getElementById('profile-avatar-preview');
+                                if (urlInput) urlInput.value = chosenUrl;
+                                if (previewImg) previewImg.src = chosenUrl;
+                                window.closeModal();
+                            };
                         });
-                        
-                        opt.className = opt.className.replace('border-transparent bg-gray-100 dark:bg-gray-700 hover:border-gray-300', 'border-orange-500 bg-orange-50 dark:bg-orange-950/40');
-                        const tick = document.createElement('div');
-                        tick.className = 'absolute bottom-0.5 right-0.5 h-3.5 w-3.5 bg-orange-500 rounded-full flex items-center justify-center text-[8px] font-black text-white';
-                        tick.textContent = '✓';
-                        opt.appendChild(tick);
                     };
-                });
+                }
             }
             document.getElementById('delete-payment-method-btn')?.addEventListener('click', async () => {
                 if (!confirm('Delete saved payment method? You can add a new one after deleting it.')) return;
@@ -5128,7 +5131,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                                 <h3 class="text-2xl font-extrabold">${active ? 'Maintenance is ON' : 'Maintenance is OFF'}</h3>
                                 <p class="mt-1 text-sm text-white/70">${active ? `Ends: ${escapeHtml(endText)}` : 'Users can open the app normally.'}</p>
                             </div>
-                            <span class="rounded-2xl px-4 py-2 text-xs font-extrabold ${active ? 'bg-red-500 text-white' : 'bg-emerald-400 text-slate-950'}">${active ? 'LIVE' : 'OPEN'}</span>
+                            <span class="rounded-2xl px-4 py-2 text-xs font-extrabold ${active ? 'bg-red-500 text-white animate-pulse' : 'bg-white/20 text-white'}">${active ? 'ON' : 'OFF'}</span>
                         </div>
                         ${active ? `
                         <div class="mt-5 rounded-2xl border border-white/15 bg-white/10 px-4 py-3">
@@ -5266,7 +5269,12 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                 showMaintenanceSettingsPage();
             } catch (error) {
                 console.error('Maintenance settings save failed:', error);
-                showNotification('Could not save maintenance settings. Please try again.', true);
+                const message = String(error?.message || '');
+                if (/resource-exhausted|quota exceeded/i.test(message)) {
+                    showNotification('Database daily quota exceeded. Please try again later.', true);
+                } else {
+                    showNotification('Could not save maintenance settings. Please try again.', true);
+                }
             } finally {
                 if (saveBtn) {
                     saveBtn.disabled = false;
@@ -5296,7 +5304,12 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                 showMaintenanceSettingsPage();
             } catch (error) {
                 console.error('Maintenance off failed:', error);
-                showNotification('Could not turn off maintenance mode. Please try again.', true);
+                const message = String(error?.message || '');
+                if (/resource-exhausted|quota exceeded/i.test(message)) {
+                    showNotification('Database daily quota exceeded. Please try again later.', true);
+                } else {
+                    showNotification('Could not turn off maintenance mode. Please try again.', true);
+                }
             } finally {
                 if (offBtn) {
                     offBtn.disabled = false;
@@ -10946,7 +10959,10 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             if (notificationRefreshTimer) clearInterval(notificationRefreshTimer);
             notificationRefreshTimer = setInterval(() => {
                 if (!currentUser || currentUser.uid !== userId) return;
-                preloadNotificationsForUser(userId).catch(error => console.warn('Notification background refresh skipped:', error));
+                preloadNotificationsForUser(userId).catch(error => {
+                    if (error && error.name === 'AbortError') return;
+                    console.warn('Notification background refresh skipped:', error);
+                });
             }, 45000);
         };
 
@@ -15826,6 +15842,8 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                 const message = String(e?.message || '');
                 const userMessage = /permission-denied|missing or insufficient permissions/i.test(message)
                     ? 'Withdrawal permission is blocked for this account. Please contact admin.'
+                    : /resource-exhausted|quota exceeded/i.test(message)
+                    ? 'Database daily quota exceeded. Please try again later.'
                     : /insufficient|pending|not found|minimum|flagged|blocked/i.test(message)
                     ? message
                     : 'Could not submit withdrawal request. Please try again.';
