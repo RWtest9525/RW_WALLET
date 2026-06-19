@@ -4159,9 +4159,11 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             const s = subs[idx];
 
             const statusColor = s.manual_status === 'approved' ? 'green' : s.manual_status === 'rejected' ? 'red' : 'yellow';
+            
+            // User-friendly status text
             const statusText = s.manual_status === 'approved' 
                 ? (s.payout_status === 'paid' ? 'Paid' : 'Approved') 
-                : (s.manual_status === 'rejected' ? 'Rejected' : 'Pending Review');
+                : (s.manual_status === 'rejected' ? 'Rejected' : 'Pending');
 
             const timeStr = s.submitted_at 
                 ? new Date(s.submitted_at).toLocaleString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) 
@@ -4172,17 +4174,19 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             const gmailName = s.ocr_extracted_name || '';
             const appLogo = s.app_logo_url || 'https://cdn-icons-png.flaticon.com/512/3176/3176366.png';
 
+            // Scraper Live Badge
             let liveBadge = '';
-            if (s.scraper_status === 'live_confirmed') {
-                liveBadge = '<span class="rounded-full bg-emerald-100 dark:bg-emerald-900/30 px-2.5 py-0.5 text-[9px] font-black text-emerald-700 dark:text-emerald-300">🟢 LIVE</span>';
-            } else if (s.scraper_status === 'not_live') {
-                liveBadge = '<span class="rounded-full bg-rose-100 dark:bg-rose-900/30 px-2.5 py-0.5 text-[9px] font-black text-rose-700 dark:text-rose-300">🔴 NOT LIVE</span>';
+            if (s.manual_status === 'approved') {
+                liveBadge = '<span class="rounded-full bg-emerald-100 dark:bg-emerald-900/30 px-2.5 py-0.5 text-[9px] font-black text-emerald-700 dark:text-emerald-300">🟢 LIVE & VERIFIED</span>';
+            } else if (s.manual_status === 'rejected') {
+                liveBadge = '<span class="rounded-full bg-rose-100 dark:bg-rose-900/30 px-2.5 py-0.5 text-[9px] font-black text-rose-700 dark:text-rose-300">🔴 VERIFICATION FAILED</span>';
             } else {
-                liveBadge = '<span class="rounded-full bg-gray-150 dark:bg-gray-700 px-2.5 py-0.5 text-[9px] font-black text-gray-500 dark:text-gray-400">⏳ UNCHECKED</span>';
+                liveBadge = '<span class="rounded-full bg-amber-100 dark:bg-amber-900/30 px-2.5 py-0.5 text-[9px] font-black text-amber-700 dark:text-amber-300 animate-pulse">⏳ VERIFYING</span>';
             }
 
             const isBulker = isBulkTaskUser();
 
+            // Status blinking overlay badge for screenshot
             const statusTextColor = s.manual_status === 'approved' ? 'emerald' : s.manual_status === 'rejected' ? 'rose' : 'amber';
             const blinkingTag = `
                 <span class="absolute top-3 left-3 rounded-full px-3 py-1 text-[10px] font-black uppercase text-${statusTextColor}-700 bg-${statusTextColor}-100/90 dark:text-${statusTextColor}-300 dark:bg-${statusTextColor}-900/80 backdrop-blur-sm border border-${statusTextColor}-200/50 animate-pulse shadow-md z-10">
@@ -4195,31 +4199,71 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                 navigationHtml = `
                     <!-- Navigation Arrows for Bulkers -->
                     ${idx > 0 ? `
-                        <button onclick="window.showUserTaskHistoryDetail('${subs[idx - 1].id}')" class="absolute left-2 top-1/2 -translate-y-1/2 h-10 w-10 flex items-center justify-center rounded-full bg-black/60 hover:bg-black text-white hover:scale-105 active:scale-95 transition shrink-0 z-20 font-black text-lg select-none">
+                        <button onclick="window.showUserTaskHistoryDetail('${subs[idx - 1].id}')" class="absolute left-2 top-1/2 -translate-y-1/2 h-8 w-8 flex items-center justify-center rounded-full bg-black/60 hover:bg-black text-white hover:scale-105 active:scale-95 transition shrink-0 z-20 font-black text-base select-none">
                             ‹
                         </button>
                     ` : ''}
                     ${idx < subs.length - 1 ? `
-                        <button onclick="window.showUserTaskHistoryDetail('${subs[idx + 1].id}')" class="absolute right-2 top-1/2 -translate-y-1/2 h-10 w-10 flex items-center justify-center rounded-full bg-black/60 hover:bg-black text-white hover:scale-105 active:scale-95 transition shrink-0 z-20 font-black text-lg select-none">
+                        <button onclick="window.showUserTaskHistoryDetail('${subs[idx + 1].id}')" class="absolute right-2 top-1/2 -translate-y-1/2 h-8 w-8 flex items-center justify-center rounded-full bg-black/60 hover:bg-black text-white hover:scale-105 active:scale-95 transition shrink-0 z-20 font-black text-base select-none">
                             ›
                         </button>
                     ` : ''}
                 `;
             }
 
+            // Stepper timeline configuration
+            const isReviewTask = !!(s.assigned_comment && String(s.assigned_comment).trim().length > 0);
+
+            // Step 2: Verification
+            let step2Text = 'Task is being verified by admin';
+            let step2CircleClass = 'bg-amber-500 ring-4 ring-amber-100 dark:ring-amber-950 animate-pulse';
+            if (s.manual_status === 'approved') {
+                step2Text = 'Task verified successfully';
+                step2CircleClass = 'bg-emerald-500 ring-4 ring-emerald-100 dark:ring-emerald-950';
+            } else if (s.manual_status === 'rejected') {
+                if (isReviewTask && (s.scraper_status === 'not_live' || s.ocr_status === 'completed')) {
+                    step2Text = 'Your review is not live, so it is rejected';
+                } else {
+                    step2Text = 'Your task is rejected';
+                }
+                step2CircleClass = 'bg-rose-500 ring-4 ring-rose-100 dark:ring-rose-950';
+            }
+
+            // Step 3: Payout / Credit
+            let step3Text = 'Amount initiation pending';
+            let step3CircleClass = 'bg-gray-200 dark:bg-gray-700 ring-4 ring-gray-100 dark:ring-gray-900';
+            if (s.manual_status === 'approved') {
+                if (s.payout_status === 'paid') {
+                    step3Text = `Amount ₹${s.reward} credited to wallet`;
+                    step3CircleClass = 'bg-emerald-500 ring-4 ring-emerald-100 dark:ring-emerald-950';
+                } else {
+                    step3Text = 'Amount has been initiated for credit';
+                    step3CircleClass = 'bg-blue-500 ring-4 ring-blue-100 dark:ring-blue-950 animate-pulse';
+                }
+            } else if (s.manual_status === 'rejected') {
+                step3Text = 'Credit cancelled due to rejection';
+                step3CircleClass = 'bg-gray-400 dark:bg-gray-600 ring-4 ring-gray-300 dark:ring-gray-850';
+            }
+
             const headerContent = `
-                <header class="flex flex-col mb-4 p-4 bg-white dark:bg-gray-800 shadow-md page-header-fixed">
-                    <div class="flex items-center">
-                        <button onclick="showUserTaskHistoryPage()" class="p-2 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700 mr-2 shrink-0">
-                            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5"></path><path d="M12 19l-7-7 7-7"></path></svg>
-                        </button>
-                        <h2 class="text-xl font-bold">Submission Details</h2>
-                    </div>
-                    <div class="pl-12 text-[10px] text-gray-400 font-extrabold uppercase tracking-wider mt-0.5">
-                        Task ID: <span class="font-mono text-gray-500 select-all">${s.task_id || s.id}</span>
+                <header class="flex flex-col p-4 bg-white dark:bg-gray-800 shadow-sm page-header-fixed border-b border-gray-100 dark:border-gray-750">
+                    <div class="flex items-center justify-between gap-3">
+                        <div class="flex items-center min-w-0">
+                            <button onclick="showUserTaskHistoryPage()" class="p-2 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700 mr-2 shrink-0">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5"></path><path d="M12 19l-7-7 7-7"></path></svg>
+                            </button>
+                            <img src="${escapeHtml(appLogo)}" class="h-8 w-8 rounded-lg object-cover border border-gray-100 dark:border-gray-700 shrink-0" onerror="this.src='https://cdn-icons-png.flaticon.com/512/3176/3176366.png';">
+                            <div class="min-w-0 ml-2">
+                                <h2 class="text-sm font-extrabold text-gray-900 dark:text-white truncate max-w-[150px]">${escapeHtml(s.app_name || 'Task Submission')}</h2>
+                                <p class="text-[9px] text-gray-400 font-mono select-all">ID: ${s.task_id || s.id}</p>
+                            </div>
+                        </div>
+                        <div class="text-right shrink-0">
+                            <span class="text-sm font-black text-blue-600 dark:text-blue-400">₹${s.reward}</span>
+                        </div>
                     </div>
                 </header>
-                <div class="p-4 pt-0">
+                <div class="p-4 pt-4">
             `;
 
             const detailContent = `
@@ -4227,24 +4271,13 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                 <div class="max-w-xl mx-auto space-y-4 pb-24 px-4">
                     <!-- Task Info card -->
                     <div class="bg-white dark:bg-gray-800 p-5 rounded-2xl shadow-md border border-gray-100 dark:border-gray-700 space-y-4">
-                        <div class="flex items-center gap-3">
-                            <img src="${escapeHtml(appLogo)}" class="h-12 w-12 rounded-2xl object-cover border border-gray-100 dark:border-gray-700 shrink-0" onerror="this.src='https://cdn-icons-png.flaticon.com/512/3176/3176366.png';">
-                            <div class="min-w-0 flex-1">
-                                <h3 class="text-base font-extrabold text-gray-900 dark:text-white truncate">${escapeHtml(s.app_name || 'Task Submission')}</h3>
-                                <p class="text-[10px] text-gray-400 dark:text-gray-500 font-semibold mt-0.5">Submitted: ${timeStr}</p>
-                            </div>
-                            <div class="text-right shrink-0">
-                                <p class="text-lg font-black text-blue-600 dark:text-blue-400">₹${s.reward}</p>
-                            </div>
-                        </div>
-
-                        <div class="border-t border-gray-100 dark:border-gray-700 pt-3 space-y-2">
+                        <div class="space-y-3 text-xs">
                             <div>
                                 <p class="text-[10px] font-black uppercase text-gray-400 tracking-wider">Assigned Comment</p>
-                                <p class="mt-1.5 text-xs font-bold text-gray-800 dark:text-gray-250 italic">"${escapeHtml(s.assigned_comment || '')}"</p>
+                                <p class="mt-1 text-xs font-bold text-gray-800 dark:text-gray-250 italic">"${escapeHtml(s.assigned_comment || '')}"</p>
                             </div>
                             ${gmailName ? `
-                            <div class="pt-1.5">
+                            <div>
                                 <p class="text-[10px] font-black uppercase text-gray-400 tracking-wider">Reviewer Gmail / Name</p>
                                 <p class="mt-1 text-xs font-extrabold text-gray-900 dark:text-white flex items-center gap-2">
                                     ${details.gmailLogoUrl ? `<img src="${escapeHtml(details.gmailLogoUrl)}" class="h-5 w-5 rounded-full object-cover border" loading="lazy">` : `<span class="flex h-5 w-5 items-center justify-center rounded-full bg-gray-100 dark:bg-gray-700 text-[9px] font-bold text-gray-400 dark:text-gray-300 shrink-0">G</span>`}
@@ -4252,7 +4285,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                                 </p>
                             </div>
                             ` : ''}
-                            <div class="flex items-center gap-2 pt-2 border-t border-gray-100 dark:border-gray-700 mt-2 text-xs">
+                            <div class="flex items-center gap-2 pt-2 border-t border-gray-100 dark:border-gray-700 mt-2">
                                 <span class="text-gray-500 font-semibold">Live Check:</span>
                                 ${liveBadge}
                             </div>
@@ -4262,20 +4295,53 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                     <!-- Screenshot container -->
                     ${s.screenshot_url ? `
                     <div class="bg-white dark:bg-gray-800 p-4 rounded-2xl shadow-md border border-gray-100 dark:border-gray-700">
-                        <p class="text-[10px] font-black uppercase text-gray-400 tracking-wider mb-3">Screenshot Proof</p>
-                        <div class="relative overflow-hidden rounded-2xl bg-gray-100 dark:bg-gray-950 flex items-center justify-center max-w-full" style="aspect-ratio: 9/16; max-height: 70vh; margin: 0 auto;">
+                        <p class="text-[10px] font-black uppercase text-gray-400 tracking-wider mb-2">Screenshot Proof</p>
+                        <div class="relative overflow-hidden rounded-xl bg-gray-50 dark:bg-gray-950 flex items-center justify-center py-2">
                             ${blinkingTag}
                             ${navigationHtml}
-                            <img src="${escapeHtml(s.screenshot_url)}" alt="Screenshot Proof" class="h-full w-full object-contain cursor-zoom-in" onclick="window.showScreenshotLightbox('${escapeHtml(s.screenshot_url)}', '${escapeHtml(s.screenshot_view_url || '')}')">
+                            <img src="${escapeHtml(s.screenshot_url)}" alt="Screenshot Proof" class="h-32 w-20 rounded-lg border border-gray-200 dark:border-gray-750 object-cover cursor-zoom-in hover:scale-102 transition shadow-sm" onclick="window.showScreenshotLightbox('${escapeHtml(s.screenshot_url)}', '${escapeHtml(s.screenshot_view_url || '')}')">
                         </div>
-                        <div class="mt-3 flex flex-wrap gap-2 justify-between items-center text-xs">
-                            <span class="text-gray-400">Click image to expand full screen</span>
+                        <div class="mt-2 flex justify-between items-center text-[10px] text-gray-400">
+                            <span>Click image to expand</span>
                             <div class="flex gap-2">
-                                ${s.task_link ? `<a href="${escapeHtml(s.task_link)}" target="_blank" class="inline-flex items-center gap-1 text-blue-600 dark:text-blue-400 font-bold hover:underline">Play Store Link ↗</a>` : ''}
-                                ${s.screenshot_view_url ? `<a href="${escapeHtml(s.screenshot_view_url)}" target="_blank" class="text-gray-400 hover:underline">Drive 📁</a>` : ''}
+                                ${s.task_link ? `<a href="${escapeHtml(s.task_link)}" target="_blank" class="text-blue-600 dark:text-blue-400 font-bold hover:underline">Play Store ↗</a>` : ''}
+                                ${s.screenshot_view_url ? `<a href="${escapeHtml(s.screenshot_view_url)}" target="_blank" class="hover:underline">Drive 📁</a>` : ''}
                             </div>
                         </div>
                     </div>` : ''}
+
+                    <!-- Lifecycle Stepper Timeline -->
+                    <div class="bg-white dark:bg-gray-800 p-5 rounded-2xl shadow-md border border-gray-100 dark:border-gray-700 space-y-4">
+                        <p class="text-[10px] font-black uppercase text-gray-400 tracking-wider">Submission Lifecycle</p>
+                        <div class="relative pl-6 space-y-6 before:absolute before:left-[5px] before:top-2 before:bottom-2 before:w-[2px] before:bg-gray-200 dark:before:bg-gray-700">
+                            <!-- Step 1: Submission -->
+                            <div class="relative flex gap-3 items-start">
+                                <span class="absolute -left-[25px] flex h-[12px] w-[12px] rounded-full bg-emerald-500 ring-4 ring-emerald-100 dark:ring-emerald-950"></span>
+                                <div class="min-w-0">
+                                    <p class="text-xs font-bold text-gray-800 dark:text-gray-200">Screenshot sent to admin for verification</p>
+                                    <p class="text-[9px] text-gray-400 font-semibold mt-0.5">${timeStr}</p>
+                                </div>
+                            </div>
+
+                            <!-- Step 2: Verification -->
+                            <div class="relative flex gap-3 items-start">
+                                <span class="absolute -left-[25px] flex h-[12px] w-[12px] rounded-full ${step2CircleClass}"></span>
+                                <div class="min-w-0">
+                                    <p class="text-xs font-bold text-gray-800 dark:text-gray-200">${step2Text}</p>
+                                    <p class="text-[9px] text-gray-400 font-semibold mt-0.5">Status: <span class="uppercase font-black text-gray-500">${s.manual_status || 'PENDING'}</span></p>
+                                </div>
+                            </div>
+
+                            <!-- Step 3: Payout -->
+                            <div class="relative flex gap-3 items-start">
+                                <span class="absolute -left-[25px] flex h-[12px] w-[12px] rounded-full ${step3CircleClass}"></span>
+                                <div class="min-w-0">
+                                    <p class="text-xs font-bold text-gray-800 dark:text-gray-200">${step3Text}</p>
+                                    <p class="text-[9px] text-gray-400 font-semibold mt-0.5">Payment: <span class="uppercase font-black text-gray-500">${s.payout_status || 'PENDING'}</span></p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
                 </div>
                 ${getPageFooter()}
             `;
