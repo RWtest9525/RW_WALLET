@@ -244,7 +244,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             showNotification(friendlyErrorMessage(fallback), true);
         };
 
-        const PREMIUM_AVATARS = [
+        let PREMIUM_AVATARS = [
             'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=150&h=150&q=80', // Boy 1
             'https://images.unsplash.com/photo-1570295999919-56ceb5ecca61?auto=format&fit=crop&w=150&h=150&q=80', // Boy 2
             'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=150&h=150&q=80', // Boy 3
@@ -256,6 +256,52 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=150&h=150&q=80', // Girl 4
             'https://images.unsplash.com/photo-1517841905240-472988babdf9?auto=format&fit=crop&w=150&h=150&q=80'  // Girl 5
         ];
+
+        const loadAndCropAvatars = () => {
+            const img = new Image();
+            img.src = '/avatars_sheet.png';
+            img.onload = () => {
+                try {
+                    const H = img.naturalHeight;
+                    const W = img.naturalWidth;
+                    if (!H || !W) return;
+                    const gridSize = H;
+                    const colWidth = gridSize / 5;
+                    const rowHeight = H / 2;
+                    const canvas = document.createElement('canvas');
+                    const ctx = canvas.getContext('2d');
+                    canvas.width = 180;
+                    canvas.height = 180;
+                    const cropped = [];
+                    for (let r = 0; r < 2; r++) {
+                        for (let c = 0; c < 5; c++) {
+                            const sx = c * colWidth;
+                            const sy = r * rowHeight + (rowHeight - colWidth) / 2;
+                            ctx.clearRect(0, 0, 180, 180);
+                            ctx.drawImage(img, sx, sy, colWidth, colWidth, 0, 0, 180, 180);
+                            cropped.push(canvas.toDataURL('image/jpeg', 0.85));
+                        }
+                    }
+                    if (cropped.length === 10) {
+                        PREMIUM_AVATARS = cropped;
+                        console.log('Successfully cropped and loaded 10 avatars.');
+                        if (currentUserData) {
+                            const currentUrl = getProfileAvatarUrl(currentUserData);
+                            const settingsPreview = document.getElementById('settings-avatar-preview');
+                            if (settingsPreview) settingsPreview.src = currentUrl;
+                            const profilePreview = document.getElementById('profile-avatar-preview');
+                            if (profilePreview) profilePreview.src = currentUrl;
+                        }
+                    }
+                } catch (e) {
+                    console.error('Error cropping avatars:', e);
+                }
+            };
+            img.onerror = () => {
+                console.warn('Avatars sheet load failed, using fallbacks.');
+            };
+        };
+        loadAndCropAvatars();
 
         const getProfileAvatarUrl = (user) => {
             if (!user) return PREMIUM_AVATARS[0];
@@ -2988,15 +3034,6 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                     document.getElementById('user-balance').textContent = formatCompactBalance(data.balance);
                     updateDollarBalanceDisplay(data.balance);
                     currentUserData = { id: userId, uid: userId, ...data };
-                    
-                    const headerAvatar = document.getElementById('header-profile-avatar');
-                    if (headerAvatar) {
-                        headerAvatar.src = getProfileAvatarUrl(currentUserData);
-                    }
-                    const headerBtn = document.getElementById('header-profile-btn');
-                    if (headerBtn) {
-                        headerBtn.onclick = () => showProfilePage();
-                    }
                     writeJsonCache(getUserCacheKey(userId), sanitizeUserForCache(data, userId));
                     getBackendAuthToken().catch(e => logBackgroundSkip('Backend session warmup skipped', e));
                     preloadSupportChatForUser(userId).catch(e => logBackgroundSkip('Support chat preload skipped', e));
@@ -4209,7 +4246,14 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             const userEmail = currentUserData?.email || '';
             const profileCardHtml = `
                 <div class="flex items-center gap-4 bg-white dark:bg-gray-800 p-5 rounded-2xl shadow-md border border-gray-150 dark:border-gray-700 text-left">
-                    <img src="${escapeHtml(userAvatarUrl)}" class="h-16 w-16 rounded-2xl border border-gray-200 dark:border-gray-750 shrink-0 bg-white p-1" alt="Profile Photo">
+                    <div class="relative cursor-pointer group shrink-0" id="settings-avatar-trigger-btn">
+                        <img id="settings-avatar-preview" src="${escapeHtml(userAvatarUrl)}" class="h-16 w-16 rounded-2xl border border-gray-200 dark:border-gray-750 bg-white p-1 object-cover" alt="Profile Photo">
+                        ${!isAdmin ? `
+                        <div class="absolute inset-0 bg-black/40 rounded-2xl flex items-center justify-center opacity-0 group-hover:opacity-100 transition duration-200">
+                            <span class="text-[8px] font-black text-white uppercase tracking-wider">Edit</span>
+                        </div>
+                        ` : ''}
+                    </div>
                     <div class="min-w-0 flex-1">
                         <h3 class="text-lg font-black text-gray-900 dark:text-white truncate">${escapeHtml(userName)}</h3>
                         <p class="text-xs text-gray-500 dark:text-gray-400 truncate mt-0.5">${escapeHtml(userEmail)}</p>
@@ -4273,6 +4317,61 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                 document.getElementById('settings-admin-maintenance').onclick = showMaintenanceSettingsPage;
                 document.getElementById('settings-admin-whats-new').onclick = showWhatsNewSettingsPage;
                 document.getElementById('settings-admin-live-lists').onclick = showAdminLiveListsPage;
+            }
+
+            if (!isAdmin) {
+                const settingsAvatarTrigger = document.getElementById('settings-avatar-trigger-btn');
+                if (settingsAvatarTrigger) {
+                    settingsAvatarTrigger.onclick = () => {
+                        const currentAvatar = getProfileAvatarUrl(currentUserData);
+                        const modalGridHtml = `
+                            <div class="space-y-4">
+                                <p class="text-xs font-black uppercase text-gray-400 tracking-wider">Select Profile Photo</p>
+                                <div class="grid grid-cols-5 gap-2.5">
+                                    ${PREMIUM_AVATARS.map((url, idx) => {
+                                        const isSelected = url === currentAvatar;
+                                        return `
+                                        <div class="avatar-modal-option relative cursor-pointer aspect-square rounded-2xl overflow-hidden border-2 ${isSelected ? 'border-orange-500 ring-2 ring-orange-500/20 bg-orange-50 dark:bg-orange-950/20' : 'border-gray-200 dark:border-gray-700 hover:border-gray-400'} p-0.5 transition duration-200" data-avatar-url="${escapeHtml(url)}">
+                                            <img src="${escapeHtml(url)}" alt="Avatar ${idx + 1}" class="w-full h-full object-cover rounded-xl bg-gray-50">
+                                            ${isSelected ? '<div class="absolute bottom-1 right-1 h-4 w-4 bg-orange-500 rounded-full flex items-center justify-center text-[9px] font-black text-white">✓</div>' : ''}
+                                        </div>`;
+                                    }).join('')}
+                                </div>
+                            </div>
+                        `;
+                        renderModal('Choose Avatar', modalGridHtml, `
+                            <button onclick="window.closeModal()" class="w-full rounded-xl bg-gray-100 dark:bg-gray-700 py-3 text-sm font-extrabold text-gray-700 dark:text-gray-200">Cancel</button>
+                        `, 'max-w-md');
+
+                        document.querySelectorAll('.avatar-modal-option').forEach(opt => {
+                            opt.onclick = async () => {
+                                const chosenUrl = opt.getAttribute('data-avatar-url');
+                                window.closeModal();
+                                
+                                showNotification('Updating profile photo...', false);
+                                try {
+                                    const userRef = doc(db, `artifacts/${appId}/public/data/users`, currentUser.uid);
+                                    await updateDoc(userRef, { profilePhoto: chosenUrl });
+                                    currentUserData = { ...(currentUserData || {}), profilePhoto: chosenUrl };
+                                    writeJsonCache(getUserCacheKey(currentUser.uid), sanitizeUserForCache(currentUserData, currentUser.uid));
+                                    
+                                    const previewImg = document.getElementById('settings-avatar-preview');
+                                    if (previewImg) previewImg.src = chosenUrl;
+                                    
+                                    showNotification('Profile photo updated successfully!');
+                                } catch (e) {
+                                    console.error('Update photo failed:', e);
+                                    const errMsg = String(e?.message || '');
+                                    if (/resource-exhausted|quota exceeded/i.test(errMsg)) {
+                                        showNotification('Database daily quota exceeded. Please try again later.', true);
+                                    } else {
+                                        showNotification('Failed to update profile photo.', true);
+                                    }
+                                }
+                            };
+                        });
+                    };
+                }
             }
         };
 
@@ -5247,7 +5346,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                     saveBtn.textContent = 'Saving...';
                 }
                 const endDate = new Date(Date.now() + durationSeconds * 1000);
-                await setDoc(doc(db, `artifacts/${appId}/settings`, 'app_config'), {
+                const writePromise = setDoc(doc(db, `artifacts/${appId}/settings`, 'app_config'), {
                     maintenanceEnabled: true,
                     maintenanceEndsAt: Timestamp.fromDate(endDate),
                     maintenanceDurationSeconds: durationSeconds,
@@ -5255,6 +5354,12 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                     maintenanceUpdatedAt: serverTimestamp(),
                     maintenanceUpdatedBy: currentUser.uid
                 }, { merge: true });
+
+                await Promise.race([
+                    writePromise,
+                    new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 5000))
+                ]);
+
                 showNotification('Maintenance mode started.');
                 appConfigCache = {
                     ...appConfigCache,
@@ -5270,7 +5375,9 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             } catch (error) {
                 console.error('Maintenance settings save failed:', error);
                 const message = String(error?.message || '');
-                if (/resource-exhausted|quota exceeded/i.test(message)) {
+                if (message === 'timeout') {
+                    showNotification('Database write timed out. Daily quota may be exceeded.', true);
+                } else if (/resource-exhausted|quota exceeded/i.test(message)) {
                     showNotification('Database daily quota exceeded. Please try again later.', true);
                 } else {
                     showNotification('Could not save maintenance settings. Please try again.', true);
@@ -5291,12 +5398,18 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                     offBtn.disabled = true;
                     offBtn.textContent = 'Turning Off...';
                 }
-                await setDoc(doc(db, `artifacts/${appId}/settings`, 'app_config'), {
+                const writePromise = setDoc(doc(db, `artifacts/${appId}/settings`, 'app_config'), {
                     maintenanceEnabled: false,
                     maintenanceEndsAt: null,
                     maintenanceUpdatedAt: serverTimestamp(),
                     maintenanceUpdatedBy: currentUser.uid
                 }, { merge: true });
+
+                await Promise.race([
+                    writePromise,
+                    new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 5000))
+                ]);
+
                 appConfigCache = { ...appConfigCache, maintenanceEnabled: false, maintenanceEndsAt: null, maintenanceEndsAtMillis: 0 };
                 rememberAppConfig(appConfigCache);
                 applyMaintenanceMode();
@@ -5305,7 +5418,9 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             } catch (error) {
                 console.error('Maintenance off failed:', error);
                 const message = String(error?.message || '');
-                if (/resource-exhausted|quota exceeded/i.test(message)) {
+                if (message === 'timeout') {
+                    showNotification('Database write timed out. Daily quota may be exceeded.', true);
+                } else if (/resource-exhausted|quota exceeded/i.test(message)) {
                     showNotification('Database daily quota exceeded. Please try again later.', true);
                 } else {
                     showNotification('Could not turn off maintenance mode. Please try again.', true);

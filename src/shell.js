@@ -131,15 +131,10 @@ root.outerHTML = String.raw`
                         <p class="text-xs text-gray-500 dark:text-gray-400 mt-0.5">REVIEWS WORLD</p>
                     </div>
                 </div>
-                <div class="flex items-center gap-2">
-                    <button id="notification-header-btn" class="relative h-12 w-12 rounded-2xl bg-blue-50 dark:bg-blue-900/30 border border-blue-100 dark:border-blue-800 p-2 shadow-sm hover:scale-105 transition" title="Notifications">
-                        <img src="https://cdn-icons-png.flaticon.com/512/1827/1827370.png" alt="Notifications" class="h-full w-full object-contain" loading="eager" fetchpriority="high" decoding="async">
-                        <span id="notification-unread-badge" class="hidden absolute -right-1 -top-1 min-w-5 h-5 rounded-full bg-red-600 px-1.5 text-center text-[10px] font-black leading-5 text-white shadow">0</span>
-                    </button>
-                    <button id="header-profile-btn" class="h-12 w-12 rounded-2xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 overflow-hidden shadow-sm p-1 shrink-0 hover:scale-105 transition" title="My Profile">
-                        <img id="header-profile-avatar" src="https://api.dicebear.com/7.x/adventurer/svg?seed=Felix" class="h-full w-full object-contain" alt="Profile">
-                    </button>
-                </div>
+                <button id="notification-header-btn" class="relative h-12 w-12 rounded-2xl bg-blue-50 dark:bg-blue-900/30 border border-blue-100 dark:border-blue-800 p-2 shadow-sm hover:scale-105 transition" title="Notifications">
+                    <img src="https://cdn-icons-png.flaticon.com/512/1827/1827370.png" alt="Notifications" class="h-full w-full object-contain" loading="eager" fetchpriority="high" decoding="async">
+                    <span id="notification-unread-badge" class="hidden absolute -right-1 -top-1 min-w-5 h-5 rounded-full bg-red-600 px-1.5 text-center text-[10px] font-black leading-5 text-white shadow">0</span>
+                </button>
             </header>
             <!-- Main Dashboard Area (Tabs) -->
             <div id="dashboard-content">
