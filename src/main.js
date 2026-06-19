@@ -7229,8 +7229,122 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             }
         };
 
+        // Dynamic JsPDF loader
+        const loadJsPDF = () => {
+            return new Promise((resolve) => {
+                if (window.jspdf) {
+                    resolve(window.jspdf);
+                    return;
+                }
+                const script = document.createElement('script');
+                script.src = 'https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js';
+                script.onload = () => resolve(window.jspdf);
+                script.onerror = () => resolve(null);
+                document.head.appendChild(script);
+            });
+        };
+
+        // Image loader with CORS handling
+        const loadImage = (url) => {
+            return new Promise((resolve) => {
+                const img = new Image();
+                img.crossOrigin = 'anonymous';
+                img.onload = () => resolve(img);
+                img.onerror = () => {
+                    const img2 = new Image();
+                    img2.onload = () => resolve(img2);
+                    img2.onerror = () => resolve(null);
+                    img2.src = url;
+                };
+                img.src = url;
+            });
+        };
+
+        // Download helper for JPG
+        window.downloadScreenshotAsJpg = async function(url, filename) {
+            try {
+                const res = await fetch(url);
+                const blob = await res.blob();
+                const blobUrl = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = blobUrl;
+                a.download = filename || 'screenshot.jpg';
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(blobUrl);
+            } catch (err) {
+                // CORS fallback: open in tab
+                window.open(url, '_blank');
+            }
+        };
+
+        // Download all screenshots as stitched PDF
+        window.downloadSubmissionsAsPdf = async function(submissions, appName, dateStr) {
+            if (!submissions || submissions.length === 0) {
+                showNotification("No screenshots to save.", true);
+                return;
+            }
+            showLoading();
+            try {
+                const jspdfModule = await loadJsPDF();
+                if (!jspdfModule) {
+                    showNotification("Could not load PDF library. Please check your internet connection.", true);
+                    hideLoading();
+                    return;
+                }
+                const { jsPDF } = jspdfModule;
+                const pdf = new jsPDF({ orientation: 'portrait', unit: 'pt' });
+                let pagesAdded = 0;
+
+                for (let i = 0; i < submissions.length; i++) {
+                    const s = submissions[i];
+                    if (!s.screenshot_url) continue;
+                    const img = await loadImage(s.screenshot_url);
+                    if (!img) continue;
+
+                    const w = img.naturalWidth || 600;
+                    const h = img.naturalHeight || 800;
+                    const targetWidth = 595.28; // Standard A4 width in pt
+                    const targetHeight = targetWidth * (h / w);
+
+                    if (pagesAdded > 0) {
+                        pdf.addPage([targetWidth, targetHeight]);
+                    } else {
+                        pdf.deletePage(1);
+                        pdf.addPage([targetWidth, targetHeight]);
+                    }
+                    
+                    pdf.addImage(img, 'JPEG', 0, 0, targetWidth, targetHeight);
+                    pagesAdded++;
+                }
+
+                if (pagesAdded === 0) {
+                    showNotification("Could not load any screenshot images.", true);
+                    hideLoading();
+                    return;
+                }
+
+                const firstWord = appName.split(' ')[0] || 'App';
+                const cleanFirstWord = firstWord.replace(/[^a-zA-Z0-9]/g, '');
+                const cleanDate = dateStr.replace(/[^0-9\-]/g, '');
+                const filename = `${cleanFirstWord}_${cleanDate}.pdf`;
+
+                pdf.save(filename);
+                showNotification(`PDF saved successfully as ${filename}`);
+            } catch (err) {
+                console.error("PDF generation failed:", err);
+                showNotification("Could not generate PDF. Please try again.", true);
+            } finally {
+                hideLoading();
+            }
+        };
+
         window.extractActualReviewText = function(ocrText, reviewerName) {
             if (!ocrText) return '';
+            const cleanResult = (txt) => {
+                return String(txt || '').trim().replace(/^[:\s\-–—"']+/g, '').trim();
+            };
             try {
                 const lines = ocrText.split('\n').map(l => l.trim()).filter(Boolean);
                 
@@ -7286,7 +7400,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                             reviewLines.push(line);
                         }
                         if (reviewLines.length > 0) {
-                            return reviewLines.join('\n');
+                            return cleanResult(reviewLines.join('\n'));
                         }
                     }
                 }
@@ -7330,7 +7444,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                         reviewLines.push(line);
                     }
                     if (reviewLines.length > 0) {
-                        return reviewLines.join('\n');
+                        return cleanResult(reviewLines.join('\n'));
                     }
                 }
                 
@@ -7370,7 +7484,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                         bestLine = line;
                     }
                 }
-                return bestLine;
+                return cleanResult(bestLine);
             } catch (err) {
                 console.warn('extractActualReviewText error:', err);
                 return '';
@@ -7453,7 +7567,6 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                                 <p class="text-[9px] font-black uppercase text-gray-400 tracking-wider">Assigned Comment</p>
                                 <p class="mt-1.5 text-xs font-bold text-gray-800 dark:text-gray-250 italic">"${escapeHtml(s.assigned_comment || '')}"</p>
                             </div>
-
                             <!-- Screenshot Review Text -->
                             <div class="rounded-2xl bg-white dark:bg-gray-850 p-4 border border-gray-150 dark:border-gray-800 shadow-sm text-left">
                                 <p class="text-[9px] font-black uppercase text-purple-600 dark:text-purple-400 tracking-wider">Screenshot Review Text</p>
@@ -7467,17 +7580,6 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                                 <div class="flex items-center gap-1"><span>Live check:</span> ${liveBadge}</div>
                                 <div class="flex items-center gap-1"><span>OCR:</span> ${ocrBadge}</div>
                             </div>
-
-                            <!-- Collapsible Raw OCR symbols -->
-                            <details class="group rounded-2xl bg-white dark:bg-gray-850 border border-gray-150 dark:border-gray-800 shadow-sm text-left overflow-hidden">
-                                <summary class="flex items-center justify-between p-3.5 cursor-pointer text-[10px] font-bold text-gray-400 hover:text-gray-600 dark:hover:text-gray-250 select-none">
-                                    <span>RAW OCR TEXT & SYMBOLS</span>
-                                    <svg class="h-3 w-3 transition-transform duration-200 group-open:rotate-180" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M19 9l-7 7-7-7"></path></svg>
-                                </summary>
-                                <div class="px-4 pb-4 border-t border-gray-100 dark:border-gray-750 pt-3 bg-gray-50/50 dark:bg-gray-900/10">
-                                    <p class="text-[10px] text-gray-600 dark:text-gray-300 font-mono max-h-36 overflow-y-auto whitespace-pre-wrap select-text leading-relaxed">${escapeHtml(rawOcrText || 'No raw OCR data available.')}</p>
-                                </div>
-                            </details>
                         </div>
 
                         <!-- Action Buttons -->
@@ -7495,6 +7597,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                                 <button id="modal-ocr-btn" class="rounded-xl bg-purple-600 py-2 text-xs font-black text-white hover:bg-purple-700 active:scale-98 transition">🤖 OCR</button>
                                 <button id="modal-check-btn" class="rounded-xl bg-indigo-600 py-2 text-xs font-black text-white hover:bg-indigo-700 active:scale-98 transition">🔎 Check</button>
                             </div>
+                            <button id="modal-download-jpg-btn" class="w-full rounded-xl bg-blue-600 py-2.5 text-xs font-black text-white hover:bg-blue-700 active:scale-98 transition">📥 Download JPG</button>
                         </div>
                     </div>
                 </div>
@@ -7541,6 +7644,15 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                 }
             };
             document.addEventListener('keydown', keyHandler);
+
+            document.getElementById('modal-download-jpg-btn')?.addEventListener('click', () => {
+                const appName = s.app_name || 'App';
+                const firstWord = appName.split(' ')[0] || 'App';
+                const sanitizedFirstWord = firstWord.replace(/[^a-zA-Z0-9]/g, '');
+                const dateStr = s.submitted_at ? new Date(s.submitted_at).toLocaleDateString('en-IN').replace(/\//g, '-') : 'Date';
+                const filename = `${sanitizedFirstWord}_${dateStr}_screenshot_${s.id || index}.jpg`;
+                window.downloadScreenshotAsJpg(s.screenshot_url, filename);
+            });
 
             // Bind Action Buttons inside Modal
             const subId = s.id;
@@ -7980,13 +8092,21 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                 }).join('');
                 cardsHtml += `</div>`;
 
+                const appName = grouped[dateStr]?.[appKey]?.taskName || appKey;
                 html = `
-                <div class="flex items-center gap-2 text-xs font-black text-gray-500 mb-4 bg-gray-50 dark:bg-gray-900/50 p-3 rounded-2xl border border-gray-150 dark:border-gray-800 flex-wrap">
-                    <span class="text-orange-500 cursor-pointer hover:underline" data-action="explore-root">📂 Root</span>
-                    <span class="text-gray-300">/</span>
-                    <span class="text-orange-500 cursor-pointer hover:underline" data-action="explore-date" data-date="${escapeHtml(dateStr)}">${escapeHtml(dateStr)}</span>
-                    <span class="text-gray-300">/</span>
-                    <span class="text-gray-700 dark:text-gray-300 font-black truncate max-w-[150px]">${escapeHtml(grouped[dateStr]?.[appKey]?.taskName || appKey)}</span>
+                <div class="flex items-center justify-between gap-2 mb-4 bg-gray-50 dark:bg-gray-900/50 p-3 rounded-2xl border border-gray-150 dark:border-gray-800 flex-wrap">
+                    <div class="flex items-center gap-2 text-xs font-black text-gray-500 flex-wrap">
+                        <span class="text-orange-500 cursor-pointer hover:underline" data-action="explore-root">📂 Root</span>
+                        <span class="text-gray-300">/</span>
+                        <span class="text-orange-500 cursor-pointer hover:underline" data-action="explore-date" data-date="${escapeHtml(dateStr)}">${escapeHtml(dateStr)}</span>
+                        <span class="text-gray-300">/</span>
+                        <span class="text-gray-700 dark:text-gray-300 font-black truncate max-w-[150px]">${escapeHtml(appName)}</span>
+                    </div>
+                    ${finalSubs.length > 0 ? `
+                        <button id="admin-download-pdf-btn" class="rounded-xl bg-orange-500 hover:bg-orange-600 text-white font-extrabold px-3 py-1.5 text-xs shadow-sm hover:scale-105 active:scale-95 transition flex items-center gap-1.5 select-none">
+                            📥 Save All as PDF
+                        </button>
+                    ` : ''}
                 </div>
                 ${finalSubs.length === 0 ? '<p class="text-center text-sm text-gray-400 py-8">No submissions found in this folder.</p>' : cardsHtml}`;
             }
@@ -8031,6 +8151,18 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                     window.showAdminSubmissionDetailModal(idx);
                 };
             });
+
+            // Bind Save All as PDF event
+            const pdfBtn = document.getElementById('admin-download-pdf-btn');
+            if (pdfBtn) {
+                pdfBtn.onclick = () => {
+                    const dateStr = adminSubmissionsView.selectedDate;
+                    const appKey = adminSubmissionsView.selectedApp;
+                    const appName = grouped[dateStr]?.[appKey]?.taskName || appKey;
+                    const finalSubs = (grouped[dateStr]?.[appKey]?.items || []);
+                    window.downloadSubmissionsAsPdf(finalSubs, appName, dateStr);
+                };
+            }
 
             // Bind action buttons click handlers
             listEl.querySelectorAll('button[data-action]').forEach(btn => {
