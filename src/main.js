@@ -4600,30 +4600,36 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                             <p class="text-xs font-extrabold uppercase text-cyan-100/75" id="admin-maintenance-timer-label">${active ? 'Remaining Time' : 'Selected Duration'}</p>
                             <p class="mt-1 text-3xl font-extrabold tabular-nums" id="admin-maintenance-timer-val">${durationValue}</p>
                         </div>
-                    </div>
-                    <div class="rounded-2xl bg-white dark:bg-gray-800 p-5 shadow-md border border-gray-100 dark:border-gray-700 space-y-4">
-                        <div>
-                            <label class="text-sm font-extrabold text-gray-700 dark:text-gray-200">Maintenance time (HH:MM:SS)</label>
-                            <input id="maintenance-duration-input" type="text" inputmode="numeric" maxlength="8" value="${durationValue}" placeholder="00:30:00" class="mt-2 w-full rounded-2xl bg-gray-100 dark:bg-gray-700 px-4 py-3 text-2xl font-extrabold tabular-nums focus:outline-none focus:ring-2 focus:ring-blue-500">
-                            <p class="mt-2 text-xs font-semibold text-gray-500 dark:text-gray-400">Example: 01:30:00 for 1 hour 30 minutes. Maximum 72:00:00.</p>
+                    <button id="maintenance-configure-btn" class="w-full rounded-2xl bg-white dark:bg-gray-800 border border-gray-150 dark:border-gray-700 py-3.5 px-4 font-extrabold text-sm text-gray-800 dark:text-white flex items-center justify-between gap-2 shadow-sm hover:scale-[1.01] active:scale-[0.99] transition select-none">
+                        <span class="flex items-center gap-2">⚙️ Configure Maintenance Settings</span>
+                        <span id="maintenance-configure-chevron" class="text-xs font-bold text-gray-400">➕ Show</span>
+                    </button>
+
+                    <div id="maintenance-form-container" class="hidden space-y-4 transition-all duration-300">
+                        <div class="rounded-2xl bg-white dark:bg-gray-800 p-5 shadow-md border border-gray-100 dark:border-gray-700 space-y-4">
+                            <div>
+                                <label class="text-sm font-extrabold text-gray-700 dark:text-gray-200">Maintenance time (HH:MM:SS)</label>
+                                <input id="maintenance-duration-input" type="text" inputmode="numeric" maxlength="8" value="${durationValue}" placeholder="00:30:00" class="mt-2 w-full rounded-2xl bg-gray-100 dark:bg-gray-700 px-4 py-3 text-2xl font-extrabold tabular-nums focus:outline-none focus:ring-2 focus:ring-blue-500">
+                                <p class="mt-2 text-xs font-semibold text-gray-500 dark:text-gray-400">Example: 01:30:00 for 1 hour 30 minutes. Maximum 72:00:00.</p>
+                            </div>
+                            <div class="grid grid-cols-4 gap-2">
+                                <button type="button" data-maintenance-duration="00:15:00" class="maintenance-quick-btn rounded-xl bg-gray-100 dark:bg-gray-700 px-3 py-2 text-xs font-extrabold">15m</button>
+                                <button type="button" data-maintenance-duration="00:30:00" class="maintenance-quick-btn rounded-xl bg-gray-100 dark:bg-gray-700 px-3 py-2 text-xs font-extrabold">30m</button>
+                                <button type="button" data-maintenance-duration="01:00:00" class="maintenance-quick-btn rounded-xl bg-gray-100 dark:bg-gray-700 px-3 py-2 text-xs font-extrabold">1h</button>
+                                <button type="button" data-maintenance-duration="02:00:00" class="maintenance-quick-btn rounded-xl bg-gray-100 dark:bg-gray-700 px-3 py-2 text-xs font-extrabold">2h</button>
+                            </div>
+                            <div>
+                                <label class="text-sm font-extrabold text-gray-700 dark:text-gray-200">Message for users</label>
+                                <textarea id="maintenance-message-input" rows="3" maxlength="180" class="mt-2 w-full rounded-2xl bg-gray-100 dark:bg-gray-700 px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500">${escapeHtml(message)}</textarea>
+                            </div>
+                            <div class="rounded-2xl bg-blue-50 dark:bg-blue-900/20 border border-blue-100 dark:border-blue-800 p-4 text-sm text-blue-800 dark:text-blue-100">
+                                Users will see a full-screen maintenance page with countdown. Admin account will keep working normally.
+                            </div>
                         </div>
-                        <div class="grid grid-cols-4 gap-2">
-                            <button type="button" data-maintenance-duration="00:15:00" class="maintenance-quick-btn rounded-xl bg-gray-100 dark:bg-gray-700 px-3 py-2 text-xs font-extrabold">15m</button>
-                            <button type="button" data-maintenance-duration="00:30:00" class="maintenance-quick-btn rounded-xl bg-gray-100 dark:bg-gray-700 px-3 py-2 text-xs font-extrabold">30m</button>
-                            <button type="button" data-maintenance-duration="01:00:00" class="maintenance-quick-btn rounded-xl bg-gray-100 dark:bg-gray-700 px-3 py-2 text-xs font-extrabold">1h</button>
-                            <button type="button" data-maintenance-duration="02:00:00" class="maintenance-quick-btn rounded-xl bg-gray-100 dark:bg-gray-700 px-3 py-2 text-xs font-extrabold">2h</button>
+                        <div class="grid grid-cols-2 gap-3">
+                            <button id="maintenance-off-btn" class="rounded-2xl bg-gray-100 dark:bg-gray-700 px-4 py-4 font-extrabold text-gray-700 dark:text-gray-100">Turn Off</button>
+                            <button id="maintenance-save-btn" class="rounded-2xl bg-blue-600 px-4 py-4 font-extrabold text-white shadow-lg shadow-blue-200 dark:shadow-none">${active ? 'Update Timer' : 'Start Maintenance'}</button>
                         </div>
-                        <div>
-                            <label class="text-sm font-extrabold text-gray-700 dark:text-gray-200">Message for users</label>
-                            <textarea id="maintenance-message-input" rows="3" maxlength="180" class="mt-2 w-full rounded-2xl bg-gray-100 dark:bg-gray-700 px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500">${escapeHtml(message)}</textarea>
-                        </div>
-                        <div class="rounded-2xl bg-blue-50 dark:bg-blue-900/20 border border-blue-100 dark:border-blue-800 p-4 text-sm text-blue-800 dark:text-blue-100">
-                            Users will see a full-screen maintenance page with countdown. Admin account will keep working normally.
-                        </div>
-                    </div>
-                    <div class="grid grid-cols-2 gap-3">
-                        <button id="maintenance-off-btn" class="rounded-2xl bg-gray-100 dark:bg-gray-700 px-4 py-4 font-extrabold text-gray-700 dark:text-gray-100">Turn Off</button>
-                        <button id="maintenance-save-btn" class="rounded-2xl bg-blue-600 px-4 py-4 font-extrabold text-white shadow-lg shadow-blue-200 dark:shadow-none">${active ? 'Update Timer' : 'Start Maintenance'}</button>
                     </div>
                 </div>
                 ${getPageFooter()}`, {
@@ -4661,6 +4667,15 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                     }
                 }, 1000);
             }
+
+            document.getElementById('maintenance-configure-btn')?.addEventListener('click', () => {
+                const container = document.getElementById('maintenance-form-container');
+                const label = document.getElementById('maintenance-configure-chevron');
+                if (container && label) {
+                    const isHidden = container.classList.toggle('hidden');
+                    label.textContent = isHidden ? '➕ Show' : '➖ Hide';
+                }
+            });
 
             const durationInput = document.getElementById('maintenance-duration-input');
             durationInput?.addEventListener('blur', () => {
@@ -4771,19 +4786,30 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                         <h3 class="mt-2 text-2xl font-black">What's New Message</h3>
                         <p class="mt-2 text-sm text-white/75">Last update: ${escapeHtml(updatedText)}</p>
                     </div>
-                    <div class="rounded-2xl border border-gray-100 bg-white p-5 shadow-md dark:border-gray-700 dark:bg-gray-800">
-                        <label class="flex items-center justify-between gap-3 rounded-2xl bg-gray-50 px-4 py-3 text-sm font-black dark:bg-gray-700">
-                            <span>Show popup to users</span>
-                            <input id="whats-new-enabled-input" type="checkbox" ${enabled ? 'checked' : ''} class="h-5 w-5 accent-indigo-600">
-                        </label>
-                        <div class="mt-4">
-                            <label class="text-sm font-black text-gray-700 dark:text-gray-200">Popup title</label>
-                            <input id="whats-new-title-input" maxlength="80" value="${escapeHtml(title)}" class="mt-2 w-full rounded-2xl bg-gray-100 px-4 py-3 font-bold outline-none focus:ring-2 focus:ring-indigo-500 dark:bg-gray-700">
+                    <button id="whats-new-configure-btn" class="w-full rounded-2xl bg-white dark:bg-gray-800 border border-gray-150 dark:border-gray-700 py-3.5 px-4 font-extrabold text-sm text-gray-800 dark:text-white flex items-center justify-between gap-2 shadow-sm hover:scale-[1.01] active:scale-[0.99] transition select-none">
+                        <span class="flex items-center gap-2">✍️ Edit / Create Update Message</span>
+                        <span id="whats-new-configure-chevron" class="text-xs font-bold text-gray-400">➕ Show</span>
+                    </button>
+
+                    <div id="whats-new-form-container" class="hidden space-y-4 transition-all duration-300">
+                        <div class="rounded-2xl border border-gray-100 bg-white p-5 shadow-md dark:border-gray-700 dark:bg-gray-800">
+                            <label class="flex items-center justify-between gap-3 rounded-2xl bg-gray-50 px-4 py-3 text-sm font-black dark:bg-gray-700">
+                                <span>Show popup to users</span>
+                                <input id="whats-new-enabled-input" type="checkbox" ${enabled ? 'checked' : ''} class="h-5 w-5 accent-indigo-600">
+                            </label>
+                            <div class="mt-4">
+                                <label class="text-sm font-black text-gray-700 dark:text-gray-200">Popup title</label>
+                                <input id="whats-new-title-input" maxlength="80" value="${escapeHtml(title)}" class="mt-2 w-full rounded-2xl bg-gray-100 px-4 py-3 font-bold outline-none focus:ring-2 focus:ring-indigo-500 dark:bg-gray-700">
+                            </div>
+                            <div class="mt-4">
+                                <label class="text-sm font-black text-gray-700 dark:text-gray-200">Message</label>
+                                <textarea id="whats-new-message-input" rows="7" maxlength="1200" placeholder="Type new update for users..." class="mt-2 w-full rounded-2xl bg-gray-100 px-4 py-3 outline-none focus:ring-2 focus:ring-indigo-500 dark:bg-gray-700">${escapeHtml(message)}</textarea>
+                                <p class="mt-2 text-xs text-gray-500 dark:text-gray-400">Saving creates a new update ID, so every user will see it once. After they close it, it will not repeat until you save another update.</p>
+                            </div>
                         </div>
-                        <div class="mt-4">
-                            <label class="text-sm font-black text-gray-700 dark:text-gray-200">Message</label>
-                            <textarea id="whats-new-message-input" rows="7" maxlength="1200" placeholder="Type new update for users..." class="mt-2 w-full rounded-2xl bg-gray-100 px-4 py-3 outline-none focus:ring-2 focus:ring-indigo-500 dark:bg-gray-700">${escapeHtml(message)}</textarea>
-                            <p class="mt-2 text-xs text-gray-500 dark:text-gray-400">Saving creates a new update ID, so every user will see it once. After they close it, it will not repeat until you save another update.</p>
+                        <div class="grid grid-cols-2 gap-3">
+                            <button id="whats-new-disable-btn" class="rounded-2xl bg-gray-100 dark:bg-gray-700 px-4 py-4 font-black text-gray-700 dark:bg-gray-700 dark:text-gray-100">Turn Off</button>
+                            <button id="whats-new-save-btn" class="rounded-2xl bg-indigo-600 px-4 py-4 font-black text-white shadow-lg shadow-indigo-200 dark:shadow-none">Save & Show</button>
                         </div>
                     </div>
                     
@@ -4801,11 +4827,6 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                         <div id="whats-new-seen-list-container" class="mt-4 hidden border-t border-gray-100 dark:border-gray-750 pt-4 max-h-60 overflow-y-auto space-y-2">
                             <p class="text-center text-xs text-gray-400 py-4">Loading users...</p>
                         </div>
-                    </div>
-
-                    <div class="grid grid-cols-2 gap-3">
-                        <button id="whats-new-disable-btn" class="rounded-2xl bg-gray-100 dark:bg-gray-700 px-4 py-4 font-black text-gray-700 dark:bg-gray-700 dark:text-gray-100">Turn Off</button>
-                        <button id="whats-new-save-btn" class="rounded-2xl bg-indigo-600 px-4 py-4 font-black text-white shadow-lg shadow-indigo-200 dark:shadow-none">Save & Show</button>
                     </div>
                 </div>
                 ${getPageFooter()}`, { returnTo: parentSection, keepBottomNav: true, onBack: handleBack });
@@ -4861,6 +4882,15 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                 const container = document.getElementById('whats-new-seen-list-container');
                 if (container) {
                     container.classList.toggle('hidden');
+                }
+            });
+
+            document.getElementById('whats-new-configure-btn')?.addEventListener('click', () => {
+                const container = document.getElementById('whats-new-form-container');
+                const label = document.getElementById('whats-new-configure-chevron');
+                if (container && label) {
+                    const isHidden = container.classList.toggle('hidden');
+                    label.textContent = isHidden ? '➕ Show' : '➖ Hide';
                 }
             });
 
