@@ -2,6 +2,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
         import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, onAuthStateChanged, sendPasswordResetEmail, setPersistence, browserLocalPersistence } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
         import { getFirestore, doc, setDoc, getDoc, collection, collectionGroup, addDoc, onSnapshot, query, orderBy, Timestamp, writeBatch, runTransaction, deleteDoc, getDocs, serverTimestamp, where, arrayUnion, updateDoc, deleteField, increment, setLogLevel, limit as firestoreLimit } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
         import { getStorage, ref as storageRef, uploadBytesResumable, getDownloadURL } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-storage.js";
+        import { getMessaging, getToken, onMessage } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-messaging.js";
 
         // --- THEME LOGIC ---
         const applyTheme = (theme) => {
@@ -83,6 +84,63 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
         setPersistence(auth, browserLocalPersistence).catch(error => {
             console.warn('Could not enable local auth persistence:', error);
         });
+
+        // Firebase Cloud Messaging Setup (FCM)
+        const FCM_VAPID_KEY = ""; // Enter your Web Push Certificates VAPID Key here in the future
+        let messaging;
+        try {
+            messaging = getMessaging(app);
+        } catch (e) {
+            console.warn("Firebase Messaging not initialized on client:", e);
+        }
+
+        const initializePushNotifications = async (userId) => {
+            if (!messaging) return;
+            if (!('Notification' in window)) {
+                console.log('This browser does not support desktop notifications');
+                return;
+            }
+
+            try {
+                let permission = Notification.permission;
+                if (permission === 'default') {
+                    permission = await Notification.requestPermission();
+                }
+
+                if (permission === 'granted') {
+                    const tokenOptions = {};
+                    if (FCM_VAPID_KEY) {
+                        tokenOptions.vapidKey = FCM_VAPID_KEY;
+                    }
+                    const fcmToken = await getToken(messaging, tokenOptions);
+
+                    if (fcmToken) {
+                        console.log('FCM Token generated:', fcmToken);
+                        const userDocRef = doc(db, `artifacts/${appId}/public/data/users`, userId);
+                        await updateDoc(userDocRef, {
+                            fcmToken: fcmToken,
+                            fcmTokenUpdatedAt: serverTimestamp()
+                        }).catch(err => console.warn('Failed to update user FCM Token in DB:', err));
+                    } else {
+                        console.log('No FCM registration token available.');
+                    }
+                }
+            } catch (error) {
+                console.warn('An error occurred while retrieving FCM token:', error);
+            }
+
+            // Listen for foreground messages
+            try {
+                onMessage(messaging, (payload) => {
+                    console.log('Foreground Message received:', payload);
+                    if (payload.notification) {
+                        showNotification(`${payload.notification.title}: ${payload.notification.body}`);
+                    }
+                });
+            } catch (e) {
+                console.warn('Error setting up onMessage listener:', e);
+            }
+        };
 
         try {
             setLogLevel('error');
@@ -2877,6 +2935,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                     if (userId !== ADMIN_UID && userTaskHistoryCache.length === 0 && !userTaskHistoryLoading) {
                         loadUserTaskHistory().catch(e => console.error("Prefetch user task history failed:", e));
                     }
+                    initializePushNotifications(userId).catch(e => console.warn('FCM Warmup failed:', e));
                     const now = Date.now();
                     if (now - lastAutoProcessCheckAt > 60000) {
                         lastAutoProcessCheckAt = now;
@@ -7545,30 +7604,42 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
         // Global Screenshot Lightbox
         window.showScreenshotLightbox = function(url, driveUrl) {
             const existing = document.getElementById('screenshot-lightbox-overlay');
-            if (existing) existing.remove();
+            if (existing) {
+                existing.remove();
+                document.body.style.overflow = '';
+            }
 
             const overlay = document.createElement('div');
             overlay.id = 'screenshot-lightbox-overlay';
-            overlay.className = 'fixed inset-0 z-[9999] flex flex-col items-center justify-center bg-black/90 p-4 transition-all duration-300';
+            // Enable scrolling on overlay container to make it fully responsive for small screen heights
+            overlay.className = 'fixed inset-0 z-[9999] flex flex-col items-center justify-start md:justify-center bg-black/95 p-4 overflow-y-auto transition-all duration-300';
             
+            // Prevent background page from scrolling
+            document.body.style.overflow = 'hidden';
+
+            const removeLightbox = () => {
+                overlay.remove();
+                document.body.style.overflow = '';
+            };
+
             overlay.innerHTML = `
-                <div class="relative max-w-full max-h-[85vh] flex items-center justify-center">
-                    <img src="${url}" alt="Screenshot Zoom" class="max-w-full max-h-[85vh] object-contain rounded-xl border border-gray-800 shadow-2xl transition-transform duration-300 hover:scale-[1.01]">
-                </div>
-                <div class="mt-4 flex items-center gap-3 bg-gray-900/85 px-4 py-2.5 rounded-2xl border border-gray-800 backdrop-blur-md">
-                    ${driveUrl ? `<a href="${driveUrl}" target="_blank" class="rounded-xl bg-blue-600 px-4 py-2 text-xs font-black text-white hover:bg-blue-700 transition">📁 Open in Drive</a>` : ''}
-                    <button id="lightbox-close-btn" class="rounded-xl bg-gray-700 px-4 py-2 text-xs font-black text-white hover:bg-gray-650 transition">✕ Close</button>
+                <div class="w-full max-w-2xl flex flex-col items-center justify-center py-6 min-h-full" onclick="event.stopPropagation()">
+                    <div class="relative max-w-full flex items-center justify-center">
+                        <img src="${url}" alt="Screenshot Zoom" class="max-w-full max-h-[70vh] md:max-h-[80vh] object-contain rounded-xl border border-gray-800 shadow-2xl transition-transform duration-300 hover:scale-[1.01]">
+                    </div>
+                    <div class="mt-4 flex items-center gap-3 bg-gray-900/85 px-4 py-2.5 rounded-2xl border border-gray-800 backdrop-blur-md shrink-0">
+                        ${driveUrl ? `<a href="${driveUrl}" target="_blank" class="rounded-xl bg-blue-600 px-4 py-2 text-xs font-black text-white hover:bg-blue-700 transition">📁 Open in Drive</a>` : ''}
+                        <button id="lightbox-close-btn" class="rounded-xl bg-gray-700 px-4 py-2 text-xs font-black text-white hover:bg-gray-650 transition">✕ Close</button>
+                    </div>
                 </div>
             `;
 
             document.body.appendChild(overlay);
 
-            overlay.onclick = (e) => {
-                if (e.target === overlay) overlay.remove();
-            };
+            overlay.onclick = removeLightbox;
             const closeBtn = document.getElementById('lightbox-close-btn');
             if (closeBtn) {
-                closeBtn.onclick = () => overlay.remove();
+                closeBtn.onclick = removeLightbox;
             }
         };
 
