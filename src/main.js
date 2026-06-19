@@ -4275,7 +4275,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                             ${s.assigned_comment ? `
                             <div>
                                 <p class="text-[10px] font-black uppercase text-gray-400 tracking-wider">Assigned Comment</p>
-                                <p class="mt-1 text-xs font-bold text-gray-800 dark:text-gray-250 italic">"${escapeHtml(s.assigned_comment)}"</p>
+                                <p class="mt-1 text-xs font-bold text-gray-800 dark:text-gray-250 italic">${escapeHtml(s.assigned_comment)}</p>
                             </div>
                             ` : ''}
                             ${gmailName ? `
