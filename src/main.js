@@ -4249,7 +4249,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                 <header class="flex flex-col p-4 bg-white dark:bg-gray-800 shadow-sm page-header-fixed border-b border-gray-100 dark:border-gray-750">
                     <div class="flex items-center justify-between gap-3">
                         <div class="flex items-center min-w-0">
-                            <button onclick="showUserTaskHistoryPage()" class="p-2 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700 mr-2 shrink-0">
+                            <button class="page-back-btn p-2 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700 mr-2 shrink-0">
                                 <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5"></path><path d="M12 19l-7-7 7-7"></path></svg>
                             </button>
                             <img src="${escapeHtml(appLogo)}" class="h-8 w-8 rounded-lg object-cover border border-gray-100 dark:border-gray-700 shrink-0" onerror="this.src='https://cdn-icons-png.flaticon.com/512/3176/3176366.png';">
@@ -4272,10 +4272,12 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                     <!-- Task Info card -->
                     <div class="bg-white dark:bg-gray-800 p-5 rounded-2xl shadow-md border border-gray-100 dark:border-gray-700 space-y-4">
                         <div class="space-y-3 text-xs">
+                            ${s.assigned_comment ? `
                             <div>
                                 <p class="text-[10px] font-black uppercase text-gray-400 tracking-wider">Assigned Comment</p>
-                                <p class="mt-1 text-xs font-bold text-gray-800 dark:text-gray-250 italic">"${escapeHtml(s.assigned_comment || '')}"</p>
+                                <p class="mt-1 text-xs font-bold text-gray-800 dark:text-gray-250 italic">"${escapeHtml(s.assigned_comment)}"</p>
                             </div>
+                            ` : ''}
                             ${gmailName ? `
                             <div>
                                 <p class="text-[10px] font-black uppercase text-gray-400 tracking-wider">Reviewer Gmail / Name</p>
@@ -4312,7 +4314,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
 
                     <!-- Lifecycle Stepper Timeline -->
                     <div class="bg-white dark:bg-gray-800 p-5 rounded-2xl shadow-md border border-gray-100 dark:border-gray-700 space-y-4">
-                        <p class="text-[10px] font-black uppercase text-gray-400 tracking-wider">Submission Lifecycle</p>
+                        <p class="text-[10px] font-black uppercase text-gray-400 tracking-wider">Submission updates</p>
                         <div class="relative pl-6 space-y-6 before:absolute before:left-[5px] before:top-2 before:bottom-2 before:w-[2px] before:bg-gray-200 dark:before:bg-gray-700">
                             <!-- Step 1: Submission -->
                             <div class="relative flex gap-3 items-start">
