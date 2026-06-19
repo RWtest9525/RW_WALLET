@@ -5219,7 +5219,21 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                         collection(db, `artifacts/${appId}/public/data/whats_new_seen/${id}/users`),
                         orderBy('seenAt', 'desc')
                     ));
-                    const users = snap.docs.map(doc => doc.data());
+                    
+                    // Resolve user details using allUsersCache
+                    const users = snap.docs.map(doc => {
+                        const d = doc.data();
+                        const uid = d.userId || doc.id;
+                        const profile = allUsersCache.find(x => x.id === uid || x.uid === uid) || {};
+                        return {
+                            ...d,
+                            userId: uid,
+                            name: profile.name || d.name || 'Unknown User',
+                            mobile: profile.mobile || d.mobile || 'No mobile',
+                            email: profile.email || 'No email'
+                        };
+                    });
+                    
                     const count = users.length;
                     if (btn) {
                         btn.textContent = `👥 View Users (${count})`;
@@ -5230,13 +5244,22 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                         } else {
                             container.innerHTML = users.map(u => {
                                 const time = u.seenAt ? new Date(timestampToMillis(u.seenAt)).toLocaleString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }) : 'Unknown';
+                                const initial = (u.name && u.name !== 'Unknown User') ? u.name.charAt(0).toUpperCase() : '?';
                                 return `
-                                    <div class="flex items-center justify-between text-xs bg-gray-50/70 dark:bg-gray-900/30 p-2.5 rounded-xl border border-gray-100 dark:border-gray-750">
-                                        <div>
-                                            <p class="font-extrabold text-gray-800 dark:text-white">${escapeHtml(u.name || 'Unknown User')}</p>
-                                            <p class="text-[10px] text-orange-500 font-bold mt-0.5">📱 ${escapeHtml(u.mobile || 'No mobile')}</p>
+                                    <div class="flex items-center gap-3 justify-between text-xs bg-gray-50/70 dark:bg-gray-900/30 p-2.5 rounded-xl border border-gray-150 dark:border-gray-800 shadow-sm">
+                                        <div class="flex items-center gap-3.5 min-w-0">
+                                            <div class="h-8 w-8 rounded-full bg-orange-100 dark:bg-orange-950 flex items-center justify-center font-bold text-orange-600 shrink-0 text-sm">
+                                                ${initial}
+                                            </div>
+                                            <div class="min-w-0 flex-1">
+                                                <p class="font-extrabold text-gray-800 dark:text-white truncate">${escapeHtml(u.name)}</p>
+                                                <div class="flex flex-col gap-0.5 mt-0.5 text-[10px] text-gray-400 font-semibold">
+                                                    <span class="text-orange-500 font-bold">📱 ${escapeHtml(u.mobile)}</span>
+                                                    ${u.email && u.email !== 'No email' ? `<span class="truncate">✉ ${escapeHtml(u.email)}</span>` : ''}
+                                                </div>
+                                            </div>
                                         </div>
-                                        <span class="text-[9px] text-gray-400 font-semibold">${time}</span>
+                                        <span class="text-[9px] text-gray-400 font-semibold shrink-0 text-right">${time}</span>
                                     </div>
                                 `;
                             }).join('');
