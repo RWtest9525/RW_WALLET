@@ -1283,14 +1283,18 @@ async function saveTaskSubmission(d1, { id, taskId, userId, reservationId, assig
 async function listTaskSubmissions(d1, { taskId = null, userId = null, manualStatus = null, ocrStatus = null, payoutStatus = null, limit = 200 } = {}) {
   const conditions = [];
   const params = [];
-  if (taskId) { conditions.push('task_id = ?'); params.push(taskId); }
-  if (userId) { conditions.push('user_id = ?'); params.push(userId); }
-  if (manualStatus) { conditions.push('manual_status = ?'); params.push(manualStatus); }
-  if (ocrStatus) { conditions.push('ocr_status = ?'); params.push(ocrStatus); }
-  if (payoutStatus) { conditions.push('payout_status = ?'); params.push(payoutStatus); }
+  if (taskId) { conditions.push('ts.task_id = ?'); params.push(taskId); }
+  if (userId) { conditions.push('ts.user_id = ?'); params.push(userId); }
+  if (manualStatus) { conditions.push('ts.manual_status = ?'); params.push(manualStatus); }
+  if (ocrStatus) { conditions.push('ts.ocr_status = ?'); params.push(ocrStatus); }
+  if (payoutStatus) { conditions.push('ts.payout_status = ?'); params.push(payoutStatus); }
   params.push(limit);
   return d1.all(
-    `SELECT * FROM task_submissions ${conditions.length ? 'WHERE ' + conditions.join(' AND ') : ''} ORDER BY submitted_at DESC LIMIT ?`,
+    `SELECT ts.*, u.mobile as user_mobile 
+     FROM task_submissions ts
+     LEFT JOIN users u ON ts.user_id = u.id OR ts.user_id = u.firebase_uid
+     ${conditions.length ? 'WHERE ' + conditions.join(' AND ') : ''} 
+     ORDER BY ts.submitted_at DESC LIMIT ?`,
     params
   );
 }
@@ -2851,8 +2855,11 @@ ${memoriesContext}`
     }
   });
 
+  const taskLogoCache = {};
+
   app.get('/api/admin/task-submissions', requireHttpAuth, async (req, res) => {
     if (!req.auth.isAdmin) return res.status(403).json({ ok: false, error: 'ADMIN_REQUIRED' });
+    const db = admin.firestore();
     const submissions = await listTaskSubmissions(d1, {
       taskId: req.query.taskId || null,
       userId: req.query.userId || null,
@@ -2861,6 +2868,29 @@ ${memoriesContext}`
       payoutStatus: req.query.payoutStatus || null,
       limit: Math.min(Number(req.query.limit || 200), 500)
     });
+
+    for (const s of submissions) {
+      if (s.task_id) {
+        if (taskLogoCache[s.task_id] === undefined) {
+          try {
+            const taskDoc = await db.doc(`artifacts/digital-wallet-prod/public/data/tasks/${s.task_id}`).get();
+            if (taskDoc.exists) {
+              const taskData = taskDoc.data();
+              taskLogoCache[s.task_id] = taskData.imageUrl || taskData.logoUrl || taskData.iconUrl || '';
+            } else {
+              taskLogoCache[s.task_id] = '';
+            }
+          } catch (err) {
+            console.warn(`[Admin-Submissions] Failed to load task logo for ${s.task_id}:`, err.message);
+            taskLogoCache[s.task_id] = '';
+          }
+        }
+        s.app_logo_url = taskLogoCache[s.task_id] || '';
+      } else {
+        s.app_logo_url = '';
+      }
+    }
+
     res.json({ ok: true, submissions });
   });
 

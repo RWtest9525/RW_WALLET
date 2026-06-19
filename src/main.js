@@ -7101,13 +7101,162 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             }
         };
 
+        window.extractActualReviewText = function(ocrText, reviewerName) {
+            if (!ocrText) return '';
+            try {
+                const lines = ocrText.split('\n').map(l => l.trim()).filter(Boolean);
+                
+                // If reviewer name is known, look for it
+                if (reviewerName && reviewerName !== 'Unknown User') {
+                    const cleanName = reviewerName.toLowerCase().replace(/[^a-z0-9]/g, '');
+                    let nameIdx = -1;
+                    for (let i = 0; i < lines.length; i++) {
+                        if (lines[i].toLowerCase().replace(/[^a-z0-9]/g, '').includes(cleanName)) {
+                            nameIdx = i;
+                            break;
+                        }
+                    }
+                    
+                    if (nameIdx !== -1) {
+                        let reviewLines = [];
+                        let foundStarsOrDate = false;
+                        for (let j = nameIdx + 1; j < lines.length; j++) {
+                            const line = lines[j];
+                            const lineLower = line.toLowerCase();
+                            
+                            // Stop if we hit typical Play Store review metadata footer or next reviews
+                            if (
+                                lineLower.includes('edit your review') ||
+                                lineLower.includes('was this review helpful') ||
+                                lineLower.includes('developer response') ||
+                                lineLower.includes('app support') ||
+                                lineLower.includes('developer contact') ||
+                                lineLower.includes('personal into') ||
+                                lineLower.includes('personal info') ||
+                                lineLower.includes('about this app') ||
+                                lineLower.includes('rate this app') ||
+                                lineLower.startsWith('personal') ||
+                                lineLower.includes('helpfulness') ||
+                                /^\d{1,2}:\d{2}/.test(line) ||
+                                /^\d{1,3}%$/.test(line)
+                            ) {
+                                break;
+                            }
+                            
+                            const isStarsOrDate = 
+                                line.includes('★') || 
+                                line.includes('☆') || 
+                                lineLower.includes('stars') || 
+                                /\d{1,2}\/\d{1,2}\/\d{2,4}/.test(line) ||
+                                /^\d+\s+(day|week|month|year)s?\s+ago/i.test(line);
+                                
+                            if (isStarsOrDate && !foundStarsOrDate) {
+                                foundStarsOrDate = true;
+                                continue;
+                            }
+                            
+                            reviewLines.push(line);
+                        }
+                        if (reviewLines.length > 0) {
+                            return reviewLines.join('\n');
+                        }
+                    }
+                }
+                
+                // Fallback: Search for "Your review"
+                let yourReviewIdx = -1;
+                for (let i = 0; i < lines.length; i++) {
+                    if (/Your review/i.test(lines[i])) {
+                        yourReviewIdx = i;
+                        break;
+                    }
+                }
+                
+                if (yourReviewIdx !== -1) {
+                    let reviewLines = [];
+                    // Typically Your review -> Name -> Stars -> Text, so scan after index + 2
+                    let foundStars = false;
+                    for (let j = yourReviewIdx + 2; j < lines.length; j++) {
+                        const line = lines[j];
+                        const lineLower = line.toLowerCase();
+                        if (
+                            lineLower.includes('edit your review') ||
+                            lineLower.includes('was this review helpful') ||
+                            lineLower.includes('developer response') ||
+                            lineLower.includes('app support')
+                        ) {
+                            break;
+                        }
+                        
+                        const isStarsOrDate = 
+                            line.includes('★') || 
+                            line.includes('☆') || 
+                            lineLower.includes('stars') || 
+                            /\d{1,2}\/\d{1,2}\/\d{2,4}/.test(line);
+                            
+                        if (isStarsOrDate && !foundStars) {
+                            foundStars = true;
+                            continue;
+                        }
+                        
+                        reviewLines.push(line);
+                    }
+                    if (reviewLines.length > 0) {
+                        return reviewLines.join('\n');
+                    }
+                }
+                
+                // Secondary Fallback: take the largest block of text that is not system text
+                const skipPatterns = [
+                    /^\d{1,2}:\d{2}/,
+                    /^\d{1,3}%$/,
+                    /LTE|WIFI|4G|5G|VoLTE|KB\/S/i,
+                    /Google Play/i,
+                    /^Search/i, /^Apps/i, /^Games/i, /^Offers/i,
+                    /^Movies/i, /^Books/i,
+                    /^Ratings and reviews/i,
+                    /^See all reviews/i,
+                    /^Post/i, /^Cancel/i,
+                    /^Edit your review/i,
+                    /^Edit/i,
+                    /^Episode/i,
+                    /^[★☆* ]+\d{1,2}/,
+                    /^[0-9.]+ stars/,
+                    /^[0-9.,]+ reviews/,
+                    /^[0-9.]+ [KMG]B/,
+                    /No reviews/i,
+                    /Personal into/i,
+                    /No data collected/i,
+                    /Developer contact/i,
+                    /About this app/i,
+                    /Rate this app/i,
+                    /Tell us what you think/i,
+                    /Write a review/i,
+                    /Safety/i, /Data privacy/i, /Security/i, /Verified/i,
+                ];
+                
+                let bestLine = '';
+                for (const line of lines) {
+                    const isSystemLine = skipPatterns.some(p => p.test(line));
+                    if (!isSystemLine && line.length > bestLine.length && line.length > 20) {
+                        bestLine = line;
+                    }
+                }
+                return bestLine;
+            } catch (err) {
+                console.warn('extractActualReviewText error:', err);
+                return '';
+            }
+        };
+
         window.showAdminSubmissionDetailModal = function(index) {
             const list = window.currentActiveSubmissions || [];
             if (!list || index < 0 || index >= list.length) return;
 
             const s = list[index];
             const statusColor = s.manual_status === 'approved' ? 'emerald' : s.manual_status === 'rejected' ? 'rose' : 'amber';
-            const payoutBadge = s.payout_status === 'paid' ? '<span class="rounded-full bg-cyan-100 dark:bg-cyan-900/30 px-2.5 py-0.5 text-[9px] font-black text-cyan-700 dark:text-cyan-300">PAID</span>' : '';
+            const statusLabel = s.manual_status === 'pending' ? 'PENDING' : s.manual_status === 'approved' ? 'APPROVED' : 'REJECTED';
+            const payoutBadge = s.payout_status === 'paid' ? '<span class="rounded-full bg-cyan-500 text-white px-2.5 py-0.5 text-[9px] font-black tracking-wider uppercase shadow-sm">PAID</span>' : '';
             const ocrBadge = s.ocr_status === 'completed' ? '🟢' : s.ocr_status === 'failed' ? '🔴' : '⏳';
             const timeStr = s.submitted_at ? new Date(s.submitted_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }) : 'Unknown';
             
@@ -7115,6 +7264,8 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             try { details = s.details_json ? JSON.parse(s.details_json) : {}; } catch {}
             const gmailLogoUrl = details.gmailLogoUrl || '';
             const gmailName = s.ocr_extracted_name || '';
+            const rawOcrText = s.ocr_extracted_text || s.ocrExtractedText || '';
+            const extractedReviewText = window.extractActualReviewText(rawOcrText, gmailName);
 
             let liveBadge = '';
             if (s.scraper_status === 'live_confirmed') {
@@ -7150,46 +7301,55 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                     <!-- Right: Info Panel -->
                     <div class="w-full md:w-[360px] shrink-0 p-5 flex flex-col justify-between border-t md:border-t-0 md:border-l border-gray-150 dark:border-gray-800 overflow-y-auto bg-gray-50 dark:bg-gray-900/50">
                         <div class="space-y-4">
-                            <!-- Header Info -->
-                            <div class="text-left">
-                                <div class="flex items-center gap-1.5 flex-wrap">
-                                    <span class="rounded-full bg-${statusColor}-100 dark:bg-${statusColor}-900/30 px-2 py-0.5 text-[9px] font-black text-${statusColor}-700 dark:text-${statusColor}-300 uppercase">${escapeHtml(s.manual_status)}</span>
+                            <!-- Header Info: Status, Gmail Name, Mobile No, Submitted Time -->
+                            <div class="text-left bg-white dark:bg-gray-850 p-4 rounded-2xl border border-gray-150 dark:border-gray-800 shadow-sm">
+                                <div class="flex items-center justify-between">
+                                    <span class="rounded-xl bg-${statusColor}-500 text-white font-extrabold px-3 py-1 text-[10px] tracking-wider uppercase shadow-sm">${statusLabel}</span>
                                     ${payoutBadge}
                                 </div>
-                                <h3 class="mt-2 text-sm font-extrabold text-gray-850 dark:text-white truncate">${escapeHtml(s.user_name || 'User')}</h3>
-                                <p class="text-[10px] text-gray-450 truncate">${escapeHtml(s.user_email || '')}</p>
-                                <p class="text-[9px] text-gray-400 mt-1">Submitted: ${timeStr}</p>
+                                <div class="mt-3 flex items-center gap-2">
+                                    ${gmailLogoUrl ? `<img src="${escapeHtml(gmailLogoUrl)}" class="h-9 w-9 rounded-full object-cover border border-gray-200 dark:border-gray-700 shrink-0">` : `<span class="flex h-9 w-9 items-center justify-center rounded-full bg-orange-100 dark:bg-orange-950 text-xs font-bold text-orange-600 shrink-0">G</span>`}
+                                    <div class="min-w-0 flex-1">
+                                        <p class="text-[9px] font-black uppercase text-gray-400 tracking-wider">Gmail Reviewer</p>
+                                        <h3 class="text-base font-extrabold text-gray-900 dark:text-white truncate">${escapeHtml(gmailName || 'Unknown User')}</h3>
+                                    </div>
+                                </div>
+                                <div class="mt-3 pt-3 border-t border-gray-100 dark:border-gray-750 flex items-center justify-between text-[11px]">
+                                    <span class="font-bold text-orange-500">📱 ${escapeHtml(s.user_mobile || 'No mobile registered')}</span>
+                                    <span class="text-gray-450 font-semibold">${timeStr}</span>
+                                </div>
                             </div>
 
                             <!-- Comment -->
-                            <div class="rounded-2xl bg-white dark:bg-gray-855 p-3.5 border border-gray-150 dark:border-gray-800 shadow-sm text-left">
-                                <p class="text-[9px] font-black uppercase text-gray-400">Assigned Comment</p>
-                                <p class="mt-1 text-xs font-bold text-gray-800 dark:text-gray-200 italic leading-relaxed">"${escapeHtml(s.assigned_comment || '')}"</p>
+                            <div class="rounded-2xl bg-white dark:bg-gray-850 p-4 border border-gray-150 dark:border-gray-800 shadow-sm text-left">
+                                <p class="text-[9px] font-black uppercase text-gray-400 tracking-wider">Assigned Comment</p>
+                                <p class="mt-1.5 text-xs font-bold text-gray-800 dark:text-gray-250 italic">"${escapeHtml(s.assigned_comment || '')}"</p>
                             </div>
 
-                            <!-- Reviewer Name -->
-                            <div class="rounded-2xl bg-white dark:bg-gray-855 p-3.5 border border-gray-150 dark:border-gray-800 shadow-sm space-y-2 text-left">
-                                <div class="flex items-center gap-2">
-                                    ${gmailLogoUrl ? `<img src="${escapeHtml(gmailLogoUrl)}" class="h-6 w-6 rounded-full object-cover border border-gray-200 dark:border-gray-700 shrink-0">` : `<span class="flex h-6 w-6 items-center justify-center rounded-full bg-gray-100 dark:bg-gray-850 text-[9px] font-bold text-gray-400 shrink-0">G</span>`}
-                                    <div class="min-w-0 flex-1">
-                                        <p class="text-[9px] font-black uppercase text-gray-400">Gmail Reviewer</p>
-                                        <p class="text-xs font-bold text-gray-900 dark:text-white truncate">${escapeHtml(gmailName || 'Not parsed yet')}</p>
-                                    </div>
-                                </div>
-
-                                ${(s.ocr_extracted_text || s.ocrExtractedText) ? `
-                                    <div class="border-t border-gray-100 dark:border-gray-750 pt-2 mt-2">
-                                        <p class="text-[9px] font-black uppercase text-purple-500">OCR Extracted Text</p>
-                                        <p class="mt-1 text-[10px] text-gray-655 dark:text-gray-300 font-mono bg-gray-55 dark:bg-gray-900 p-2 rounded-xl border border-gray-100 dark:border-gray-800 max-h-24 overflow-y-auto whitespace-pre-wrap select-text">${escapeHtml(s.ocr_extracted_text || s.ocrExtractedText)}</p>
-                                    </div>
-                                ` : ''}
+                            <!-- Screenshot Review Text -->
+                            <div class="rounded-2xl bg-white dark:bg-gray-850 p-4 border border-gray-150 dark:border-gray-800 shadow-sm text-left">
+                                <p class="text-[9px] font-black uppercase text-purple-600 dark:text-purple-400 tracking-wider">Screenshot Review Text</p>
+                                <p class="mt-1.5 text-xs font-extrabold text-gray-900 dark:text-white leading-relaxed bg-purple-50/50 dark:bg-purple-950/10 p-3 rounded-xl border border-purple-100/80 dark:border-purple-900/50">
+                                    ${escapeHtml(extractedReviewText || 'Not found in screenshot')}
+                                </p>
                             </div>
 
                             <!-- Check badges -->
-                            <div class="flex items-center justify-between text-[10px] text-gray-450 border-t border-gray-100 dark:border-gray-850 pt-3">
+                            <div class="flex items-center justify-between text-[10px] text-gray-450 border-t border-gray-150 dark:border-gray-850 pt-3">
                                 <div class="flex items-center gap-1"><span>Live check:</span> ${liveBadge}</div>
                                 <div class="flex items-center gap-1"><span>OCR:</span> ${ocrBadge}</div>
                             </div>
+
+                            <!-- Collapsible Raw OCR symbols -->
+                            <details class="group rounded-2xl bg-white dark:bg-gray-850 border border-gray-150 dark:border-gray-800 shadow-sm text-left overflow-hidden">
+                                <summary class="flex items-center justify-between p-3.5 cursor-pointer text-[10px] font-bold text-gray-400 hover:text-gray-600 dark:hover:text-gray-250 select-none">
+                                    <span>RAW OCR TEXT & SYMBOLS</span>
+                                    <svg class="h-3 w-3 transition-transform duration-200 group-open:rotate-180" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M19 9l-7 7-7-7"></path></svg>
+                                </summary>
+                                <div class="px-4 pb-4 border-t border-gray-100 dark:border-gray-750 pt-3 bg-gray-50/50 dark:bg-gray-900/10">
+                                    <p class="text-[10px] text-gray-600 dark:text-gray-300 font-mono max-h-36 overflow-y-auto whitespace-pre-wrap select-text leading-relaxed">${escapeHtml(rawOcrText || 'No raw OCR data available.')}</p>
+                                </div>
+                            </details>
                         </div>
 
                         <!-- Action Buttons -->
@@ -7590,8 +7750,12 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                         taskName: s.app_name || s.appName || appKey,
                         taskLink: s.task_link || s.taskLink || '',
                         reward: s.reward || 0,
+                        appLogoUrl: s.app_logo_url || '',
                         items: []
                     };
+                }
+                if (s.app_logo_url && !grouped[dateKey][appKey].appLogoUrl) {
+                    grouped[dateKey][appKey].appLogoUrl = s.app_logo_url;
                 }
                 grouped[dateKey][appKey].items.push(s);
             });
@@ -7642,14 +7806,12 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                     const appGroup = dateGroup[appKey];
                     const totalCount = appGroup.items.length;
                     const pendingCount = appGroup.items.filter(s => s.manual_status === 'pending').length;
-
+                    const logoUrl = appGroup.appLogoUrl || 'https://cdn-icons-png.flaticon.com/512/3176/3176366.png';
                     return `
                         <div class="flex items-center gap-3 rounded-2xl border border-gray-150 dark:border-gray-800 bg-white dark:bg-gray-800 p-4 hover:border-orange-500 hover:shadow-md cursor-pointer transition select-none" data-action="select-app" data-app="${escapeHtml(appKey)}">
-                            <div class="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-cyan-100 dark:bg-cyan-900/35 text-2xl">
-                                📱
-                            </div>
+                            <img src="${escapeHtml(logoUrl)}" class="h-12 w-12 rounded-2xl object-cover border border-gray-200 dark:border-gray-700 shrink-0" alt="${escapeHtml(appGroup.taskName)}" onerror="this.src='https://cdn-icons-png.flaticon.com/512/3176/3176366.png';">
                             <div class="min-w-0 flex-1">
-                                <p class="truncate text-sm font-extrabold text-gray-850 dark:text-white">${escapeHtml(appGroup.taskName)}</p>
+                                <p class="truncate text-sm font-extrabold text-gray-855 dark:text-white">${escapeHtml(appGroup.taskName)}</p>
                                 <p class="text-[10px] text-gray-450">${totalCount} items ${pendingCount > 0 ? `· <span class="text-amber-500 font-bold">${pendingCount} pending</span>` : ''}</p>
                             </div>
                             <svg class="h-4 w-4 text-gray-450 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M9 5l7 7-7 7"></path></svg>
