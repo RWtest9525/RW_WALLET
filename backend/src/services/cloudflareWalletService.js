@@ -1,4 +1,5 @@
 const bcrypt = require('bcrypt');
+const crypto = require('crypto');
 const jwt = require('jsonwebtoken');
 const admin = require('firebase-admin');
 const path = require('path');
@@ -1090,6 +1091,53 @@ async function uploadToGoogleDrive(buffer, fileName, mimeType, rootFolderId, { a
   };
 }
 
+async function extractAndStoreReviewerAvatar({ imageBuffer, reviewerName, nameLine = null, r2, userId = 'user', appName = 'Avatars' }) {
+  if (!imageBuffer || !reviewerName || String(reviewerName).toLowerCase() === 'unknown user') return { avatarUrl: '', avatarHash: '', avatarCrop: null };
+  const clean = (value) => String(value || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+  let locatedLine = nameLine && nameLine.bbox ? nameLine : null;
+  if (!locatedLine) {
+    const { data } = await Tesseract.recognize(imageBuffer, 'eng', { logger: () => {} });
+    const target = clean(reviewerName);
+    locatedLine = (Array.isArray(data.lines) ? data.lines : []).find((line) => {
+      const value = clean(line.text);
+      return value && target && (value.includes(target) || target.includes(value));
+    }) || null;
+  }
+  if (!locatedLine?.bbox) throw new Error('REVIEWER_NAME_POSITION_NOT_FOUND');
+  const image = await Jimp.read(imageBuffer);
+  const { width, height } = image.bitmap;
+  const bbox = locatedLine.bbox;
+  const lineHeight = Math.max(12, Number(bbox.y1 || 0) - Number(bbox.y0 || 0));
+  const avatarSize = Math.max(32, Math.min(Math.round(lineHeight * 2.8), Math.round(width * 0.18), 120));
+  const gap = Math.max(6, Math.round(lineHeight * 0.45));
+  const nameCenterY = (Number(bbox.y0 || 0) + Number(bbox.y1 || 0)) / 2;
+  const cropX = Math.max(0, Math.min(Math.round(Number(bbox.x0 || 0) - gap - avatarSize), width - avatarSize));
+  const cropY = Math.max(0, Math.min(Math.round(nameCenterY - (avatarSize / 2)), height - avatarSize));
+  const cropW = Math.min(avatarSize, width - cropX);
+  const cropH = Math.min(avatarSize, height - cropY);
+  if (cropW < 24 || cropH < 24) throw new Error('REVIEWER_AVATAR_REGION_INVALID');
+  const avatar = image.clone().crop(cropX, cropY, cropW, cropH);
+  const avatarBuffer = await avatar.getBufferAsync(Jimp.MIME_JPEG);
+  const avatarHash = crypto.createHash('sha256').update(avatarBuffer).digest('hex');
+  const safeName = String(reviewerName).replace(/[<>:"/\\|?*]+/g, '_').trim().slice(0, 40) || 'reviewer';
+  const avatarFileName = `${safeName}-${avatarHash.slice(0, 12)}-avatar.jpg`;
+  let avatarUrl = '';
+  const driveFolderId = process.env.GOOGLE_DRIVE_FOLDER_ID;
+  if (driveFolderId && (process.env.GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON || process.env.FIREBASE_SERVICE_ACCOUNT_JSON)) {
+    try {
+      const driveResult = await uploadToGoogleDrive(avatarBuffer, avatarFileName, 'image/jpeg', driveFolderId, { appName });
+      avatarUrl = driveResult.directUrl;
+    } catch (error) {
+      console.error('[Avatar] Google Drive upload failed:', error.message);
+    }
+  }
+  if (!avatarUrl && r2 && process.env.CLOUDFLARE_R2_BUCKET) {
+    const key = `task-screenshots/avatars/${sanitizePathSegment(userId)}/${avatarFileName}`;
+    avatarUrl = await putR2Object(r2, key, avatarBuffer, 'image/jpeg');
+  }
+  return { avatarUrl, avatarHash, avatarCrop: { x: cropX, y: cropY, width: cropW, height: cropH } };
+}
+
 // Clear folder cache every hour to pick up any manual Drive changes
 setInterval(() => _driveFolderCache.clear(), 60 * 60 * 1000);
 
@@ -1435,6 +1483,21 @@ async function processOcrAndGmailProfile(d1, r2, submissionId) {
         Object.assign(details, JSON.parse(submission.details_json));
       }
     } catch {}
+    try {
+      const avatarResult = await extractAndStoreReviewerAvatar({
+        imageBuffer: imgBuffer,
+        reviewerName: gmailName,
+        nameLine,
+        r2,
+        userId: submission.user_id,
+        appName: submission.app_name || 'Avatars'
+      });
+      if (avatarResult.avatarUrl) gmailLogoUrl = avatarResult.avatarUrl;
+      if (avatarResult.avatarHash) details.avatarHash = avatarResult.avatarHash;
+      if (avatarResult.avatarCrop) details.avatarCrop = avatarResult.avatarCrop;
+    } catch (avatarErr) {
+      console.warn('[OCR] Reviewer avatar capture skipped:', avatarErr.message || avatarErr);
+    }
     details.gmailLogoUrl = gmailLogoUrl;
 
     await updateTaskSubmission(d1, submissionId, {
@@ -2396,6 +2459,8 @@ ${memoriesContext}`
       let matchedComment = null;
       let gmailName = 'Unknown User';
       let gmailLogoUrl = '';
+      let avatarHash = '';
+      let avatarCrop = null;
 
       if (skipOcr) {
         ocrText = req.query.ocrText ? String(req.query.ocrText).trim() : '';
@@ -2613,6 +2678,20 @@ ${memoriesContext}`
         }
       }
 
+      try {
+        const avatarResult = await extractAndStoreReviewerAvatar({
+          imageBuffer: body,
+          reviewerName: gmailName,
+          r2,
+          userId: req.auth.sub,
+          appName
+        });
+        if (avatarResult.avatarUrl) gmailLogoUrl = avatarResult.avatarUrl;
+        avatarHash = avatarResult.avatarHash || avatarHash;
+        avatarCrop = avatarResult.avatarCrop || null;
+      } catch (avatarErr) {
+        console.warn('[OCR-Upload] Reviewer avatar capture skipped:', avatarErr.message || avatarErr);
+      }
       const safeComment = (matchedComment || 'screenshot').slice(0, 30).replace(/[<>:"/\\|?*]+/g, '_').trim();
 
       // 8. Upload Full Screenshot with Date/App nested naming structure
@@ -2668,6 +2747,8 @@ ${memoriesContext}`
           ocrConfidence,
           gmailName: gmailName.slice(0, 200),
           gmailLogoUrl,
+          avatarHash,
+          avatarCrop,
           matchedComment
         }
       });
@@ -2692,6 +2773,8 @@ ${memoriesContext}`
       let ocrConfidence = req.body.ocrConfidence || 0;
       let gmailName = req.body.ocrExtractedName || '';
       let gmailLogoUrl = req.body.details?.gmailLogoUrl || '';
+      let avatarHash = req.body.details?.avatarHash || '';
+      let avatarCrop = req.body.details?.avatarCrop || null;
       let ocrStatus = req.body.ocrStatus || 'pending';
       let matched = !!ocrText;
 
@@ -2837,6 +2920,12 @@ ${memoriesContext}`
       if (gmailLogoUrl) {
         details.gmailLogoUrl = gmailLogoUrl;
       }
+      if (avatarHash) {
+        details.avatarHash = avatarHash;
+      }
+      if (avatarCrop) {
+        details.avatarCrop = avatarCrop;
+      }
 
       // Update OCR fields directly in D1
       await updateTaskSubmission(d1, submissionId, {
@@ -2942,13 +3031,14 @@ ${memoriesContext}`
 
       let ocrResult = { text: '', confidence: 0, status: 'completed' };
       let ocrSuccess = false;
+      let imgBuffer = null;
 
       if (submission.screenshot_url) {
         try {
           // Download image from URL
           const imgResponse = await fetch(submission.screenshot_url);
           if (!imgResponse.ok) throw new Error(`Image download failed: ${imgResponse.status}`);
-          const imgBuffer = Buffer.from(await imgResponse.arrayBuffer());
+          imgBuffer = Buffer.from(await imgResponse.arrayBuffer());
 
           // Try OCR.space API first
           const ocrApiKey = process.env.OCR_SPACE_API_KEY || 'helloworld';
@@ -3066,14 +3156,34 @@ ${memoriesContext}`
         extractedName = reviewerName;
       }
 
+      let details = {};
+      try { details = submission.details_json ? JSON.parse(submission.details_json) : {}; } catch {}
+      if (imgBuffer && extractedName && extractedName.toLowerCase() !== 'unknown user') {
+        try {
+          const avatarResult = await extractAndStoreReviewerAvatar({
+            imageBuffer: imgBuffer,
+            reviewerName: extractedName,
+            r2,
+            userId: submission.user_id,
+            appName: submission.app_name || 'Avatars'
+          });
+          if (avatarResult.avatarUrl) details.gmailLogoUrl = avatarResult.avatarUrl;
+          if (avatarResult.avatarHash) details.avatarHash = avatarResult.avatarHash;
+          if (avatarResult.avatarCrop) details.avatarCrop = avatarResult.avatarCrop;
+        } catch (avatarErr) {
+          console.warn('[Admin-OCR] Reviewer avatar capture skipped:', avatarErr.message || avatarErr);
+        }
+      }
+
       await updateTaskSubmission(d1, req.params.submissionId, {
         ocrStatus: ocrResult.status,
         ocrExtractedText: ocrResult.text.slice(0, 4000),
         ocrConfidence: ocrResult.confidence,
-        ocrExtractedName: extractedName
+        ocrExtractedName: extractedName,
+        detailsJson: details
       });
 
-      res.json({ ok: true, ocr: { ...ocrResult, name: extractedName } });
+      res.json({ ok: true, ocr: { ...ocrResult, name: extractedName, avatarHash: details.avatarHash || '', gmailLogoUrl: details.gmailLogoUrl || '' } });
     } catch (error) {
       console.error('OCR processing failed:', error);
       res.status(500).json({ ok: false, error: 'OCR_FAILED' });
@@ -3097,16 +3207,22 @@ ${memoriesContext}`
         [appNameLower]
       );
 
+      let details = {};
+      try { details = sub.details_json ? JSON.parse(sub.details_json) : {}; } catch {}
+      const avatarHash = String(details.avatarHash || '').trim().toLowerCase();
       let isLive = false;
       let matchSource = '';
       if (liveList && sub.ocr_extracted_name && sub.ocr_extracted_name.toLowerCase() !== 'unknown user') {
         const lines = liveList.content.split(/\r?\n/).map(l => l.trim().toLowerCase()).filter(Boolean);
         const nameClean = sub.ocr_extracted_name.trim().toLowerCase();
-        // Check fuzzy matching
-        isLive = lines.some(line => line.includes(nameClean) || nameClean.includes(line));
-        if (isLive) matchSource = 'live_list';
+        isLive = lines.some(line => {
+          const lineHash = (line.match(/[a-f0-9]{32,64}/) || [])[0] || '';
+          const lineNameOnly = line.replace(/[a-f0-9]{32,64}/g, '').trim();
+          const nameMatches = line.includes(nameClean) || nameClean.includes(lineNameOnly);
+          return lineHash ? (nameMatches && avatarHash && lineHash === avatarHash) : nameMatches;
+        });
+        if (isLive) matchSource = avatarHash ? 'live_list_name_avatar' : 'live_list_name';
       }
-
       const isPlayStore = String(sub.task_link || taskLink || '').includes('play.google.com');
 
       if (isLive) {
@@ -3116,6 +3232,9 @@ ${memoriesContext}`
           isPlayStore,
           found: true,
           source: matchSource,
+          reviewerName: sub.ocr_extracted_name || '',
+          avatarHash,
+          reviewerIdentity: avatarHash ? `${sub.ocr_extracted_name || ''}:${avatarHash}` : (sub.ocr_extracted_name || ''),
           message: 'Review verified: Reviewer found in Active Reviewers List!',
           checkedAt: nowMs()
         };

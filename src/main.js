@@ -6428,7 +6428,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                                     ocrExtractedName: verification.gmailName,
                                     ocrExtractedText: verification.ocrText,
                                     ocrConfidence: verification.ocrConfidence,
-                                    details: { gmailLogoUrl: verification.gmailLogoUrl }
+                                    details: { gmailLogoUrl: verification.gmailLogoUrl, avatarHash: verification.avatarHash || '', avatarCrop: verification.avatarCrop || null }
                                 })
                             }, 10000);
                             
@@ -6664,7 +6664,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                                     ocrExtractedName: verification.gmailName,
                                     ocrExtractedText: ocrText,
                                     ocrConfidence: 1.0,
-                                    details: { gmailLogoUrl: verification.gmailLogoUrl }
+                                    details: { gmailLogoUrl: verification.gmailLogoUrl, avatarHash: verification.avatarHash || '', avatarCrop: verification.avatarCrop || null }
                                 })
                             }, 10000);
                             
