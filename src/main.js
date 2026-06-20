@@ -50,6 +50,8 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
         const ADMIN_UID = "mOs5Fmp4RoRzeBDH4pZLMOpQx7Q2";
         const WEB_APP_BUILD = "rw-web-2026-05-21-tracker";
         const WEB_APP_UPDATE_DATE = "2026-05-21";
+        // Keep Firestore reads bounded to the canonical per-user transaction collection.
+        const FIRESTORE_TRANSACTION_READ_LIMIT = 200;
         const LEGACY_WITHDRAWAL_DEDUCTION_CUTOFF = new Date(2026, 4, 20).getTime();
         const RECHARGE_DISCOUNT_RATE = 0.01;
         const PARTNER_INTEREST_RATE = 0.01;
@@ -309,6 +311,8 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
 
         const getProfileAvatarUrl = (user) => {
             if (!user) return PREMIUM_AVATARS[0];
+            const localAvatar = localStorage.getItem(`rw_profile_avatar_${user.uid || user.id || ''}`);
+            if (localAvatar) return localAvatar;
             
             // 1. Admin always uses the app logo
             const uId = user.uid || user.id || '';
@@ -727,51 +731,21 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             };
         };
 
-        const loadFirebaseTransactions = async (userId, maxItems = 5000) => {
-            const docsByPath = new Map();
-            const addSnapshot = (snap, source) => {
-                snap.docs.forEach((docSnap, index) => {
-                    docsByPath.set(`${source}:${docSnap.ref.path}`, {
-                        id: docSnap.id,
-                        sourcePath: docSnap.ref.path,
-                        ...docSnap.data(),
-                        _sourceIndex: index
-                    });
-                });
-            };
-
-            const directCollections = [
-                `artifacts/${appId}/public/data/users/${userId}/transactions`,
-                'artifacts/digital-wallet-prod/public/data/users/' + userId + '/transactions',
-                'users/' + userId + '/transactions',
-                'wallet_users/' + userId + '/transactions'
-            ];
-
-            for (const path of [...new Set(directCollections)]) {
-                try {
-                    addSnapshot(await getDocs(collection(db, path)), path);
-                } catch (error) {
-                    console.warn('Transaction path load skipped:', path, error);
-                }
-            }
-
-            const rootTransactionCollections = ['transactions', 'transaction_history', 'wallet_transactions'];
-            const userFields = ['userId', 'uid', 'user_id'];
-            for (const rootPath of rootTransactionCollections) {
-                for (const field of userFields) {
-                    try {
-                        const snap = await getDocs(query(collection(db, rootPath), where(field, '==', userId)));
-                        addSnapshot(snap, `${rootPath}:${field}`);
-                    } catch (error) {
-                        console.warn('Root transaction query skipped:', rootPath, field, error);
-                    }
-                }
-            }
-
-            return mergeTransactionsByKey(Array.from(docsByPath.values()))
-                .slice(0, maxItems);
+        const loadFirebaseTransactions = async (userId, maxItems = FIRESTORE_TRANSACTION_READ_LIMIT) => {
+            if (!userId) return [];
+            const readLimit = Math.max(1, Math.min(Number(maxItems) || FIRESTORE_TRANSACTION_READ_LIMIT, FIRESTORE_TRANSACTION_READ_LIMIT));
+            const canonicalQuery = query(
+                collection(db, `artifacts/${appId}/public/data/users/${userId}/transactions`),
+                orderBy('timestamp', 'desc'),
+                firestoreLimit(readLimit)
+            );
+            const snapshot = await getDocs(canonicalQuery);
+            return snapshot.docs.map(docSnap => ({
+                id: docSnap.id,
+                sourcePath: docSnap.ref.path,
+                ...docSnap.data()
+            }));
         };
-
         const serializeCloudTransaction = (item = {}, userId = currentUser?.uid) => {
             const timestamp = timestampToMillis(item.timestamp || item.requestedAt || item.createdAt || item.processedAt) || Date.now();
             const transactionId = String(item.transactionId || item.adminTransactionId || item.requestId || item.id || `${item.type || 'tx'}-${timestamp}`);
@@ -1388,7 +1362,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
         const syncRecentTransactionsToCloud = async (userId = currentUser?.uid) => {
             if (!userId) return;
             try {
-                const items = await loadFirebaseTransactions(userId, 2000);
+                const items = await loadFirebaseTransactions(userId, FIRESTORE_TRANSACTION_READ_LIMIT);
                 await importFirestoreTransactionsToCloud(userId, items);
                 const mergedUserHistory = mergeTransactionsByKey(readHistoryItemsFromCache(userId), items);
                 writeHistoryItemsToCache(userId, mergedUserHistory);
@@ -1415,11 +1389,11 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             transactionHistoryPrefetch.userId = userId;
             transactionHistoryPrefetch.promise = (async () => {
                 const [firebaseTransactions, cloudTransactions, pendingWithdrawals] = await Promise.all([
-                    loadFirebaseTransactions(userId, 5000).catch(error => {
+                    loadFirebaseTransactions(userId, FIRESTORE_TRANSACTION_READ_LIMIT).catch(error => {
                         console.warn('Firebase transaction prefetch skipped:', error);
                         return [];
                     }),
-                    fetchCloudTransactionHistory(userId, 5000).catch(error => {
+                    fetchCloudTransactionHistory(userId, FIRESTORE_TRANSACTION_READ_LIMIT).catch(error => {
                         console.warn('Cloud transaction prefetch skipped:', error);
                         return [];
                     }),
@@ -1436,7 +1410,6 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                 if (currentUser?.uid === userId) {
                     unifiedHistoryCache = mergedUserHistory;
                 }
-                if (firebaseTransactions.length) importFirestoreTransactionsToCloud(userId, firebaseTransactions);
                 transactionHistoryPrefetch.loadedAt = Date.now();
                 return mergedUserHistory;
             })().finally(() => {
@@ -3118,22 +3091,12 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                 renderUnifiedHistory(5);
             }, (error) => console.warn('Realtime transaction listener skipped:', error)));
 
-            const userPendingRequestsQuery = query(
-                collection(db, `artifacts/${appId}/public/data/fund_requests`),
-                where('userId', '==', userId),
-                where('status', '==', 'pending')
-            );
-            unsubscribers.push(onSnapshot(userPendingRequestsQuery, (snapshot) => {
-                pendingRequests = mergeFundRequestsById(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-                renderUnifiedHistory(5);
-            }, (error) => console.warn('Realtime pending request listener skipped:', error)));
-
             Promise.all([
-                loadFirebaseTransactions(userId, 2000).catch(error => {
+                loadFirebaseTransactions(userId, FIRESTORE_TRANSACTION_READ_LIMIT).catch(error => {
                     console.warn('Firebase transaction history preload skipped:', error);
                     return [];
                 }),
-                fetchCloudTransactionHistory(userId, 2000).catch(error => {
+                fetchCloudTransactionHistory(userId, FIRESTORE_TRANSACTION_READ_LIMIT).catch(error => {
                     console.warn('Cloud transaction history preload skipped:', error);
                     return [];
                 })
@@ -3141,7 +3104,6 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                 .then(([firebaseTransactions, cloudTransactions]) => {
                     transactions = mergeTransactionsByKey(cachedHistoryItems.filter(item => !String(item.key || '').startsWith('req-')), firebaseTransactions, cloudTransactions);
                     renderUnifiedHistory(5);
-                    if (firebaseTransactions.length) return importFirestoreTransactionsToCloud(userId, firebaseTransactions);
                 })
                 .catch((error) => {
                     console.error("Firebase transaction history load failed:", error);
@@ -3384,23 +3346,10 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
         const initializeAdminFundRequestsRealtime = () => {
             if (currentUser?.uid !== ADMIN_UID || adminFundRequestsRealtimeStarted) return;
             adminFundRequestsRealtimeStarted = true;
-            const pendingRequestsQuery = query(
-                collection(db, `artifacts/${appId}/public/data/fund_requests`),
-                where('status', '==', 'pending')
-            );
-            unsubscribers.push(onSnapshot(pendingRequestsQuery, (snapshot) => {
-                const pendingRequests = mergeFundRequestsById(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-                allFundRequestsCache = pendingRequests.filter(req => (req.type || 'withdrawal') === 'withdrawal');
-                allRechargeRequestsCache = pendingRequests.filter(req => req.type === 'mobile_recharge');
-                updateAdminPendingRequestSummary();
-                if (document.getElementById('admin-fund-requests-list-page')) renderAdminFundRequests(allFundRequestsCache);
-                if (document.getElementById('admin-recharge-requests-list-page')) renderAdminRechargeRequests(allRechargeRequestsCache);
-            }, (error) => {
-                console.warn('Admin realtime fund requests skipped:', error);
-                refreshAdminFundRequestsFromCloud().catch(refreshError => console.warn('Admin fund request fallback refresh skipped:', refreshError));
-            }));
+            refreshAdminFundRequestsFromCloud().catch(error => {
+                console.warn('Admin fund request refresh skipped:', error);
+            });
         };
-
         const applyAdminGiftCodesSnapshot = (docs = []) => {
             allGiftCodesCache = docs;
             const totalRedeemed = docs.reduce((acc, doc) => acc + (doc.data().timesUsed || 0), 0);
@@ -3622,59 +3571,19 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
         const initializePublicHomeRealtime = () => {
             if (publicHomeRealtimeStarted) return;
             publicHomeRealtimeStarted = true;
-            unsubscribers.push(onSnapshot(
-                query(collection(db, `artifacts/${appId}/public/data/ads`), orderBy("createdAt", "desc")),
-                (snapshot) => applyAdsSnapshot(snapshot.docs),
-                (error) => console.warn('Public ads realtime skipped:', error)
-            ));
-            unsubscribers.push(onSnapshot(
-                query(collection(db, `artifacts/${appId}/public/data/tasks`), orderBy("createdAt", "desc")),
-                (snapshot) => applyAdminTasksSnapshot(snapshot.docs),
-                (error) => console.warn('Public tasks realtime skipped:', error)
-            ));
+            Promise.allSettled([
+                getDocs(query(collection(db, `artifacts/${appId}/public/data/ads`), orderBy("createdAt", "desc"), firestoreLimit(30))),
+                getDocs(query(collection(db, `artifacts/${appId}/public/data/tasks`), orderBy("createdAt", "desc"), firestoreLimit(50)))
+            ]).then(([adsResult, tasksResult]) => {
+                if (adsResult.status === 'fulfilled') applyAdsSnapshot(adsResult.value.docs);
+                if (tasksResult.status === 'fulfilled') applyAdminTasksSnapshot(tasksResult.value.docs);
+            }).catch(error => console.warn('Public home data load skipped:', error));
         };
-
         const initializeAdminSecondaryRealtime = () => {
             if (currentUser?.uid !== ADMIN_UID || adminSecondaryRealtimeStarted) return;
             adminSecondaryRealtimeStarted = true;
-
-            unsubscribers.push(onSnapshot(
-                query(collection(db, `artifacts/${appId}/public/data/gift_codes`)),
-                (snapshot) => applyAdminGiftCodesSnapshot(snapshot.docs),
-                (error) => console.warn('Admin realtime gift codes skipped:', error)
-            ));
-
-            unsubscribers.push(onSnapshot(
-                query(collection(db, `artifacts/${appId}/public/data/loan_requests`), orderBy("requestedAt", "desc")),
-                (snapshot) => applyAdminLoanRequestsSnapshot(snapshot.docs),
-                (error) => console.warn('Admin realtime loan requests skipped:', error)
-            ));
-
-            unsubscribers.push(onSnapshot(
-                query(collection(db, `artifacts/${appId}/public/data/loans`), orderBy("createdAt", "desc")),
-                (snapshot) => applyAdminLoansSnapshot(snapshot.docs),
-                (error) => console.warn('Admin realtime loans skipped:', error)
-            ));
-
-            unsubscribers.push(onSnapshot(
-                query(collection(db, `artifacts/${appId}/public/data/partner_investments`), orderBy("createdAt", "desc")),
-                (snapshot) => applyAdminInvestmentsSnapshot(snapshot.docs),
-                (error) => console.warn('Admin realtime partner investments skipped:', error)
-            ));
-
-            unsubscribers.push(onSnapshot(
-                query(collection(db, `artifacts/${appId}/public/data/tasks`), orderBy("createdAt", "desc")),
-                (snapshot) => applyAdminTasksSnapshot(snapshot.docs),
-                (error) => console.warn('Admin realtime tasks skipped:', error)
-            ));
-
-            unsubscribers.push(onSnapshot(
-                query(collection(db, `artifacts/${appId}/public/data/ads`), orderBy("createdAt", "desc")),
-                (snapshot) => applyAdsSnapshot(snapshot.docs),
-                (error) => console.warn('Admin realtime ads skipped:', error)
-            ));
+            refreshAdminSecondaryCaches().catch(error => console.warn('Admin secondary data refresh skipped:', error));
         };
-
         const refreshAdminSecondaryCaches = async () => {
             const codesQuery = query(collection(db, `artifacts/${appId}/public/data/gift_codes`));
             const codesSnap = await getDocs(codesQuery);
@@ -4354,8 +4263,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                                 
                                 showNotification('Updating profile photo...', false);
                                 try {
-                                    const userRef = doc(db, `artifacts/${appId}/public/data/users`, currentUser.uid);
-                                    await updateDoc(userRef, { profilePhoto: chosenUrl });
+                                    localStorage.setItem(`rw_profile_avatar_${currentUser.uid}`, chosenUrl);
                                     currentUserData = { ...(currentUserData || {}), profilePhoto: chosenUrl };
                                     writeJsonCache(getUserCacheKey(currentUser.uid), sanitizeUserForCache(currentUserData, currentUser.uid));
                                     
@@ -13895,11 +13803,11 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             loadAdminUserPendingWithdrawals(userId);
             try {
                 const [firebaseItems, cloudItems, cloudPendingRequests, firebasePendingRequests] = await Promise.all([
-                    loadFirebaseTransactions(userId, 5000).catch(error => {
+                    loadFirebaseTransactions(userId, FIRESTORE_TRANSACTION_READ_LIMIT).catch(error => {
                         console.warn('Admin user Firebase transactions skipped:', error);
                         return [];
                     }),
-                    fetchCloudTransactionHistory(userId, 5000).catch(error => {
+                    fetchCloudTransactionHistory(userId, FIRESTORE_TRANSACTION_READ_LIMIT).catch(error => {
                         console.warn('Admin user Cloud transactions skipped:', error);
                         return [];
                     }),
@@ -18684,6 +18592,6 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
         };
 
         // Check version on load
+        // A single startup read replaces the permanent app-config listener.
         checkAppVersion();
-        startWithdrawalSettingsListener();
     
