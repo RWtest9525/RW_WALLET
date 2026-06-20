@@ -2912,6 +2912,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                 setTimeout(() => {
                     try {
                         initializeUserListeners(user.uid);
+                        startWithdrawalSettingsListener();
                         initializePublicHomeRealtime();
                     } catch (err) {
                         console.error("Error initializing user listeners:", err);
@@ -18583,15 +18584,21 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             }
         };
 
+        let appConfigListenerActive = false;
         const startWithdrawalSettingsListener = () => {
-            onSnapshot(doc(db, `artifacts/${appId}/settings`, 'app_config'), (snapshot) => {
+            if (appConfigListenerActive) return;
+            appConfigListenerActive = true;
+            const stopListening = onSnapshot(doc(db, `artifacts/${appId}/settings`, 'app_config'), (snapshot) => {
                 if (!snapshot.exists()) return;
                 applyAppConfig(snapshot.data());
                 withdrawalSettingsLoadedAt = Date.now();
-            }, (error) => console.error('Withdrawal settings listener failed:', error));
+            }, (error) => {
+                appConfigListenerActive = false;
+                console.error('App settings listener failed:', error);
+            });
+            unsubscribers.push(() => {
+                stopListening();
+                appConfigListenerActive = false;
+            });
         };
-
-        // Check version on load
-        // A single startup read replaces the permanent app-config listener.
-        checkAppVersion();
     
