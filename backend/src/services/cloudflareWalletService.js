@@ -2765,6 +2765,59 @@ ${memoriesContext}`
       const { taskId, assignedComment, screenshotUrl } = req.body;
       const userId = req.auth.sub;
 
+      // check if it's a read_news task
+      const db = admin.firestore();
+      const taskDoc = await db.doc(`artifacts/digital-wallet-prod/public/data/tasks/${taskId}`).get();
+      const taskData = taskDoc.data();
+      if (taskData && taskData.taskSubtype === 'read_news') {
+        const submissionId = `sub_${taskId.slice(0, 12)}_${userId.slice(0, 12)}_${Date.now()}`;
+        const reward = Number(taskData.rate || taskData.reward || 0);
+
+        // 1. Save submission to D1
+        await saveTaskSubmission(d1, {
+          id: submissionId,
+          taskId,
+          userId,
+          assignedComment: 'Read News Task Completed',
+          screenshotUrl: 'https://cdn-icons-png.flaticon.com/512/2540/2540832.png',
+          reward,
+          taskLink: taskData.taskLink || '',
+          appName: taskData.appName || taskData.title || 'News Task',
+          userName: req.auth.name || req.auth.email || 'User',
+          userEmail: req.auth.email || '',
+          payoutDelayDays: 0
+        });
+
+        // 2. Mark submission approved and paid instantly in D1
+        await updateTaskSubmission(d1, submissionId, {
+          ocrStatus: 'completed',
+          manualStatus: 'approved',
+          payoutStatus: 'paid',
+          paidAt: Date.now()
+        });
+
+        // 3. Save credit transaction in D1
+        if (reward > 0) {
+          const transactionId = `task_payout_${submissionId}_${Date.now()}`;
+          await saveTransaction(d1, {
+            userId,
+            transactionId,
+            type: 'credit',
+            amount: reward,
+            status: 'completed',
+            timestamp: Date.now(),
+            details: {
+              comment: `Task reward: ${taskData.title}`,
+              source: 'task_auto_payout',
+              taskId,
+              submissionId
+            }
+          });
+        }
+
+        return res.json({ ok: true, submissionId, instantPaid: true });
+      }
+
       if (!screenshotUrl) {
         return res.status(400).json({ ok: false, error: 'SCREENSHOT_REQUIRED' });
       }

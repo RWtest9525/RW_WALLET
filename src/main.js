@@ -3494,6 +3494,8 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                     // Show task if user hasn't submitted it yet
                     if (!userTaskSubmissionIds.has(task.id)) return true;
                     // If they have submitted it: for bulkers, keep visible if submitted today (until 12 AM)
+                    const subtype = task.subtype || task.taskSubtype || '';
+                    if (subtype === 'read_news') return false;
                     if (isBulker) {
                         return userTaskTodaySubmissionIds.has(task.id);
                     }
@@ -6014,11 +6016,286 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             setBottomNavActive('bottom-task-btn');
         };
 
+        const showUserReadNewsTaskPage = (task) => {
+            const reward = task.rate || task.reward || 0;
+            const appName = task.appName || task.title || 'Read News';
+            const newsLinks = Array.isArray(task.newsLinks) ? task.newsLinks : [];
+            
+            // Track read status for 5 links
+            const readStatus = [false, false, false, false, false];
+            
+            const content = `
+                <header class="mb-4 flex items-center justify-between bg-white dark:bg-gray-800 px-4 py-3 shadow-sm page-header-fixed">
+                    <div class="flex items-center gap-3">
+                        <button class="page-back-btn rounded-full p-2 text-slate-900 dark:text-white">
+                            <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 12H5m7 7-7-7 7-7"></path></svg>
+                        </button>
+                        <h2 class="text-base font-black uppercase text-slate-950 dark:text-white">News Mission</h2>
+                    </div>
+                    <span class="h-9 w-9 overflow-hidden rounded-full bg-slate-100 dark:bg-slate-700 flex items-center justify-center p-1.5 border border-gray-200">
+                        <img src="https://cdn-icons-png.flaticon.com/512/2540/2540832.png" alt="News" class="h-full w-full object-contain">
+                    </span>
+                </header>
+                <div class="px-4 pb-24 h-[calc(100vh-80px)] flex flex-col justify-between">
+                    <div class="mx-auto max-w-xl w-full flex-1 flex flex-col justify-between space-y-4">
+                        <section class="overflow-hidden rounded-[1.75rem] border-t-4 border-slate-950 bg-white shadow-xl dark:border-white dark:bg-gray-800 flex-1 flex flex-col justify-between">
+                            <div class="flex items-start justify-between bg-slate-50 p-4 dark:bg-slate-900 shrink-0">
+                                <div>
+                                    <p class="text-[10px] font-black uppercase tracking-widest text-slate-950 dark:text-white">Earn From Read News</p>
+                                    <h3 class="mt-1 text-base font-black text-slate-950 dark:text-white">${escapeHtml(appName)}</h3>
+                                    <span class="mt-0.5 inline-flex rounded bg-white px-2 py-0.5 text-[9px] font-black uppercase text-slate-600 shadow-sm dark:bg-slate-700 dark:text-white">Instant Credit</span>
+                                </div>
+                                <div class="rounded-xl bg-slate-950 px-4 py-2 text-center text-white shadow-md">
+                                    <p class="text-[8px] font-black uppercase text-white/60">Reward</p>
+                                    <p class="text-lg font-black">${formatCurrency(reward).replace('.00', '')}</p>
+                                </div>
+                            </div>
+                            
+                            <!-- News Links Boxes Grid (Fixed in single screen) -->
+                            <div class="p-4 flex-grow flex flex-col justify-center space-y-2">
+                                <p class="text-center text-xs font-bold text-gray-500 dark:text-gray-400">Click and read all 5 news for 10 seconds each:</p>
+                                <div class="grid grid-cols-1 gap-2 flex-grow justify-center content-center max-h-[50vh] overflow-y-auto">
+                                    ${Array.from({ length: 5 }).map((_, idx) => {
+                                        const newsUrl = newsLinks[idx] || '';
+                                        return `
+                                            <button type="button" data-news-idx="${idx}" data-news-url="${escapeHtml(newsUrl)}" class="news-box-btn flex items-center justify-between p-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-slate-50 dark:bg-slate-900 transition text-left hover:bg-slate-100 dark:hover:bg-slate-800">
+                                                <div class="flex items-center gap-3">
+                                                    <span class="news-num-badge flex h-8 w-8 items-center justify-center rounded-lg bg-slate-900 text-white font-black text-sm">${idx + 1}</span>
+                                                    <div>
+                                                        <span class="block text-xs font-black text-slate-950 dark:text-white">News Article ${idx + 1}</span>
+                                                        <span class="block text-[9px] text-gray-400">Read & wait 10s</span>
+                                                    </div>
+                                                </div>
+                                                <span class="news-status-pill text-[10px] font-black uppercase tracking-wide px-2.5 py-1 rounded-lg bg-gray-200 text-gray-700 dark:bg-gray-800 dark:text-gray-300">Pending</span>
+                                            </button>
+                                        `;
+                                    }).join('')}
+                                </div>
+                            </div>
+                            
+                            <div class="p-4 bg-slate-50 dark:bg-slate-900 shrink-0">
+                                <button id="news-task-submit-btn" class="flex w-full items-center justify-center gap-2 rounded-xl bg-slate-950 px-4 py-3 text-sm font-black uppercase tracking-wide text-white disabled:bg-slate-400" disabled>Complete Task</button>
+                            </div>
+                        </section>
+                    </div>
+                </div>
+                
+                <!-- Mini Web Opener Overlay -->
+                <div id="mini-web-opener-overlay" class="fixed inset-0 z-[10000] hidden bg-slate-950 flex flex-col">
+                    <div class="flex items-center justify-between bg-white dark:bg-gray-900 px-4 py-3 border-b border-gray-200 dark:border-gray-800 shrink-0">
+                        <div class="flex items-center gap-2">
+                            <span class="h-2.5 w-2.5 rounded-full bg-red-500 animate-ping"></span>
+                            <span id="web-opener-title" class="text-xs font-black uppercase tracking-wider text-slate-900 dark:text-white">Reading News Article...</span>
+                        </div>
+                        <div class="flex items-center gap-3">
+                            <span id="web-opener-timer" class="text-sm font-black text-blue-600 dark:text-blue-400">10s remaining</span>
+                            <button id="web-opener-close-btn" class="hidden rounded-lg bg-red-50 hover:bg-red-100 text-red-600 dark:bg-red-900/30 dark:text-red-200 px-3 py-1.5 text-xs font-black">Close</button>
+                        </div>
+                    </div>
+                    <div class="flex-grow bg-white dark:bg-gray-900 relative">
+                        <iframe id="web-opener-iframe" class="w-full h-full border-0" sandbox="allow-scripts allow-same-origin allow-popups allow-forms"></iframe>
+                        <div id="web-opener-loading" class="absolute inset-0 flex items-center justify-center bg-white dark:bg-gray-950 z-10">
+                            <div class="flex flex-col items-center gap-2">
+                                <svg class="animate-spin h-8 w-8 text-blue-600" fill="none" viewBox="0 0 24 24">
+                                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                </svg>
+                                <p class="text-xs font-bold text-gray-500">Loading Article...</p>
+                                <p class="text-[10px] text-gray-400 mt-1">If loading is blocked, timer will still complete.</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+            
+            showPage(content, { returnTo: 'task', keepBottomNav: true, onBack: showUserTaskPage });
+            setBottomNavActive('bottom-task-btn');
+            
+            // Bind back button
+            const backBtn = document.querySelector('.page-back-btn');
+            if (backBtn) {
+                backBtn.onclick = () => showUserTaskPage();
+            }
+            
+            // Bind iframe load event
+            const iframe = document.getElementById('web-opener-iframe');
+            const openerLoading = document.getElementById('web-opener-loading');
+            if (iframe && openerLoading) {
+                iframe.onload = () => {
+                    openerLoading.classList.add('hidden');
+                };
+            }
+            
+            // Opener Close Action
+            let activeIdx = -1;
+            const closeBtn = document.getElementById('web-opener-close-btn');
+            const overlay = document.getElementById('mini-web-opener-overlay');
+            
+            const handleCloseOpener = () => {
+                if (activeIdx !== -1) {
+                    readStatus[activeIdx] = true;
+                    // Update main box UI
+                    const box = document.querySelector(`[data-news-idx="${activeIdx}"]`);
+                    if (box) {
+                        const statusPill = box.querySelector('.news-status-pill');
+                        if (statusPill) {
+                            statusPill.textContent = 'Completed ✅';
+                            statusPill.className = 'news-status-pill text-[10px] font-black uppercase tracking-wide px-2.5 py-1 rounded-lg bg-green-50 text-green-700 dark:bg-green-900/30 dark:text-green-300';
+                        }
+                        box.classList.add('border-green-200', 'bg-green-50/20', 'dark:border-green-900/30');
+                        box.disabled = true;
+                    }
+                }
+                
+                // Hide overlay
+                if (overlay) overlay.classList.add('hidden');
+                if (iframe) iframe.src = 'about:blank';
+                activeIdx = -1;
+                
+                // Check if all complete
+                const allDone = readStatus.every(status => status === true);
+                const submitBtn = document.getElementById('news-task-submit-btn');
+                if (submitBtn) {
+                    submitBtn.disabled = !allDone;
+                }
+            };
+            
+            if (closeBtn) {
+                closeBtn.onclick = handleCloseOpener;
+            }
+            
+            // Box clicks
+            document.querySelectorAll('.news-box-btn').forEach(btn => {
+                btn.onclick = () => {
+                    const idx = Number(btn.dataset.newsIdx);
+                    const url = btn.dataset.newsUrl;
+                    if (!url) return showNotification('News url is missing.', true);
+                    
+                    activeIdx = idx;
+                    
+                    // Show overlay
+                    if (overlay) overlay.classList.remove('hidden');
+                    if (openerLoading) openerLoading.classList.remove('hidden');
+                    if (closeBtn) closeBtn.classList.add('hidden');
+                    
+                    const timerText = document.getElementById('web-opener-timer');
+                    if (timerText) timerText.textContent = '10s remaining';
+                    
+                    if (iframe) iframe.src = url;
+                    
+                    // Start timer
+                    let seconds = 10;
+                    const interval = setInterval(() => {
+                        seconds--;
+                        if (seconds > 0) {
+                            if (timerText) timerText.textContent = `${seconds}s remaining`;
+                        } else {
+                            clearInterval(interval);
+                            if (timerText) timerText.textContent = 'Completed ✅';
+                            if (closeBtn) closeBtn.classList.remove('hidden');
+                            if (openerLoading) openerLoading.classList.add('hidden');
+                            showNotification(`News Article ${idx + 1} read completed!`);
+                        }
+                    }, 1000);
+                };
+            });
+            
+            // Submit Task
+            const submitBtn = document.getElementById('news-task-submit-btn');
+            if (submitBtn) {
+                submitBtn.onclick = async () => {
+                    submitBtn.disabled = true;
+                    submitBtn.textContent = 'Crediting reward...';
+                    
+                    try {
+                        const token = await getBackendAuthToken();
+                        const resp = await fetchWithTimeout(`${BACKEND_BASE_URL}/api/task-submissions`, {
+                            method: 'POST',
+                            headers: {
+                                Authorization: `Bearer ${token}`,
+                                'Content-Type': 'application/json'
+                            },
+                            body: JSON.stringify({ taskId: task.id })
+                        }, 15000);
+                        
+                        const resData = await resp.json().catch(() => ({}));
+                        if (!resp.ok || !resData.ok) {
+                            throw new Error(resData.detail || resData.error || 'Submission failed');
+                        }
+                        
+                        // Success! Now update Firestore
+                        const userRef = doc(db, `artifacts/${appId}/public/data/users`, currentUser.uid);
+                        await updateDoc(userRef, { balance: increment(reward) });
+                        
+                        // Save transaction in Firestore
+                        const txnRef = doc(collection(userRef, 'transactions'));
+                        await setDoc(txnRef, {
+                            type: 'credit',
+                            amount: reward,
+                            comment: `Read News Task: ${task.title}`,
+                            timestamp: serverTimestamp(),
+                            transactionId: txnRef.id,
+                            status: 'completed',
+                            isAdminTransaction: true,
+                            senderName: 'Reviews World',
+                            recipientName: currentUserData?.name || 'User',
+                            recipientMobile: currentUserData?.mobile || ''
+                        });
+                        
+                        // Save submission in Firestore
+                        const submissionId = resData.submissionId || `sub_${task.id.slice(0, 12)}_${currentUser.uid.slice(0, 12)}_${Date.now()}`;
+                        await setDoc(doc(db, `artifacts/${appId}/public/data/task_submissions`, submissionId), {
+                            id: submissionId,
+                            taskId: task.id,
+                            taskCode: task.taskCode || task.id,
+                            taskTitle: task.title,
+                            taskFamily: 'social',
+                            taskSubtype: 'read_news',
+                            taskSubtypeLabel: 'Earn from read news',
+                            appName,
+                            userId: currentUser.uid,
+                            userName: currentUserData?.name || currentUser.email || 'User',
+                            userEmail: currentUser.email || currentUserData?.email || '',
+                            userMobile: currentUserData?.mobile || '',
+                            reward: Number(reward || 0),
+                            status: 'approved',
+                            manualStatus: 'approved',
+                            payoutStatus: 'paid',
+                            submittedAt: serverTimestamp(),
+                            verifiedAt: serverTimestamp(),
+                            paidAt: serverTimestamp()
+                        });
+                        
+                        // Update cache
+                        currentUserData.balance = (currentUserData.balance || 0) + reward;
+                        userTaskSubmissionIds.add(task.id);
+                        userTaskTodaySubmissionIds.add(task.id);
+                        
+                        // Sync
+                        syncRecentTransactionsToCloud(currentUser.uid).catch(() => {});
+                        
+                        showNotification(`Congratulations! ₹${reward} credited to your wallet.`);
+                        showUserTaskPage();
+                    } catch (err) {
+                        console.error('Submit news task failed:', err);
+                        showNotification(err.message || 'Verification failed. Please try again.', true);
+                        submitBtn.disabled = false;
+                        submitBtn.textContent = 'Complete Task';
+                    }
+                };
+            }
+        };
+
         const showUserTaskDetailsPage = async (taskId) => {
             const task = allTasksCache.find(item => item.id === taskId);
             if (!task) return showNotification('Task not found. Please refresh tasks.', true);
             if (getAdminTaskEffectiveStatus(task) !== 'active') return showNotification('This task is closed.', true);
             
+            if (task.taskSubtype === 'read_news') {
+                showUserReadNewsTaskPage(task);
+                return;
+            }
+
             showLoading();
             const isBulk = isBulkTaskUser();
             const reward = task.rate || task.reward || 0;
@@ -6760,7 +7037,8 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             { value: 'youtube_task', label: 'YouTube Task', logo: 'https://cdn-icons-png.flaticon.com/512/1384/1384060.png' },
             { value: 'app_download_task', label: 'App Download Task', logo: 'https://cdn-icons-png.flaticon.com/512/2991/2991148.png' },
             { value: 'facebook_task', label: 'Facebook Task', logo: 'https://cdn-icons-png.flaticon.com/512/5968/5968764.png' },
-            { value: 'telegram_task', label: 'Telegram Task', logo: 'https://cdn-icons-png.flaticon.com/512/2111/2111646.png' }
+            { value: 'telegram_task', label: 'Telegram Task', logo: 'https://cdn-icons-png.flaticon.com/512/2111/2111646.png' },
+            { value: 'read_news', label: 'Earn from read news', logo: 'https://cdn-icons-png.flaticon.com/512/2540/2540832.png' }
         ];
 
         const getAdminTaskTypes = (family = 'review') => family === 'social' ? ADMIN_TASK_SOCIAL_TYPES : ADMIN_TASK_REVIEW_TYPES;
@@ -6786,6 +7064,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                 if (text.includes('download') || text.includes('install')) return 'app_download_task';
                 if (text.includes('facebook')) return 'facebook_task';
                 if (text.includes('telegram')) return 'telegram_task';
+                if (text.includes('news') || text.includes('read')) return 'read_news';
                 return 'instagram_task';
             }
             if (text.includes('map')) return 'map_review';
@@ -7157,6 +7436,14 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                                     </span>
                                 </div>
                             </div>
+                            <div id="admin-task-news-links-wrap" class="hidden sm:col-span-2 space-y-2">
+                                <label class="text-xs font-black uppercase text-gray-400">News Links (Total 5 links required)</label>
+                                <input id="admin-task-news-link-1" placeholder="News Link 1 (https://...)" class="w-full px-4 py-3 bg-gray-100 dark:bg-gray-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-cyan-500 text-sm">
+                                <input id="admin-task-news-link-2" placeholder="News Link 2 (https://...)" class="w-full px-4 py-3 bg-gray-100 dark:bg-gray-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-cyan-500 text-sm">
+                                <input id="admin-task-news-link-3" placeholder="News Link 3 (https://...)" class="w-full px-4 py-3 bg-gray-100 dark:bg-gray-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-cyan-500 text-sm">
+                                <input id="admin-task-news-link-4" placeholder="News Link 4 (https://...)" class="w-full px-4 py-3 bg-gray-100 dark:bg-gray-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-cyan-500 text-sm">
+                                <input id="admin-task-news-link-5" placeholder="News Link 5 (https://...)" class="w-full px-4 py-3 bg-gray-100 dark:bg-gray-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-cyan-500 text-sm">
+                            </div>
                             <div>
                                 <label class="text-xs font-black uppercase text-gray-400">Rate / Reward</label>
                                 <input id="admin-task-rate" type="number" min="0" step="1" placeholder="Amount in rupees" class="mt-1 w-full px-4 py-3 bg-gray-100 dark:bg-gray-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-cyan-500">
@@ -7336,6 +7623,17 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             subtypeInput.innerHTML = renderAdminTaskSubtypeOptions(family, selectedSubtype);
             subtypeInput.value = selectedSubtype;
 
+            const newsWrap = document.getElementById('admin-task-news-links-wrap');
+            const linkInput = document.getElementById('admin-task-link');
+            const linkWrap = linkInput ? linkInput.closest('.sm:col-span-2') : null;
+            if (selectedSubtype === 'read_news') {
+                if (newsWrap) newsWrap.classList.remove('hidden');
+                if (linkWrap) linkWrap.classList.add('hidden');
+            } else {
+                if (newsWrap) newsWrap.classList.add('hidden');
+                if (linkWrap) linkWrap.classList.remove('hidden');
+            }
+
             const paymentMode = document.getElementById('admin-task-payment-mode')?.value || 'instant';
             document.getElementById('admin-task-payment-days-wrap')?.classList.toggle('hidden', paymentMode !== 'days');
             updateAdminTaskLogoPreview();
@@ -7349,7 +7647,19 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             const subtypeMeta = getAdminTaskSubtypeMeta(family, subtype);
             const rate = Number(document.getElementById('admin-task-rate')?.value || 0);
             const limitValue = Number(document.getElementById('admin-task-limit')?.value || 0);
-            const taskLink = document.getElementById('admin-task-link')?.value.trim() || '';
+            let taskLink = document.getElementById('admin-task-link')?.value.trim() || '';
+            
+            const newsLinks = [];
+            if (subtype === 'read_news') {
+                for (let i = 1; i <= 5; i++) {
+                    const lnk = document.getElementById(`admin-task-news-link-${i}`)?.value.trim() || '';
+                    if (lnk) newsLinks.push(lnk);
+                }
+                if (newsLinks.length > 0) {
+                    taskLink = newsLinks[0];
+                }
+            }
+
             const paymentMode = document.getElementById('admin-task-payment-mode')?.value || 'instant';
             const paymentDays = paymentMode === 'days' ? Number(document.getElementById('admin-task-payment-days')?.value || 0) : 0;
             const scrapedLogoUrl = document.getElementById('admin-task-link')?.dataset.scrapedLogoUrl || '';
@@ -7373,6 +7683,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                 proofRequired: 'Screenshot',
                 priority: 'normal',
                 taskLink,
+                newsLinks,
                 logoUrl,
                 imageUrl: logoUrl,
                 iconUrl: logoUrl,
@@ -7398,6 +7709,12 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             if (listTimeInput) listTimeInput.value = '20:00';
             const saveBtn = document.getElementById('admin-task-save-btn');
             if (saveBtn) saveBtn.textContent = 'Add Task';
+            
+            for (let i = 1; i <= 5; i++) {
+                const input = document.getElementById(`admin-task-news-link-${i}`);
+                if (input) input.value = '';
+            }
+
             updateAdminTaskDynamicFields('app_review');
             applyDefaultAdminTaskInstructions(true);
         };
@@ -7411,8 +7728,21 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             const payload = getAdminTaskFormData(existingTask);
             if (!payload.title) return showNotification('Please enter task title.', true);
             if (!Number.isFinite(payload.rate) || payload.rate <= 0) return showNotification('Please enter a valid task rate.', true);
-            if (!payload.taskLink) return showNotification('Please add task link.', true);
-            if (payload.taskLink && !/^https?:\/\//i.test(payload.taskLink)) return showNotification('Task link must start with http:// or https://', true);
+            
+            if (payload.taskSubtype === 'read_news') {
+                if (!payload.newsLinks || payload.newsLinks.length < 5) {
+                    return showNotification('Please add all 5 news links.', true);
+                }
+                for (const link of payload.newsLinks) {
+                    if (!/^https?:\/\//i.test(link)) {
+                        return showNotification('All news links must start with http:// or https://', true);
+                    }
+                }
+            } else {
+                if (!payload.taskLink) return showNotification('Please add task link.', true);
+                if (payload.taskLink && !/^https?:\/\//i.test(payload.taskLink)) return showNotification('Task link must start with http:// or https://', true);
+            }
+            
             if (payload.paymentMode === 'days' && (!Number.isFinite(payload.paymentDelayDays) || payload.paymentDelayDays <= 0)) return showNotification('Please enter payment day.', true);
             if (!payload.instructions) return showNotification('Please add task instructions.', true);
 
@@ -7473,6 +7803,17 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             document.getElementById('admin-task-title').value = task.title || '';
             document.getElementById('admin-task-family').value = family;
             updateAdminTaskDynamicFields(subtype);
+            if (subtype === 'read_news' && Array.isArray(task.newsLinks)) {
+                for (let i = 1; i <= 5; i++) {
+                    const input = document.getElementById(`admin-task-news-link-${i}`);
+                    if (input) input.value = task.newsLinks[i - 1] || '';
+                }
+            } else {
+                for (let i = 1; i <= 5; i++) {
+                    const input = document.getElementById(`admin-task-news-link-${i}`);
+                    if (input) input.value = '';
+                }
+            }
             document.getElementById('admin-task-rate').value = task.rate || task.reward || '';
             document.getElementById('admin-task-limit').value = task.limit || '';
             const linkInput = document.getElementById('admin-task-link');
