@@ -6223,56 +6223,10 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                             throw new Error(resData.detail || resData.error || 'Submission failed');
                         }
                         
-                        // Success! Now update Firestore
-                        const userRef = doc(db, `artifacts/${appId}/public/data/users`, currentUser.uid);
-                        await updateDoc(userRef, { balance: increment(reward) });
-                        
-                        // Save transaction in Firestore
-                        const txnRef = doc(collection(userRef, 'transactions'));
-                        await setDoc(txnRef, {
-                            type: 'credit',
-                            amount: reward,
-                            comment: `Read News Task: ${task.title}`,
-                            timestamp: serverTimestamp(),
-                            transactionId: txnRef.id,
-                            status: 'completed',
-                            isAdminTransaction: true,
-                            senderName: 'Reviews World',
-                            recipientName: currentUserData?.name || 'User',
-                            recipientMobile: currentUserData?.mobile || ''
-                        });
-                        
-                        // Save submission in Firestore
-                        const submissionId = resData.submissionId || `sub_${task.id.slice(0, 12)}_${currentUser.uid.slice(0, 12)}_${Date.now()}`;
-                        await setDoc(doc(db, `artifacts/${appId}/public/data/task_submissions`, submissionId), {
-                            id: submissionId,
-                            taskId: task.id,
-                            taskCode: task.taskCode || task.id,
-                            taskTitle: task.title,
-                            taskFamily: 'social',
-                            taskSubtype: 'read_news',
-                            taskSubtypeLabel: 'Earn from read news',
-                            appName,
-                            userId: currentUser.uid,
-                            userName: currentUserData?.name || currentUser.email || 'User',
-                            userEmail: currentUser.email || currentUserData?.email || '',
-                            userMobile: currentUserData?.mobile || '',
-                            reward: Number(reward || 0),
-                            status: 'approved',
-                            manualStatus: 'approved',
-                            payoutStatus: 'paid',
-                            submittedAt: serverTimestamp(),
-                            verifiedAt: serverTimestamp(),
-                            paidAt: serverTimestamp()
-                        });
-                        
-                        // Update cache
+                        // Success! Update local cache and UI
                         currentUserData.balance = (currentUserData.balance || 0) + reward;
                         userTaskSubmissionIds.add(task.id);
                         userTaskTodaySubmissionIds.add(task.id);
-                        
-                        // Sync
-                        syncRecentTransactionsToCloud(currentUser.uid).catch(() => {});
                         
                         showNotification(`Congratulations! ₹${reward} credited to your wallet.`);
                         showUserTaskPage();

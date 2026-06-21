@@ -2815,6 +2815,54 @@ ${memoriesContext}`
           });
         }
 
+        // 4. Update user balance in Firestore (Cloudflare is source of truth)
+        const userRef = db.doc(`artifacts/digital-wallet-prod/public/data/users/${userId}`);
+        await userRef.update({
+          balance: admin.firestore.FieldValue.increment(reward)
+        }).catch(e => console.error(`[News Task] Firestore user balance update failed:`, e));
+
+        // 5. Save transaction in Firestore
+        const txnId = `txn_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+        const txnRef = db.doc(`artifacts/digital-wallet-prod/public/data/users/${userId}/transactions/${txnId}`);
+        const userDoc = await userRef.get().catch(() => null);
+        const userData = userDoc ? userDoc.data() : null;
+        await txnRef.set({
+          type: 'credit',
+          amount: reward,
+          comment: `Read News Task: ${taskData.title}`,
+          timestamp: admin.firestore.FieldValue.serverTimestamp(),
+          transactionId: txnId,
+          status: 'completed',
+          isAdminTransaction: true,
+          senderName: 'Reviews World',
+          recipientName: userData?.name || req.auth.name || 'User',
+          recipientMobile: userData?.mobile || ''
+        }).catch(e => console.error(`[News Task] Firestore transaction write failed:`, e));
+
+        // 6. Save submission in Firestore
+        const firestoreSubRef = db.doc(`artifacts/digital-wallet-prod/public/data/task_submissions/${submissionId}`);
+        await firestoreSubRef.set({
+          id: submissionId,
+          taskId: taskId,
+          taskCode: taskData.taskCode || taskId,
+          taskTitle: taskData.title,
+          taskFamily: 'social',
+          taskSubtype: 'read_news',
+          taskSubtypeLabel: 'Earn from read news',
+          appName: taskData.appName || taskData.title || 'News Task',
+          userId: userId,
+          userName: userData?.name || req.auth.name || 'User',
+          userEmail: req.auth.email || userData?.email || '',
+          userMobile: userData?.mobile || '',
+          reward: reward,
+          status: 'approved',
+          manualStatus: 'approved',
+          payoutStatus: 'paid',
+          submittedAt: admin.firestore.FieldValue.serverTimestamp(),
+          verifiedAt: admin.firestore.FieldValue.serverTimestamp(),
+          paidAt: admin.firestore.FieldValue.serverTimestamp()
+        }).catch(e => console.error(`[News Task] Firestore submission write failed:`, e));
+
         return res.json({ ok: true, submissionId, instantPaid: true });
       }
 
