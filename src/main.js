@@ -6021,8 +6021,8 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             const appName = task.appName || task.title || 'Read News';
             const newsLinks = Array.isArray(task.newsLinks) ? task.newsLinks : [];
             
-            // Track read status for 5 links
-            const readStatus = [false, false, false, false, false];
+            // Track read status for links
+            const readStatus = new Array(newsLinks.length).fill(false);
             
             const content = `
                 <header class="mb-4 flex items-center justify-between bg-white dark:bg-gray-800 px-4 py-3 shadow-sm page-header-fixed">
@@ -6053,10 +6053,9 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                             
                             <!-- News Links Boxes Grid (Fixed in single screen) -->
                             <div class="p-4 flex-grow flex flex-col justify-center space-y-2">
-                                <p class="text-center text-xs font-bold text-gray-500 dark:text-gray-400">Click and read all 5 news for 10 seconds each:</p>
+                                <p class="text-center text-xs font-bold text-gray-500 dark:text-gray-400">Click and read all ${newsLinks.length} news for 10 seconds each:</p>
                                 <div class="grid grid-cols-1 gap-2 flex-grow justify-center content-center max-h-[50vh] overflow-y-auto">
-                                    ${Array.from({ length: 5 }).map((_, idx) => {
-                                        const newsUrl = newsLinks[idx] || '';
+                                    ${newsLinks.map((newsUrl, idx) => {
                                         return `
                                             <button type="button" data-news-idx="${idx}" data-news-url="${escapeHtml(newsUrl)}" class="news-box-btn flex items-center justify-between p-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-slate-50 dark:bg-slate-900 transition text-left hover:bg-slate-100 dark:hover:bg-slate-800">
                                                 <div class="flex items-center gap-3">
@@ -7005,8 +7004,8 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             const raw = String(task.taskFamily || task.taskType || task.family || '').toLowerCase();
             if (raw.includes('social')) return 'social';
             if (raw.includes('review')) return 'review';
-            const text = [task.category, task.title, task.taskSubtype].join(' ').toLowerCase();
-            return text.includes('instagram') || text.includes('youtube') || text.includes('download') || text.includes('social') ? 'social' : 'review';
+            const text = [task.category, task.title, task.taskSubtype || task.subtype].join(' ').toLowerCase();
+            return text.includes('instagram') || text.includes('youtube') || text.includes('download') || text.includes('social') || text.includes('news') || text.includes('read') ? 'social' : 'review';
         };
         const getAdminTaskSubtype = (task = {}) => {
             const family = getAdminTaskFamily(task);
@@ -7244,7 +7243,8 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                 youtube_task: '1. Open the YouTube link.\n2. Complete the required action.\n3. Keep the action active until verification.\n4. Upload a clear screenshot proof.',
                 app_download_task: '1. Open the app download link.\n2. Install the app.\n3. Open it once after install.\n4. Upload a clear screenshot proof.',
                 facebook_task: '1. Open the Facebook link.\n2. Complete the required action.\n3. Keep the action active until verification.\n4. Upload a clear screenshot proof.',
-                telegram_task: '1. Open the Telegram link.\n2. Join or complete the required action.\n3. Keep it active until verification.\n4. Upload a clear screenshot proof.'
+                telegram_task: '1. Open the Telegram link.\n2. Join or complete the required action.\n3. Keep it active until verification.\n4. Upload a clear screenshot proof.',
+                read_news: '1. Click on each of the news article cards below.\n2. Read the article in the sandboxed browser overlay and wait for the 10-second timer to finish.\n3. Close the article reader.\n4. Complete all news articles.\n5. Click the "Complete Task" button to receive your reward instantly.'
             };
             return defaults[subtype] || (family === 'social'
                 ? '1. Open the task link.\n2. Complete the required social action.\n3. Upload a clear screenshot proof.'
@@ -7391,12 +7391,16 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                                 </div>
                             </div>
                             <div id="admin-task-news-links-wrap" class="hidden sm:col-span-2 space-y-2">
-                                <label class="text-xs font-black uppercase text-gray-400">News Links (Total 5 links required)</label>
-                                <input id="admin-task-news-link-1" placeholder="News Link 1 (https://...)" class="w-full px-4 py-3 bg-gray-100 dark:bg-gray-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-cyan-500 text-sm">
-                                <input id="admin-task-news-link-2" placeholder="News Link 2 (https://...)" class="w-full px-4 py-3 bg-gray-100 dark:bg-gray-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-cyan-500 text-sm">
-                                <input id="admin-task-news-link-3" placeholder="News Link 3 (https://...)" class="w-full px-4 py-3 bg-gray-100 dark:bg-gray-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-cyan-500 text-sm">
-                                <input id="admin-task-news-link-4" placeholder="News Link 4 (https://...)" class="w-full px-4 py-3 bg-gray-100 dark:bg-gray-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-cyan-500 text-sm">
-                                <input id="admin-task-news-link-5" placeholder="News Link 5 (https://...)" class="w-full px-4 py-3 bg-gray-100 dark:bg-gray-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-cyan-500 text-sm">
+                                <div class="flex items-center justify-between">
+                                    <label class="text-xs font-black uppercase text-gray-400">News Links</label>
+                                    <button type="button" id="admin-task-add-news-link-btn" class="inline-flex items-center gap-1 rounded-xl bg-slate-950 hover:bg-slate-900 text-white px-3 py-1.5 text-[11px] font-black uppercase">
+                                        <svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg>
+                                        Add Link
+                                    </button>
+                                </div>
+                                <div id="admin-task-news-links-container" class="space-y-2">
+                                    <!-- Dynamic rows -->
+                                </div>
                             </div>
                             <div>
                                 <label class="text-xs font-black uppercase text-gray-400">Rate / Reward</label>
@@ -7477,6 +7481,14 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             }
             document.getElementById('admin-task-form')?.addEventListener('submit', handleSaveAdminTask);
             document.getElementById('admin-task-reset-btn')?.addEventListener('click', resetAdminTaskForm);
+            document.getElementById('admin-task-add-news-link-btn')?.addEventListener('click', () => {
+                const container = document.getElementById('admin-task-news-links-container');
+                if (!container) return;
+                const rows = Array.from(container.querySelectorAll('.news-link-row'));
+                const currentVals = rows.map(row => row.querySelector('.news-link-input')?.value.trim() || '');
+                currentVals.push('');
+                renderAdminTaskNewsLinkInputs(currentVals);
+            });
             document.getElementById('admin-task-family')?.addEventListener('change', () => updateAdminTaskDynamicFields());
             document.getElementById('admin-task-subtype')?.addEventListener('change', () => updateAdminTaskDynamicFields());
             document.getElementById('admin-task-payment-mode')?.addEventListener('change', () => updateAdminTaskDynamicFields());
@@ -7566,6 +7578,29 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             }
         };
 
+        const renderAdminTaskNewsLinkInputs = (links = []) => {
+            const container = document.getElementById('admin-task-news-links-container');
+            if (!container) return;
+            const items = links.length ? links : [''];
+            container.innerHTML = items.map((val, idx) => `
+                <div class="flex gap-2 items-center news-link-row">
+                    <input value="${escapeHtml(val)}" placeholder="News Link ${idx + 1} (https://...)" class="news-link-input w-full px-4 py-3 bg-gray-100 dark:bg-gray-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-cyan-500 text-sm">
+                    <button type="button" class="remove-news-link-btn flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-red-50 text-red-600 dark:bg-red-900/30 dark:text-red-200 transition hover:scale-105 active:scale-95" title="Remove Link">
+                        <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+                    </button>
+                </div>
+            `).join('');
+
+            container.querySelectorAll('.remove-news-link-btn').forEach((btn, idx) => {
+                btn.onclick = () => {
+                    const rows = Array.from(container.querySelectorAll('.news-link-row'));
+                    const currentVals = rows.map(row => row.querySelector('.news-link-input')?.value.trim() || '');
+                    currentVals.splice(idx, 1);
+                    renderAdminTaskNewsLinkInputs(currentVals);
+                };
+            });
+        };
+
         const updateAdminTaskDynamicFields = (preferredSubtype = '') => {
             const familyInput = document.getElementById('admin-task-family');
             const subtypeInput = document.getElementById('admin-task-subtype');
@@ -7583,6 +7618,11 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             if (selectedSubtype === 'read_news') {
                 if (newsWrap) newsWrap.classList.remove('hidden');
                 if (linkWrap) linkWrap.classList.add('hidden');
+                
+                const container = document.getElementById('admin-task-news-links-container');
+                if (container && !container.querySelector('.news-link-row')) {
+                    renderAdminTaskNewsLinkInputs([]);
+                }
             } else {
                 if (newsWrap) newsWrap.classList.add('hidden');
                 if (linkWrap) linkWrap.classList.remove('hidden');
@@ -7605,10 +7645,11 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             
             const newsLinks = [];
             if (subtype === 'read_news') {
-                for (let i = 1; i <= 5; i++) {
-                    const lnk = document.getElementById(`admin-task-news-link-${i}`)?.value.trim() || '';
+                const inputs = document.querySelectorAll('.news-link-input');
+                inputs.forEach(input => {
+                    const lnk = input.value.trim();
                     if (lnk) newsLinks.push(lnk);
-                }
+                });
                 if (newsLinks.length > 0) {
                     taskLink = newsLinks[0];
                 }
@@ -7664,10 +7705,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             const saveBtn = document.getElementById('admin-task-save-btn');
             if (saveBtn) saveBtn.textContent = 'Add Task';
             
-            for (let i = 1; i <= 5; i++) {
-                const input = document.getElementById(`admin-task-news-link-${i}`);
-                if (input) input.value = '';
-            }
+            renderAdminTaskNewsLinkInputs([]);
 
             updateAdminTaskDynamicFields('app_review');
             applyDefaultAdminTaskInstructions(true);
@@ -7684,8 +7722,8 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             if (!Number.isFinite(payload.rate) || payload.rate <= 0) return showNotification('Please enter a valid task rate.', true);
             
             if (payload.taskSubtype === 'read_news') {
-                if (!payload.newsLinks || payload.newsLinks.length < 5) {
-                    return showNotification('Please add all 5 news links.', true);
+                if (!payload.newsLinks || payload.newsLinks.length === 0) {
+                    return showNotification('Please add at least one news link.', true);
                 }
                 for (const link of payload.newsLinks) {
                     if (!/^https?:\/\//i.test(link)) {
@@ -7758,15 +7796,9 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             document.getElementById('admin-task-family').value = family;
             updateAdminTaskDynamicFields(subtype);
             if (subtype === 'read_news' && Array.isArray(task.newsLinks)) {
-                for (let i = 1; i <= 5; i++) {
-                    const input = document.getElementById(`admin-task-news-link-${i}`);
-                    if (input) input.value = task.newsLinks[i - 1] || '';
-                }
+                renderAdminTaskNewsLinkInputs(task.newsLinks);
             } else {
-                for (let i = 1; i <= 5; i++) {
-                    const input = document.getElementById(`admin-task-news-link-${i}`);
-                    if (input) input.value = '';
-                }
+                renderAdminTaskNewsLinkInputs([]);
             }
             document.getElementById('admin-task-rate').value = task.rate || task.reward || '';
             document.getElementById('admin-task-limit').value = task.limit || '';
