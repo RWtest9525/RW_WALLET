@@ -1,0 +1,3023 @@
+// File: src/pages/dashboard.js
+
+const getHistoryCacheKey = (userId) => `rw_wallet_history_cache_${userId}`;
+
+const getHistoryDataCacheKey = (userId) => `rw_wallet_history_data_cache_${userId}`;
+
+const normalizeHistoryItemForCache = (item = {}) => {
+            const cached = { ...item };
+            ['timestamp', 'requestedAt', 'processedAt'].forEach(field => {
+                if (cached[field]) cached[field] = timestampToMillis(cached[field]);
+            });
+            return cached;
+        };
+
+const reviveHistoryItemFromCache = (item = {}) => {
+            const revived = { ...item };
+            ['timestamp', 'requestedAt', 'processedAt'].forEach(field => {
+                if (revived[field]) revived[field] = reviveCachedTimestamp(revived[field]);
+            });
+            return revived;
+        };
+
+const readHistoryItemsFromCache = (userId) => {
+            const cached = readJsonCache(getHistoryDataCacheKey(userId));
+            return Array.isArray(cached) ? cached.map(reviveHistoryItemFromCache) : [];
+        };
+
+const writeHistoryItemsToCache = (userId, items) => {
+            if (!userId || !Array.isArray(items)) return;
+            writeJsonCache(getHistoryDataCacheKey(userId), items.map(normalizeHistoryItemForCache));
+        };
+
+const normalizeTransactionType = (item = {}) => {
+            const rawType = String(item.type || '').toLowerCase().replace(/\s+/g, '_');
+            const comment = String(item.comment || item.remarks || '').toLowerCase();
+            if (rawType.includes('withdraw') || comment.includes('withdraw')) return 'withdrawal';
+            if (rawType.includes('recharge') || comment.includes('recharge')) return 'mobile_recharge';
+            if (rawType.includes('gift')) return 'gift_card';
+            if (rawType.includes('wallet_transfer') || rawType === 'transfer') return 'wallet_transfer';
+            if (rawType === 'credit' || rawType.includes('credit') || rawType.includes('received') || rawType.includes('deposit') || rawType.includes('add_fund')) return 'credit';
+            if (rawType === 'debit' || rawType.includes('debit') || rawType.includes('deduct') || rawType.includes('cut')) return 'debit';
+            if (rawType.includes('sent') || comment.includes('money sent')) return 'debit';
+            if (comment.includes('admin credit')) return 'credit';
+            if (comment.includes('admin debit') || comment.includes('balance cut') || comment.includes('deduct')) return 'debit';
+            if (Number(item.amount || 0) > 0) return 'credit';
+            if (Number(item.amount || 0) < 0) return 'debit';
+            return rawType || 'transaction';
+        };
+
+const normalizeTransactionForHistory = (item = {}, index = 0) => {
+            const timestamp = timestampToMillis(item.timestamp || item.requestedAt || item.createdAt || item.processedAt || item.date) || Date.now();
+            const type = normalizeTransactionType(item);
+            const amount = Number(item.amount || item.chargeAmount || 0);
+            const transactionId = String(item.transaction_id || item.transactionId || item.adminTransactionId || item.id || `TX-${timestamp}-${index}`);
+            return {
+                ...item,
+                id: item.id || transactionId,
+                userId: item.user_id || item.userId || currentUser?.uid || '',
+                transactionId,
+                type,
+                timestamp,
+                amount,
+                status: item.status || 'completed',
+                comment: item.comment || item.remarks || item.description || (type === 'credit' ? 'Money Received' : type === 'withdrawal' ? 'Withdrawal' : 'Wallet Transaction')
+            };
+        };
+
+const getTransactionBalanceEffect = (item = {}) => {
+            const type = normalizeTransactionType(item);
+            const amount = Number(item.chargeAmount || item.amount || 0);
+            const status = String(item.status || '').toLowerCase();
+            if (!Number.isFinite(amount) || amount === 0) return 0;
+            if (status === 'rejected' || status === 'failed') {
+                if (type === 'withdrawal' || type === 'mobile_recharge') return amount;
+                return 0;
+            }
+            if (type === 'credit' || type === 'wallet_transfer' || type === 'add_fund' || type === 'gift_card') return amount;
+            if (type === 'debit' || type === 'withdrawal' || type === 'mobile_recharge') return -amount;
+            return amount > 0 ? amount : 0;
+        };
+
+const annotateTransactionsWithRemainingBalance = (items = [], currentBalance = 0) => {
+            let runningBalance = Number(currentBalance || 0);
+            return items.map(item => {
+                const explicitBalanceAfter = getExplicitBalanceAfter(item);
+                const balanceAfter = explicitBalanceAfter !== null ? explicitBalanceAfter : runningBalance;
+                const effect = getTransactionBalanceEffect(item);
+                runningBalance = Number((balanceAfter - effect).toFixed(2));
+                return {
+                    ...item,
+                    balanceAfter,
+                    balanceBefore: item.balanceBefore ?? item.balance_before ?? Number((balanceAfter - effect).toFixed(2))
+                };
+            });
+        };
+
+const normalizeCloudTransaction = (item = {}) => normalizeTransactionForHistory(item);
+
+const getTransactionKey = (item = {}, index = 0) => {
+            const timestamp = timestampToMillis(item.timestamp || item.requestedAt || item.createdAt || item.processedAt) || Date.now();
+            const existingKey = String(item.key || '');
+            if (existingKey.startsWith('req-')) return existingKey;
+            const requestId = item.requestId || item.request_id;
+            const type = normalizeTransactionType(item);
+            if (requestId && (type === 'withdrawal' || type === 'mobile_recharge')) return `req-${requestId}`;
+            return String(item.transactionId || item.adminTransactionId || item.requestId || item.id || existingKey || `${item.type || 'tx'}-${timestamp}-${item.amount || 0}-${index}`);
+        };
+
+const mergeTransactionsByKey = (...groups) => {
+            const merged = new Map();
+            const statusRank = (item = {}) => ['completed', 'rejected', 'failed'].includes(String(item.status || '').toLowerCase()) ? 2 : 1;
+            const getOriginalRequestTime = (...items) => {
+                const times = items
+                    .flat()
+                    .map(item => timestampToMillis(item?.requestedAt || item?.requested_at || item?.createdAt || item?.timestamp))
+                    .filter(time => Number.isFinite(time) && time > 0);
+                return times.length ? Math.min(...times) : null;
+            };
+            groups.flat().forEach((item, index) => {
+                if (!item) return;
+                const normalized = normalizeTransactionForHistory(item, index);
+                const key = getTransactionKey(normalized, index);
+                const existing = merged.get(key) || {};
+                let next = statusRank(normalized) >= statusRank(existing)
+                    ? { ...existing, ...normalized, key }
+                    : { ...normalized, ...existing, key };
+                const type = normalizeTransactionType(next);
+                if ((next.requestId || next.request_id) && (type === 'withdrawal' || type === 'mobile_recharge')) {
+                    const requestedAt = getOriginalRequestTime(existing, normalized, item);
+                    if (requestedAt) {
+                        next = {
+                            ...next,
+                            requestedAt,
+                            timestamp: requestedAt
+                        };
+                    }
+                }
+                merged.set(key, next);
+            });
+            return Array.from(merged.values())
+                .sort((a, b) => timestampToMillis(b.timestamp || b.requestedAt) - timestampToMillis(a.timestamp || a.requestedAt));
+        };
+
+const normalizePendingRequestForHistory = (request = {}) => {
+            const requestType = request.type || 'withdrawal';
+            const timestamp = request.requestedAt || request.requested_at || request.timestamp || request.createdAt || Date.now();
+            const requestId = request.id || request.requestId || request.request_id || `${requestType}-${timestampToMillis(timestamp)}-${request.amount || 0}`;
+            return {
+                ...request,
+                id: requestId,
+                requestId,
+                key: `req-${requestId}`,
+                type: requestType,
+                comment: requestType === 'mobile_recharge' ? 'Mobile Recharge Request' : 'Withdrawal Request',
+                timestamp,
+                status: request.status || 'pending'
+            };
+        };
+
+const loadFirebaseTransactions = async (userId, maxItems = FIRESTORE_TRANSACTION_READ_LIMIT) => {
+            if (!userId) return [];
+            const readLimit = Math.max(1, Math.min(Number(maxItems) || FIRESTORE_TRANSACTION_READ_LIMIT, FIRESTORE_TRANSACTION_READ_LIMIT));
+            const canonicalQuery = query(
+                collection(db, `artifacts/${appId}/public/data/users/${userId}/transactions`),
+                orderBy('timestamp', 'desc'),
+                firestoreLimit(readLimit)
+            );
+            const snapshot = await getDocs(canonicalQuery);
+            return snapshot.docs.map(docSnap => ({
+                id: docSnap.id,
+                sourcePath: docSnap.ref.path,
+                ...docSnap.data()
+            }));
+        };
+
+const serializeCloudTransaction = (item = {}, userId = currentUser?.uid) => {
+            const timestamp = timestampToMillis(item.timestamp || item.requestedAt || item.createdAt || item.processedAt) || Date.now();
+            const transactionId = String(item.transactionId || item.adminTransactionId || item.requestId || item.id || `${item.type || 'tx'}-${timestamp}`);
+            return {
+                userId,
+                transactionId,
+                type: item.type || 'transaction',
+                amount: Number(item.amount || 0),
+                status: item.status || 'completed',
+                timestamp,
+                details: normalizeHistoryItemForCache({ ...item, transactionId, timestamp })
+            };
+        };
+
+const fetchCloudTransactionHistory = async (userId, limit = 100) => {
+            const token = await getBackendAuthToken();
+            const response = await fetchWithTimeout(`${BACKEND_BASE_URL}/api/transactions/${encodeURIComponent(userId)}?limit=${limit}`, {
+                headers: { Authorization: `Bearer ${token}` }
+            }, 7000);
+            const data = await response.json().catch(() => ({}));
+            if (!response.ok || !data.ok) throw new Error(data.error || 'Cloudflare history load failed');
+            return (data.history || []).map(normalizeCloudTransaction);
+        };
+
+const importFirestoreTransactionsToCloud = async (userId, items) => {
+            if (!items.length) return;
+            try {
+                const token = await getBackendAuthToken();
+                for (let index = 0; index < items.length; index += 500) {
+                    const chunk = items.slice(index, index + 500);
+                    await fetch(`${BACKEND_BASE_URL}/api/transactions/import`, {
+                        method: 'POST',
+                        headers: {
+                            Authorization: `Bearer ${token}`,
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({
+                            userId,
+                            transactions: chunk.map(item => serializeCloudTransaction(item, userId))
+                        })
+                    });
+                }
+            } catch (error) {
+                console.warn('Cloudflare history import failed:', error);
+                reportSyncFailure('transaction_import', userId, 'firebase', 'd1', error?.message);
+            }
+        };
+
+const recordCloudTransaction = async (userId, item) => {
+            try {
+                const token = await getBackendAuthToken();
+                await fetchWithTimeout(`${BACKEND_BASE_URL}/api/transactions`, {
+                    method: 'POST',
+                    headers: {
+                        Authorization: `Bearer ${token}`,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(serializeCloudTransaction(item, userId))
+                }, 5000);
+            } catch (error) {
+                console.warn('Cloudflare transaction save failed:', error);
+                reportSyncFailure('transaction', item?.transactionId || 'unknown', 'firebase', 'd1', error?.message);
+            }
+        };
+
+const getSafeTransactionDocId = (id = '') => String(id || generateTransactionId()).replace(/[\/\\#?[\]]/g, '-').slice(0, 120);
+
+const recordUserFirestoreTransaction = async (userId, item = {}) => {
+            const userRef = doc(db, `artifacts/${appId}/public/data/users`, userId);
+            const transactionId = item.transactionId || generateTransactionId();
+            const txRef = doc(collection(userRef, 'transactions'), getSafeTransactionDocId(transactionId));
+            await setDoc(txRef, {
+                ...item,
+                transactionId,
+                timestamp: item.timestamp || serverTimestamp()
+            }, { merge: true });
+            return { ...item, transactionId };
+        };
+
+const syncRecentTransactionsToCloud = async (userId = currentUser?.uid) => {
+            if (!userId) return;
+            try {
+                const items = await loadFirebaseTransactions(userId, FIRESTORE_TRANSACTION_READ_LIMIT);
+                await importFirestoreTransactionsToCloud(userId, items);
+                const mergedUserHistory = mergeTransactionsByKey(readHistoryItemsFromCache(userId), items);
+                writeHistoryItemsToCache(userId, mergedUserHistory);
+                if (currentUser?.uid === userId) {
+                    unifiedHistoryCache = mergeTransactionsByKey(unifiedHistoryCache, mergedUserHistory);
+                }
+            } catch (error) {
+                console.warn('Firebase transaction cache sync failed:', error);
+            }
+        };
+
+const prefetchTransactionHistory = (userId = currentUser?.uid, { force = false } = {}) => {
+            if (!userId) return Promise.resolve([]);
+            if (!force && transactionHistoryPrefetch.userId === userId && transactionHistoryPrefetch.promise) {
+                return transactionHistoryPrefetch.promise;
+            }
+            if (!force && transactionHistoryPrefetch.userId === userId && transactionHistoryPrefetch.loadedAt && Date.now() - transactionHistoryPrefetch.loadedAt < 60000) {
+                return Promise.resolve(unifiedHistoryCache);
+            }
+            const cached = readHistoryItemsFromCache(userId);
+            if (cached.length) {
+                unifiedHistoryCache = mergeTransactionsByKey(unifiedHistoryCache, cached);
+            }
+            transactionHistoryPrefetch.userId = userId;
+            transactionHistoryPrefetch.promise = (async () => {
+                const [firebaseTransactions, cloudTransactions, pendingWithdrawals] = await Promise.all([
+                    loadFirebaseTransactions(userId, FIRESTORE_TRANSACTION_READ_LIMIT).catch(error => {
+                        console.warn('Firebase transaction prefetch skipped:', error);
+                        return [];
+                    }),
+                    fetchCloudTransactionHistory(userId, FIRESTORE_TRANSACTION_READ_LIMIT).catch(error => {
+                        console.warn('Cloud transaction prefetch skipped:', error);
+                        return [];
+                    }),
+                    loadUserPendingWithdrawalsMerged(userId).catch(error => {
+                        console.warn('Pending withdrawal prefetch skipped:', error);
+                        return [];
+                    })
+                ]);
+                const activeHistoryCache = currentUser?.uid === userId ? unifiedHistoryCache : readHistoryItemsFromCache(userId);
+                const cachedPending = (activeHistoryCache || []).filter(item => String(item.key || '').startsWith('req-') || item.status === 'pending');
+                const pendingHistoryItems = pendingWithdrawals.map(normalizePendingRequestForHistory);
+                const mergedUserHistory = mergeTransactionsByKey(firebaseTransactions, cloudTransactions, cachedPending, pendingHistoryItems);
+                writeHistoryItemsToCache(userId, mergedUserHistory);
+                if (currentUser?.uid === userId) {
+                    unifiedHistoryCache = mergedUserHistory;
+                }
+                transactionHistoryPrefetch.loadedAt = Date.now();
+                return mergedUserHistory;
+            })().finally(() => {
+                transactionHistoryPrefetch.promise = null;
+            });
+            return transactionHistoryPrefetch.promise;
+        };
+
+const addInstantTransactionToHistory = (userId, item = {}) => {
+            if (!userId || !item) return null;
+            const normalized = normalizeTransactionForHistory({
+                ...item,
+                timestamp: item.timestamp || Date.now()
+            });
+            const mergedUserHistory = mergeTransactionsByKey([normalized], readHistoryItemsFromCache(userId), currentUser?.uid === userId ? unifiedHistoryCache : []);
+            writeHistoryItemsToCache(userId, mergedUserHistory);
+            if (currentUser?.uid === userId) {
+                unifiedHistoryCache = mergedUserHistory;
+            }
+            transactionHistoryPrefetch = { userId, promise: null, loadedAt: 0 };
+            if (document.getElementById('transactions-list')) {
+                document.getElementById('transactions-list').innerHTML = unifiedHistoryCache.slice(0, 5).map(tx => renderTransactionItem(tx)).join('');
+                try {
+                    localStorage.setItem(getHistoryCacheKey(userId), document.getElementById('transactions-list').innerHTML);
+                } catch (error) {
+                    console.warn('Instant history html cache skipped:', error);
+                }
+            }
+            if (document.getElementById('all-transactions-list')) {
+                const activeFilter = document.querySelector('#filter-bar .active-filter')?.dataset.filter || 'all';
+                renderFilteredTransactions(activeFilter, { reset: false });
+            }
+            return unifiedHistoryCache.find(tx => tx.transactionId === normalized.transactionId) || normalized;
+        };
+
+const generateTransactionId = () => {
+            const timestamp = Date.now().toString(36);
+            const random = Math.random().toString(36).substring(2, 8);
+            return `TXN${timestamp}${random}`.toUpperCase();
+        };
+
+const renderTransactionItem = (item, isFullPage = false) => {
+            const hasDetailKey = !!item.key;
+            const clickableClass = hasDetailKey ? 'tx-item-clickable cursor-pointer' : '';
+            const dataKey = hasDetailKey ? `data-key="${item.key}"` : '';
+
+            if (item.type === 'mobile_recharge') {
+                const isPending = item.status === 'pending';
+                const isRejected = item.status === 'rejected';
+                const statusText = isPending ? 'Pending' : isRejected ? 'Rejected' : 'Completed';
+                const statusColor = isPending ? 'text-yellow-600' : isRejected ? 'text-red-500' : 'text-green-500';
+                const bgColor = isPending ? 'bg-sky-50 dark:bg-sky-900/20' : isRejected ? 'bg-red-50 dark:bg-red-900/20' : 'bg-gray-50 dark:bg-gray-700/50';
+                const chargeAmount = item.chargeAmount || item.amount || 0;
+
+                return `
+                    <div class="flex justify-between items-center p-3 ${bgColor} rounded-lg text-sm ${clickableClass}" ${dataKey}>
+                        <div class="flex-1 min-w-0">
+                            <p class="font-semibold">Mobile Recharge</p>
+                            <p class="text-xs text-gray-500 dark:text-gray-400">${item.mobileNumber || ''} ${item.operator ? `| ${item.operator}` : ''}</p>
+                            <p class="text-xs text-gray-500 dark:text-gray-400">${formatDateDDMMYY(item.timestamp || item.requestedAt)}</p>
+                        </div>
+                        <div class="text-right">
+                            <p class="font-bold text-red-500">-${formatCurrencyAbs(chargeAmount)}</p>
+                            <p class="text-xs font-semibold ${statusColor}">${statusText}</p>
+                        </div>
+                    </div>`;
+            }
+
+            if (item.status === 'pending') {
+                return `
+                    <div class="flex justify-between items-center p-3 bg-yellow-50 dark:bg-yellow-900/20 rounded-lg text-sm ${clickableClass}" ${dataKey}>
+                        <div class="flex-1">
+                            <p class="font-semibold capitalize">Withdrawal Request</p>
+                            <p class="text-xs text-gray-500 dark:text-gray-400">${formatDate(item.timestamp)}</p>
+                        </div>
+                        <div class="text-right">
+                            <p class="font-bold text-yellow-600">${formatCurrencyAbs(item.amount)}</p>
+                            <p class="text-xs font-semibold text-yellow-600">Pending</p>
+                        </div>
+                    </div>`;
+            }
+
+            // Handle withdrawal status
+            if (item.type === 'withdrawal') {
+                let statusText = 'Completed';
+                let statusColor = 'text-red-500';
+                let bgColor = 'bg-red-50 dark:bg-red-900/20';
+                let txnIdBadge = '';
+
+                if (item.adminTransactionId) {
+                    txnIdBadge = `<span class="txn-id-badge text-xs ml-2">${item.adminTransactionId}</span>`;
+                }
+
+                if (item.status === 'rejected') {
+                    statusText = 'Rejected';
+                    statusColor = 'text-red-500';
+                    bgColor = 'bg-red-50 dark:bg-red-900/20';
+                }
+
+                return `
+                    <div class="flex justify-between items-center p-3 ${bgColor} rounded-lg text-sm ${clickableClass}" ${dataKey}>
+                        <div class="flex-1">
+                            <p class="font-semibold">Withdrawal ${txnIdBadge}</p>
+                            <p class="text-xs text-gray-500 dark:text-gray-400">${formatDateDDMMYY(item.timestamp)}</p>
+                            ${item.rejectionReason ? `<p class="text-xs text-red-400 mt-1">Reason: ${escapeHtml(item.rejectionReason)}</p>` : ''}
+                        </div>
+                        <div class="text-right">
+                            <p class="font-bold ${statusColor}">-${formatCurrencyAbs(item.amount)}</p>
+                            <p class="text-xs font-semibold ${statusColor}">${statusText}</p>
+                        </div>
+                    </div>`;
+            }
+
+            // Handle wallet transfers (Pay to Wallet) - Show clear From/To information
+            if (item.type === 'wallet_transfer') {
+                const isCredit = item.amount > 0;
+                const sign = isCredit ? '+' : '-';
+                const colorClass = isCredit ? 'text-green-500' : 'text-red-500';
+                const actionText = isCredit ? 'From: ' : 'To: ';
+                const userName = isCredit ? (item.senderName || 'User') : (item.recipientName || 'User');
+
+                return `
+                    <div class="flex justify-between items-center p-3 bg-gray-50 dark:bg-gray-700/50 rounded-lg text-sm ${clickableClass}" ${dataKey}>
+                        <div class="flex-1">
+                            <p class="font-semibold">${actionText}${escapeHtml(userName)}</p>
+                            <p class="text-xs text-gray-500 dark:text-gray-400">${formatDateDDMMYY(item.timestamp)}</p>
+                            <p class="text-xs text-gray-500 dark:text-gray-400">Wallet Transfer</p>
+                        </div>
+                        <p class="font-bold ${colorClass}">
+                            ${sign}${formatCurrency(Math.abs(item.amount))}
+                        </p>
+                    </div>`;
+            }
+
+            // Handle debit transactions (when user sends money) - Show To information
+            if (item.type === 'debit' && item.recipientName) {
+                return `
+                    <div class="flex justify-between items-center p-3 bg-gray-50 dark:bg-gray-700/50 rounded-lg text-sm ${clickableClass}" ${dataKey}>
+                        <div class="flex-1">
+                            <p class="font-semibold">To: ${escapeHtml(item.recipientName || 'User')}</p>
+                            <p class="text-xs text-gray-500 dark:text-gray-400">${formatDateDDMMYY(item.timestamp)}</p>
+                            <p class="text-xs text-gray-500 dark:text-gray-400">Money Sent</p>
+                        </div>
+                        <p class="font-bold text-red-500">
+                            -${formatCurrencyAbs(item.amount)}
+                        </p>
+                    </div>`;
+            }
+
+            // Handle other transaction types
+            const normalizedType = normalizeTransactionType(item);
+            const isCredit = ['credit', 'gift_card'].includes(normalizedType) || (Number(item.amount || 0) > 0 && !['debit', 'withdrawal', 'mobile_recharge'].includes(normalizedType));
+            const sign = isCredit ? '+' : '-';
+            const colorClass = isCredit ? 'text-green-500' : 'text-red-500';
+
+            // Check if this is a debit (wallet send) and use recipientName if available
+            let displayText = (item.comment || item.type || 'Wallet Transaction').replace(/_/g, ' ');
+            if (item.type === 'debit' && item.recipientName) {
+                displayText = item.recipientName;
+            }
+
+            return `
+                <div class="flex justify-between items-center p-3 bg-gray-50 dark:bg-gray-700/50 rounded-lg text-sm ${clickableClass}" ${dataKey}>
+                    <div class="flex-1">
+                        <p class="font-semibold capitalize">${escapeHtml(displayText)}</p>
+                        <p class="text-xs text-gray-500 dark:text-gray-400">${formatDateDDMMYY(item.timestamp)}</p>
+                    </div>
+                    <p class="font-bold ${colorClass}">
+                        ${sign}${formatCurrencyAbs(item.amount)}
+                    </p>
+                </div>`;
+        };
+
+const setBottomNavActive = (activeId) => {
+            document.querySelectorAll('.bottom-nav-btn').forEach(btn => {
+                btn.classList.toggle('active', btn.id === activeId);
+            });
+        };
+
+const showPage = (content, options = {}) => {
+            if (adminMaintenanceInterval) {
+                clearInterval(adminMaintenanceInterval);
+                adminMaintenanceInterval = null;
+            }
+            lastManualPageOpenAt = Date.now();
+            document.getElementById('dashboard-content').classList.add('hidden');
+            const pageContainer = document.getElementById('page-container');
+            const returnSection = options.returnTo || currentMainSection;
+            pageContainer.innerHTML = content;
+            pageContainer.classList.remove('hidden');
+            pageContainer.style.paddingBottom = options.fullHeight ? '0' : (options.keepBottomNav ? '6.5rem' : '1.5rem');
+            pageContainer.style.overflowY = options.fullHeight ? 'hidden' : 'auto';
+            pageContainer.style.scrollPaddingBottom = '7rem';
+            setMainChrome(!!options.keepBottomNav);
+            document.getElementById('app-footer')?.classList.add('app-footer-hidden');
+            const backButton = pageContainer.querySelector('.page-back-btn');
+            if (backButton) {
+                backButton.onclick = options.onBack || (() => {
+                    if (returnSection === 'settings') {
+                        showSettingsPage();
+                    } else if (returnSection === 'transactions') {
+                        showAllTransactionsPage();
+                    } else if (returnSection === 'help') {
+                        showHelpSupportPage();
+                    } else if (returnSection === 'admin') {
+                        showAdminMainPage();
+                    } else {
+                        hidePage();
+                    }
+                });
+            }
+        };
+
+const hidePage = () => {
+            if (adminMaintenanceInterval) {
+                clearInterval(adminMaintenanceInterval);
+                adminMaintenanceInterval = null;
+            }
+            if (activeChatUnsubscribe) {
+                activeChatUnsubscribe();
+                activeChatUnsubscribe = null;
+            }
+            document.getElementById('dashboard-content').classList.remove('hidden');
+            document.getElementById('page-container').classList.add('hidden');
+            document.getElementById('page-container').innerHTML = '';
+            document.getElementById('page-container').style.overflowY = 'auto';
+            document.getElementById('page-container').style.scrollPaddingBottom = '';
+            updateDollarBalanceDisplay(currentUserData?.balance || 0);
+            setMainChrome(true);
+            document.getElementById('app-footer')?.classList.add('app-footer-hidden');
+            const selectedTab = document.querySelector('.tab-button[aria-selected="true"]');
+            if (selectedTab) {
+                switchTab(selectedTab.dataset.tab);
+                setBottomNavActive(selectedTab.dataset.tab === 'admin-panel' ? 'bottom-admin-btn' : 'bottom-home-btn');
+            } else {
+                const fallbackTab = currentUser.uid === ADMIN_UID && currentMainSection === 'admin'
+                    ? 'admin-panel'
+                    : 'user-panel';
+                switchTab(fallbackTab);
+                setBottomNavActive(fallbackTab === 'admin-panel' ? 'bottom-admin-btn' : 'bottom-home-btn');
+            }
+        };
+
+const openSlideMenu = () => {
+            const menu = document.getElementById('slide-menu');
+            const isAdmin = currentUser && currentUser.uid === ADMIN_UID;
+
+            let adminItems = '';
+            if (isAdmin) {
+                adminItems = `
+                    <hr class="border-gray-200 dark:border-gray-700 my-2">
+                    <p class="text-xs font-semibold text-gray-400 uppercase px-4 pt-2">Admin</p>
+                    <button id="slide-menu-admin-withdrawals" class="flex items-center w-full text-left p-4 hover:bg-gray-100 dark:hover:bg-gray-700 transition font-medium">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="mr-3"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line><path d="M8 14h.01"></path><path d="M12 14h.01"></path><path d="M16 14h.01"></path><path d="M8 18h.01"></path><path d="M12 18h.01"></path><path d="M16 18h.01"></path></svg>
+                        Pending Requests
+                    </button>
+                    <button id="slide-menu-admin-users" class="flex items-center w-full text-left p-4 hover:bg-gray-100 dark:hover:bg-gray-700 transition font-medium">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="mr-3"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>
+                        User Management
+                    </button>
+                    <button id="slide-menu-admin-gift-codes" class="flex items-center w-full text-left p-4 hover:bg-gray-100 dark:hover:bg-gray-700 transition font-medium">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="mr-3"><polyline points="20 12 20 22 4 22 4 12"></polyline><rect x="2" y="7" width="20" height="5"></rect><line x1="12" y1="22" x2="12" y2="7"></line><path d="M12 7H7.5a2.5 2.5 0 0 1 0-5C11 2 12 7 12 7z"></path><path d="M12 7h4.5a2.5 2.5 0 0 0 0-5C13 2 12 7 12 7z"></path></svg>
+                        Gift Codes
+                    </button>
+                    <button id="slide-menu-admin-withdrawal-history" class="flex items-center w-full text-left p-4 hover:bg-gray-100 dark:hover:bg-gray-700 transition font-medium">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="mr-3"><path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" /></svg>
+                        Withdrawal History
+                    </button>
+                    `;
+            }
+
+            menu.innerHTML = `
+                <div class="flex justify-between items-center p-4 border-b border-gray-200 dark:border-gray-700">
+                    <h3 class="text-lg font-semibold">Menu</h3>
+                    <button id="slide-menu-close-btn" class="p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                    </button>
+                </div>
+                <div class="p-2 space-y-1">
+                    <button id="slide-menu-profile-btn" class="flex items-center w-full text-left p-4 hover:bg-gray-100 dark:hover:bg-gray-700 transition font-medium rounded-lg">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="mr-3"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
+                        My Profile
+                    </button>
+                    <button id="slide-menu-settings-btn" class="flex items-center w-full text-left p-4 hover:bg-gray-100 dark:hover:bg-gray-700 transition font-medium rounded-lg">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="mr-3"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
+                        Settings
+                    </button>
+                    
+                    ${adminItems}
+
+                    <hr class="border-gray-200 dark:border-gray-700 my-2">
+                    
+                    <button id="slide-menu-logout-btn" class="flex items-center w-full text-left p-4 bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 rounded-lg hover:bg-red-100 dark:hover:bg-red-900/30 transition font-medium">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="mr-3"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></svg>
+                        Logout
+                    </button>
+                </div>
+            `;
+
+            document.getElementById('menu-overlay').classList.remove('hidden');
+            menu.classList.remove('translate-x-full');
+
+            // Add listeners
+            document.getElementById('slide-menu-close-btn').onclick = closeSlideMenu;
+            document.getElementById('slide-menu-profile-btn').onclick = () => { showProfilePage(); closeSlideMenu(); };
+            document.getElementById('slide-menu-settings-btn').onclick = () => { showSettingsPage(); closeSlideMenu(); };
+            if (isAdmin) {
+                document.getElementById('slide-menu-admin-withdrawals').onclick = () => { showAdminWithdrawalsPage(); closeSlideMenu(); };
+                document.getElementById('slide-menu-admin-users').onclick = () => { showAdminUsersPage(); closeSlideMenu(); };
+                document.getElementById('slide-menu-admin-gift-codes').onclick = () => { showAdminGiftCodesPage(); closeSlideMenu(); };
+                document.getElementById('slide-menu-admin-withdrawal-history').onclick = () => { showWithdrawalHistoryPage(); closeSlideMenu(); };
+            }
+            document.getElementById('slide-menu-logout-btn').onclick = () => {
+                signOut(auth);
+            };
+        };
+
+const closeSlideMenu = () => {
+            document.getElementById('slide-menu').classList.add('translate-x-full');
+            document.getElementById('menu-overlay').classList.add('hidden');
+        };
+
+const showBlockedAccountPage = (data = currentUserData || {}) => {
+            const details = getBanDetails(data);
+            hideLoading();
+            setMainChrome(false);
+            document.getElementById('auth-screen')?.classList.add('hidden');
+            document.getElementById('main-content')?.classList.remove('hidden');
+            document.getElementById('dashboard-content')?.classList.add('hidden');
+            document.getElementById('menu-overlay')?.classList.add('hidden');
+            document.getElementById('slide-menu')?.classList.add('translate-x-full');
+            const pageContainer = document.getElementById('page-container');
+            pageContainer.innerHTML = `
+                <div class="min-h-[100dvh] flex items-center justify-center p-4 bg-gray-100 dark:bg-gray-900">
+                    <div class="w-full max-w-md rounded-3xl bg-white dark:bg-gray-800 border border-red-100 dark:border-red-900/50 shadow-xl overflow-hidden">
+                        <div class="bg-gradient-to-br from-red-600 to-rose-700 p-6 text-white">
+                            <div class="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-white/15 ring-1 ring-white/25">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-9 w-9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <path d="M12 9v4"></path><path d="M12 17h.01"></path><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0Z"></path>
+                                </svg>
+                            </div>
+                            <h2 class="text-center text-2xl font-black">Account Blocked</h2>
+                            <p class="mt-2 text-center text-sm text-white/80">Your wallet access is currently limited by admin.</p>
+                        </div>
+                        <div class="space-y-4 p-5">
+                            <div class="rounded-2xl bg-red-50 dark:bg-red-900/20 border border-red-100 dark:border-red-800 p-4">
+                                <p class="text-xs font-black uppercase text-red-500 dark:text-red-300">Reason</p>
+                                <p class="mt-1 text-sm font-semibold text-gray-900 dark:text-white">${escapeHtml(details.reason)}</p>
+                            </div>
+                            <div class="rounded-2xl bg-gray-50 dark:bg-gray-700/50 border border-gray-100 dark:border-gray-700 p-4">
+                                <p class="text-xs font-black uppercase text-gray-400">Ban Time</p>
+                                <p class="mt-1 text-sm font-semibold text-gray-900 dark:text-white">${escapeHtml(details.time)}</p>
+                            </div>
+                            <button id="blocked-contact-admin-btn" class="w-full rounded-2xl bg-blue-600 px-4 py-3 font-black text-white shadow-sm hover:bg-blue-700 transition">Contact Admin</button>
+                        </div>
+                    </div>
+                </div>`;
+            pageContainer.classList.remove('hidden');
+            pageContainer.style.paddingBottom = '0';
+            pageContainer.style.overflowY = 'hidden';
+            document.getElementById('blocked-contact-admin-btn').onclick = () => {
+                openSupportChatPage(currentUser.uid, 'user', {
+                    initialMessage: `My account is blocked. Reason: ${details.reason}. Ban time: ${details.time}. Please help.`,
+                    returnToBlocked: true,
+                    blockedData: data
+                });
+            };
+            if (currentUser?.uid) {
+                preloadSupportChatForUser(currentUser.uid).catch(error => console.warn('Blocked support chat preload skipped:', error));
+            }
+        };
+
+const showVerificationPendingPage = (data = currentUserData || {}) => {
+            const details = getApprovalDetails(data);
+            hideLoading();
+            setMainChrome(false);
+            document.getElementById('auth-screen')?.classList.add('hidden');
+            document.getElementById('main-content')?.classList.remove('hidden');
+            document.getElementById('dashboard-content')?.classList.add('hidden');
+            document.getElementById('menu-overlay')?.classList.add('hidden');
+            document.getElementById('slide-menu')?.classList.add('translate-x-full');
+            const pageContainer = document.getElementById('page-container');
+            pageContainer.innerHTML = `
+                <div id="verification-pending-container" class="min-h-[100dvh] flex items-center justify-center p-4 bg-gray-100 dark:bg-gray-900">
+                    <div class="w-full max-w-md rounded-3xl bg-white dark:bg-gray-800 border border-amber-100 dark:border-amber-900/50 shadow-xl overflow-hidden">
+                        <div class="bg-gradient-to-br from-amber-500 to-orange-600 p-6 text-white">
+                            <div class="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-white/15 ring-1 ring-white/25">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-9 w-9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <path d="M9 12l2 2 4-4"></path><path d="M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z"></path>
+                                </svg>
+                            </div>
+                            <h2 class="text-center text-2xl font-black">${escapeHtml(details.title)}</h2>
+                            <p class="mt-2 text-center text-sm text-white/85">Admin review is required before wallet access.</p>
+                        </div>
+                        <div class="space-y-4 p-5">
+                            <div class="rounded-2xl bg-amber-50 dark:bg-amber-900/20 border border-amber-100 dark:border-amber-800 p-4">
+                                <p class="text-xs font-black uppercase text-amber-600 dark:text-amber-200">Status</p>
+                                <p class="mt-1 text-sm font-semibold text-gray-900 dark:text-white">${escapeHtml(details.message)}</p>
+                            </div>
+                            <div class="rounded-2xl bg-gray-50 dark:bg-gray-700/50 border border-gray-100 dark:border-gray-700 p-4">
+                                <p class="text-xs font-black uppercase text-gray-400">Account</p>
+                                <p class="mt-1 text-sm font-semibold text-gray-900 dark:text-white">${escapeHtml(data.name || data.email || 'New user')}</p>
+                                ${details.requestedAt ? `<p class="mt-1 text-xs text-gray-500 dark:text-gray-300">Sent: ${new Date(details.requestedAt).toLocaleString('en-IN')}</p>` : ''}
+                            </div>
+                        </div>
+                    </div>
+                </div>`;
+            pageContainer.classList.remove('hidden');
+            pageContainer.style.paddingBottom = '0';
+            pageContainer.style.overflowY = 'hidden';
+        };
+
+const getPageHeader = (title, options = {}) => `
+            <header class="flex items-center mb-6 p-4 bg-white dark:bg-gray-800 shadow-md page-header-fixed">
+                ${options.showBack === false ? '' : `
+                    <button class="page-back-btn p-2 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700 mr-2">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5"></path><path d="M12 19l-7-7 7-7"></path></svg>
+                    </button>
+                `}
+                <h2 class="text-xl font-bold">${title}</h2>
+            </header>
+            <div class="p-4 pt-0">`;
+
+const getPageFooter = () => `</div>`;
+
+const showUserTaskHistoryPage = () => {
+            if (!ensureUserSessionReady()) return;
+            const content = `
+                ${getPageHeader('Task History')}
+                <div class="max-w-xl mx-auto space-y-4 pb-24 px-4">
+                    <div class="flex gap-2">
+                        <select id="user-task-history-filter" class="w-full px-4 py-2.5 bg-white dark:bg-gray-800 rounded-xl border border-gray-150 dark:border-gray-700 outline-none text-sm font-semibold shadow-sm focus:ring-2 focus:ring-blue-500">
+                            <option value="all">All Submissions</option>
+                            <option value="pending">Pending Review</option>
+                            <option value="approved">Approved</option>
+                            <option value="paid">Paid</option>
+                            <option value="rejected">Rejected</option>
+                        </select>
+                    </div>
+                    <div id="user-task-history-list" class="space-y-4">
+                        <div class="py-8 text-center text-sm text-gray-400">Loading history...</div>
+                    </div>
+                </div>
+                ${getPageFooter()}`;
+
+            showPage(content, { returnTo: 'settings', keepBottomNav: true });
+            if (userTaskHistoryCache && userTaskHistoryCache.length > 0) {
+                renderUserTaskHistory();
+            }
+            loadUserTaskHistory();
+
+            document.getElementById('user-task-history-filter').onchange = renderUserTaskHistory;
+        };
+
+const loadUserTaskHistory = async () => {
+            if (userTaskHistoryLoading) return;
+            userTaskHistoryLoading = true;
+            try {
+                const token = await getBackendAuthToken();
+                const response = await fetchWithTimeout(`${BACKEND_BASE_URL}/api/task-submissions`, {
+                    headers: { Authorization: `Bearer ${token}` }
+                }, 10000);
+                const data = await response.json().catch(() => ({}));
+                if (data.ok && Array.isArray(data.submissions)) {
+                    userTaskHistoryCache = data.submissions;
+                } else {
+                    userTaskHistoryCache = [];
+                }
+            } catch (err) {
+                console.error('Failed to load user task history:', err);
+                userTaskHistoryCache = [];
+            }
+            userTaskHistoryLoading = false;
+            renderUserTaskHistory();
+        };
+
+const renderUserTaskHistory = () => {
+            const listEl = document.getElementById('user-task-history-list');
+            if (!listEl) return;
+
+            const filter = document.getElementById('user-task-history-filter')?.value || 'all';
+            let subs = [...userTaskHistoryCache];
+
+            if (filter !== 'all') {
+                if (filter === 'paid') {
+                    subs = subs.filter(s => s.payout_status === 'paid');
+                } else if (filter === 'approved') {
+                    subs = subs.filter(s => s.manual_status === 'approved' && s.payout_status !== 'paid');
+                } else {
+                    subs = subs.filter(s => s.manual_status === filter);
+                }
+            }
+
+            if (subs.length === 0) {
+                listEl.innerHTML = `<div class="rounded-2xl border border-dashed border-gray-200 dark:border-gray-700 py-10 text-center text-sm font-semibold text-gray-450 dark:text-gray-500">No submissions found.</div>`;
+                return;
+            }
+
+            listEl.innerHTML = subs.map(s => {
+                const statusColor = s.manual_status === 'approved' ? 'green' : s.manual_status === 'rejected' ? 'red' : 'yellow';
+                const statusText = s.manual_status === 'approved' 
+                    ? (s.payout_status === 'paid' ? 'Paid' : 'Approved') 
+                    : (s.manual_status === 'rejected' ? 'Rejected' : 'Pending Review');
+                
+                const timeStr = s.submitted_at 
+                    ? new Date(s.submitted_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' }) 
+                    : 'Unknown';
+
+                const appLogo = s.app_logo_url || 'https://cdn-icons-png.flaticon.com/512/3176/3176366.png';
+
+                const payoutBadge = s.payout_status === 'paid' 
+                    ? '<span class="rounded-full bg-cyan-100 dark:bg-cyan-900/30 px-2 py-0.5 text-[9px] font-black text-cyan-700 dark:text-cyan-300">PAID</span>' 
+                    : '';
+
+                return `
+                <div class="flex items-center gap-3 bg-white dark:bg-gray-800 p-4 rounded-2xl border border-gray-150 dark:border-gray-700 hover:border-blue-500 hover:shadow-md cursor-pointer transition select-none" onclick="window.showUserTaskHistoryDetail('${s.id}')">
+                    <img src="${escapeHtml(appLogo)}" class="h-10 w-10 rounded-xl object-cover border border-gray-100 dark:border-gray-700 shrink-0" onerror="this.src='https://cdn-icons-png.flaticon.com/512/3176/3176366.png';">
+                    <div class="min-w-0 flex-1">
+                        <h4 class="text-sm font-extrabold text-gray-850 dark:text-white truncate">${escapeHtml(s.app_name || 'Task Submission')}</h4>
+                        <div class="flex items-center gap-1.5 mt-1 flex-wrap">
+                            <span class="rounded-full bg-${statusColor}-100 dark:bg-${statusColor}-900/30 px-2 py-0.5 text-[9px] font-black text-${statusColor}-700 dark:text-${statusColor}-300 uppercase">${statusText}</span>
+                            ${payoutBadge}
+                        </div>
+                    </div>
+                    <div class="text-right shrink-0">
+                        <p class="text-sm font-black text-blue-600 dark:text-blue-400">₹${s.reward}</p>
+                        <p class="text-[9px] text-gray-400 dark:text-gray-500 font-semibold mt-0.5">${timeStr}</p>
+                    </div>
+                </div>`;
+            }).join('');
+        };
+
+window.showUserTaskHistoryDetail = (submissionId) => {
+            const filter = document.getElementById('user-task-history-filter')?.value || 'all';
+            let subs = [...userTaskHistoryCache];
+            if (filter !== 'all') {
+                if (filter === 'paid') {
+                    subs = subs.filter(s => s.payout_status === 'paid');
+                } else if (filter === 'approved') {
+                    subs = subs.filter(s => s.manual_status === 'approved' && s.payout_status !== 'paid');
+                } else {
+                    subs = subs.filter(s => s.manual_status === filter);
+                }
+            }
+
+            const idx = subs.findIndex(x => x.id === submissionId);
+            if (idx === -1) return;
+            const s = subs[idx];
+
+            const statusColor = s.manual_status === 'approved' ? 'green' : s.manual_status === 'rejected' ? 'red' : 'yellow';
+            
+            // User-friendly status text
+            const statusText = s.manual_status === 'approved' 
+                ? (s.payout_status === 'paid' ? 'Paid' : 'Approved') 
+                : (s.manual_status === 'rejected' ? 'Rejected' : 'Pending');
+
+            const timeStr = s.submitted_at 
+                ? new Date(s.submitted_at).toLocaleString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) 
+                : 'Unknown';
+
+            let details = {};
+            try { details = s.details_json ? JSON.parse(s.details_json) : {}; } catch {}
+            const gmailName = s.ocr_extracted_name || '';
+            const appLogo = s.app_logo_url || 'https://cdn-icons-png.flaticon.com/512/3176/3176366.png';
+
+            // Scraper Live Badge
+            let liveBadge = '';
+            if (s.manual_status === 'approved') {
+                liveBadge = '<span class="rounded-full bg-emerald-100 dark:bg-emerald-900/30 px-2.5 py-0.5 text-[9px] font-black text-emerald-700 dark:text-emerald-300">🟢 LIVE & VERIFIED</span>';
+            } else if (s.manual_status === 'rejected') {
+                liveBadge = '<span class="rounded-full bg-rose-100 dark:bg-rose-900/30 px-2.5 py-0.5 text-[9px] font-black text-rose-700 dark:text-rose-300">🔴 VERIFICATION FAILED</span>';
+            } else {
+                liveBadge = '<span class="rounded-full bg-amber-100 dark:bg-amber-900/30 px-2.5 py-0.5 text-[9px] font-black text-amber-700 dark:text-amber-300 animate-pulse">⏳ VERIFYING</span>';
+            }
+
+            const isBulker = isBulkTaskUser();
+
+            // Status blinking overlay badge for screenshot
+            const statusTextColor = s.manual_status === 'approved' ? 'emerald' : s.manual_status === 'rejected' ? 'rose' : 'amber';
+            const blinkingTag = `
+                <span class="absolute top-3 left-3 rounded-full px-3 py-1 text-[10px] font-black uppercase text-${statusTextColor}-700 bg-${statusTextColor}-100/90 dark:text-${statusTextColor}-300 dark:bg-${statusTextColor}-900/80 backdrop-blur-sm border border-${statusTextColor}-200/50 animate-pulse shadow-md z-10">
+                    ${escapeHtml(statusText)}
+                </span>
+            `;
+
+            let navigationHtml = '';
+            if (isBulker) {
+                navigationHtml = `
+                    <!-- Navigation Arrows for Bulkers -->
+                    ${idx > 0 ? `
+                        <button onclick="window.showUserTaskHistoryDetail('${subs[idx - 1].id}')" class="absolute left-2 top-1/2 -translate-y-1/2 h-8 w-8 flex items-center justify-center rounded-full bg-black/60 hover:bg-black text-white hover:scale-105 active:scale-95 transition shrink-0 z-20 font-black text-base select-none">
+                            ‹
+                        </button>
+                    ` : ''}
+                    ${idx < subs.length - 1 ? `
+                        <button onclick="window.showUserTaskHistoryDetail('${subs[idx + 1].id}')" class="absolute right-2 top-1/2 -translate-y-1/2 h-8 w-8 flex items-center justify-center rounded-full bg-black/60 hover:bg-black text-white hover:scale-105 active:scale-95 transition shrink-0 z-20 font-black text-base select-none">
+                            ›
+                        </button>
+                    ` : ''}
+                `;
+            }
+
+            // Stepper timeline configuration
+            const isReviewTask = !!(s.assigned_comment && String(s.assigned_comment).trim().length > 0);
+
+            // Step 2: Verification
+            let step2Text = 'Task is being verified by admin';
+            let step2CircleClass = 'bg-amber-500 ring-4 ring-amber-100 dark:ring-amber-950 animate-pulse';
+            if (s.manual_status === 'approved') {
+                step2Text = 'Task verified successfully';
+                step2CircleClass = 'bg-emerald-500 ring-4 ring-emerald-100 dark:ring-emerald-950';
+            } else if (s.manual_status === 'rejected') {
+                if (isReviewTask && (s.scraper_status === 'not_live' || s.ocr_status === 'completed')) {
+                    step2Text = 'Your review is not live, so it is rejected';
+                } else {
+                    step2Text = 'Your task is rejected';
+                }
+                step2CircleClass = 'bg-rose-500 ring-4 ring-rose-100 dark:ring-rose-950';
+            }
+
+            // Step 3: Payout / Credit
+            let step3Text = 'Amount initiation pending';
+            let step3CircleClass = 'bg-gray-200 dark:bg-gray-700 ring-4 ring-gray-100 dark:ring-gray-900';
+            if (s.manual_status === 'approved') {
+                if (s.payout_status === 'paid') {
+                    step3Text = `Amount ₹${s.reward} credited to wallet`;
+                    step3CircleClass = 'bg-emerald-500 ring-4 ring-emerald-100 dark:ring-emerald-950';
+                } else {
+                    step3Text = 'Amount has been initiated for credit';
+                    step3CircleClass = 'bg-blue-500 ring-4 ring-blue-100 dark:ring-blue-950 animate-pulse';
+                }
+            } else if (s.manual_status === 'rejected') {
+                step3Text = 'Credit cancelled due to rejection';
+                step3CircleClass = 'bg-gray-400 dark:bg-gray-600 ring-4 ring-gray-300 dark:ring-gray-850';
+            }
+
+            const headerContent = `
+                <header class="flex flex-col p-4 bg-white dark:bg-gray-800 shadow-sm page-header-fixed border-b border-gray-100 dark:border-gray-750">
+                    <div class="flex items-center justify-between gap-3">
+                        <div class="flex items-center min-w-0">
+                            <button class="page-back-btn p-2 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700 mr-2 shrink-0">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5"></path><path d="M12 19l-7-7 7-7"></path></svg>
+                            </button>
+                            <img src="${escapeHtml(appLogo)}" class="h-8 w-8 rounded-lg object-cover border border-gray-100 dark:border-gray-700 shrink-0" onerror="this.src='https://cdn-icons-png.flaticon.com/512/3176/3176366.png';">
+                            <div class="min-w-0 ml-2">
+                                <h2 class="text-sm font-extrabold text-gray-900 dark:text-white truncate max-w-[150px]">${escapeHtml(s.app_name || 'Task Submission')}</h2>
+                                <p class="text-[9px] text-gray-400 font-mono select-all">ID: ${s.task_id || s.id}</p>
+                            </div>
+                        </div>
+                        <div class="text-right shrink-0">
+                            <span class="text-sm font-black text-blue-600 dark:text-blue-400">₹${s.reward}</span>
+                        </div>
+                    </div>
+                </header>
+                <div class="p-4 pt-4">
+            `;
+
+            const detailContent = `
+                ${headerContent}
+                <div class="max-w-xl mx-auto space-y-4 pb-24 px-4">
+                    <!-- Task Info card -->
+                    <div class="bg-white dark:bg-gray-800 p-5 rounded-2xl shadow-md border border-gray-100 dark:border-gray-700 space-y-4">
+                        <div class="space-y-3 text-xs">
+                            ${s.assigned_comment ? `
+                            <div>
+                                <p class="text-[10px] font-black uppercase text-gray-400 tracking-wider">Assigned Comment</p>
+                                <p class="mt-1 text-xs font-bold text-gray-800 dark:text-gray-250 italic">${escapeHtml(s.assigned_comment)}</p>
+                            </div>
+                            ` : ''}
+                            ${gmailName ? `
+                            <div>
+                                <p class="text-[10px] font-black uppercase text-gray-400 tracking-wider">Reviewer Gmail / Name</p>
+                                <p class="mt-1 text-xs font-extrabold text-gray-900 dark:text-white flex items-center gap-2">
+                                    ${details.gmailLogoUrl ? `<img src="${escapeHtml(details.gmailLogoUrl)}" class="h-5 w-5 rounded-full object-cover border" loading="lazy">` : `<span class="flex h-5 w-5 items-center justify-center rounded-full bg-gray-100 dark:bg-gray-700 text-[9px] font-bold text-gray-400 dark:text-gray-300 shrink-0">G</span>`}
+                                    <span>${escapeHtml(gmailName)}</span>
+                                </p>
+                            </div>
+                            ` : ''}
+                            <div class="flex items-center gap-2 pt-2 border-t border-gray-100 dark:border-gray-700 mt-2">
+                                <span class="text-gray-500 font-semibold">Live Check:</span>
+                                ${liveBadge}
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Screenshot container -->
+                    ${s.screenshot_url ? `
+                    <div class="bg-white dark:bg-gray-800 p-4 rounded-2xl shadow-md border border-gray-100 dark:border-gray-700">
+                        <p class="text-[10px] font-black uppercase text-gray-400 tracking-wider mb-2">Screenshot Proof</p>
+                        <div class="relative overflow-hidden rounded-xl bg-gray-50 dark:bg-gray-950 flex items-center justify-center py-2">
+                            ${blinkingTag}
+                            ${navigationHtml}
+                            <img id="user-detail-screenshot-img" src="${escapeHtml(s.screenshot_url)}" alt="Screenshot Proof" class="h-32 w-20 rounded-lg border border-gray-200 dark:border-gray-750 object-cover cursor-zoom-in hover:scale-102 transition shadow-sm">
+                        </div>
+                        <div class="mt-2 flex justify-between items-center text-[10px] text-gray-400">
+                            <span>Click image to expand</span>
+                            <div class="flex gap-2">
+                                ${s.task_link ? `<a href="${escapeHtml(s.task_link)}" target="_blank" class="text-blue-600 dark:text-blue-400 font-bold hover:underline">Play Store ↗</a>` : ''}
+                                ${s.screenshot_view_url ? `<a href="${escapeHtml(s.screenshot_view_url)}" target="_blank" class="hover:underline">Drive 📁</a>` : ''}
+                            </div>
+                        </div>
+                    </div>` : ''}
+
+                    <!-- Lifecycle Stepper Timeline -->
+                    <div class="bg-white dark:bg-gray-800 p-5 rounded-2xl shadow-md border border-gray-100 dark:border-gray-700 space-y-4">
+                        <p class="text-[10px] font-black uppercase text-gray-400 tracking-wider">Submission updates</p>
+                        <div class="relative pl-6 space-y-6 before:absolute before:left-[5px] before:top-2 before:bottom-2 before:w-[2px] before:bg-gray-200 dark:before:bg-gray-700">
+                            <!-- Step 1: Submission -->
+                            <div class="relative flex gap-3 items-start">
+                                <span class="absolute -left-[25px] flex h-[12px] w-[12px] rounded-full bg-emerald-500 ring-4 ring-emerald-100 dark:ring-emerald-950"></span>
+                                <div class="min-w-0">
+                                    <p class="text-xs font-bold text-gray-800 dark:text-gray-200">Screenshot sent to admin for verification</p>
+                                    <p class="text-[9px] text-gray-400 font-semibold mt-0.5">${timeStr}</p>
+                                </div>
+                            </div>
+
+                            <!-- Step 2: Verification -->
+                            <div class="relative flex gap-3 items-start">
+                                <span class="absolute -left-[25px] flex h-[12px] w-[12px] rounded-full ${step2CircleClass}"></span>
+                                <div class="min-w-0">
+                                    <p class="text-xs font-bold text-gray-800 dark:text-gray-200">${step2Text}</p>
+                                    <p class="text-[9px] text-gray-400 font-semibold mt-0.5">Status: <span class="uppercase font-black text-gray-500">${s.manual_status || 'PENDING'}</span></p>
+                                </div>
+                            </div>
+
+                            <!-- Step 3: Payout -->
+                            <div class="relative flex gap-3 items-start">
+                                <span class="absolute -left-[25px] flex h-[12px] w-[12px] rounded-full ${step3CircleClass}"></span>
+                                <div class="min-w-0">
+                                    <p class="text-xs font-bold text-gray-800 dark:text-gray-200">${step3Text}</p>
+                                    <p class="text-[9px] text-gray-400 font-semibold mt-0.5">Payment: <span class="uppercase font-black text-gray-500">${s.payout_status || 'PENDING'}</span></p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                ${getPageFooter()}
+            `;
+
+            showPage(detailContent, { returnTo: 'task-history', keepBottomNav: true, onBack: showUserTaskHistoryPage });
+            const userScreenshotImg = document.getElementById('user-detail-screenshot-img');
+            if (userScreenshotImg) {
+                userScreenshotImg.onclick = () => {
+                    window.showScreenshotLightbox(s.screenshot_url, s.screenshot_view_url || '');
+                };
+            }
+        };
+
+const showUserLiveListsPage = () => {
+            if (!ensureUserSessionReady()) return;
+            const content = `
+                ${getPageHeader('Live Lists Verification')}
+                <div class="max-w-xl mx-auto space-y-4 pb-24 px-4">
+                    <div class="bg-white dark:bg-gray-800 p-5 rounded-2xl shadow-md border border-gray-100 dark:border-gray-700">
+                        <p class="text-xs font-semibold text-gray-500 dark:text-gray-400">
+                            Here you can verify if your reviewer name is listed in the live lists uploaded by the admin for different apps.
+                        </p>
+                        <input type="text" id="user-live-lists-search" placeholder="🔍 Search app name or reviewer name..." class="mt-3 w-full px-4 py-2.5 bg-gray-50 dark:bg-gray-750 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none text-sm border border-gray-100 dark:border-gray-700">
+                    </div>
+                    <div id="user-live-lists-container" class="space-y-4">
+                        <div class="py-8 text-center text-sm text-gray-400">Loading lists...</div>
+                    </div>
+                </div>
+                ${getPageFooter()}`;
+
+            showPage(content, { returnTo: 'settings', keepBottomNav: true });
+            
+            loadUserLiveLists();
+
+            document.getElementById('user-live-lists-search').addEventListener('input', renderUserLiveLists);
+        };
+
+const openFullscreenScreenshotHistory = (url) => {
+            const overlay = document.createElement('div');
+            overlay.id = 'fullscreen-ss-overlay';
+            overlay.className = 'fixed inset-0 z-[10000] flex flex-col items-center justify-center bg-black/95 p-4 cursor-zoom-out';
+            
+            // Prevent background page from scrolling
+            document.body.style.overflow = 'hidden';
+
+            const removeOverlay = () => {
+                overlay.remove();
+                document.body.style.overflow = '';
+            };
+
+            overlay.onclick = removeOverlay;
+            overlay.innerHTML = `
+                <div class="relative max-w-3xl max-h-[85vh] flex items-center justify-center">
+                    <img src="${url}" class="max-w-full max-h-[80vh] rounded-2xl shadow-2xl object-contain border border-gray-800">
+                </div>
+                <div class="mt-4 flex gap-2 shrink-0" onclick="event.stopPropagation()">
+                    <button id="fullscreen-close-btn" class="rounded-xl bg-gray-700 px-4 py-2.5 text-xs font-bold text-white hover:bg-gray-650 transition">✕ Close</button>
+                </div>`;
+            document.body.appendChild(overlay);
+            
+            const closeBtn = document.getElementById('fullscreen-close-btn');
+            if (closeBtn) {
+                closeBtn.onclick = removeOverlay;
+            }
+        };
+
+const showHomeMainPage = () => {
+            if (activeChatUnsubscribe) {
+                activeChatUnsubscribe();
+                activeChatUnsubscribe = null;
+            }
+            document.getElementById('dashboard-content').classList.remove('hidden');
+            document.getElementById('page-container').classList.add('hidden');
+            document.getElementById('page-container').innerHTML = '';
+            setMainChrome(true);
+            document.getElementById('app-footer')?.classList.add('app-footer-hidden');
+            currentMainSection = 'home';
+            switchTab('user-panel');
+            setBottomNavActive('bottom-home-btn');
+        };
+
+const showReferEarnPage = () => {
+            if (!ensureUserSessionReady()) return;
+            if (activeChatUnsubscribe) {
+                activeChatUnsubscribe();
+                activeChatUnsubscribe = null;
+            }
+            const reward = getReferralRewardAmount();
+            const rewardText = formatCurrency(reward).replace('.00', '');
+            const rawReferralSeed = String(
+                currentUserData?.referralCode ||
+                currentUserData?.referCode ||
+                currentUserData?.inviteCode ||
+                currentUserData?.mobile ||
+                currentUser?.uid ||
+                'RWUSER'
+            ).replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
+            const referralCode = rawReferralSeed.startsWith('RW')
+                ? rawReferralSeed.slice(0, 12)
+                : `RW${rawReferralSeed.slice(-6) || 'USER'}`;
+            const content = `
+                <header class="refer-page-header flex items-center mb-3 px-4 py-3 bg-white dark:bg-gray-800 shadow-md page-header-fixed">
+                    <h2 class="text-xl font-bold">Refer & Earn</h2>
+                </header>
+                <div class="refer-page-body px-3 pb-0">
+                <div class="refer-page-shell refer-one-screen mx-auto max-w-md px-0">
+                    <section class="refer-poster-card refer-one-card">
+                        <div class="refer-text-head refer-compact-head">
+                            <span>Refer & Earn</span>
+                            <h3>Invite friends. Earn together.</h3>
+                            <p>You and your friend both get rewards after the first withdrawal.</p>
+                        </div>
+                        <div class="refer-offer-strip refer-compact-offers">
+                            <div>
+                                <span>You get</span>
+                                <strong>${rewardText}</strong>
+                            </div>
+                            <div>
+                                <span>Friend gets</span>
+                                <strong>${rewardText}</strong>
+                            </div>
+                            <div>
+                                <span>Lifetime</span>
+                                <strong>1%</strong>
+                            </div>
+                        </div>
+                        <div class="refer-steps-compact">
+                            <article class="refer-mini-step">
+                                <span class="refer-step-node">
+                                    <img src="${REFER_ICON_URL}" alt="Invite" loading="lazy" decoding="async">
+                                </span>
+                                <div>
+                                    <p>Step 1</p>
+                                    <h4>Share code</h4>
+                                    <span>Send it to a friend.</span>
+                                </div>
+                            </article>
+                            <article class="refer-mini-step">
+                                <span class="refer-step-node">
+                                    <img src="https://cdn-icons-png.flaticon.com/512/681/681494.png" alt="Friend joins" loading="lazy" decoding="async">
+                                </span>
+                                <div>
+                                    <p>Step 2</p>
+                                    <h4>Friend joins</h4>
+                                    <span>They create account.</span>
+                                </div>
+                            </article>
+                            <article class="refer-mini-step">
+                                <span class="refer-step-node">
+                                    <img src="https://cdn-icons-png.flaticon.com/512/7939/7939990.png" alt="First withdrawal" loading="lazy" decoding="async">
+                                </span>
+                                <div>
+                                    <p>Step 3</p>
+                                    <h4>First withdrawal</h4>
+                                    <span>Both get ${rewardText}.</span>
+                                </div>
+                            </article>
+                            <article class="refer-mini-step">
+                                <span class="refer-step-node">
+                                    <img src="${PARTNER_ICON_URL}" alt="Lifetime income" loading="lazy" decoding="async">
+                                </span>
+                                <div>
+                                    <p>Lifetime</p>
+                                    <h4>Earn 1% income</h4>
+                                    <span>On friend withdrawals.</span>
+                                </div>
+                            </article>
+                        </div>
+                        <div class="refer-share-card refer-compact-share">
+                            <div>
+                                <p>Referral code</p>
+                                <h4>${escapeHtml(referralCode)}</h4>
+                            </div>
+                            <button type="button" disabled>
+                                <span>Coming Soon</span>
+                            </button>
+                        </div>
+                    </section>
+                </div>
+                </div>`;
+            showPage(content, { keepBottomNav: true, returnTo: currentUser?.uid === ADMIN_UID ? 'admin' : 'home' });
+            currentMainSection = 'refer';
+            setBottomNavActive('bottom-refer-btn');
+        };
+
+const showUserTaskPageLegacy = () => {
+            if (!ensureUserSessionReady()) return;
+            currentMainSection = 'task';
+            const content = `
+                <header class="mb-4 flex items-center justify-between bg-white dark:bg-gray-800 px-4 py-3 shadow-sm page-header-fixed">
+                    <h2 class="text-base font-extrabold uppercase text-slate-950 dark:text-white">Task Mission</h2>
+                    <span class="h-9 w-9 overflow-hidden rounded-full bg-slate-100 p-1 dark:bg-slate-700">
+                        <img src="${RW_LOGO_URL}" alt="REVIEWS WORLD" class="h-full w-full rounded-full object-cover">
+                    </span>
+                </header>
+                <div class="px-4 pt-1 pb-28">
+                    <div class="mx-auto max-w-xl space-y-4">
+                        <section class="rounded-[1.75rem] border border-slate-200 bg-white p-6 text-center shadow-sm dark:border-slate-700 dark:bg-gray-800">
+                            <div class="mx-auto flex h-16 w-16 items-center justify-center rounded-3xl bg-slate-950 p-3 shadow-lg">
+                                <img src="https://cdn-icons-png.flaticon.com/512/3176/3176366.png" alt="Tasks" class="h-full w-full object-contain">
+                            </div>
+                            <p class="mt-5 text-xs font-extrabold uppercase text-blue-600">Coming Soon</p>
+                            <h3 class="mt-2 text-2xl font-extrabold text-slate-950 dark:text-white">Live missions are being prepared</h3>
+                            <p class="mx-auto mt-2 max-w-sm text-sm font-semibold leading-6 text-slate-500 dark:text-slate-300">Task work will open here after admin makes it live.</p>
+                        </section>
+
+                        <section class="space-y-3 opacity-60">
+                            <div class="flex items-center justify-between px-1">
+                                <p class="text-xs font-extrabold uppercase text-slate-500 dark:text-slate-300">Live Missions</p>
+                                <span class="text-[11px] font-bold text-gray-400">0 available</span>
+                            </div>
+                            <label class="flex items-center gap-3 rounded-2xl border border-gray-200 bg-white px-4 py-3 shadow-sm dark:border-gray-700 dark:bg-gray-800">
+                                <svg class="h-4 w-4 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="m21 21-4.35-4.35M10 18a8 8 0 1 1 0-16 8 8 0 0 1 0 16z"></path></svg>
+                                <input type="search" disabled placeholder="Search app tasks..." class="min-w-0 flex-1 bg-transparent text-sm font-semibold outline-none placeholder:text-slate-500">
+                            </label>
+                            <div class="pointer-events-none rounded-2xl border border-slate-100 bg-slate-50 p-4 dark:border-slate-700 dark:bg-gray-900">
+                                <div class="flex items-center gap-3">
+                                    <span class="flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-slate-200 bg-white text-xs font-bold text-slate-400 dark:border-slate-700 dark:bg-gray-800">APP</span>
+                                    <span class="min-w-0 flex-1">
+                                        <span class="block text-sm font-extrabold text-slate-700 dark:text-slate-200">Sample Task</span>
+                                        <span class="mt-1 inline-flex rounded bg-slate-200 px-1.5 py-0.5 text-[9px] font-extrabold uppercase text-slate-500 dark:bg-slate-700 dark:text-slate-300">Instant</span>
+                                    </span>
+                                    <span class="text-right">
+                                        <span class="block text-[8px] font-extrabold uppercase text-slate-400">Reward</span>
+                                        <span class="block text-lg font-extrabold text-slate-400">₹--</span>
+                                    </span>
+                                </div>
+                            </div>
+                        </section>
+                    </div>
+                </div>
+                ${getPageFooter()}`;
+            showPage(content, { returnTo: currentUser?.uid === ADMIN_UID ? 'admin' : 'home', keepBottomNav: true });
+            setBottomNavActive('bottom-task-btn');
+        };
+
+const showUserTaskPage = () => {
+            if (!ensureUserSessionReady()) return;
+            currentMainSection = 'task';
+            const isTaskPageEnabled = !!appConfigCache?.task_page_enabled;
+            let taskCategories = [];
+
+            if (!isTaskPageEnabled) {
+                taskCategories = [
+                    {
+                        label: 'App Review',
+                        accent: 'task-accent-blue',
+                        logo: PLAY_STORE_LOGO_URL,
+                        items: [
+                            { title: 'App Review', reward: 'Rs 8' },
+                            { title: 'App Review', reward: 'Rs 10' },
+                            { title: 'App Review', reward: 'Rs 12' }
+                        ]
+                    },
+                    {
+                        label: 'Map Review',
+                        accent: 'task-accent-emerald',
+                        logo: 'https://cdn-icons-png.flaticon.com/512/854/854878.png',
+                        items: [
+                            { title: 'Map Review', reward: 'Rs 15' },
+                            { title: 'Map Review', reward: 'Rs 20' },
+                            { title: 'Map Review', reward: 'Rs 10' }
+                        ]
+                    },
+                    {
+                        label: 'Social Media Task',
+                        accent: 'task-accent-rose',
+                        logo: 'https://cdn-icons-png.flaticon.com/512/4187/4187336.png',
+                        items: [
+                            { title: 'Social Task', reward: 'Rs 5' },
+                            { title: 'Social Task', reward: 'Rs 8' },
+                            { title: 'Social Task', reward: 'Rs 7' }
+                        ]
+                    }
+                ];
+            } else {
+                const appReviewItems = [];
+                const mapReviewItems = [];
+                const socialTaskItems = [];
+
+                allTasksCache.forEach(task => {
+                    const subtype = task.subtype || '';
+                    if (subtype === 'app_review' || subtype === 'app_download_task') {
+                        appReviewItems.push(task);
+                    } else if (subtype === 'map_review' || subtype === 'trustpilot_review' || subtype === 'website_review') {
+                        mapReviewItems.push(task);
+                    } else {
+                        socialTaskItems.push(task);
+                    }
+                });
+
+                taskCategories = [
+                    {
+                        label: 'App Review',
+                        accent: 'task-accent-blue',
+                        logo: PLAY_STORE_LOGO_URL,
+                        items: appReviewItems
+                    },
+                    {
+                        label: 'Map Review',
+                        accent: 'task-accent-emerald',
+                        logo: 'https://cdn-icons-png.flaticon.com/512/854/854878.png',
+                        items: mapReviewItems
+                    },
+                    {
+                        label: 'Social Media Task',
+                        accent: 'task-accent-rose',
+                        logo: 'https://cdn-icons-png.flaticon.com/512/4187/4187336.png',
+                        items: socialTaskItems
+                    }
+                ].filter(cat => cat.items.length > 0);
+            }
+
+            const renderTaskCard = (category, task, index) => {
+                const isReal = isTaskPageEnabled;
+                const status = isReal ? getAdminTaskEffectiveStatus(task) : 'draft';
+                const isLive = isReal && status === 'active';
+                const reward = isReal ? `₹${task.rate || task.reward || 0}` : task.reward;
+                const imageUrl = isReal ? (task.imageUrl || category.logo) : category.logo;
+                const taskTitle = isReal ? (task.title || 'Task Mission') : task.title;
+
+                if (isLive) {
+                    return `
+                        <article class="task-preview-card cursor-pointer hover:border-slate-400 dark:hover:border-slate-500" style="--task-card-delay:${index * 90}ms" data-action="open-user-task" data-taskid="${task.id}">
+                            <div class="task-card-main">
+                                <span class="task-card-logo">
+                                    <img src="${escapeHtml(imageUrl)}" alt="${escapeHtml(taskTitle)}" loading="lazy" decoding="async">
+                                </span>
+                                <span class="task-rate-pill">${escapeHtml(reward)}</span>
+                                <h4>${escapeHtml(taskTitle)}</h4>
+                            </div>
+                        </article>`;
+                } else {
+                    return `
+                        <article class="task-preview-card" style="--task-card-delay:${index * 90}ms" aria-disabled="true">
+                            <div class="task-card-main">
+                                <span class="task-card-logo">
+                                    <img src="${escapeHtml(imageUrl)}" alt="${escapeHtml(taskTitle)}" loading="lazy" decoding="async">
+                                </span>
+                                <span class="task-rate-pill">${escapeHtml(reward)}</span>
+                                <h4>${escapeHtml(taskTitle)}</h4>
+                            </div>
+                            <div class="task-card-coming">Coming Soon</div>
+                        </article>`;
+                }
+            };
+
+            const renderCategory = (category) => `
+                <section class="task-category-block ${category.accent}">
+                    <div class="task-category-title">
+                        <span class="task-category-mark"></span>
+                        <h3>${escapeHtml(category.label)}</h3>
+                    </div>
+                    <div class="task-preview-rail">
+                        ${category.items.map((task, index) => renderTaskCard(category, task, index)).join('')}
+                    </div>
+                </section>`;
+
+            let bodyContent = '';
+            if (isTaskPageEnabled && taskCategories.length === 0) {
+                bodyContent = `
+                    <div class="rounded-3xl border border-dashed border-gray-200 dark:border-gray-700 p-8 text-center bg-white dark:bg-gray-800 shadow-sm">
+                        <div class="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-cyan-50 dark:bg-cyan-900/20 mb-4">
+                            <img src="https://cdn-icons-png.flaticon.com/512/3176/3176366.png" alt="No tasks" class="h-8 w-8 object-contain">
+                        </div>
+                        <h3 class="text-lg font-black text-gray-900 dark:text-white">No Live Missions</h3>
+                        <p class="mt-2 text-sm text-gray-500 dark:text-gray-400">Real tasks are currently not available. Please check back later.</p>
+                    </div>`;
+            } else {
+                bodyContent = taskCategories.map(renderCategory).join('');
+            }
+
+            const content = `
+                <header class="mb-4 bg-white/95 px-4 py-3 shadow-sm backdrop-blur page-header-fixed dark:bg-gray-900/95">
+                    <div class="flex items-center justify-between gap-3">
+                        <div class="min-w-0">
+                            <p class="text-lg font-black uppercase text-slate-950 dark:text-white">RW TASK</p>
+                        </div>
+                        <div class="task-header-actions">
+                            <button type="button" data-action="open-task-ads-page" class="task-mini-action">
+                                <img src="https://cdn-icons-png.flaticon.com/512/2659/2659360.png" alt="Ads" loading="eager" decoding="async">
+                                <span>Ads</span>
+                            </button>
+                            <button type="button" data-action="open-task-bonus-page" class="task-mini-action">
+                                <img src="https://cdn-icons-png.flaticon.com/512/2611/2611152.png" alt="Bonus" loading="eager" decoding="async">
+                                <span>Bonus</span>
+                            </button>
+                        </div>
+                    </div>
+                </header>
+                <div class="task-page-shell px-4 pt-1 pb-28">
+                    <div class="mx-auto max-w-4xl space-y-4">
+                        ${bodyContent}
+                    </div>
+                </div>
+                ${getPageFooter()}`;
+            showPage(content, { returnTo: currentUser?.uid === ADMIN_UID ? 'admin' : 'home', keepBottomNav: true });
+            setBottomNavActive('bottom-task-btn');
+        };
+
+const showTaskFeatureComingSoonPage = (feature = 'ads') => {
+            const isAds = feature === 'ads';
+            const title = isAds ? 'Watch Ads & Earn' : 'Daily Bonus';
+            const icon = isAds
+                ? 'https://cdn-icons-png.flaticon.com/512/2659/2659360.png'
+                : 'https://cdn-icons-png.flaticon.com/512/2611/2611152.png';
+            const headline = isAds
+                ? 'Earn from watching banner Ads, videos ads.'
+                : 'Claim daily bonus, spin wheel and earn money upto 5 rupees.';
+            const content = `
+                ${getPageHeader(title)}
+                <div class="mx-auto max-w-md pb-24">
+                    <section class="relative overflow-hidden rounded-3xl border border-slate-100 bg-white p-5 text-center shadow-xl dark:border-slate-700 dark:bg-gray-800">
+                        <div class="mx-auto flex h-20 w-20 items-center justify-center rounded-3xl bg-slate-50 shadow-inner dark:bg-gray-900">
+                            <img src="${icon}" alt="${title}" class="h-12 w-12 object-contain" loading="eager" decoding="async">
+                        </div>
+                        <p class="mt-5 text-[10px] font-black uppercase text-blue-600 dark:text-blue-300">Coming Soon</p>
+                        <h3 class="mt-2 text-2xl font-black leading-tight text-slate-950 dark:text-white">${headline}</h3>
+                        <div class="mt-5 rounded-2xl bg-blue-50 px-4 py-4 text-sm font-bold leading-6 text-blue-800 dark:bg-blue-900/20 dark:text-blue-100">
+                            This feature is not available yet. It will be announced soon...
+                        </div>
+                    </section>
+                </div>
+                ${getPageFooter()}`;
+            showPage(content, { returnTo: 'task', keepBottomNav: true, onBack: showUserTaskPage });
+            setBottomNavActive('bottom-task-btn');
+        };
+
+const showUserReadNewsTaskPage = (task) => {
+            const reward = task.rate || task.reward || 0;
+            const appName = task.appName || task.title || 'Read News';
+            const newsLinks = Array.isArray(task.newsLinks) ? task.newsLinks : [];
+            
+            // Track read status for links
+            const readStatus = new Array(newsLinks.length).fill(false);
+            
+            const content = `
+                <header class="mb-4 flex items-center justify-between bg-white dark:bg-gray-800 px-4 py-3 shadow-sm page-header-fixed">
+                    <div class="flex items-center gap-3">
+                        <button class="page-back-btn rounded-full p-2 text-slate-900 dark:text-white">
+                            <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 12H5m7 7-7-7 7-7"></path></svg>
+                        </button>
+                        <h2 class="text-base font-black uppercase text-slate-950 dark:text-white">News Mission</h2>
+                    </div>
+                    <span class="h-9 w-9 overflow-hidden rounded-full bg-slate-100 dark:bg-slate-700 flex items-center justify-center p-1.5 border border-gray-200">
+                        <img src="https://cdn-icons-png.flaticon.com/512/2540/2540832.png" alt="News" class="h-full w-full object-contain">
+                    </span>
+                </header>
+                <div class="px-4 pb-24 h-[calc(100vh-80px)] flex flex-col justify-between">
+                    <div class="mx-auto max-w-xl w-full flex-1 flex flex-col justify-between space-y-4">
+                        <section class="overflow-hidden rounded-[1.75rem] border-t-4 border-slate-950 bg-white shadow-xl dark:border-white dark:bg-gray-800 flex-1 flex flex-col justify-between">
+                            <div class="flex items-start justify-between bg-slate-50 p-4 dark:bg-slate-900 shrink-0">
+                                <div>
+                                    <p class="text-[10px] font-black uppercase tracking-widest text-slate-950 dark:text-white">Earn From Read News</p>
+                                    <h3 class="mt-1 text-base font-black text-slate-950 dark:text-white">${escapeHtml(appName)}</h3>
+                                    <span class="mt-0.5 inline-flex rounded bg-white px-2 py-0.5 text-[9px] font-black uppercase text-slate-600 shadow-sm dark:bg-slate-700 dark:text-white">Instant Credit</span>
+                                </div>
+                                <div class="rounded-xl bg-slate-950 px-4 py-2 text-center text-white shadow-md">
+                                    <p class="text-[8px] font-black uppercase text-white/60">Reward</p>
+                                    <p class="text-lg font-black">${formatCurrency(reward).replace('.00', '')}</p>
+                                </div>
+                            </div>
+                            
+                            <!-- News Links Boxes Grid (Fixed in single screen) -->
+                            <div class="p-4 flex-grow flex flex-col justify-center space-y-2">
+                                <p class="text-center text-xs font-bold text-gray-500 dark:text-gray-400">Click and read all ${newsLinks.length} news for 10 seconds each:</p>
+                                <div class="grid grid-cols-1 gap-2 flex-grow justify-center content-center max-h-[50vh] overflow-y-auto">
+                                    ${newsLinks.map((newsUrl, idx) => {
+                                        return `
+                                            <button type="button" data-news-idx="${idx}" data-news-url="${escapeHtml(newsUrl)}" class="news-box-btn flex items-center justify-between p-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-slate-50 dark:bg-slate-900 transition text-left hover:bg-slate-100 dark:hover:bg-slate-800">
+                                                <div class="flex items-center gap-3">
+                                                    <span class="news-num-badge flex h-8 w-8 items-center justify-center rounded-lg bg-slate-900 text-white font-black text-sm">${idx + 1}</span>
+                                                    <div>
+                                                        <span class="block text-xs font-black text-slate-950 dark:text-white">News Article ${idx + 1}</span>
+                                                        <span class="block text-[9px] text-gray-400">Read & wait 10s</span>
+                                                    </div>
+                                                </div>
+                                                <span class="news-status-pill text-[10px] font-black uppercase tracking-wide px-2.5 py-1 rounded-lg bg-gray-200 text-gray-700 dark:bg-gray-800 dark:text-gray-300">Pending</span>
+                                            </button>
+                                        `;
+                                    }).join('')}
+                                </div>
+                            </div>
+                            
+                            <div class="p-4 bg-slate-50 dark:bg-slate-900 shrink-0">
+                                <button id="news-task-submit-btn" class="flex w-full items-center justify-center gap-2 rounded-xl bg-slate-950 px-4 py-3 text-sm font-black uppercase tracking-wide text-white disabled:bg-slate-400" disabled>Complete Task</button>
+                            </div>
+                        </section>
+                    </div>
+                </div>
+                
+                <!-- Mini Web Opener Overlay -->
+                <div id="mini-web-opener-overlay" class="fixed inset-0 z-[10000] hidden bg-slate-950 flex flex-col">
+                    <div class="flex items-center justify-between bg-white dark:bg-gray-900 px-4 py-3 border-b border-gray-200 dark:border-gray-800 shrink-0">
+                        <div class="flex items-center gap-2">
+                            <span class="h-2.5 w-2.5 rounded-full bg-red-500 animate-ping"></span>
+                            <span id="web-opener-title" class="text-xs font-black uppercase tracking-wider text-slate-900 dark:text-white">Reading News Article...</span>
+                        </div>
+                        <div class="flex items-center gap-3">
+                            <span id="web-opener-timer" class="text-sm font-black text-blue-600 dark:text-blue-400">10s remaining</span>
+                            <button id="web-opener-close-btn" class="hidden rounded-lg bg-red-50 hover:bg-red-100 text-red-600 dark:bg-red-900/30 dark:text-red-200 px-3 py-1.5 text-xs font-black">Close</button>
+                        </div>
+                    </div>
+                    <div class="flex-grow bg-white dark:bg-gray-900 relative">
+                        <iframe id="web-opener-iframe" class="w-full h-full border-0" sandbox="allow-scripts allow-same-origin allow-popups allow-forms"></iframe>
+                        <div id="web-opener-loading" class="absolute inset-0 flex items-center justify-center bg-white dark:bg-gray-950 z-10">
+                            <div class="flex flex-col items-center gap-2">
+                                <svg class="animate-spin h-8 w-8 text-blue-600" fill="none" viewBox="0 0 24 24">
+                                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                </svg>
+                                <p class="text-xs font-bold text-gray-500">Loading Article...</p>
+                                <p class="text-[10px] text-gray-400 mt-1">If loading is blocked, timer will still complete.</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+            
+            showPage(content, { returnTo: 'task', keepBottomNav: true, onBack: showUserTaskPage });
+            setBottomNavActive('bottom-task-btn');
+            
+            // Bind back button
+            const backBtn = document.querySelector('.page-back-btn');
+            if (backBtn) {
+                backBtn.onclick = () => showUserTaskPage();
+            }
+            
+            // Bind iframe load event
+            const iframe = document.getElementById('web-opener-iframe');
+            const openerLoading = document.getElementById('web-opener-loading');
+            if (iframe && openerLoading) {
+                iframe.onload = () => {
+                    openerLoading.classList.add('hidden');
+                };
+            }
+            
+            // Opener Close Action
+            let activeIdx = -1;
+            const closeBtn = document.getElementById('web-opener-close-btn');
+            const overlay = document.getElementById('mini-web-opener-overlay');
+            
+            const handleCloseOpener = () => {
+                if (activeIdx !== -1) {
+                    readStatus[activeIdx] = true;
+                    // Update main box UI
+                    const box = document.querySelector(`[data-news-idx="${activeIdx}"]`);
+                    if (box) {
+                        const statusPill = box.querySelector('.news-status-pill');
+                        if (statusPill) {
+                            statusPill.textContent = 'Completed ✅';
+                            statusPill.className = 'news-status-pill text-[10px] font-black uppercase tracking-wide px-2.5 py-1 rounded-lg bg-green-50 text-green-700 dark:bg-green-900/30 dark:text-green-300';
+                        }
+                        box.classList.add('border-green-200', 'bg-green-50/20', 'dark:border-green-900/30');
+                        box.disabled = true;
+                    }
+                }
+                
+                // Hide overlay
+                if (overlay) overlay.classList.add('hidden');
+                if (iframe) iframe.src = 'about:blank';
+                activeIdx = -1;
+                
+                // Check if all complete
+                const allDone = readStatus.every(status => status === true);
+                const submitBtn = document.getElementById('news-task-submit-btn');
+                if (submitBtn) {
+                    submitBtn.disabled = !allDone;
+                }
+            };
+            
+            if (closeBtn) {
+                closeBtn.onclick = handleCloseOpener;
+            }
+            
+            // Box clicks
+            document.querySelectorAll('.news-box-btn').forEach(btn => {
+                btn.onclick = () => {
+                    const idx = Number(btn.dataset.newsIdx);
+                    const url = btn.dataset.newsUrl;
+                    if (!url) return showNotification('News url is missing.', true);
+                    
+                    activeIdx = idx;
+                    
+                    // Show overlay
+                    if (overlay) overlay.classList.remove('hidden');
+                    if (openerLoading) openerLoading.classList.remove('hidden');
+                    if (closeBtn) closeBtn.classList.add('hidden');
+                    
+                    const timerText = document.getElementById('web-opener-timer');
+                    if (timerText) timerText.textContent = '10s remaining';
+                    
+                    if (iframe) iframe.src = url;
+                    
+                    // Start timer
+                    let seconds = 10;
+                    const interval = setInterval(() => {
+                        seconds--;
+                        if (seconds > 0) {
+                            if (timerText) timerText.textContent = `${seconds}s remaining`;
+                        } else {
+                            clearInterval(interval);
+                            if (timerText) timerText.textContent = 'Completed ✅';
+                            if (closeBtn) closeBtn.classList.remove('hidden');
+                            if (openerLoading) openerLoading.classList.add('hidden');
+                            showNotification(`News Article ${idx + 1} read completed!`);
+                        }
+                    }, 1000);
+                };
+            });
+            
+            // Submit Task
+            const submitBtn = document.getElementById('news-task-submit-btn');
+            if (submitBtn) {
+                submitBtn.onclick = async () => {
+                    submitBtn.disabled = true;
+                    submitBtn.textContent = 'Crediting reward...';
+                    
+                    try {
+                        const token = await getBackendAuthToken();
+                        const resp = await fetchWithTimeout(`${BACKEND_BASE_URL}/api/task-submissions`, {
+                            method: 'POST',
+                            headers: {
+                                Authorization: `Bearer ${token}`,
+                                'Content-Type': 'application/json'
+                            },
+                            body: JSON.stringify({ taskId: task.id })
+                        }, 15000);
+                        
+                        const resData = await resp.json().catch(() => ({}));
+                        if (!resp.ok || !resData.ok) {
+                            throw new Error(resData.detail || resData.error || 'Submission failed');
+                        }
+                        
+                        // Success! Update local cache and UI
+                        currentUserData.balance = (currentUserData.balance || 0) + reward;
+                        userTaskSubmissionIds.add(task.id);
+                        userTaskTodaySubmissionIds.add(task.id);
+                        
+                        showNotification(`Congratulations! ₹${reward} credited to your wallet.`);
+                        showUserTaskPage();
+                    } catch (err) {
+                        console.error('Submit news task failed:', err);
+                        showNotification(err.message || 'Verification failed. Please try again.', true);
+                        submitBtn.disabled = false;
+                        submitBtn.textContent = 'Complete Task';
+                    }
+                };
+            }
+        };
+
+const showUserTaskDetailsPage = async (taskId) => {
+            const task = allTasksCache.find(item => item.id === taskId);
+            if (!task) return showNotification('Task not found. Please refresh tasks.', true);
+            if (getAdminTaskEffectiveStatus(task) !== 'active') return showNotification('This task is closed.', true);
+            
+            if (task.taskSubtype === 'read_news') {
+                showUserReadNewsTaskPage(task);
+                return;
+            }
+
+            showLoading();
+            const isBulk = isBulkTaskUser();
+            const reward = task.rate || task.reward || 0;
+            const taskTitle = task.title || 'Task Mission';
+            const appName = task.appName || taskTitle;
+            const commentPool = getTaskCommentPool(task);
+            const taskLink = task.taskLink || task.link || task.url || '';
+            const image = task.imageUrl || task.logoUrl || task.iconUrl || 'https://cdn-icons-png.flaticon.com/512/3176/3176366.png';
+            
+            let submittedComments = [];
+            if (isBulk) {
+                try {
+                    const todayStart = getStartOfTodayMillis();
+                    const snap = await getDocs(query(
+                        collection(db, `artifacts/${appId}/public/data/task_submissions`),
+                        where('userId', '==', currentUser.uid),
+                        where('taskId', '==', taskId)
+                    ));
+                    snap.docs.forEach(docSnap => {
+                        const data = docSnap.data();
+                        const submittedAt = timestampToMillis(data.submittedAt || data.createdAt || data.timestamp);
+                        if (submittedAt >= todayStart && data.assignedComment) {
+                            submittedComments.push(String(data.assignedComment).trim());
+                        }
+                    });
+                } catch (err) {
+                    console.warn('Failed to load submitted comments:', err);
+                }
+            }
+            hideLoading();
+
+            const selectDeterministicComment = (pool, userId, taskId) => {
+                let hash = 0;
+                const str = userId + taskId;
+                for (let i = 0; i < str.length; i++) {
+                    hash = str.charCodeAt(i) + ((hash << 5) - hash);
+                }
+                const index = Math.abs(hash) % pool.length;
+                return { comment: pool[index], index };
+            };
+            const preSelected = selectDeterministicComment(commentPool, currentUser.uid, task.id);
+            const initialComment = preSelected.comment;
+
+            let step2Html = '';
+            if (isBulk) {
+                step2Html = `
+                    <div class="space-y-2 text-left">
+                        <p class="text-xs text-gray-500 mb-2 font-bold">Copy the comments you want to review. Already submitted reviews are marked:</p>
+                        ${commentPool.map((comment, idx) => {
+                            const isSubmitted = submittedComments.includes(String(comment).trim());
+                            return `
+                                <div class="flex items-center justify-between gap-3 p-3 bg-slate-50 dark:bg-slate-900 rounded-xl border ${isSubmitted ? 'border-green-200 bg-green-50/50 dark:border-green-900/30' : 'border-gray-200 dark:border-gray-700'}">
+                                    <p class="text-xs font-bold text-gray-900 dark:text-white flex-1 italic text-left">${escapeHtml(comment)}</p>
+                                    ${isSubmitted 
+                                        ? `<span class="text-xs font-bold text-green-600 dark:text-green-400 shrink-0">Submitted ✅</span>`
+                                        : `<button type="button" data-action="copy-comment" data-comment="${escapeHtml(comment)}" class="rounded-lg bg-slate-900 px-3 py-1.5 text-[10px] font-black text-white hover:bg-slate-800 transition shrink-0">Copy</button>`
+                                    }
+                                </div>
+                            `;
+                        }).join('')}
+                    </div>
+                `;
+            } else {
+                step2Html = `
+                    <div class="rounded-2xl border border-dashed border-slate-200 bg-slate-50 p-4 text-center dark:border-slate-700 dark:bg-slate-900">
+                        <p id="task-assigned-review-text" class="mb-2 text-sm font-bold italic text-slate-950 dark:text-white">"${escapeHtml(initialComment)}"</p>
+                        <p id="task-reservation-timer" class="mb-4 text-[11px] font-black uppercase tracking-wide text-blue-600 dark:text-blue-300">Reserving review lock...</p>
+                        <button id="task-copy-review-btn" class="flex w-full items-center justify-center gap-2 rounded-xl bg-slate-950 px-4 py-3 text-xs font-black uppercase tracking-wide text-white">
+                            <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16h8M8 12h8m-7 8h6a2 2 0 0 0 2-2V7l-5-5H9a2 2 0 0 0-2 2v16z"></path></svg>
+                            Copy Assigned Review
+                        </button>
+                    </div>
+                `;
+            }
+
+            const content = `
+                <header class="mb-4 flex items-center justify-between bg-white dark:bg-gray-800 px-4 py-3 shadow-sm page-header-fixed">
+                    <div class="flex items-center gap-3">
+                        <button class="page-back-btn rounded-full p-2 text-slate-900 dark:text-white">
+                            <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 12H5m7 7-7-7 7-7"></path></svg>
+                        </button>
+                        <h2 class="text-base font-black uppercase text-slate-950 dark:text-white">Task Mission</h2>
+                    </div>
+                    <span class="h-9 w-9 overflow-hidden rounded-full bg-slate-100 dark:bg-slate-700">
+                        <img src="${escapeHtml(image)}" alt="${escapeHtml(appName)}" class="h-full w-full object-cover" onerror="this.src='https://cdn-icons-png.flaticon.com/512/3176/3176366.png'">
+                    </span>
+                </header>
+                <div class="px-5 pb-28">
+                    <div class="mx-auto max-w-xl space-y-5">
+                        <section class="rounded-2xl border border-slate-200 bg-slate-50 p-4 shadow-lg dark:border-slate-700 dark:bg-slate-900">
+                            <div class="flex items-center gap-3">
+                                <span class="flex h-10 w-10 items-center justify-center rounded-full bg-slate-200 text-slate-700 dark:bg-slate-700 dark:text-white">
+                                    <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 2m6-2A9 9 0 1 1 3 12a9 9 0 0 1 18 0z"></path></svg>
+                                </span>
+                                <div>
+                                    <p class="text-[10px] font-black uppercase tracking-[0.26em] text-slate-400">Session Timer</p>
+                                    <p id="task-session-timer" class="text-lg font-black text-slate-950 dark:text-white">4:40</p>
+                                </div>
+                            </div>
+                        </section>
+                        <section class="overflow-hidden rounded-[1.75rem] border-t-4 border-slate-950 bg-white shadow-xl dark:border-white dark:bg-gray-800">
+                            <div class="flex items-start justify-between bg-slate-50 p-5 dark:bg-slate-900">
+                                <div>
+                                    <p class="text-[10px] font-black uppercase tracking-widest text-slate-950 dark:text-white">${escapeHtml(task.category || 'Active App Review')}</p>
+                                    <h3 class="mt-2 text-lg font-black text-slate-950 dark:text-white">${escapeHtml(appName)}</h3>
+                                    <span class="mt-1 inline-flex rounded bg-white px-2 py-0.5 text-[9px] font-black uppercase text-slate-600 shadow-sm dark:bg-slate-700 dark:text-white">Instant</span>
+                                </div>
+                                <div class="rounded-2xl bg-slate-950 px-5 py-3 text-center text-white shadow-lg">
+                                    <p class="text-[8px] font-black uppercase text-white/60">Reward</p>
+                                    <p class="text-xl font-black">${formatCurrency(reward).replace('.00', '')}</p>
+                                </div>
+                            </div>
+                            <div class="space-y-5 p-5">
+                                <div>
+                                    <p class="mb-2 text-[10px] font-black uppercase tracking-widest text-slate-500"><span class="mr-2 rounded-full bg-slate-100 px-2 py-1">1</span> Get App</p>
+                                    <button id="task-download-btn" class="flex w-full items-center justify-center gap-2 rounded-xl border border-slate-300 bg-white px-4 py-3 text-xs font-black uppercase tracking-wide text-slate-950 shadow-sm dark:border-slate-600 dark:bg-slate-900 dark:text-white">
+                                        <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-4m-1-9h-6m6 0v6m0-6L10 12"></path></svg>
+                                        Download Application
+                                    </button>
+                                </div>
+                                <div>
+                                    <p class="mb-2 text-[10px] font-black uppercase tracking-widest text-slate-500"><span class="mr-2 rounded-full bg-slate-100 px-2 py-1">2</span> Copy & Review</p>
+                                    ${step2Html}
+                                </div>
+                                <div>
+                                    <p class="mb-2 text-[10px] font-black uppercase tracking-widest text-slate-500"><span class="mr-2 rounded-full bg-slate-100 px-2 py-1">3</span> Upload Proof</p>
+                                    <label class="flex min-h-32 cursor-pointer flex-col items-center justify-center rounded-2xl border border-dashed border-slate-200 bg-white p-5 text-center dark:border-slate-700 dark:bg-slate-900">
+                                        <input id="task-proof-input" type="file" accept="image/*" class="hidden" ${isBulk ? 'multiple' : ''}>
+                                        <svg class="h-6 w-6 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 16V4m0 0-4 4m4-4 4 4M4 16v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"></path></svg>
+                                        <span id="task-proof-label" class="mt-2 text-[10px] font-black uppercase text-slate-600 dark:text-slate-200">${isBulk ? 'Select Screenshot(s)' : 'Select Screenshot'}</span>
+                                        <span class="text-[10px] text-slate-400">Duplicate screenshots will be detected</span>
+                                    </label>
+                                    <div id="task-files-list" class="mt-3 space-y-2 hidden text-left"></div>
+                                </div>
+                                <button id="task-submit-mission-btn" class="flex w-full items-center justify-center gap-2 rounded-xl bg-slate-950 px-4 py-4 text-sm font-black uppercase tracking-wide text-white disabled:bg-slate-400" disabled>Submit Mission</button>
+                            </div>
+                        </section>
+                    </div>
+                </div>
+                ${getPageFooter()}`;
+                
+            showPage(content, { returnTo: 'task', keepBottomNav: true, onBack: showUserTaskPage });
+            setBottomNavActive('bottom-task-btn');
+            
+            activeTaskReservation = null;
+            if (activeTaskReservationTimer) {
+                clearInterval(activeTaskReservationTimer);
+                activeTaskReservationTimer = null;
+            }
+
+            const updateReservationUi = (reservation) => {
+                activeTaskReservation = reservation;
+                const commentEl = document.getElementById('task-assigned-review-text');
+                const timerEl = document.getElementById('task-reservation-timer');
+                const copyBtn = document.getElementById('task-copy-review-btn');
+                if (commentEl) commentEl.textContent = `"${reservation.comment}"`;
+                if (copyBtn) copyBtn.textContent = 'Copy Assigned Review Again';
+                
+                const tick = () => {
+                    const expiresAt = timestampToMillis(reservation.expiresAt);
+                    const remaining = Math.max(0, expiresAt - Date.now());
+                    const minutes = Math.floor(remaining / 60000);
+                    const seconds = Math.floor((remaining % 60000) / 1000);
+                    if (timerEl) timerEl.textContent = remaining > 0
+                        ? `Reserved for ${minutes}:${String(seconds).padStart(2, '0')}`
+                        : 'Reservation expired. Copy again to continue.';
+                    if (!remaining && activeTaskReservationTimer) {
+                        clearInterval(activeTaskReservationTimer);
+                        activeTaskReservationTimer = null;
+                    }
+                };
+                tick();
+                if (activeTaskReservationTimer) clearInterval(activeTaskReservationTimer);
+                activeTaskReservationTimer = setInterval(tick, 1000);
+            };
+
+            // Setup buttons
+            const downloadBtn = document.getElementById('task-download-btn');
+            downloadBtn.onclick = () => taskLink ? window.open(taskLink, '_blank', 'noopener') : showNotification('Task link is not added yet.', true);
+
+            if (isBulk) {
+                // Attach copy listeners
+                document.querySelectorAll('[data-action="copy-comment"]').forEach(btn => {
+                    btn.onclick = async (e) => {
+                        const text = e.target.dataset.comment;
+                        try {
+                            await navigator.clipboard.writeText(text);
+                            showNotification('Comment copied!');
+                        } catch (err) {
+                            showNotification('Failed to copy. Please copy manually.', true);
+                        }
+                    };
+                });
+            } else {
+                // Background reserve
+                const initBackgroundReservation = async () => {
+                    try {
+                        const reservation = await reserveTaskReviewComment(task);
+                        updateReservationUi(reservation);
+                    } catch (error) {
+                        console.warn('Background reservation failed:', error);
+                        const timerEl = document.getElementById('task-reservation-timer');
+                        if (timerEl) timerEl.textContent = 'Failed to lock reservation. Try copying again.';
+                    }
+                };
+                initBackgroundReservation();
+
+                document.getElementById('task-copy-review-btn').onclick = async () => {
+                    // Copy initial pre-selected comment instantly to prevent browser blocking!
+                    const targetComment = activeTaskReservation?.comment || initialComment;
+                    try {
+                        await navigator.clipboard.writeText(targetComment);
+                        showNotification('Review comment copied.');
+                    } catch (err) {
+                        showNotification('Copy failed. Try copying manually.', true);
+                    }
+                    
+                    // Call reserve in background/foreground to refresh or make sure it is locked
+                    try {
+                        const reservation = await reserveTaskReviewComment(task);
+                        updateReservationUi(reservation);
+                    } catch (error) {
+                        console.error('Review reserve failed:', error);
+                    }
+                };
+            }
+
+            // File select handling
+            const fileInput = document.getElementById('task-proof-input');
+            const filesListEl = document.getElementById('task-files-list');
+            const submitBtn = document.getElementById('task-submit-mission-btn');
+            
+            fileInput.onchange = (event) => {
+                const files = Array.from(event.target.files || []);
+                if (files.length === 0) {
+                    if (filesListEl) filesListEl.classList.add('hidden');
+                    submitBtn.disabled = true;
+                    return;
+                }
+                
+                if (isBulk) {
+                    filesListEl.classList.remove('hidden');
+                    filesListEl.innerHTML = files.map((file, idx) => `
+                        <div id="file-item-${idx}" class="flex items-center justify-between p-2.5 bg-gray-50 dark:bg-gray-900 border border-gray-100 dark:border-gray-700 rounded-xl">
+                            <span class="text-xs font-semibold truncate max-w-[70%] text-gray-700 dark:text-gray-300">${escapeHtml(file.name)}</span>
+                            <span id="file-status-${idx}" class="text-[10px] font-black uppercase text-amber-500 shrink-0">Ready</span>
+                        </div>
+                    `).join('');
+                } else {
+                    document.getElementById('task-proof-label').textContent = files[0].name;
+                }
+                submitBtn.disabled = false;
+            };
+
+            // Submit handler
+            submitBtn.onclick = async () => {
+                const files = Array.from(fileInput.files || []);
+                if (files.length === 0) return showNotification('Please select screenshot proof first.', true);
+                
+                if (!isBulk) {
+                    // Single User Flow
+                    const expiresAt = timestampToMillis(activeTaskReservation?.expiresAt);
+                    if (!activeTaskReservation?.comment || !expiresAt || expiresAt <= Date.now()) {
+                        return showNotification('Please copy and reserve a review comment before submitting.', true);
+                    }
+                    
+                    if (submitBtn) { submitBtn.disabled = true; submitBtn.textContent = 'Running OCR...'; }
+                    const file = files[0];
+                    try {
+                        // 1. Run OCR.space client-side (Engine 2)
+                        let ocrText = '';
+                        let clientOcrSuccess = false;
+                        try {
+                            const formData = new FormData();
+                            formData.append('file', file);
+                            formData.append('language', 'eng');
+                            formData.append('OCREngine', '2');
+                            formData.append('apikey', 'helloworld'); // fallback to free demo key
+
+                            const ocrResponse = await fetch('https://api.ocr.space/parse/image', {
+                                method: 'POST',
+                                body: formData
+                            });
+                            if (ocrResponse.ok) {
+                                const ocrData = await ocrResponse.json();
+                                if (ocrData.OCRExitCode === 1 && ocrData.ParsedResults && ocrData.ParsedResults.length > 0) {
+                                    ocrText = ocrData.ParsedResults[0].ParsedText || '';
+                                    clientOcrSuccess = true;
+                                }
+                            }
+                        } catch (ocrErr) {
+                            console.error('OCR.space client call failed:', ocrErr);
+                        }
+
+                        let gmailName = 'Unknown User';
+                        let skipOcr = 'false';
+
+                        if (clientOcrSuccess) {
+                            // 2. Validate comment matches (first 2 words merged/separate fallback)
+                            const cleanStr = (s) => String(s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+                            const ocrTextLower = ocrText.toLowerCase().replace(/[^a-z0-9\s]/g, '');
+                            const targetComment = activeTaskReservation.comment;
+                            const expectedCommentWords = String(targetComment || '').trim().split(/\s+/).filter(Boolean);
+
+                            let matchFound = false;
+                            if (expectedCommentWords.length >= 2) {
+                                const word1 = cleanStr(expectedCommentWords[0]);
+                                const word2 = cleanStr(expectedCommentWords[1]);
+                                const combined = word1 + word2;
+                                const normalizedFullText = ocrTextLower.replace(/\s+/g, '');
+                                if (normalizedFullText.includes(combined) || (ocrTextLower.includes(word1) && ocrTextLower.includes(word2))) {
+                                    matchFound = true;
+                                }
+                            } else if (expectedCommentWords.length === 1) {
+                                const word1 = cleanStr(expectedCommentWords[0]);
+                                if (ocrTextLower.includes(word1)) {
+                                    matchFound = true;
+                                }
+                            }
+
+                            if (!matchFound) {
+                                throw new Error('Your comment is wrong. Copy the same comment as given.');
+                            }
+
+                            // 3. Extract reviewer's Gmail name using proximity helper
+                            if (submitBtn) submitBtn.textContent = 'Extracting Name...';
+                            try {
+                                gmailName = await window.extractReviewerName(ocrText, targetComment);
+                            } catch (chatErr) {
+                                console.warn('Failed to extract name:', chatErr);
+                            }
+                            skipOcr = 'true';
+                        }
+
+                        const gmailLogoUrl = `https://ui-avatars.com/api/?name=${encodeURIComponent(gmailName)}&background=random`;
+
+                        if (submitBtn) submitBtn.textContent = 'Uploading...';
+
+                        let screenshotUrl = '';
+                        let screenshotKey = '';
+                        let screenshotViewUrl = '';
+                        let screenshotDrivePath = '';
+                        
+                        // Step 1: Upload and pre-verify comment synchronously on backend
+                        try {
+                            const token = await getBackendAuthToken();
+                            const params = new URLSearchParams({
+                                taskId: task.id,
+                                fileName: file.name,
+                                appName: appName || task.appName || task.title || 'Unknown App',
+                                assignedComment: activeTaskReservation.comment,
+                                skipOcr,
+                                ocrText: ocrText.slice(0, 1000),
+                                gmailName,
+                                gmailLogoUrl
+                            });
+                            const uploadResponse = await fetchWithTimeout(`${BACKEND_BASE_URL}/api/uploads/task-screenshot?${params.toString()}`, {
+                                method: 'POST',
+                                headers: {
+                                    Authorization: `Bearer ${token}`,
+                                    'Content-Type': file.type || 'image/jpeg',
+                                    'Content-Length': String(file.size)
+                                },
+                                body: file
+                            }, 35000); // 35s timeout
+                            
+                            const uploadData = await uploadResponse.json().catch(() => ({}));
+                            if (!uploadResponse.ok || !uploadData.ok) {
+                                throw new Error(uploadData.detail || uploadData.error || 'Upload failed');
+                            }
+                            
+                            const verification = uploadData.verification;
+                            if (!verification) {
+                                throw new Error('Verification data missing');
+                            }
+                            
+                            screenshotUrl = uploadData.screenshot.url || '';
+                            screenshotKey = uploadData.screenshot.key || '';
+                            screenshotViewUrl = uploadData.screenshot.viewUrl || '';
+                            screenshotDrivePath = uploadData.screenshot.drivePath || '';
+                            
+                            if (submitBtn) submitBtn.textContent = 'Submitting...';
+                            
+                            // Step 2: D1 submission save (pre-verified bypass)
+                            const reservationId = activeTaskReservation.id || getTaskReservationDocId(task.id, currentUser.uid);
+                            const submissionId = `sub_${task.id.slice(0, 12)}_${currentUser.uid.slice(0, 12)}_${Date.now()}`;
+                            
+                            const submitResponse = await fetchWithTimeout(`${BACKEND_BASE_URL}/api/task-submissions`, {
+                                method: 'POST',
+                                headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+                                body: JSON.stringify({
+                                    id: submissionId,
+                                    taskId: task.id,
+                                    reservationId,
+                                    assignedComment: activeTaskReservation.comment,
+                                    screenshotUrl,
+                                    screenshotKey,
+                                    screenshotViewUrl,
+                                    screenshotDrivePath,
+                                    reward: Number(reward || 0),
+                                    taskLink,
+                                    appName,
+                                    userName: currentUserData?.name || currentUser.email || 'User',
+                                    userEmail: currentUser.email || currentUserData?.email || '',
+                                    payoutDelayDays: Number(task.paymentDelayDays || task.paymentDays || 7),
+                                    ocrStatus: 'completed',
+                                    ocrExtractedName: verification.gmailName,
+                                    ocrExtractedText: verification.ocrText,
+                                    ocrConfidence: verification.ocrConfidence,
+                                    details: { gmailLogoUrl: verification.gmailLogoUrl, avatarHash: verification.avatarHash || '', avatarCrop: verification.avatarCrop || null }
+                                })
+                            }, 10000);
+                            
+                            const resData = await submitResponse.json().catch(() => ({}));
+                            if (!submitResponse.ok || !resData.ok) {
+                                throw new Error(resData.detail || resData.error || 'Submission failed');
+                            }
+                            
+                            // Step 3: Firebase save
+                            await setDoc(doc(db, `artifacts/${appId}/public/data/task_submissions`, submissionId), {
+                                id: submissionId,
+                                taskId: task.id,
+                                taskCode: task.taskCode || task.id,
+                                taskTitle,
+                                taskFamily: getAdminTaskFamily(task),
+                                taskSubtype: getAdminTaskSubtype(task),
+                                taskSubtypeLabel: task.taskSubtypeLabel || getAdminTaskSubtypeMeta(getAdminTaskFamily(task), getAdminTaskSubtype(task)).label,
+                                appName,
+                                appLogoUrl: image,
+                                taskLink,
+                                userId: currentUser.uid,
+                                userName: currentUserData?.name || currentUser.email || 'User',
+                                userEmail: currentUser.email || currentUserData?.email || '',
+                                userMobile: currentUserData?.mobile || '',
+                                reward: Number(reward || 0),
+                                assignedComment: activeTaskReservation.comment,
+                                assignedCommentIndex: activeTaskReservation.commentIndex ?? 0,
+                                reservationId,
+                                reservationExpiresAt: activeTaskReservation.expiresAt,
+                                screenshotUrl,
+                                screenshotKey,
+                                proofFileName: file.name,
+                                proofFileSize: file.size,
+                                proofMimeType: file.type || 'image/*',
+                                status: 'pending_manual_verification',
+                                manualStatus: 'pending',
+                                autoStatus: 'waiting_scraper',
+                                verificationMode: 'manual_and_auto_ready',
+                                ocrStatus: 'completed',
+                                ocrExtractedName: verification.gmailName,
+                                ocrExtractedComment: activeTaskReservation.comment,
+                                ocrExtractedLogoUrl: verification.gmailLogoUrl,
+                                scraperStatus: 'not_configured',
+                                payoutStatus: 'pending',
+                                submittedAt: serverTimestamp()
+                            });
+                            
+                            await setDoc(doc(db, `artifacts/${appId}/public/data/task_comment_reservations`, reservationId), {
+                                status: 'submitted',
+                                submittedAt: serverTimestamp()
+                            }, { merge: true });
+                            
+                            // Mark reservation as submitted on backend (non-blocking)
+                            fetchWithTimeout(`${BACKEND_BASE_URL}/api/task-reservations/${encodeURIComponent(reservationId)}/submit`, {
+                                method: 'POST',
+                                headers: { Authorization: `Bearer ${token}` }
+                            }, 5000).catch(() => {});
+                            
+                            userTaskSubmissionIds.add(task.id);
+                            userTaskTodaySubmissionIds.add(task.id);
+                            showNotification('Mission submitted for admin review.');
+                            showUserTaskPage();
+                            
+                        } catch (err) {
+                            showNotification(err.message || 'Validation failed. Please check your screenshot.', true);
+                            if (submitBtn) { submitBtn.disabled = false; submitBtn.textContent = 'Submit Mission'; }
+                        }
+                    } catch (error) {
+                        console.error('Task submission failed:', error);
+                        showNotification('Could not submit mission. Please contact admin.', true);
+                        if (submitBtn) { submitBtn.disabled = false; submitBtn.textContent = 'Submit Mission'; }
+                    }
+                } else {
+                    // Bulk User Flow
+                    if (submitBtn) { submitBtn.disabled = true; submitBtn.textContent = 'Running OCR...'; }
+                    let successCount = 0;
+                    let failCount = 0;
+                    
+                    for (let i = 0; i < files.length; i++) {
+                        const file = files[i];
+                        const statusEl = document.getElementById(`file-status-${i}`);
+                        const itemEl = document.getElementById(`file-item-${i}`);
+                        
+                        if (statusEl) {
+                            statusEl.textContent = 'Verifying...';
+                            statusEl.className = 'text-[10px] font-black uppercase text-blue-500 shrink-0';
+                        }
+                        if (itemEl) {
+                            itemEl.className = 'flex items-center justify-between p-2.5 bg-blue-50/50 dark:bg-blue-900/10 border border-blue-200 dark:border-blue-800 rounded-xl';
+                        }
+                        
+                        try {
+                            // 1. Run OCR.space client-side (Engine 2)
+                            if (statusEl) statusEl.textContent = 'Running OCR...';
+                            let ocrText = '';
+                            let clientOcrSuccess = false;
+                            try {
+                                const formData = new FormData();
+                                formData.append('file', file);
+                                formData.append('language', 'eng');
+                                formData.append('OCREngine', '2');
+                                formData.append('apikey', 'helloworld'); // fallback to free demo key
+
+                                const ocrResponse = await fetch('https://api.ocr.space/parse/image', {
+                                    method: 'POST',
+                                    body: formData
+                                });
+                                if (ocrResponse.ok) {
+                                    const ocrData = await ocrResponse.json();
+                                    if (ocrData.OCRExitCode === 1 && ocrData.ParsedResults && ocrData.ParsedResults.length > 0) {
+                                        ocrText = ocrData.ParsedResults[0].ParsedText || '';
+                                        clientOcrSuccess = true;
+                                    }
+                                }
+                            } catch (ocrErr) {
+                                console.error('OCR.space client call failed for file:', file.name, ocrErr);
+                            }
+
+                            let gmailName = 'Unknown User';
+                            let matchedComment = null;
+                            let skipOcr = 'false';
+
+                            if (clientOcrSuccess) {
+                                // 2. Clean and match comment from remaining comment pool (first 2 words merged/separate fallback)
+                                const cleanStr = (s) => String(s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+                                const ocrTextLower = ocrText.toLowerCase().replace(/[^a-z0-9\s]/g, '');
+                                const remainingComments = commentPool.filter(c => !submittedComments.includes(String(c).trim()));
+                                
+                                for (const comment of remainingComments) {
+                                    const expectedCommentWords = String(comment || '').trim().split(/\s+/).filter(Boolean);
+                                    let matchFound = false;
+
+                                    if (expectedCommentWords.length >= 2) {
+                                        const word1 = cleanStr(expectedCommentWords[0]);
+                                        const word2 = cleanStr(expectedCommentWords[1]);
+                                        const combined = word1 + word2;
+                                        const normalizedFullText = ocrTextLower.replace(/\s+/g, '');
+                                        if (normalizedFullText.includes(combined) || (ocrTextLower.includes(word1) && ocrTextLower.includes(word2))) {
+                                            matchFound = true;
+                                        }
+                                    } else if (expectedCommentWords.length === 1) {
+                                        const word1 = cleanStr(expectedCommentWords[0]);
+                                        if (ocrTextLower.includes(word1)) {
+                                            matchFound = true;
+                                        }
+                                    }
+
+                                    if (matchFound) {
+                                        matchedComment = comment;
+                                        break;
+                                    }
+                                }
+                                
+                                if (!matchedComment) {
+                                    throw new Error('Comment mismatch or verification failed');
+                                }
+
+                                // 3. Extract reviewer's Gmail name using proximity helper
+                                if (statusEl) statusEl.textContent = 'Extracting Name...';
+                                try {
+                                    gmailName = await window.extractReviewerName(ocrText, matchedComment);
+                                } catch (chatErr) {
+                                    console.warn('Failed to extract name:', chatErr);
+                                }
+                                skipOcr = 'true';
+                            }
+
+                            const gmailLogoUrl = `https://ui-avatars.com/api/?name=${encodeURIComponent(gmailName)}&background=random`;
+
+                            if (statusEl) statusEl.textContent = 'Uploading...';
+
+                            const token = await getBackendAuthToken();
+                            const params = new URLSearchParams({
+                                taskId: task.id,
+                                fileName: file.name,
+                                appName: appName || task.appName || task.title || 'Unknown App',
+                                isBulk: 'true',
+                                skipOcr,
+                                ocrText: ocrText.slice(0, 1000),
+                                gmailName,
+                                gmailLogoUrl,
+                                matchedComment: matchedComment || ''
+                            });
+                            
+                            // 4. Upload screenshot on backend with OCR bypassed
+                            const uploadResponse = await fetchWithTimeout(`${BACKEND_BASE_URL}/api/uploads/task-screenshot?${params.toString()}`, {
+                                method: 'POST',
+                                headers: {
+                                    Authorization: `Bearer ${token}`,
+                                    'Content-Type': file.type || 'image/jpeg',
+                                    'Content-Length': String(file.size)
+                                },
+                                body: file
+                            }, 35000); // 35s timeout
+                            
+                            const uploadData = await uploadResponse.json().catch(() => ({}));
+                            if (!uploadResponse.ok || !uploadData.ok) {
+                                throw new Error(uploadData.detail || uploadData.error || 'Upload failed');
+                            }
+                            
+                            const verification = uploadData.screenshot ? uploadData.verification : null;
+                            if (!verification || !verification.matchedComment) {
+                                throw new Error('Comment mismatch or verification failed');
+                            }
+                            
+                            const screenshotUrl = uploadData.screenshot.url || '';
+                            const screenshotKey = uploadData.screenshot.key || '';
+                            const screenshotViewUrl = uploadData.screenshot.viewUrl || '';
+                            const screenshotDrivePath = uploadData.screenshot.drivePath || '';
+                            
+                            if (statusEl) statusEl.textContent = 'Saving...';
+                            
+                            // 5. Submit task details (bypass OCR)
+                            const submissionId = `sub_${task.id.slice(0, 12)}_${currentUser.uid.slice(0, 12)}_${Date.now()}`;
+                            const submitResponse = await fetchWithTimeout(`${BACKEND_BASE_URL}/api/task-submissions`, {
+                                method: 'POST',
+                                headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+                                body: JSON.stringify({
+                                    id: submissionId,
+                                    taskId: task.id,
+                                    assignedComment: verification.matchedComment,
+                                    screenshotUrl,
+                                    screenshotKey,
+                                    screenshotViewUrl,
+                                    screenshotDrivePath,
+                                    reward: Number(reward || 0),
+                                    taskLink,
+                                    appName,
+                                    userName: currentUserData?.name || currentUser.email || 'User',
+                                    userEmail: currentUser.email || currentUserData?.email || '',
+                                    payoutDelayDays: Number(task.paymentDelayDays || task.paymentDays || 7),
+                                    ocrStatus: 'completed',
+                                    ocrExtractedName: verification.gmailName,
+                                    ocrExtractedText: ocrText,
+                                    ocrConfidence: 1.0,
+                                    details: { gmailLogoUrl: verification.gmailLogoUrl, avatarHash: verification.avatarHash || '', avatarCrop: verification.avatarCrop || null }
+                                })
+                            }, 10000);
+                            
+                            const resData = await submitResponse.json().catch(() => ({}));
+                            if (!submitResponse.ok || !resData.ok) {
+                                throw new Error(resData.detail || resData.error || 'Submission failed');
+                            }
+                            
+                            // 6. Save to Firebase
+                            await setDoc(doc(db, `artifacts/${appId}/public/data/task_submissions`, submissionId), {
+                                id: submissionId,
+                                taskId: task.id,
+                                taskCode: task.taskCode || task.id,
+                                taskTitle,
+                                taskFamily: getAdminTaskFamily(task),
+                                taskSubtype: getAdminTaskSubtype(task),
+                                taskSubtypeLabel: task.taskSubtypeLabel || getAdminTaskSubtypeMeta(getAdminTaskFamily(task), getAdminTaskSubtype(task)).label,
+                                appName,
+                                appLogoUrl: image,
+                                taskLink,
+                                userId: currentUser.uid,
+                                userName: currentUserData?.name || currentUser.email || 'User',
+                                userEmail: currentUser.email || currentUserData?.email || '',
+                                userMobile: currentUserData?.mobile || '',
+                                reward: Number(reward || 0),
+                                assignedComment: verification.matchedComment,
+                                screenshotUrl,
+                                screenshotKey,
+                                proofFileName: file.name,
+                                proofFileSize: file.size,
+                                proofMimeType: file.type || 'image/*',
+                                status: 'pending_manual_verification',
+                                manualStatus: 'pending',
+                                autoStatus: 'waiting_scraper',
+                                verificationMode: 'manual_and_auto_ready',
+                                ocrStatus: 'completed',
+                                ocrExtractedName: verification.gmailName,
+                                ocrExtractedComment: verification.matchedComment,
+                                ocrExtractedLogoUrl: verification.gmailLogoUrl,
+                                scraperStatus: 'not_configured',
+                                payoutStatus: 'pending',
+                                submittedAt: serverTimestamp()
+                            });
+                            
+                            if (statusEl) {
+                                statusEl.textContent = 'Success ✅';
+                                statusEl.className = 'text-[10px] font-black uppercase text-green-600 shrink-0';
+                            }
+                            if (itemEl) {
+                                itemEl.className = 'flex items-center justify-between p-2.5 bg-green-50/50 dark:bg-green-900/10 border border-green-200 dark:border-green-800 rounded-xl';
+                            }
+                            submittedComments.push(matchedComment);
+                            successCount++;
+                        } catch (err) {
+                            console.error(`File ${file.name} failed:`, err);
+                            if (statusEl) {
+                                statusEl.textContent = 'Failed ❌';
+                                statusEl.title = err.message;
+                                statusEl.className = 'text-[10px] font-black uppercase text-red-600 shrink-0 cursor-help';
+                            }
+                            if (itemEl) {
+                                itemEl.className = 'flex items-center justify-between p-2.5 bg-red-50/50 dark:bg-red-900/10 border border-red-200 dark:border-red-800 rounded-xl';
+                            }
+                            failCount++;
+                        }
+                    }
+                    
+                    showNotification(`Submissions completed. Success: ${successCount}, Failed: ${failCount}`);
+                    
+                    if (failCount === 0) {
+                        userTaskSubmissionIds.add(task.id);
+                        userTaskTodaySubmissionIds.add(task.id);
+                        showUserTaskPage();
+                    } else {
+                        if (submitBtn) {
+                            submitBtn.disabled = false;
+                            submitBtn.textContent = 'Submit Remaining';
+                        }
+                    }
+                }
+            };
+        };
+
+const getIncomeTransactions = () => unifiedHistoryCache.filter(item => {
+            if (item.status && item.status !== 'completed') return false;
+            const type = normalizeTransactionType(item);
+            return type === 'credit' || type === 'gift_card' || (type === 'wallet_transfer' && Number(item.amount || 0) > 0);
+        });
+
+const showTrackIncomePage = () => {
+            const createdYear = getUserCreatedYear();
+            const currentYear = new Date().getFullYear();
+            const years = [];
+            for (let year = createdYear; year <= currentYear; year++) years.push(year);
+            const content = `
+                ${getPageHeader('Track Income')}
+                <div class="max-w-lg mx-auto space-y-4">
+                    <div class="bg-white dark:bg-gray-800 p-5 rounded-2xl shadow-md border border-gray-100 dark:border-gray-700">
+                        <label class="text-sm font-semibold text-gray-500 dark:text-gray-400">Choose Year</label>
+                        <select id="income-year-select" class="mt-2 w-full px-4 py-3 rounded-xl bg-gray-100 dark:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-emerald-500">
+                            ${years.map(year => `<option value="${year}" ${year === currentYear ? 'selected' : ''}>${year}</option>`).join('')}
+                        </select>
+                    </div>
+                    <div id="income-month-list" class="space-y-3"></div>
+                </div>
+                ${getPageFooter()}`;
+            showPage(content, { onBack: showSettingsPage });
+            const renderIncomeYear = (year) => {
+                const created = getSafeDate(currentUserData?.createdAt);
+                const current = new Date();
+                const totals = Array(12).fill(0);
+                getIncomeTransactions().forEach(item => {
+                    const date = getSafeDate(item.timestamp || item.createdAt);
+                    if (!date || date.getFullYear() !== Number(year)) return;
+                    totals[date.getMonth()] += absoluteAmount(item.amount || item.chargeAmount || 0);
+                });
+                const rows = totals.map((amount, monthIndex) => {
+                    if (created && Number(year) === created.getFullYear() && monthIndex < created.getMonth()) return '';
+                    if (Number(year) === current.getFullYear() && monthIndex > current.getMonth()) return '';
+                    return `
+                        <div class="flex items-center justify-between p-4 bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 shadow-sm">
+                            <span class="font-semibold text-gray-900 dark:text-white">${monthNames[monthIndex]}</span>
+                            <span class="font-bold text-emerald-600 dark:text-emerald-300">${formatCurrency(amount)}</span>
+                        </div>`;
+                }).join('');
+                document.getElementById('income-month-list').innerHTML = rows || '<p class="text-center text-gray-500 dark:text-gray-400 py-8">No income records for this year.</p>';
+            };
+            document.getElementById('income-year-select').onchange = (e) => renderIncomeYear(e.target.value);
+            renderIncomeYear(currentYear);
+        };
+
+const getLatestTransactionsForBot = async (limit = 5) => {
+            if (!currentUser?.uid) return [];
+            const cachedHistory = mergeTransactionsByKey(
+                unifiedHistoryCache || [],
+                readHistoryItemsFromCache(currentUser.uid)
+            );
+
+            try {
+                const mergedHistory = await prefetchTransactionHistory(currentUser.uid, { force: !cachedHistory.length });
+                const combinedHistory = mergeTransactionsByKey(mergedHistory || [], cachedHistory);
+                return combinedHistory.slice(0, limit);
+            } catch (error) {
+                console.warn('Bot merged transaction lookup failed:', error);
+                return cachedHistory.slice(0, limit);
+            }
+        };
+
+const getFilteredTransactions = (filter) => {
+            if ((!unifiedHistoryCache || unifiedHistoryCache.length === 0) && currentUser?.uid) {
+                unifiedHistoryCache = readHistoryItemsFromCache(currentUser.uid);
+            }
+
+            if (filter === 'all') {
+                return unifiedHistoryCache;
+            }
+
+            if (filter === 'withdrawal') {
+                return unifiedHistoryCache.filter(item =>
+                    normalizeTransactionType(item) === 'withdrawal' ||
+                    (item.status === 'pending' && normalizeTransactionType(item) !== 'loan')
+                );
+            }
+
+            if (filter === 'received') {
+                return unifiedHistoryCache.filter(item => {
+                    const type = normalizeTransactionType(item);
+                    return ['credit', 'gift_card'].includes(type) || (type === 'wallet_transfer' && Number(item.amount || 0) > 0);
+                });
+            }
+
+            if (filter === 'sent') {
+                return unifiedHistoryCache.filter(item => {
+                    const type = normalizeTransactionType(item);
+                    return type === 'debit' || type === 'mobile_recharge' || type === 'withdrawal' || (type === 'wallet_transfer' && Number(item.amount || 0) < 0);
+                });
+            }
+
+            if (filter === 'debit') {
+                return unifiedHistoryCache.filter(item => normalizeTransactionType(item) === 'debit');
+            }
+
+            return unifiedHistoryCache;
+        };
+
+const renderFilteredTransactions = (filter, options = {}) => {
+            const { reset = true } = options;
+            const filteredList = getFilteredTransactions(filter);
+            transactionListState.filter = filter;
+            transactionListState.items = filteredList;
+            if (reset) {
+                transactionListState.visibleCount = TRANSACTION_PAGE_SIZE;
+            }
+
+            const listElement = document.getElementById('all-transactions-list');
+            if (listElement) {
+                const visibleItems = filteredList.slice(0, transactionListState.visibleCount);
+                const hasMore = transactionListState.visibleCount < filteredList.length;
+                listElement.innerHTML = filteredList.length === 0
+                    ? '<p class="text-gray-500 dark:text-gray-400 text-center py-4">No transactions found for this filter.</p>'
+                    : `${visibleItems.map(item => renderTransactionItem(item, true)).join('')}
+                       ${hasMore ? '<p id="transactions-load-hint" class="text-center text-xs font-semibold text-gray-500 dark:text-gray-400 py-3">Scroll to load more</p>' : ''}`;
+            }
+        };
+
+const loadMoreTransactionsIfNeeded = () => {
+            if (!document.getElementById('all-transactions-list')) return;
+            if (transactionListState.visibleCount >= transactionListState.items.length) return;
+
+            transactionListState.visibleCount += TRANSACTION_PAGE_SIZE;
+            renderFilteredTransactions(transactionListState.filter, { reset: false });
+        };
+
+const refreshTransactionHistoryFromFirebase = async (userId = currentUser?.uid) => {
+            if (!userId) return [];
+            return prefetchTransactionHistory(userId, { force: true });
+        };
+
+const showAllTransactionsPage = () => {
+            if ((!unifiedHistoryCache || unifiedHistoryCache.length === 0) && currentUser?.uid) {
+                unifiedHistoryCache = readHistoryItemsFromCache(currentUser.uid);
+            }
+
+            const content = `
+                ${getPageHeader('Transaction History')}
+                <div class="max-w-2xl mx-auto bg-white dark:bg-gray-800 p-6 rounded-xl shadow-md">
+                    
+                    <div id="filter-bar" class="flex space-x-2 overflow-x-auto pb-2 mb-4">
+                        <button data-filter="all" class="filter-btn active-filter">All</button>
+                        <button data-filter="withdrawal" class="filter-btn">Withdrawal</button>
+                        <button data-filter="debit" class="filter-btn">Debit</button>
+                        <button data-filter="received" class="filter-btn">Received</button>
+                        <button data-filter="sent" class="filter-btn">Sent</button>
+                    </div>
+                    
+                    <div id="all-transactions-list" class="space-y-3 pr-1">
+                        </div>
+                </div>
+                ${getPageFooter()}`;
+            showPage(content, { keepBottomNav: true });
+            currentMainSection = 'transactions';
+            setBottomNavActive('bottom-home-btn');
+            const pageContainer = document.getElementById('page-container');
+
+            // Initial render of all transactions
+            renderFilteredTransactions('all');
+            prefetchTransactionHistory(currentUser?.uid)
+                .then(() => {
+                    const activeFilter = document.querySelector('#filter-bar .active-filter')?.dataset.filter || 'all';
+                    renderFilteredTransactions(activeFilter, { reset: false });
+                })
+                .catch((error) => {
+                    console.error('Background transaction refresh failed:', error);
+                });
+
+            // Add click listener for filter buttons
+            document.getElementById('filter-bar').addEventListener('click', (e) => {
+                if (e.target.matches('.filter-btn')) {
+                    // Update active button
+                    document.querySelectorAll('.filter-btn').forEach(btn => btn.classList.remove('active-filter'));
+                    e.target.classList.add('active-filter');
+
+                    // Filter the list
+                    const filter = e.target.dataset.filter;
+                    renderFilteredTransactions(filter);
+                    pageContainer.scrollTop = 0;
+                }
+            });
+
+            pageContainer.onscroll = () => {
+                if (currentMainSection !== 'transactions') return;
+                const distanceFromBottom = pageContainer.scrollHeight - pageContainer.scrollTop - pageContainer.clientHeight;
+                if (distanceFromBottom < 180) {
+                    loadMoreTransactionsIfNeeded();
+                }
+            };
+
+            // Keep the click listener for transaction details
+            document.getElementById('all-transactions-list').addEventListener('click', (e) => {
+                const itemEl = e.target.closest('.tx-item-clickable');
+                if (itemEl) {
+                    showTransactionDetails(itemEl.dataset.key);
+                }
+            });
+        };
+
+const showPayToWalletPage = () => {
+            const content = `
+                ${getPageHeader('Pay to Wallet')}
+                <div class="max-w-md mx-auto bg-white dark:bg-gray-800 p-6 rounded-xl shadow-md space-y-6">
+                    <div class="text-center">
+                        <h3 class="text-lg font-semibold">Send Money to Another User</h3>
+                        <p class="text-sm text-gray-500 dark:text-gray-400 mt-2">Enter the recipient's mobile number to send money</p>
+                    </div>
+                    
+                    <div class="space-y-4">
+                        <div>
+                            <label class="text-sm font-medium text-gray-500 dark:text-gray-400">Recipient Mobile Number</label>
+                            <input type="tel" id="recipient-mobile-input" placeholder="Enter mobile number" class="w-full mt-1 px-4 py-3 bg-gray-100 dark:bg-gray-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+                        </div>
+                        
+                        <div>
+                            <label class="text-sm font-medium text-gray-500 dark:text-gray-400">Amount</label>
+                            <input type="number" id="pay-amount-input" placeholder="Enter amount (₹)" min="1" class="w-full mt-1 px-4 py-3 bg-gray-100 dark:bg-gray-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+                            <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">Minimum amount: ₹1</p>
+                        </div>
+                        
+                        <div>
+                            <label class="text-sm font-medium text-gray-500 dark:text-gray-400">Remarks (Optional)</label>
+                            <input type="text" id="pay-comment-input" placeholder="Add a note" class="w-full mt-1 px-4 py-3 bg-gray-100 dark:bg-gray-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+                        </div>
+                    </div>
+                    
+                    <button id="find-recipient-btn" class="w-full bg-purple-500 text-white font-semibold py-3 rounded-lg hover:bg-purple-600 transition">Find Recipient</button>
+                </div>
+                ${getPageFooter()}`;
+            showPage(content);
+            document.getElementById('find-recipient-btn').onclick = handleFindRecipient;
+        };
+
+const showTransactionDetails = (key, source = 'user') => {
+            const item = source === 'admin-user'
+                ? (adminViewedUserTransactions.find(i => i.key === key) || unifiedHistoryCache.find(i => i.key === key))
+                : (unifiedHistoryCache.find(i => i.key === key) || adminViewedUserTransactions.find(i => i.key === key));
+            if (!item) {
+                console.error("Could not find transaction with key:", key);
+                return;
+            }
+            const viewedUser = source === 'admin-user' ? (adminViewedUserProfile || {}) : (currentUserData || {});
+
+            const rwLogoUrl = 'https://i.ibb.co/x8YBYwGG/6233389803554672153.jpg';
+            const isReviewsWorldName = (name = '') => name.toLowerCase().includes('reviews world');
+            const getInitials = (name = 'User') => {
+                const parts = name.trim().split(/\s+/).filter(Boolean);
+                if (!parts.length) return 'US';
+                if (parts.length === 1) return parts[0].substring(0, 2).toUpperCase();
+                return (parts[0][0] + parts[1][0]).toUpperCase();
+            };
+            const verifiedBadge = getVerifiedBadge();
+            const isVerifiedTransactionParty = (party = {}) =>
+                !!party.appLogo ||
+                isReviewsWorldName(party.name || '') ||
+                /admin wallet|rw wallet|digital wallet/i.test(`${party.detail || ''} ${party.name || ''}`);
+            const renderTransactionAvatar = (name, forceAppLogo = false, logoUrl = '', userProfile = null) => logoUrl ? `
+                <div class="w-10 h-10 bg-white dark:bg-gray-700 rounded-full flex items-center justify-center shadow-inner shrink-0 border border-gray-100 dark:border-gray-600 p-1.5">
+                    <img src="${logoUrl}" class="w-full h-full object-contain rounded-full" alt="${name}" loading="eager">
+                </div>` : (forceAppLogo || isReviewsWorldName(name)) ? `
+                <div class="shrink-0">
+                    <img src="${rwLogoUrl}" class="w-10 h-10 rounded-full border-2 border-gray-100 dark:border-gray-700 shadow-sm object-cover" alt="Reviews World Logo" loading="eager" fetchpriority="high" decoding="sync">
+                </div>` : `
+                <div class="shrink-0">
+                    <img src="${getProfileAvatarUrl(userProfile || findUserProfile({ name }))}" class="w-10 h-10 rounded-full border border-gray-250 dark:border-gray-700 shadow-sm object-cover bg-white dark:bg-gray-800" alt="${name}" loading="eager">
+                </div>`;
+            const findUserProfile = ({ name = '', mobile = '' } = {}) => {
+                const candidates = [
+                    ...(viewedUser ? [viewedUser] : []),
+                    ...(currentUserData ? [currentUserData] : []),
+                    ...allUsersCache
+                ];
+                const normalizedName = name.toLowerCase();
+                return candidates.find(u =>
+                    (mobile && u.mobile === mobile) ||
+                    (normalizedName && (u.name || '').toLowerCase() === normalizedName)
+                );
+            };
+
+            const isRecharge = item.type === 'mobile_recharge';
+            const isCredit = item.type !== 'debit' && item.type !== 'withdrawal' && !isRecharge && item.amount > 0;
+            const dateStr = formatDate(item.timestamp);
+            const displayAmount = isRecharge ? (item.chargeAmount || item.amount || 0) : Math.abs(item.amount);
+            const amountStr = formatCurrency(displayAmount);
+
+            // Format amount in words
+            const amountInWords = numberToWords(displayAmount) + " Only";
+
+            const senderName = item.senderName || (isCredit ? (item.isAdminTransaction ? 'Reviews World' : 'User') : viewedUser.name);
+            const recipientName = item.recipientName || (isCredit ? viewedUser.name : 'User');
+            const senderMobile = item.senderMobile || '';
+            const recipientMobile = item.recipientMobile || '';
+            const senderProfile = findUserProfile({ name: senderName, mobile: senderMobile });
+            const recipientProfile = findUserProfile({ name: recipientName, mobile: recipientMobile });
+            const senderIsPro = !!item.senderIsProProfile || !!senderProfile?.isProProfile;
+            const recipientIsPro = !!item.recipientIsProProfile || !!recipientProfile?.isProProfile;
+            let remarks = item.comment || (item.isAdminTransaction ? 'Payment By reviews World' : 'Money Transfer');
+            const rawStatus = item.status || 'completed';
+            const isWithdrawal = item.type === 'withdrawal';
+            const isGiftCard = item.type === 'gift_card';
+            const isRejected = rawStatus === 'rejected' || rawStatus === 'failed';
+            const isPending = rawStatus === 'pending';
+            const normalizedDetailType = normalizeTransactionType(item);
+            if (normalizedDetailType === 'credit' && /admin\s+debit/i.test(remarks)) {
+                remarks = 'Admin Balance Credit';
+            }
+            const isAdminCredit = (item.isAdminTransaction && isCredit) || normalizedDetailType === 'credit' && (isReviewsWorldName(remarks) || isReviewsWorldName(senderName));
+            const isAdminDebit = item.isAdminTransaction && !isCredit && normalizedDetailType === 'debit';
+            const giftCodeFromComment = (remarks.match(/redeemed code\s+([A-Z0-9-]+)/i) || [])[1] || '';
+            const txnDisplayId = isGiftCard ? (item.giftCode || giftCodeFromComment || item.transactionId) : (item.adminTransactionId || item.transactionId);
+            const methodId = item.methodId || (item.upiId ? 'upi' : item.accountNumber ? 'bank' : remarks.toLowerCase().includes('amazon') ? 'amazon_gift' : remarks.toLowerCase().includes('flipkart') ? 'flipkart_gift' : remarks.toLowerCase().includes('play') ? 'play_store' : remarks.toLowerCase().includes('paypal') ? 'paypal' : '');
+            const methodName = getWithdrawalDisplayMethodName({ ...item, methodId });
+            const methodDetail = getWithdrawalDetailText({ ...item, methodId });
+            const detailBalanceAfter = getExplicitBalanceAfter(item) ?? item.balanceAfter;
+
+            let statusTitle = isCredit ? 'Money Received' : 'Money Sent';
+            let statusLabel = isCredit ? 'Money Received' : 'Money Sent';
+            let statusPillClass = isCredit
+                ? 'bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-400 border-green-100 dark:border-green-900/30'
+                : 'bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-400 border-blue-100 dark:border-blue-900/30';
+            let statusIconClass = isCredit ? 'text-green-500' : 'text-blue-500';
+            let fromParty = { label: 'From', name: isCredit ? senderName : viewedUser.name, detail: isCredit ? senderMobile : (viewedUser.mobile || ''), appLogo: isCredit ? senderIsPro : !!viewedUser?.isProProfile };
+            let toParty = { label: 'To', name: isCredit ? recipientName : recipientName, detail: isCredit ? 'RW Wallet Balance' : recipientMobile, appLogo: isCredit ? recipientIsPro : recipientIsPro };
+            let modeLabel = item.type === 'wallet_transfer' || item.type === 'debit' ? 'Wallet Transfer' : isAdminCredit ? 'Wallet Credit' : 'Wallet Transaction';
+            let extraDetail = '';
+
+            if (isAdminCredit) {
+                fromParty = { label: 'From', name: 'REVIEWS WORLD', detail: 'Admin Wallet', appLogo: true };
+                toParty = { label: 'To', name: recipientName || viewedUser.name || 'User', detail: 'RW Wallet Balance', appLogo: recipientIsPro || !!viewedUser?.isProProfile };
+                modeLabel = 'Admin Credit';
+            }
+
+            if (isAdminDebit) {
+                statusTitle = 'Money Debited';
+                statusLabel = 'Admin Debit';
+                fromParty = { label: 'From', name: viewedUser.name || senderName || 'User', detail: viewedUser.mobile || senderMobile || '', appLogo: !!viewedUser?.isProProfile || senderIsPro };
+                toParty = { label: 'To', name: 'REVIEWS WORLD', detail: 'Admin Wallet', appLogo: true };
+                modeLabel = 'Admin Debit';
+            }
+
+            if (isGiftCard) {
+                statusTitle = 'Money Received';
+                statusLabel = 'Money Received';
+                fromParty = { label: 'From', name: 'REVIEWS WORLD', detail: 'Gift Card', appLogo: true };
+                toParty = { label: 'To', name: recipientName || viewedUser.name || 'User', detail: 'RW Wallet Balance', appLogo: recipientIsPro || !!viewedUser?.isProProfile };
+                modeLabel = 'Gift Card';
+            }
+
+            if (isWithdrawal) {
+                statusTitle = isRejected ? 'Withdrawal Failed' : isPending ? 'Withdrawal Pending' : 'Money Withdrawn';
+                statusLabel = isRejected ? 'Failed' : isPending ? 'Pending' : 'Withdrawal Completed';
+                statusPillClass = isRejected
+                    ? 'bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-400 border-red-100 dark:border-red-900/30'
+                    : isPending
+                        ? 'bg-yellow-50 dark:bg-yellow-900/20 text-yellow-700 dark:text-yellow-400 border-yellow-100 dark:border-yellow-900/30'
+                        : 'bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-400 border-green-100 dark:border-green-900/30';
+                statusIconClass = isRejected ? 'text-red-500' : isPending ? 'text-yellow-500' : 'text-green-500';
+                fromParty = { label: 'From', name: 'Digital Wallet', detail: 'RW Wallet Balance', appLogo: true };
+                toParty = { label: 'To', name: methodName, detail: methodDetail, appLogo: false, logoUrl: getWithdrawMethodLogo(methodId) };
+                modeLabel = methodName;
+                extraDetail = isRejected && item.rejectionReason ? `
+                    <div class="bg-red-50 dark:bg-red-900/20 px-3 py-2">
+                        <p class="text-[10px] font-semibold uppercase text-red-500 dark:text-red-400">Failed Reason</p>
+                        <p class="text-xs text-red-700 dark:text-red-300 mt-0.5">${item.rejectionReason}</p>
+                    </div>` : '';
+            }
+            if (isRecharge) {
+                statusTitle = isRejected ? 'Recharge Failed' : isPending ? 'Recharge Pending' : 'Mobile Recharge Done';
+                statusLabel = isRejected ? 'Failed' : isPending ? 'Pending' : 'Recharge Completed';
+                statusPillClass = isRejected
+                    ? 'bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-400 border-red-100 dark:border-red-900/30'
+                    : isPending
+                        ? 'bg-yellow-50 dark:bg-yellow-900/20 text-yellow-700 dark:text-yellow-400 border-yellow-100 dark:border-yellow-900/30'
+                        : 'bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-400 border-green-100 dark:border-green-900/30';
+                statusIconClass = isRejected ? 'text-red-500' : isPending ? 'text-yellow-500' : 'text-green-500';
+                fromParty = { label: 'From', name: 'Digital Wallet', detail: 'RW Wallet Balance', appLogo: true };
+                toParty = { label: 'Recharge For', name: item.mobileNumber || 'Mobile Number', detail: `${item.operator || ''} ${item.state ? `| ${item.state}` : ''}`.trim(), appLogo: false };
+                modeLabel = 'Mobile Recharge';
+                extraDetail = `
+                    <div class="bg-sky-50 dark:bg-sky-900/20 px-3 py-2">
+                        <p class="text-[10px] font-semibold uppercase text-sky-600 dark:text-sky-300">Plan Details</p>
+                        <p class="text-xs text-sky-800 dark:text-sky-200 mt-0.5">${item.planDetails || 'N/A'}</p>
+                    </div>
+                    <div class="bg-green-50 dark:bg-green-900/20 px-3 py-2">
+                        <p class="text-[10px] font-semibold uppercase text-green-600 dark:text-green-300">Discount</p>
+                        <p class="text-xs text-green-800 dark:text-green-200 mt-0.5">Recharge ${formatCurrency(item.amount || 0)} - 1% discount ${formatCurrency(item.discount || 0)} = wallet deduction ${formatCurrency(item.chargeAmount || item.amount || 0)}</p>
+                    </div>
+                    ${isRejected && item.rejectionReason ? `
+                        <div class="bg-red-50 dark:bg-red-900/20 px-3 py-2">
+                            <p class="text-[10px] font-semibold uppercase text-red-500 dark:text-red-400">Failed Reason</p>
+                            <p class="text-xs text-red-700 dark:text-red-300 mt-0.5">${item.rejectionReason}</p>
+                        </div>` : ''}`;
+            }
+            const dateVerb = isRecharge ? (isRejected ? 'Failed' : isPending ? 'Requested' : 'Recharged') : isWithdrawal ? (isRejected ? 'Failed' : isPending ? 'Requested' : 'Withdrawn') : (isCredit ? 'Received' : 'Paid');
+
+            const content = `
+                <div class="bg-gray-50 dark:bg-gray-900 min-h-screen pb-6 overflow-x-hidden">
+                    <div class="bg-white dark:bg-gray-800 px-4 py-3 flex items-center border-b border-gray-200 dark:border-gray-700 sticky top-0 z-50">
+                        <button onclick="window.closeModal()" class="p-2 -ml-2 mr-2">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"></line><polyline points="12 19 5 12 12 5"></polyline></svg>
+                        </button>
+                        <h2 class="text-lg font-semibold">${statusTitle}</h2>
+                    </div>
+
+                    <div class="p-3 max-w-md mx-auto">
+                        <div class="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-200 dark:border-gray-700 p-4 space-y-4 ring-1 ring-gray-50 dark:ring-gray-700/40">
+                            <!-- Amount Section -->
+                            <div class="space-y-0.5">
+                                <p class="text-xs text-gray-500 dark:text-gray-400 font-medium">Amount</p>
+                                <div class="flex items-center gap-2">
+                                    <span class="text-2xl font-bold">${amountStr}</span>
+                                    <svg class="w-5 h-5 ${statusIconClass} fill-current" viewBox="0 0 24 24">
+                                        <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/>
+                                    </svg>
+                                </div>
+                                <p class="text-[10px] text-gray-400 dark:text-gray-500 italic">${amountInWords}</p>
+                            </div>
+
+                            <!-- Remarks Section -->
+                            <div class="flex items-start gap-2">
+                                <div class="bg-gray-100 dark:bg-gray-700 px-3 py-1.5 rounded-2xl flex items-center gap-2 max-w-full border border-gray-200 dark:border-gray-600">
+                                    <span class="text-xs font-medium truncate">${remarks}</span>
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-gray-400"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>
+                                </div>
+                            </div>
+
+                            <div class="flex items-center gap-2">
+                                <div class="flex items-center gap-1.5 ${statusPillClass} px-3 py-1 rounded-full text-xs font-medium border">
+                                    <span class="text-sm">💵</span>
+                                    <span>${statusLabel}</span>
+                                </div>
+                            </div>
+
+                            <hr class="border-gray-200 dark:border-gray-700">
+
+                            <!-- Transfer Flow -->
+                            <div class="rounded-2xl border border-gray-100 dark:border-gray-700 divide-y divide-gray-100 dark:divide-gray-700 overflow-hidden">
+                                <!-- Recipient/Sender -->
+                                <div class="flex justify-between items-center gap-3 p-3 bg-gray-50/40 dark:bg-gray-900/20">
+                                    <div class="space-y-0.5 min-w-0">
+                                        <p class="text-xs text-gray-500 dark:text-gray-400">${fromParty.label}</p>
+                                        <div class="flex items-center gap-1.5 min-w-0">
+                                            <span class="text-base font-bold truncate">${fromParty.name}</span>
+                                            ${isVerifiedTransactionParty(fromParty) ? verifiedBadge : ''}
+                                        </div>
+                                        ${fromParty.detail ? `<p class="text-xs text-gray-400 font-mono truncate">${fromParty.detail}</p>` : ''}
+                                    </div>
+                                    ${renderTransactionAvatar(fromParty.name, fromParty.appLogo, fromParty.logoUrl, isCredit ? senderProfile : viewedUser)}
+                                </div>
+
+                                <!-- My Account -->
+                                <div class="flex justify-between items-center gap-3 p-3">
+                                    <div class="space-y-0.5 min-w-0">
+                                        <p class="text-xs text-gray-500 dark:text-gray-400">${toParty.label}</p>
+                                        <div class="flex items-center gap-1.5 min-w-0">
+                                            <span class="text-base font-bold truncate">${toParty.name}</span>
+                                            ${isVerifiedTransactionParty(toParty) ? verifiedBadge : ''}
+                                        </div>
+                                        ${toParty.detail ? `<p class="text-xs text-gray-400 font-mono truncate">${toParty.detail}</p>` : ''}
+                                    </div>
+                                    ${renderTransactionAvatar(toParty.name, toParty.appLogo, toParty.logoUrl, isCredit ? viewedUser : recipientProfile)}
+                                </div>
+                            </div>
+
+                            <div class="rounded-2xl border border-gray-100 dark:border-gray-700 divide-y divide-gray-100 dark:divide-gray-700 overflow-hidden text-xs">
+                                <div class="flex justify-between gap-3 px-3 py-2">
+                                    <span class="text-gray-500 dark:text-gray-400">Mode</span>
+                                    <span class="font-semibold text-right">${modeLabel}</span>
+                                </div>
+                                <div class="flex justify-between gap-3 px-3 py-2">
+                                    <span class="text-gray-500 dark:text-gray-400">Status</span>
+                                    <span class="font-semibold text-right">${statusLabel}</span>
+                                </div>
+                                ${Number.isFinite(Number(detailBalanceAfter)) ? `
+                                    <div class="flex justify-between gap-3 px-3 py-2">
+                                        <span class="text-gray-500 dark:text-gray-400">Remaining Balance</span>
+                                        <span class="font-semibold text-right">${formatCurrency(detailBalanceAfter)}</span>
+                                    </div>
+                                ` : ''}
+                                ${item.adminTransactionId ? `
+                                    <div class="flex justify-between gap-3 px-3 py-2">
+                                        <span class="text-gray-500 dark:text-gray-400">Processed By</span>
+                                        <span class="font-semibold text-right inline-flex items-center justify-end gap-1.5">REVIEWS WORLD ${verifiedBadge}</span>
+                                    </div>
+                                ` : ''}
+                                ${extraDetail}
+                            </div>
+
+                            <div class="space-y-2 pt-3 border-t border-gray-200 dark:border-gray-700">
+                                <p class="text-[10px] text-gray-400 dark:text-gray-500">${dateVerb} on ${dateStr}</p>
+                                ${txnDisplayId ? `
+                                    <div class="flex items-center gap-2 min-w-0">
+                                        <p class="text-[10px] text-gray-400 dark:text-gray-500 truncate">Txn ID: ${txnDisplayId}</p>
+                                        <button data-action="copy-text" data-text="${txnDisplayId}" class="text-blue-500 text-[10px] font-bold hover:underline shrink-0">Copy</button>
+                                    </div>
+                                ` : ''}
+                            </div>
+                        </div>
+
+                        <!-- RW Wallet Watermark Footer -->
+                        <div class="mt-3 mb-3 flex flex-col items-center justify-center space-y-1.5 opacity-35 select-none">
+                             <div class="flex items-center gap-2 grayscale">
+                                <img src="https://i.ibb.co/x8YBYwGG/6233389803554672153.jpg" class="w-6 h-6 rounded-full" alt="RW">
+                                <span class="text-[10px] font-black tracking-widest uppercase">RW WALLET SECURE</span>
+                             </div>
+                             <div class="flex items-center gap-4 grayscale opacity-70">
+                                <span class="text-[8px] font-bold">REVIEWS WORLD</span>
+                                <span class="text-[8px]">|</span>
+                                <span class="text-[8px] font-bold">VERIFIED PAYMENT</span>
+                             </div>
+                        </div>
+                    </div>
+                </div>`;
+
+            // Render as a full-screen overlay instead of a standard modal.
+            const overlay = document.createElement('div');
+            overlay.id = 'transaction-overlay';
+            overlay.className = 'fixed inset-0 z-[100] bg-gray-50 dark:bg-gray-900';
+            overlay.innerHTML = content;
+            document.body.appendChild(overlay);
+            document.body.style.overflow = 'hidden';
+
+            // Override window.closeModal for this overlay
+            const originalCloseModal = window.closeModal;
+            window.closeModal = () => {
+                overlay.remove();
+                document.body.style.overflow = '';
+                window.closeModal = originalCloseModal;
+            };
+        };
+
+// Expose functions to window for global access
+window.getHistoryCacheKey = getHistoryCacheKey;
+window.getHistoryDataCacheKey = getHistoryDataCacheKey;
+window.normalizeHistoryItemForCache = normalizeHistoryItemForCache;
+window.reviveHistoryItemFromCache = reviveHistoryItemFromCache;
+window.readHistoryItemsFromCache = readHistoryItemsFromCache;
+window.writeHistoryItemsToCache = writeHistoryItemsToCache;
+window.normalizeTransactionType = normalizeTransactionType;
+window.normalizeTransactionForHistory = normalizeTransactionForHistory;
+window.getTransactionBalanceEffect = getTransactionBalanceEffect;
+window.annotateTransactionsWithRemainingBalance = annotateTransactionsWithRemainingBalance;
+window.normalizeCloudTransaction = normalizeCloudTransaction;
+window.getTransactionKey = getTransactionKey;
+window.mergeTransactionsByKey = mergeTransactionsByKey;
+window.normalizePendingRequestForHistory = normalizePendingRequestForHistory;
+window.loadFirebaseTransactions = loadFirebaseTransactions;
+window.serializeCloudTransaction = serializeCloudTransaction;
+window.fetchCloudTransactionHistory = fetchCloudTransactionHistory;
+window.importFirestoreTransactionsToCloud = importFirestoreTransactionsToCloud;
+window.recordCloudTransaction = recordCloudTransaction;
+window.getSafeTransactionDocId = getSafeTransactionDocId;
+window.recordUserFirestoreTransaction = recordUserFirestoreTransaction;
+window.syncRecentTransactionsToCloud = syncRecentTransactionsToCloud;
+window.prefetchTransactionHistory = prefetchTransactionHistory;
+window.addInstantTransactionToHistory = addInstantTransactionToHistory;
+window.generateTransactionId = generateTransactionId;
+window.renderTransactionItem = renderTransactionItem;
+window.setBottomNavActive = setBottomNavActive;
+window.showPage = showPage;
+window.hidePage = hidePage;
+window.openSlideMenu = openSlideMenu;
+window.closeSlideMenu = closeSlideMenu;
+window.showBlockedAccountPage = showBlockedAccountPage;
+window.showVerificationPendingPage = showVerificationPendingPage;
+window.getPageHeader = getPageHeader;
+window.getPageFooter = getPageFooter;
+window.showUserTaskHistoryPage = showUserTaskHistoryPage;
+window.loadUserTaskHistory = loadUserTaskHistory;
+window.renderUserTaskHistory = renderUserTaskHistory;
+window.showUserLiveListsPage = showUserLiveListsPage;
+window.openFullscreenScreenshotHistory = openFullscreenScreenshotHistory;
+window.showHomeMainPage = showHomeMainPage;
+window.showReferEarnPage = showReferEarnPage;
+window.showUserTaskPageLegacy = showUserTaskPageLegacy;
+window.showUserTaskPage = showUserTaskPage;
+window.showTaskFeatureComingSoonPage = showTaskFeatureComingSoonPage;
+window.showUserReadNewsTaskPage = showUserReadNewsTaskPage;
+window.showUserTaskDetailsPage = showUserTaskDetailsPage;
+window.getIncomeTransactions = getIncomeTransactions;
+window.showTrackIncomePage = showTrackIncomePage;
+window.getLatestTransactionsForBot = getLatestTransactionsForBot;
+window.getFilteredTransactions = getFilteredTransactions;
+window.renderFilteredTransactions = renderFilteredTransactions;
+window.loadMoreTransactionsIfNeeded = loadMoreTransactionsIfNeeded;
+window.refreshTransactionHistoryFromFirebase = refreshTransactionHistoryFromFirebase;
+window.showAllTransactionsPage = showAllTransactionsPage;
+window.showPayToWalletPage = showPayToWalletPage;
+window.showTransactionDetails = showTransactionDetails;

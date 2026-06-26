@@ -15,6 +15,7 @@
     "fix:duplicate-loans": "node scripts/audit-fix-duplicate-loans.cjs --apply"
   },
   "devDependencies": {
+    "@babel/parser": "^8.0.0",
     "autoprefixer": "^10.4.20",
     "postcss": "^8.4.49",
     "tailwindcss": "^3.4.17",

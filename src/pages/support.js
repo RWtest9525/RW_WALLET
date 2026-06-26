@@ -1,0 +1,1133 @@
+// File: src/pages/support.js
+
+const getSupportSocket = async ({ timeoutMs = 2500 } = {}) => {
+            await loadSocketIoClient(timeoutMs);
+            const token = await getBackendAuthToken();
+            if (supportSocket?.connected) return supportSocket;
+
+            supportSocket = window.io(BACKEND_BASE_URL, {
+                transports: ['websocket', 'polling'],
+                auth: { token }
+            });
+
+            supportSocket.on('connect_error', async (error) => {
+                console.warn('Support socket connection failed:', error?.message || error);
+                if (/token|auth/i.test(error.message || '')) {
+                    backendAuthToken = '';
+                }
+            });
+
+            return supportSocket;
+        };
+
+const installChatViewportLock = ({ shellId, composerId, inputId, messagesId }) => {
+            const shell = document.getElementById(shellId);
+            const composer = document.getElementById(composerId);
+            const input = document.getElementById(inputId);
+            const messages = document.getElementById(messagesId);
+            const pageContainer = document.getElementById('page-container');
+            if (!shell || !composer || !input || !messages) return null;
+
+            const isSmallTouchScreen = () =>
+                window.matchMedia?.('(pointer: coarse)')?.matches ||
+                Math.min(window.innerWidth || 0, window.innerHeight || 0) <= 768;
+
+            if (!isSmallTouchScreen()) {
+                // On desktop/laptop screen sizes, bypass viewport locking to prevent layout shrinking
+                requestAnimationFrame(() => {
+                    messages.scrollTop = messages.scrollHeight;
+                });
+                return () => {};
+            }
+
+            let scheduledFrame = 0;
+            let keyboardFallbackActive = false;
+            let baseViewportHeight = Math.max(
+                window.innerHeight || 0,
+                document.documentElement.clientHeight || 0,
+                window.visualViewport?.height || 0
+            );
+
+            const getCurrentLayoutHeight = () => Math.max(
+                window.innerHeight || 0,
+                document.documentElement.clientHeight || 0,
+                window.visualViewport?.height || 0
+            );
+
+            const clearChatViewport = () => {
+                keyboardFallbackActive = false;
+                shell.style.height = '';
+                shell.style.maxHeight = '';
+                shell.style.minHeight = '';
+                shell.classList.remove('chat-keyboard-active');
+                composer.classList.remove('chat-composer-floating');
+                messages.style.paddingBottom = '';
+                if (pageContainer) pageContainer.style.overflowY = 'hidden';
+            };
+
+            const getKeyboardHeight = () => {
+                const viewport = window.visualViewport;
+                const layoutHeight = getCurrentLayoutHeight();
+                baseViewportHeight = Math.max(baseViewportHeight, layoutHeight);
+                const vkRect = navigator.virtualKeyboard?.boundingRect;
+                const virtualKeyboardHeight = Number(vkRect?.height || 0);
+                if (virtualKeyboardHeight >= 60) {
+                    return Math.min(virtualKeyboardHeight, Math.round(baseViewportHeight * 0.58));
+                }
+                if (viewport && viewport.height > 0 && viewport.height < baseViewportHeight - 60) {
+                    const visualHeight = baseViewportHeight - viewport.height - Math.max(0, viewport.offsetTop || 0);
+                    return Math.min(Math.max(0, visualHeight), Math.round(baseViewportHeight * 0.58));
+                }
+                if (document.activeElement === input && keyboardFallbackActive && isSmallTouchScreen()) {
+                    return Math.round(Math.min(360, Math.max(260, baseViewportHeight * 0.42)));
+                }
+                return 0;
+            };
+
+            const syncChatViewport = () => {
+                const keyboardHeight = getKeyboardHeight();
+                const keyboardOpen = keyboardHeight >= 60;
+                const visibleHeight = keyboardOpen
+                    ? Math.max(300, baseViewportHeight - keyboardHeight)
+                    : Math.max(300, getCurrentLayoutHeight());
+                shell.style.height = `${visibleHeight}px`;
+                shell.style.maxHeight = `${visibleHeight}px`;
+                shell.style.minHeight = `${visibleHeight}px`;
+                shell.classList.toggle('chat-keyboard-active', keyboardOpen);
+                composer.classList.toggle('chat-composer-floating', keyboardOpen);
+                messages.style.paddingBottom = keyboardOpen ? '0.5rem' : '';
+                if (pageContainer) pageContainer.style.overflowY = 'hidden';
+
+                requestAnimationFrame(() => {
+                    messages.scrollTop = messages.scrollHeight;
+                });
+            };
+
+            const requestSyncChatViewport = () => {
+                if (scheduledFrame) cancelAnimationFrame(scheduledFrame);
+                scheduledFrame = requestAnimationFrame(() => {
+                    scheduledFrame = 0;
+                    syncChatViewport();
+                });
+            };
+
+            const scheduleSyncChatViewport = () => {
+                requestSyncChatViewport();
+                setTimeout(requestSyncChatViewport, 80);
+                setTimeout(requestSyncChatViewport, 180);
+                setTimeout(requestSyncChatViewport, 360);
+                setTimeout(requestSyncChatViewport, 700);
+            };
+
+            const refreshTypingVisible = () => {
+                scheduleSyncChatViewport();
+            };
+            const handleFocus = () => {
+                baseViewportHeight = Math.max(baseViewportHeight, getCurrentLayoutHeight());
+                scheduleSyncChatViewport();
+                setTimeout(() => {
+                    if (document.activeElement !== input) return;
+                    if (getKeyboardHeight() < 60) {
+                        keyboardFallbackActive = true;
+                        scheduleSyncChatViewport();
+                    }
+                }, 320);
+            };
+            const handleBlur = () => {
+                setTimeout(clearChatViewport, 60);
+            };
+            const handlePointerDown = (event) => {
+                if (event.target === input) return;
+                if (composer.contains(event.target)) return;
+                input.blur();
+                clearChatViewport();
+            };
+            const handleViewportChange = () => {
+                if (document.activeElement === input) {
+                    scheduleSyncChatViewport();
+                } else {
+                    clearChatViewport();
+                }
+            };
+
+            input.addEventListener('focus', handleFocus);
+            input.addEventListener('input', refreshTypingVisible);
+            input.addEventListener('blur', handleBlur);
+            document.addEventListener('pointerdown', handlePointerDown, true);
+            window.visualViewport?.addEventListener('resize', handleViewportChange);
+            window.visualViewport?.addEventListener('scroll', handleViewportChange);
+            navigator.virtualKeyboard?.addEventListener?.('geometrychange', handleViewportChange);
+            window.addEventListener('orientationchange', handleViewportChange);
+
+            return () => {
+                input.removeEventListener('focus', handleFocus);
+                input.removeEventListener('input', refreshTypingVisible);
+                input.removeEventListener('blur', handleBlur);
+                document.removeEventListener('pointerdown', handlePointerDown, true);
+                window.visualViewport?.removeEventListener('resize', handleViewportChange);
+                window.visualViewport?.removeEventListener('scroll', handleViewportChange);
+                navigator.virtualKeyboard?.removeEventListener?.('geometrychange', handleViewportChange);
+                window.removeEventListener('orientationchange', handleViewportChange);
+                clearChatViewport();
+            };
+        };
+
+const getSupportLogo = () => 'https://i.ibb.co/x8YBYwGG/6233389803554672153.jpg';
+
+const getRevyBotLogo = (sizeClass = 'h-14 w-14') => `
+            ${getPremiumLogoFrame(`<img src="${CHATBOT_ICON_URL}" alt="REVY AI" class="max-h-full max-w-full rounded-full object-contain" loading="eager" fetchpriority="high" decoding="async">`, sizeClass)}`;
+
+const getSupportLogoFrame = (sizeClass = 'h-14 w-14', extraClass = '') => `
+            ${getPremiumLogoFrame(`<img src="${getSupportLogo()}" alt="REVIEWS WORLD" class="h-full w-full rounded-full object-cover" loading="eager" fetchpriority="high" decoding="async">`, sizeClass, extraClass)}`;
+
+const showSupportProfileModal = async () => {
+            let supportProfile = allUsersCache.find(u => u.id === ADMIN_UID) || {};
+            try {
+                const adminDoc = await getDoc(doc(db, `artifacts/${appId}/public/data/users`, ADMIN_UID));
+                if (adminDoc.exists()) supportProfile = { id: ADMIN_UID, ...adminDoc.data() };
+            } catch (e) {
+                console.error('Support profile load failed:', e);
+            }
+
+            const whatsappNumber = supportProfile.whatsappNumber || supportProfile.mobile || '';
+            const whatsappDigits = whatsappNumber.replace(/\D/g, '');
+            const whatsappHrefNumber = whatsappDigits.length > 10 ? whatsappDigits : `91${whatsappDigits.slice(-10)}`;
+            const websiteLinks = Array.isArray(supportProfile.websiteLinks) ? supportProfile.websiteLinks.slice(0, 3) : [];
+            const renderSupportLink = (link) => {
+                const safeLink = escapeHtml(link);
+                return `<a href="${safeLink}" target="_blank" rel="noopener noreferrer" class="block rounded-xl border border-blue-100 dark:border-blue-800 bg-white dark:bg-gray-800 px-3 py-2 text-sm font-semibold text-blue-700 dark:text-blue-300 break-all hover:underline">${safeLink}</a>`;
+            };
+            renderModal('REVIEWS WORLD',
+                `<div class="space-y-4 text-center">
+                    ${getSupportLogoFrame('h-20 w-20', 'mx-auto')}
+                    <div class="rounded-2xl bg-blue-50 dark:bg-blue-900/20 border border-blue-100 dark:border-blue-800 p-4">
+                        <h3 class="text-lg font-bold text-blue-900 dark:text-blue-100 inline-flex items-center justify-center gap-1">REVIEWS WORLD ${getVerifiedBadge()}</h3>
+                        <p class="text-sm text-blue-600 dark:text-blue-300">${escapeHtml(supportProfile.email || 'reviewsworld01@gmail.com')}</p>
+                    </div>
+                    <div class="grid grid-cols-1 gap-3 text-left">
+                        <div class="rounded-2xl bg-green-50 dark:bg-green-900/20 border border-green-100 dark:border-green-800 p-4">
+                            <p class="text-xs font-bold uppercase text-green-600 dark:text-green-300 mb-2">WhatsApp</p>
+                            ${whatsappNumber
+                                ? `<a href="https://wa.me/${escapeHtml(whatsappHrefNumber)}" target="_blank" rel="noopener noreferrer" class="text-sm font-bold text-green-800 dark:text-green-100 hover:underline">${escapeHtml(whatsappNumber)}</a>`
+                                : '<p class="text-sm text-gray-500 dark:text-gray-400">Not added yet</p>'}
+                        </div>
+                        <div class="rounded-2xl bg-blue-50 dark:bg-blue-900/20 border border-blue-100 dark:border-blue-800 p-4">
+                            <p class="text-xs font-bold uppercase text-blue-600 dark:text-blue-300 mb-2">Website Links</p>
+                            <div class="space-y-2">
+                                ${websiteLinks.length ? websiteLinks.map(renderSupportLink).join('') : '<p class="text-sm text-gray-500 dark:text-gray-400">No website links added</p>'}
+                            </div>
+                        </div>
+                    </div>
+                    <div class="rounded-2xl bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-100 dark:border-emerald-800 p-4 text-left">
+                        <p class="text-xs font-bold uppercase text-emerald-600 dark:text-emerald-300 mb-2">Description</p>
+                        <p class="text-sm leading-6 text-gray-700 dark:text-gray-200">${escapeHtml(SUPPORT_PROFILE_DESCRIPTION)}</p>
+                    </div>
+                </div>`,
+                ``,
+                'max-w-md');
+        };
+
+const formatChatTime = (timestamp) => {
+            if (!timestamp) return '';
+            const date = timestamp.toDate ? timestamp.toDate() : new Date(timestamp);
+            return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        };
+
+const formatChatDate = (timestamp) => {
+            if (!timestamp) return '';
+            const date = timestamp.toDate ? timestamp.toDate() : new Date(timestamp);
+            if (Number.isNaN(date.getTime())) return '';
+            const dd = String(date.getDate()).padStart(2, '0');
+            const mm = String(date.getMonth() + 1).padStart(2, '0');
+            const yyyy = date.getFullYear();
+            return `${dd}/${mm}/${yyyy}`;
+        };
+
+const markChatMessagesRead = async (messageDocs, readerRole) => {
+            const batch = writeBatch(db);
+            let hasUpdates = false;
+            messageDocs.forEach(messageDoc => {
+                const data = messageDoc.data();
+                if (data.senderRole !== readerRole && !data.readAt) {
+                    batch.update(messageDoc.ref, { readAt: serverTimestamp() });
+                    hasUpdates = true;
+                }
+            });
+            if (hasUpdates) {
+                await batch.commit();
+            }
+        };
+
+const renderSupportMessages = (messages, viewerRole) => {
+            const list = document.getElementById('support-chat-messages');
+            if (!list) return;
+            const wasNearBottom = list.scrollHeight - list.scrollTop - list.clientHeight < 90;
+            list.innerHTML = messages.length === 0
+                ? '<p class="text-center text-sm text-gray-500 dark:text-gray-400 py-8">Start a chat with Reviews World support.</p>'
+                : messages.map((message, index) => {
+                    const isMine = message.senderRole === viewerRole;
+                    const messageDate = formatChatDate(message.createdAt);
+                    const previousDate = index > 0 ? formatChatDate(messages[index - 1].createdAt) : '';
+                    const dateDivider = messageDate && messageDate !== previousDate
+                        ? `<div class="flex justify-center py-1">
+                                <span class="rounded-full bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 px-3 py-1 text-[10px] font-bold text-gray-500 dark:text-gray-400 shadow-sm">${messageDate}</span>
+                           </div>`
+                        : '';
+                    return `
+                        ${dateDivider}
+                        <div class="flex ${isMine ? 'justify-end' : 'justify-start'}" data-message-id="${message.id}">
+                            <div class="w-fit max-w-[82%] px-3 py-1.5 shadow-sm ${isMine ? 'chat-bubble-user bg-emerald-50 dark:bg-emerald-900/40 text-gray-900 dark:text-white border border-emerald-100 dark:border-emerald-800' : 'chat-bubble-admin bg-white dark:bg-gray-800 text-gray-900 dark:text-white border border-gray-100 dark:border-gray-700'}">
+                                <span class="text-sm leading-5 break-words align-baseline">${escapeHtml(message.text || '')}</span>
+                                <span class="inline-flex items-center text-[10px] ml-2 text-gray-400 align-baseline">
+                                    <span>${formatChatTime(message.createdAt)}</span>
+                                    ${renderMessageTicks(message, isMine, viewerRole)}
+                                </span>
+                            </div>
+                        </div>`;
+                }).join('');
+            if (wasNearBottom) {
+                list.scrollTop = list.scrollHeight;
+            }
+        };
+
+const getSupportRoomId = (chatUserId) => `support_${chatUserId}`;
+
+const getSupportChatCacheKey = (roomId) => `rw_support_chat_${roomId}`;
+
+const getSupportChatSeenKey = (roomId) => `rw_support_seen_${roomId}`;
+
+const readSupportChatCache = (roomId) => {
+            try {
+                const cached = JSON.parse(localStorage.getItem(getSupportChatCacheKey(roomId)) || '[]');
+                return Array.isArray(cached) ? cached : [];
+            } catch {
+                return [];
+            }
+        };
+
+const writeSupportChatCache = (roomId, messages) => {
+            try {
+                localStorage.setItem(getSupportChatCacheKey(roomId), JSON.stringify(messages.slice(-200)));
+            } catch (error) {
+                console.warn('Support chat cache write failed:', error);
+            }
+        };
+
+const getSupportMessageDedupeKey = (message) => {
+            const normalized = normalizeBackendMessage(message);
+            if (normalized.clientMessageId) return `client:${normalized.clientMessageId}`;
+            const text = String(normalized.text || '').replace(/\s+/g, ' ').trim().toLowerCase();
+            const timestamp = timestampToMillis(normalized.createdAt) || Date.now();
+            const closeTimeBucket = Math.floor(timestamp / 120000);
+            return `${normalized.roomId || activeSupportRoomId}|${normalized.senderId}|${closeTimeBucket}|${text}`;
+        };
+
+const mergeSupportMessages = (...groups) => {
+            const merged = new Map();
+            groups.flat().forEach((message) => {
+                if (!message) return;
+                const normalized = normalizeBackendMessage(message);
+                if (!String(normalized.text || '').trim()) return;
+                const key = getSupportMessageDedupeKey(normalized);
+                const existing = merged.get(key);
+                if (!existing) {
+                    merged.set(key, normalized);
+                    return;
+                }
+                const existingTime = timestampToMillis(existing.createdAt);
+                const normalizedTime = timestampToMillis(normalized.createdAt);
+                merged.set(key, {
+                    ...existing,
+                    ...normalized,
+                    id: existing.id || normalized.id,
+                    clientMessageId: existing.clientMessageId || normalized.clientMessageId,
+                    createdAt: existingTime && normalizedTime ? Math.min(existingTime, normalizedTime) : (existing.createdAt || normalized.createdAt),
+                    readAt: existing.readAt || normalized.readAt
+                });
+            });
+            return Array.from(merged.values()).sort((a, b) => timestampToMillis(a.createdAt) - timestampToMillis(b.createdAt));
+        };
+
+const applySupportReadReceipt = (roomId, readerRole, readAt = Date.now()) => {
+            const receiptTime = timestampToMillis(readAt) || Date.now();
+            const updateMessages = (messages = []) => mergeSupportMessages(messages.map(message => {
+                const normalized = normalizeBackendMessage(message);
+                if (normalized.roomId !== roomId) return normalized;
+                if (normalized.senderRole === readerRole) return normalized;
+                if (timestampToMillis(normalized.createdAt) > receiptTime) return normalized;
+                return { ...normalized, readAt: normalized.readAt || receiptTime };
+            }));
+            const cached = updateMessages(readSupportChatCache(roomId));
+            writeSupportChatCache(roomId, cached);
+            if (activeSupportRoomId === roomId && document.getElementById('support-chat-messages')) {
+                activeSupportMessages = updateMessages(activeSupportMessages);
+            }
+        };
+
+const fetchSupportChatHistory = async (roomId, limit = 80) => {
+            const token = await getBackendAuthToken();
+            const response = await fetchWithTimeout(`${BACKEND_BASE_URL}/api/chats/${encodeURIComponent(roomId)}?limit=${limit}`, {
+                headers: { Authorization: `Bearer ${token}` }
+            }, 6000);
+            const data = await response.json().catch(() => ({}));
+            if (!response.ok || !data.ok) throw new Error(data.error || 'Chat history load failed');
+            return data.history || [];
+        };
+
+const calculateSupportUnreadCount = (roomId, messages = readSupportChatCache(roomId)) => {
+            const lastSeen = Number(localStorage.getItem(getSupportChatSeenKey(roomId)) || 0);
+            return messages
+                .map(normalizeBackendMessage)
+                .filter(message => message.senderRole === 'admin' && timestampToMillis(message.createdAt) > lastSeen)
+                .length;
+        };
+
+const updateSupportChatUnreadBadges = () => {
+            const countText = supportChatUnreadCount > 99 ? '99+' : String(supportChatUnreadCount || '');
+            ['bottom-help-unread-badge', 'support-chat-unread-badge'].forEach(id => {
+                const badge = document.getElementById(id);
+                if (!badge) return;
+                badge.textContent = countText;
+                badge.classList.toggle('hidden', supportChatUnreadCount <= 0);
+            });
+        };
+
+const markSupportChatSeen = (roomId, messages = readSupportChatCache(roomId)) => {
+            const latestAdminTime = getLatestAdminMessageTime(messages);
+            if (latestAdminTime) {
+                localStorage.setItem(getSupportChatSeenKey(roomId), String(latestAdminTime));
+            }
+            supportChatUnreadCount = 0;
+            updateSupportChatUnreadBadges();
+        };
+
+const refreshSupportUnreadFromCache = (roomId) => {
+            supportChatUnreadCount = calculateSupportUnreadCount(roomId);
+            updateSupportChatUnreadBadges();
+        };
+
+const preloadSupportChatForUser = async (userId = currentUser?.uid) => {
+            if (!userId || userId === ADMIN_UID) return;
+            const roomId = getSupportRoomId(userId);
+            const cached = readSupportChatCache(roomId);
+            if (supportChatPreloadUserId === userId && cached.length) return;
+            supportChatPreloadUserId = userId;
+            if (cached.length) refreshSupportUnreadFromCache(roomId);
+
+            await fetchSupportChatHistory(roomId, 200)
+                .then((history) => {
+                const merged = mergeSupportMessages(cached, history);
+                writeSupportChatCache(roomId, merged);
+                refreshSupportUnreadFromCache(roomId);
+                    return merged;
+                })
+                .catch((error) => {
+                    console.warn('Support chat preload failed:', error);
+                    return cached;
+                });
+        };
+
+const openSupportChatPage = async (chatUserId, viewerRole = 'user', chatMeta = {}) => {
+            if (activeChatUnsubscribe) {
+                activeChatUnsubscribe();
+                activeChatUnsubscribe = null;
+            }
+            const isAdminView = viewerRole === 'admin';
+            const displayName = isAdminView ? (chatMeta.userName || 'User') : 'REVIEWS WORLD';
+            const displayEmail = isAdminView
+                ? (chatMeta.userEmail || '')
+                : getSupportAdminEmail();
+            const logo = isAdminView ? 'https://cdn-icons-png.flaticon.com/512/3135/3135715.png' : getSupportLogo();
+            const initialMessage = chatMeta.initialMessage || '';
+            const returnToBlocked = !!chatMeta.returnToBlocked;
+            const content = `
+                <div id="support-chat-shell" class="max-w-xl mx-auto bg-gray-100 dark:bg-gray-900 h-[100dvh] flex flex-col">
+                    <div class="bg-white dark:bg-gray-800 border border-gray-100 dark:border-gray-700 rounded-xl shadow-sm overflow-hidden flex flex-col h-full min-h-0">
+                        <div class="relative flex items-center gap-3 px-3 pb-3 pt-[calc(1.85rem+env(safe-area-inset-top))] border-b border-gray-100 dark:border-gray-700">
+                            <button class="page-back-btn h-10 w-10 shrink-0 rounded-full bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 flex items-center justify-center">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5"></path><path d="M12 19l-7-7 7-7"></path></svg>
+                            </button>
+                            ${isAdminView ? `<img src="${logo}" alt="${escapeHtml(displayName)}" class="h-10 w-10 rounded-full object-cover">` : getSupportLogoFrame('h-10 w-10 shrink-0')}
+                            <button id="support-profile-btn" class="min-w-0 flex-1 text-left">
+                                <h3 class="font-bold truncate inline-flex items-center gap-1">${escapeHtml(displayName)} ${!isAdminView ? getVerifiedBadge() : ''}</h3>
+                                <p class="text-xs text-gray-500 dark:text-gray-400 truncate">${escapeHtml(displayEmail)}</p>
+                            </button>
+                            <button id="chat-disappear-info-btn" class="h-9 w-9 shrink-0 rounded-full bg-gray-100 dark:bg-gray-700 text-xs font-bold text-gray-600 dark:text-gray-200 hover:bg-gray-200 dark:hover:bg-gray-600" title="Disappearing chat">15d</button>
+                            <div id="chat-disappear-info-popup" class="hidden absolute right-3 top-14 z-20 w-64 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-3 text-xs leading-5 text-gray-600 dark:text-gray-300 shadow-xl">
+                                All chat will automatically delete after 15 days after read by admin.
+                            </div>
+                        </div>
+                        <div id="support-chat-messages" class="flex-1 min-h-0 space-y-3 overflow-y-auto p-4 bg-gray-50 dark:bg-gray-900"></div>
+                        <div id="emoji-panel" class="hidden flex flex-wrap gap-2 p-3 border-t border-gray-100 dark:border-gray-700 bg-white dark:bg-gray-800">
+                            ${['😀','😁','🙏','👍','❤️','🔥','🎉','😊','🤗','✅','💰','📞'].map(emoji => `<button class="emoji-choice text-xl">${emoji}</button>`).join('')}
+                        </div>
+                        <div id="support-chat-composer" class="shrink-0 flex items-center gap-2 p-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] border-t border-gray-100 dark:border-gray-700 bg-white dark:bg-gray-800 transition-transform duration-150">
+                            <button id="emoji-toggle-btn" class="h-10 w-10 rounded-full bg-gray-100 dark:bg-gray-700 text-xl">☺</button>
+                            <textarea id="support-message-input" placeholder="Type a message" rows="1" class="flex-1 min-w-0 px-4 py-2 text-[16px] bg-gray-100 dark:bg-gray-700 rounded-2xl focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none overflow-y-auto max-h-24"></textarea>
+                            <button id="support-send-btn" class="h-10 w-10 rounded-full bg-blue-600 text-white flex items-center justify-center">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M2 21l21-9L2 3v7l15 2-15 2v7z"></path></svg>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+                ${getPageFooter()}`;
+            const goBackFromSupportChat = () => {
+                if (activeChatUnsubscribe) {
+                    activeChatUnsubscribe();
+                    activeChatUnsubscribe = null;
+                }
+                if (isAdminView) {
+                    showAdminChatsPage();
+                } else if (returnToBlocked) {
+                    showBlockedAccountPage(chatMeta.blockedData || currentUserData || {});
+                } else {
+                    showHelpSupportPage();
+                }
+            };
+            showPage(content, { fullHeight: true, onBack: goBackFromSupportChat });
+            if (!returnToBlocked) setBottomNavActive(isAdminView ? 'bottom-settings-btn' : 'bottom-help-btn');
+            const chatBackBtn = document.querySelector('#page-container .page-back-btn');
+            if (chatBackBtn) {
+                chatBackBtn.onclick = goBackFromSupportChat;
+            }
+
+            document.getElementById('support-profile-btn').onclick = () => {
+                if (isAdminView) {
+                    renderModal('User Details',
+                        `<div class="space-y-3">
+                            <p><strong>Name:</strong> ${escapeHtml(chatMeta.userName || 'User')}</p>
+                            <p><strong>Email:</strong> ${escapeHtml(chatMeta.userEmail || '')}</p>
+                            <p><strong>Mobile:</strong> ${escapeHtml(chatMeta.userMobile || '')}</p>
+                        </div>`,
+                        `<button onclick="window.closeModal()" class="px-4 py-2 text-sm bg-blue-600 text-white rounded-lg">Close</button>`);
+                } else {
+                    showSupportProfileModal();
+                }
+            };
+            document.getElementById('chat-disappear-info-btn').onclick = (event) => {
+                event.stopPropagation();
+                document.getElementById('chat-disappear-info-popup').classList.toggle('hidden');
+            };
+            document.addEventListener('click', function closeDisappearPopup(event) {
+                const popup = document.getElementById('chat-disappear-info-popup');
+                const button = document.getElementById('chat-disappear-info-btn');
+                if (!popup || !button) {
+                    document.removeEventListener('click', closeDisappearPopup);
+                    return;
+                }
+                if (!popup.contains(event.target) && !button.contains(event.target)) {
+                    popup.classList.add('hidden');
+                }
+            });
+
+            const keyboardCleanup = installChatViewportLock({
+                shellId: 'support-chat-shell',
+                composerId: 'support-chat-composer',
+                inputId: 'support-message-input',
+                messagesId: 'support-chat-messages'
+            });
+
+            activeSupportRoomId = getSupportRoomId(chatUserId);
+            activeSupportMessages = mergeSupportMessages(readSupportChatCache(activeSupportRoomId));
+            writeSupportChatCache(activeSupportRoomId, activeSupportMessages);
+            renderSupportMessages(activeSupportMessages, viewerRole);
+            if (!isAdminView) markSupportChatSeen(activeSupportRoomId, activeSupportMessages);
+            if (isAdminView) markAdminSupportChatSeen(activeSupportRoomId, activeSupportMessages);
+            fetchSupportChatHistory(activeSupportRoomId, 200)
+                .then((history) => {
+                    if (!history.length && activeSupportMessages.length) return;
+                    activeSupportMessages = mergeSupportMessages(activeSupportMessages, history);
+                    writeSupportChatCache(activeSupportRoomId, activeSupportMessages);
+                    renderSupportMessages(activeSupportMessages, viewerRole);
+                    if (!isAdminView) markSupportChatSeen(activeSupportRoomId, activeSupportMessages);
+                    if (isAdminView) markAdminSupportChatSeen(activeSupportRoomId, activeSupportMessages);
+                })
+                .catch((error) => console.warn('Fast chat history fetch failed:', error));
+            const handleHistory = ({ roomId, history = [] }) => {
+                if (roomId !== activeSupportRoomId) return;
+                if (!history.length && activeSupportMessages.length) return;
+                activeSupportMessages = mergeSupportMessages(activeSupportMessages, history);
+                writeSupportChatCache(activeSupportRoomId, activeSupportMessages);
+                renderSupportMessages(activeSupportMessages, viewerRole);
+                if (!isAdminView) markSupportChatSeen(activeSupportRoomId, activeSupportMessages);
+                if (isAdminView) markAdminSupportChatSeen(activeSupportRoomId, activeSupportMessages);
+            };
+            const handleNewMessage = (message) => {
+                if (message.roomId !== activeSupportRoomId) return;
+                activeSupportMessages = mergeSupportMessages(activeSupportMessages, [message]);
+                writeSupportChatCache(activeSupportRoomId, activeSupportMessages);
+                renderSupportMessages(activeSupportMessages, viewerRole);
+                if (!isAdminView) markSupportChatSeen(activeSupportRoomId, activeSupportMessages);
+                if (isAdminView) markAdminSupportChatSeen(activeSupportRoomId, activeSupportMessages);
+            };
+            const handleReadReceipt = ({ roomId, readerRole, readAt }) => {
+                if (roomId !== activeSupportRoomId) return;
+                applySupportReadReceipt(activeSupportRoomId, readerRole, readAt);
+                renderSupportMessages(activeSupportMessages, viewerRole);
+            };
+            let socket = null;
+            let realtimeAttached = false;
+            const roomIdAtOpen = activeSupportRoomId;
+            const attachSupportRealtime = (nextSocket) => {
+                if (!nextSocket || activeSupportRoomId !== roomIdAtOpen || !document.getElementById('support-chat-messages')) return;
+                if (socket && socket !== nextSocket && realtimeAttached) {
+                    socket.off('chat_history', handleHistory);
+                    socket.off('new_message', handleNewMessage);
+                    socket.off('chat_read', handleReadReceipt);
+                }
+                socket = nextSocket;
+                if (!realtimeAttached) {
+                    socket.on('chat_history', handleHistory);
+                    socket.on('new_message', handleNewMessage);
+                    socket.on('chat_read', handleReadReceipt);
+                    realtimeAttached = true;
+                }
+                socket.emit('join_room', { roomId: roomIdAtOpen, limit: 200, markRead: true }, (response) => {
+                    if (!response?.ok) {
+                        console.warn('Join support room failed:', response?.error);
+                    }
+                });
+            };
+            const startSupportRealtime = (timeoutMs = 1800) => {
+                getSupportSocket({ timeoutMs })
+                    .then(attachSupportRealtime)
+                    .catch((error) => console.warn('Support chat realtime is not ready:', error?.message || error));
+            };
+            startSupportRealtime();
+            activeChatUnsubscribe = () => {
+                if (keyboardCleanup) keyboardCleanup();
+                if (socket && realtimeAttached) {
+                    socket.off('chat_history', handleHistory);
+                    socket.off('new_message', handleNewMessage);
+                    socket.off('chat_read', handleReadReceipt);
+                    socket.emit('leave_room', { roomId: roomIdAtOpen });
+                }
+                realtimeAttached = false;
+            };
+
+            const sendMessage = async () => {
+                const input = document.getElementById('support-message-input');
+                const sendBtn = document.getElementById('support-send-btn');
+                if (!input) return;
+                const text = input.value.trim();
+                if (!text) return;
+                const now = Date.now();
+                const sendSignature = `${activeSupportRoomId}|${currentUser?.uid || ''}|${text}`;
+                if ((supportSendingMessage && supportLastSendSignature === sendSignature) || (supportLastSendSignature === sendSignature && now - supportLastSendAt < 1800)) {
+                    return;
+                }
+                supportSendingMessage = true;
+                supportLastSendSignature = sendSignature;
+                supportLastSendAt = now;
+                if (sendBtn) {
+                    sendBtn.disabled = true;
+                    sendBtn.classList.add('opacity-70');
+                }
+                const unlockSend = () => {
+                    supportSendingMessage = false;
+                    if (sendBtn) {
+                        sendBtn.disabled = false;
+                        sendBtn.classList.remove('opacity-70');
+                    }
+                };
+                input.value = '';
+                input.style.height = 'auto';
+                const userMeta = {
+                    userId: chatUserId,
+                    userName: chatMeta.userName || currentUserData?.name || currentUser?.email || 'User',
+                    userEmail: chatMeta.userEmail || currentUserData?.email || currentUser?.email || '',
+                    userMobile: chatMeta.userMobile || currentUserData?.mobile || ''
+                };
+                if (!socket?.connected) {
+                    try {
+                        attachSupportRealtime(await getSupportSocket({ timeoutMs: 2500 }));
+                    } catch (error) {
+                        unlockSend();
+                        input.value = text;
+                        showNotification('Chat is still connecting. Please try again.', true);
+                        return;
+                    }
+                }
+                socket.emit('send_message', {
+                    roomId: activeSupportRoomId,
+                    message: text,
+                    userMeta,
+                    clientMessageId: `${activeSupportRoomId}-${currentUser?.uid || 'user'}-${Date.now()}-${Math.random().toString(36).slice(2)}`
+                }, (response) => {
+                    unlockSend();
+                    if (!response?.ok) {
+                        console.error('Send support message failed:', response?.error);
+                        showNotification('Message not sent. Please try again.', true);
+                    }
+                });
+                setTimeout(unlockSend, 4000);
+                const updatedChat = {
+                    userId: chatUserId,
+                    roomId: activeSupportRoomId,
+                    userName: userMeta.userName,
+                    userEmail: userMeta.userEmail,
+                    userMobile: userMeta.userMobile,
+                    lastMessage: text,
+                    lastSenderId: currentUser?.uid || '',
+                    lastSenderRole: viewerRole,
+                    updatedAt: Date.now()
+                };
+                const index = allSupportChatsCache.findIndex(chat => (chat.userId || chat.id) === chatUserId);
+                if (index >= 0) {
+                    allSupportChatsCache[index] = { ...allSupportChatsCache[index], ...updatedChat };
+                } else {
+                    allSupportChatsCache.unshift({ id: chatUserId, ...updatedChat });
+                }
+            };
+
+            const supportSendButton = document.getElementById('support-send-btn');
+            const supportMessageInput = document.getElementById('support-message-input');
+            const emojiToggleButton = document.getElementById('emoji-toggle-btn');
+            const emojiPanel = document.getElementById('emoji-panel');
+            if (!supportSendButton || !supportMessageInput || !emojiToggleButton) return;
+            supportSendButton.onclick = sendMessage;
+
+            const adjustSupportTextareaHeight = () => {
+                supportMessageInput.style.height = 'auto';
+                supportMessageInput.style.height = Math.min(supportMessageInput.scrollHeight, 120) + 'px';
+            };
+            supportMessageInput.addEventListener('input', adjustSupportTextareaHeight);
+
+            supportMessageInput.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    sendMessage();
+                }
+            });
+            emojiToggleButton.onclick = () => {
+                emojiPanel?.classList.toggle('hidden');
+                supportMessageInput.focus();
+            };
+            document.querySelectorAll('.emoji-choice').forEach(btn => {
+                btn.onclick = () => {
+                    supportMessageInput.value += btn.textContent;
+                    supportMessageInput.focus();
+                    adjustSupportTextareaHeight();
+                };
+            });
+            if (initialMessage) {
+                supportMessageInput.value = initialMessage;
+                sendMessage();
+            }
+        };
+
+const resetRevyBotTimer = () => {
+            if (revyBotTimer) clearTimeout(revyBotTimer);
+            revyBotTimer = setTimeout(() => closeRevyBotSession(), 10 * 60 * 1000);
+        };
+
+const closeRevyBotSession = () => {
+            if (revyBotTimer) clearTimeout(revyBotTimer);
+            revyBotTimer = null;
+            revyBotMessages = [];
+            revyBotLastQuestion = '';
+            hidePage();
+            currentMainSection = 'home';
+            switchTab('user-panel');
+            setBottomNavActive('bottom-home-btn');
+        };
+
+const getRevyBotReply = async (question) => {
+            try {
+                const token = await getBackendAuthToken();
+                const history = (revyBotMessages || [])
+                    .slice(0, -1)
+                    .map(msg => ({
+                        role: msg.senderRole === 'user' ? 'user' : 'assistant',
+                        content: msg.text
+                    }))
+                    .slice(-6);
+
+                const pendingWithdrawal = await getPendingWithdrawalForBot();
+                const latestTransactions = await getLatestTransactionsForBot(5);
+                const activeLoan = allLoansCache.find(loan => loan.userId === currentUser?.uid && loan.status === 'active' && isModernLoanRecord(loan));
+                const activeInvestment = allInvestmentsCache.find(item => item.userId === currentUser?.uid && item.status === 'active');
+
+                const userContext = {
+                    userName: currentUserData?.name || 'User',
+                    userEmail: currentUserData?.email || '',
+                    userMobile: currentUserData?.mobile || '',
+                    balance: currentUserData?.balance || 0,
+                    pendingWithdrawal: pendingWithdrawal ? {
+                        amount: pendingWithdrawal.amount || 0,
+                        method: getWithdrawalDisplayMethodName(pendingWithdrawal, 'saved payout method'),
+                        status: pendingWithdrawal.status || 'pending',
+                        requestedAt: formatDateDDMMYY(pendingWithdrawal.timestamp || pendingWithdrawal.requestedAt || pendingWithdrawal.processedAt)
+                    } : null,
+                    latestTransactions: latestTransactions.map(item => getBotTransactionSummary(item)),
+                    activeLoan: activeLoan ? {
+                        amount: activeLoan.amount || activeLoan.principal || 0,
+                        status: activeLoan.status || 'active'
+                    } : null,
+                    activeInvestment: activeInvestment ? {
+                        amount: activeInvestment.amount || 0,
+                        status: activeInvestment.status || 'active'
+                    } : null
+                };
+
+                const response = await fetchWithTimeout(`${BACKEND_BASE_URL}/api/revy-bot`, {
+                    method: 'POST',
+                    headers: {
+                        Authorization: `Bearer ${token}`,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ question, history, userContext })
+                }, 25000);
+                
+                const data = await response.json();
+                if (response.ok && data.ok && data.answer) {
+                    const ans = data.answer.trim();
+                    if (ans.includes('Sorry, I can help only with RW Wallet') || ans.includes('transfer your problem to ADMIN')) {
+                        return {
+                            unsupported: true,
+                            text: 'Sorry, I can help only with RW Wallet, REVIEWS WORLD, earning, account, wallet, transaction, withdrawal, add fund, pay to wallet, recharge, gift code, loan, partner investment, profile, and app usage questions. Would you like me to transfer your problem to ADMIN?'
+                        };
+                    }
+                    return ans;
+                }
+            } catch (err) {
+                console.warn('Backend Revy Bot request failed, falling back to local rules:', err);
+            }
+
+            const text = String(question || '').toLowerCase();
+            const compactText = text.replace(/[^a-z0-9]+/g, ' ').trim();
+            const hasAny = (...words) => words.some(word => compactText.includes(String(word).toLowerCase()));
+            const activeLoan = allLoansCache.find(loan => loan.userId === currentUser?.uid && loan.status === 'active' && isModernLoanRecord(loan));
+            const activeInvestment = allInvestmentsCache.find(item => item.userId === currentUser?.uid && item.status === 'active');
+
+            if (hasAny('earn', 'earning', 'income', 'make money', 'track income', 'work', 'task', 'review work', 'reviews work', 'map review', 'download work', 'like comment')) {
+                return 'Main earning work in REVIEWS WORLD is app reviews work, map review work, app download work, and like/comment work. Work updates are shared on the WhatsApp channel by admin. Complete the given task properly, then admin verifies it and wallet income/payment records can be tracked in the app. You can also check Track Income, Gift Codes if admin gives codes, and Become Partner if investment options are available.';
+            }
+
+            if (hasAny('add money', 'add fund', 'add funds', 'deposit', 'recharge wallet', 'top up', 'load wallet', 'add balance')) {
+                return 'To add wallet funds, open Add Fund from the dashboard, enter amount and payment details, then submit. After admin verifies your payment, balance is credited. If delayed, send payment proof in REVIEWS WORLD support chat.';
+            }
+
+            if (hasAny('send money', 'pay to wallet', 'transfer money', 'wallet transfer', 'pay user', 'send fund')) {
+                return 'Use Pay to Wallet to send money to another RW Wallet user. Enter recipient mobile number, amount, and note/details. The app finds the user, asks confirmation, transfers wallet balance, and saves the record in both users transaction history.';
+            }
+
+            if (hasAny('withdraw', 'withdrawal', 'payout', 'payment pending', 'pending')) {
+                const pendingWithdrawal = await getPendingWithdrawalForBot();
+                if (pendingWithdrawal) {
+                    return `Your withdrawal request of ${formatCurrency(pendingWithdrawal.amount || 0)} is pending. Method: ${getWithdrawalDisplayMethodName(pendingWithdrawal, 'saved payout method')}. It is not rejected. Admin will process it soon if details are correct.`;
+                }
+                return 'I do not see a pending withdrawal request right now. To withdraw, first add your payout details in Settings > My Profile, then open Withdraw Fund, choose UPI/Bank/Gift Card/PayPal, enter the amount, and submit. The amount is deducted immediately and stays pending until admin approves or rejects it.';
+            }
+            if (hasAny('balance', 'wallet', 'fund')) {
+                return `Your current wallet balance is ${formatCurrency(currentUserData?.balance || 0)}. If a withdrawal is submitted, the amount is deducted immediately and shown as pending until admin approves or rejects it.`;
+            }
+            if (hasAny('transaction', 'history', 'invoice', 'receipt', 'last transaction', 'latest transaction', 'recent transaction', 'last 5', 'latest 5')) {
+                const latestTransactions = await getLatestTransactionsForBot(5);
+                const latestHistory = latestTransactions[0];
+                if (latestHistory) {
+                    if (hasAny('last 5', 'latest 5', 'recent transaction', 'recent transactions', 'latest transactions', 'transaction history')) {
+                        const summary = latestTransactions.map((item, index) =>
+                            `${index + 1}. ${getBotTransactionSummary(item)}`
+                        ).join('\n');
+                        return `Your latest ${latestTransactions.length} wallet records:\n${summary}\nOpen Transaction History to view full details, IDs, and receipts.`;
+                    }
+                    return `Your latest wallet activity is ${getBotTransactionSummary(latestHistory)}. Open Transaction History to view full details and receipts.`;
+                }
+                return 'You can check all wallet activity from Transaction History. It shows deposits, withdrawals, transfers, recharge, gift code, and other wallet records.';
+            }
+            if (hasAny('payment method', 'upi', 'bank', 'ifsc', 'paypal', 'gift card', 'voucher', 'profile')) {
+                return 'To update payout details, open Settings, then My Profile. You can add UPI, bank account with IFSC, PayPal or gift-card email details. Withdrawals use the details saved in your profile at request time.';
+            }
+            if (hasAny('setting', 'settings', 'change name', 'mobile number', 'whatsapp', 'website link', 'account details')) {
+                return 'Open Settings to manage your profile, payout method, WhatsApp number, website links, invoices, theme, and support options. Keep your mobile number and payment details correct before requesting withdrawal.';
+            }
+            if (hasAny('password', 'login', 'reset', 'email')) {
+                return 'For password help, use Forgot Password on the login page. A reset link will be sent to your email, and you should also check the spam folder.';
+            }
+            if (hasAny('recharge', 'mobile recharge')) {
+                return 'For mobile recharge, open Mobile Recharge, enter number, choose operator and circle/state, select or type plan details, then submit. Wallet amount is deducted and the request stays pending until admin completes or rejects it.';
+            }
+            if (hasAny('loan', 'borrow')) {
+                if (activeLoan) {
+                    return `You have an active loan record of ${formatCurrency(activeLoan.amount || activeLoan.principal || 0)}. Please check the Loan section for repayment status and due details.`;
+                }
+                return 'Loan options depend on your account eligibility. If your account is eligible, open the Loan section and submit the request from there.';
+            }
+            if (hasAny('partner', 'investment', 'invest', 'interest', 'monthly income')) {
+                if (activeInvestment) {
+                    return `Your partner investment of ${formatCurrency(activeInvestment.amount || 0)} is active. Monthly interest is processed after completed periods according to the app rules. Open Become Partner or Track Income for details.`;
+                }
+                return 'Become Partner lets eligible users create a partner investment. The app calculates monthly interest using the platform rule, shows expected income, and admin manages active investment records. Open Become Partner from the dashboard to check the options.';
+            }
+            if (hasAny('gift', 'code', 'redeem')) {
+                return 'Gift codes can be redeemed from the Gift Code section when you have a valid code. Gift card withdrawals use the email saved in your profile payout details.';
+            }
+            if (hasAny('admin', 'support', 'contact', 'help from admin', 'human', 'whatsapp')) {
+                return 'For direct help, open REVIEWS WORLD chat from Help. Work updates are shared on the WhatsApp channel, and you can check the REVIEWS WORLD profile in chat for WhatsApp number and website links added by admin.';
+            }
+            if (hasAny('delete chat', 'chat delete', 'disappear', '15 days', 'privacy')) {
+                return 'Support chat messages are kept until admin reads them. After admin reads a chat, those read messages automatically become eligible for deletion after 15 days to save storage.';
+            }
+            if (hasAny('company', 'reviews world', 'rw wallet', 'app', 'developer', 'yash', 'about', 'platform')) {
+                return 'RW Wallet is the digital wallet platform of REVIEWS WORLD, developed by YASH VISHAL. It supports wallet balance, add fund, pay to wallet, withdrawals, transaction history, mobile recharge, gift codes, partner investment, loan tools, withdrawal invoices, payout profile details, support chat, and REVY instant help. REVIEWS WORLD work includes app review, map review, app download, and like/comment tasks shared by admin.';
+            }
+            if (hasAny('hello', 'hi', 'hey', 'help', 'start')) {
+                return 'Hi, I am REVY, RW AI BOT. I can help with earning, add fund, pay to wallet, wallet balance, pending withdrawals, transaction history, payout details, password reset, recharge, gift codes, loans, partner investment, invoices, and how to use the app.';
+            }
+
+            if (hasAny('how to', 'where is', 'where to', 'can i', 'why', 'what is')) {
+                return 'I can help with RW Wallet features like earning, Add Fund, Withdraw Fund, Pay to Wallet, Mobile Recharge, Gift Codes, Loan, Become Partner, Track Income, Transaction History, Invoices, Profile, password reset, and admin support. Please ask using one of these app sections, for example “how to earn” or “where is transaction history”.';
+            }
+
+            return {
+                unsupported: true,
+                text: 'Sorry, I can help only with RW Wallet, REVIEWS WORLD, earning, account, wallet, transaction, withdrawal, add fund, pay to wallet, recharge, gift code, loan, partner investment, profile, and app usage questions. Would you like me to transfer your problem to ADMIN?'
+            };
+        };
+
+const renderRevyBotMessages = () => {
+            const list = document.getElementById('revy-bot-messages');
+            if (!list) return;
+            let html = revyBotMessages.map((message, index) => {
+                const isMine = message.senderRole === 'user';
+                const showActions = message.actions === 'escalate' && index === revyBotMessages.length - 1;
+                return `
+                    <div class="flex ${isMine ? 'justify-end' : 'justify-start'}">
+                        <div class="w-fit max-w-[84%] rounded-2xl px-3 py-2 shadow-sm ${isMine ? 'chat-bubble-user bg-emerald-50 dark:bg-emerald-900/40 border border-emerald-100 dark:border-emerald-800' : 'chat-bubble-admin bg-white dark:bg-gray-800 border border-gray-100 dark:border-gray-700'}">
+                            <p class="text-sm leading-5 break-words whitespace-pre-line">${escapeHtml(message.text)}</p>
+                            <p class="text-[10px] mt-1 text-gray-400">${formatChatTime(message.createdAt)}</p>
+                            ${showActions ? `
+                                <div class="mt-3 flex flex-wrap gap-2">
+                                    <button id="revy-transfer-yes" class="px-3 py-1.5 rounded-full bg-blue-600 text-white text-xs font-bold">Yes, I need help</button>
+                                    <button id="revy-transfer-no" class="px-3 py-1.5 rounded-full bg-gray-100 dark:bg-gray-700 text-xs font-bold">No</button>
+                                    <button id="revy-edit-question" class="px-3 py-1.5 rounded-full bg-yellow-100 dark:bg-yellow-900/40 text-yellow-700 dark:text-yellow-200 text-xs font-bold">Edit</button>
+                                    <button id="revy-exit-chat" class="px-3 py-1.5 rounded-full bg-red-50 dark:bg-red-900/30 text-red-600 dark:text-red-200 text-xs font-bold">Exit</button>
+                                </div>` : ''}
+                        </div>
+                    </div>`;
+            }).join('');
+
+            if (revyBotTyping) {
+                html += `
+                    <div class="flex justify-start">
+                        <div class="chat-bubble-admin bg-white dark:bg-gray-800 border border-gray-100 dark:border-gray-700 px-4 py-3 rounded-2xl shadow-sm">
+                            <div class="flex items-center gap-1.5 py-1">
+                                <span class="h-2 w-2 rounded-full bg-gray-400 dark:bg-gray-500 animate-bounce" style="animation-delay: 0ms"></span>
+                                <span class="h-2 w-2 rounded-full bg-gray-400 dark:bg-gray-500 animate-bounce" style="animation-delay: 150ms"></span>
+                                <span class="h-2 w-2 rounded-full bg-gray-400 dark:bg-gray-500 animate-bounce" style="animation-delay: 300ms"></span>
+                            </div>
+                        </div>
+                    </div>`;
+            }
+
+            list.innerHTML = html;
+            list.scrollTop = list.scrollHeight;
+            document.getElementById('revy-transfer-yes')?.addEventListener('click', () => {
+                const question = revyBotLastQuestion || 'I need admin help.';
+                revyBotMessages = [];
+                if (revyBotTimer) clearTimeout(revyBotTimer);
+                openSupportChatPage(currentUser.uid, 'user', {
+                    initialMessage: `REVY - RW AI BOT could not answer this issue. User question: ${question}`
+                });
+            });
+            document.getElementById('revy-transfer-no')?.addEventListener('click', () => {
+                addRevyBotMessage('No problem. Please ask any other RW Wallet question, I will try to help instantly.');
+            });
+            document.getElementById('revy-edit-question')?.addEventListener('click', () => {
+                const input = document.getElementById('revy-message-input');
+                if (input) {
+                    input.value = revyBotLastQuestion;
+                    input.focus();
+                }
+            });
+            document.getElementById('revy-exit-chat')?.addEventListener('click', closeRevyBotSession);
+        };
+
+const addRevyBotMessage = (text, senderRole = 'bot', actions = '') => {
+            revyBotMessages.push({
+                id: `revy-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+                text,
+                senderRole,
+                actions,
+                createdAt: Date.now()
+            });
+            renderRevyBotMessages();
+            resetRevyBotTimer();
+        };
+
+const openRevyBotChatPage = () => {
+            if (activeChatUnsubscribe) {
+                activeChatUnsubscribe();
+                activeChatUnsubscribe = null;
+            }
+            revyBotMessages = [];
+            const content = `
+                <div id="revy-chat-shell" class="max-w-xl mx-auto bg-gray-100 dark:bg-gray-900 h-[100dvh] flex flex-col">
+                    <div class="bg-white dark:bg-gray-800 border border-gray-100 dark:border-gray-700 rounded-xl shadow-sm overflow-hidden flex flex-col h-full min-h-0">
+                        <div class="flex items-center gap-3 px-3 pb-3 pt-[calc(1.85rem+env(safe-area-inset-top))] border-b border-gray-100 dark:border-gray-700">
+                            <button id="revy-back-btn" class="h-10 w-10 shrink-0 rounded-full bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 flex items-center justify-center">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5"></path><path d="M12 19l-7-7 7-7"></path></svg>
+                            </button>
+                            ${getRevyBotLogo('h-10 w-10')}
+                            <div class="min-w-0 flex-1">
+                                <h3 class="font-bold truncate inline-flex items-center gap-1">REVY - RW AI BOT ${getVerifiedBadge()}</h3>
+                                <p class="text-xs text-emerald-600 dark:text-emerald-300 truncate">Instant help solution</p>
+                            </div>
+                            <button id="revy-close-btn" class="px-3 py-1.5 rounded-full bg-red-50 dark:bg-red-900/30 text-red-600 dark:text-red-200 text-xs font-bold">Exit</button>
+                        </div>
+                        <div id="revy-bot-messages" class="flex-1 min-h-0 space-y-3 overflow-y-auto p-4 bg-gray-50 dark:bg-gray-900"></div>
+                        <div id="revy-quick-options" class="shrink-0 flex gap-2 overflow-x-auto px-3 py-2 border-t border-gray-100 dark:border-gray-700 bg-white dark:bg-gray-800">
+                            ${[
+                                ['how to earn', 'Earn'],
+                                ['how to add fund', 'Add Fund'],
+                                ['how to withdraw', 'Withdraw'],
+                                ['pending withdrawal', 'Pending'],
+                                ['pay to wallet', 'Pay'],
+                                ['transaction history', 'History'],
+                                ['payment method', 'Profile'],
+                                ['become partner investment', 'Partner'],
+                                ['loan help', 'Loan'],
+                                ['contact admin', 'Admin']
+                            ].map(([question, label]) => `<button data-revy-question="${question}" class="revy-option shrink-0 px-3 py-1.5 rounded-full bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-200 text-xs font-bold">${label}</button>`).join('')}
+                        </div>
+                        <div id="revy-chat-composer" class="shrink-0 flex items-center gap-2 p-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] border-t border-gray-100 dark:border-gray-700 bg-white dark:bg-gray-800">
+                            <textarea id="revy-message-input" placeholder="Or type your question" rows="1" class="flex-1 min-w-0 px-4 py-2 text-[16px] bg-gray-100 dark:bg-gray-700 rounded-2xl focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none overflow-y-auto max-h-24"></textarea>
+                            <button id="revy-send-btn" class="h-10 w-10 rounded-full bg-blue-600 text-white flex items-center justify-center">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M2 21l21-9L2 3v7l15 2-15 2v7z"></path></svg>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+                ${getPageFooter()}`;
+            showPage(content, { fullHeight: true });
+            setBottomNavActive('bottom-help-btn');
+            const revyKeyboardCleanup = installChatViewportLock({
+                shellId: 'revy-chat-shell',
+                composerId: 'revy-chat-composer',
+                inputId: 'revy-message-input',
+                messagesId: 'revy-bot-messages'
+            });
+            const sendBotMessage = async () => {
+                const input = document.getElementById('revy-message-input');
+                const text = input.value.trim();
+                if (!text) return;
+                input.value = '';
+                input.style.height = 'auto';
+                revyBotLastQuestion = text;
+                addRevyBotMessage(text, 'user');
+
+                revyBotTyping = true;
+                renderRevyBotMessages();
+
+                const reply = await getRevyBotReply(text);
+                
+                revyBotTyping = false;
+
+                if (reply?.unsupported) {
+                    addRevyBotMessage(reply.text, 'bot', 'escalate');
+                } else {
+                    addRevyBotMessage(reply, 'bot');
+                }
+            };
+            document.getElementById('revy-send-btn').onclick = sendBotMessage;
+            const revyInput = document.getElementById('revy-message-input');
+            if (revyInput) {
+                const adjustRevyTextareaHeight = () => {
+                    revyInput.style.height = 'auto';
+                    revyInput.style.height = Math.min(revyInput.scrollHeight, 120) + 'px';
+                };
+                revyInput.addEventListener('input', adjustRevyTextareaHeight);
+
+                document.querySelectorAll('.revy-option').forEach(btn => {
+                    btn.onclick = () => {
+                        revyInput.value = btn.dataset.revyQuestion;
+                        sendBotMessage();
+                        adjustRevyTextareaHeight();
+                    };
+                });
+
+                revyInput.addEventListener('keydown', (e) => {
+                    resetRevyBotTimer();
+                    if (e.key === 'Enter' && !e.shiftKey) {
+                        e.preventDefault();
+                        sendBotMessage();
+                    }
+                });
+            }
+            document.getElementById('revy-back-btn').onclick = () => {
+                if (revyKeyboardCleanup) revyKeyboardCleanup();
+                showHelpSupportPage();
+            };
+            document.getElementById('revy-close-btn').onclick = () => {
+                if (revyKeyboardCleanup) revyKeyboardCleanup();
+                closeRevyBotSession();
+            };
+            addRevyBotMessage(`Hi ${currentUserData?.name || 'there'}, I am REVY, RW AI BOT. I can instantly help with wallet balance, withdrawal status, transaction history, payment details, recharge, gift code, loan, invoices, password reset, and app usage.`);
+        };
+
+const showHelpSupportPage = () => {
+            if (!ensureUserSessionReady()) return;
+            const content = `
+                ${getPageHeader('Help', { showBack: false })}
+                <div class="max-w-lg mx-auto space-y-4">
+                    <button id="revy-ai-chat-card" class="w-full flex items-center gap-4 p-4 bg-white dark:bg-gray-800 border border-gray-100 dark:border-gray-700 rounded-2xl shadow-md text-left hover:bg-gray-50 dark:hover:bg-gray-700/50 transition">
+                        ${getRevyBotLogo('h-14 w-14 shrink-0')}
+                        <div class="flex-1 min-w-0">
+                            <h3 class="font-bold text-gray-900 dark:text-white inline-flex items-center gap-1">REVY - RW AI BOT ${getVerifiedBadge()}</h3>
+                            <p class="text-sm text-emerald-600 dark:text-emerald-300 truncate">Instant help solution</p>
+                        </div>
+                        <span class="text-blue-600 dark:text-blue-300 font-bold">Ask</span>
+                    </button>
+                    <button id="reviews-world-chat-card" class="w-full flex items-center gap-4 p-4 bg-white dark:bg-gray-800 border border-gray-100 dark:border-gray-700 rounded-2xl shadow-md text-left hover:bg-gray-50 dark:hover:bg-gray-700/50 transition">
+                        ${getSupportLogoFrame('h-14 w-14 shrink-0')}
+                        <div class="flex-1 min-w-0">
+                            <h3 class="font-bold text-gray-900 dark:text-white inline-flex items-center gap-1">REVIEWS WORLD ${getVerifiedBadge()}</h3>
+                            <p class="text-sm text-gray-500 dark:text-gray-400 truncate">Chat with admin support</p>
+                        </div>
+                        <span id="support-chat-unread-badge" class="hidden min-w-6 h-6 rounded-full bg-red-600 px-2 text-center text-xs font-black leading-6 text-white shadow"></span>
+                        <span class="text-blue-600 dark:text-blue-300 font-bold">Chat</span>
+                    </button>
+                </div>
+                ${getPageFooter()}`;
+            showPage(content, { keepBottomNav: true });
+            currentMainSection = 'help';
+            setBottomNavActive('bottom-help-btn');
+            updateSupportChatUnreadBadges();
+            document.getElementById('revy-ai-chat-card').onclick = openRevyBotChatPage;
+            document.getElementById('reviews-world-chat-card').onclick = () => openSupportChatPage(currentUser.uid, 'user');
+        };
+
+// Expose functions to window for global access
+window.getSupportSocket = getSupportSocket;
+window.installChatViewportLock = installChatViewportLock;
+window.getSupportLogo = getSupportLogo;
+window.getRevyBotLogo = getRevyBotLogo;
+window.getSupportLogoFrame = getSupportLogoFrame;
+window.showSupportProfileModal = showSupportProfileModal;
+window.formatChatTime = formatChatTime;
+window.formatChatDate = formatChatDate;
+window.markChatMessagesRead = markChatMessagesRead;
+window.renderSupportMessages = renderSupportMessages;
+window.getSupportRoomId = getSupportRoomId;
+window.getSupportChatCacheKey = getSupportChatCacheKey;
+window.getSupportChatSeenKey = getSupportChatSeenKey;
+window.readSupportChatCache = readSupportChatCache;
+window.writeSupportChatCache = writeSupportChatCache;
+window.getSupportMessageDedupeKey = getSupportMessageDedupeKey;
+window.mergeSupportMessages = mergeSupportMessages;
+window.applySupportReadReceipt = applySupportReadReceipt;
+window.fetchSupportChatHistory = fetchSupportChatHistory;
+window.calculateSupportUnreadCount = calculateSupportUnreadCount;
+window.updateSupportChatUnreadBadges = updateSupportChatUnreadBadges;
+window.markSupportChatSeen = markSupportChatSeen;
+window.refreshSupportUnreadFromCache = refreshSupportUnreadFromCache;
+window.preloadSupportChatForUser = preloadSupportChatForUser;
+window.openSupportChatPage = openSupportChatPage;
+window.resetRevyBotTimer = resetRevyBotTimer;
+window.closeRevyBotSession = closeRevyBotSession;
+window.getRevyBotReply = getRevyBotReply;
+window.renderRevyBotMessages = renderRevyBotMessages;
+window.addRevyBotMessage = addRevyBotMessage;
+window.openRevyBotChatPage = openRevyBotChatPage;
+window.showHelpSupportPage = showHelpSupportPage;
