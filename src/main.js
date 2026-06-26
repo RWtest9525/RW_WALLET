@@ -1,6 +1,6 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
         import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, onAuthStateChanged, sendPasswordResetEmail, setPersistence, browserLocalPersistence } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { getFirestore, doc, setDoc, getDoc, collection, collectionGroup, addDoc, onSnapshot, query, orderBy, Timestamp, writeBatch, runTransaction, deleteDoc, getDocs, serverTimestamp, where, arrayUnion, updateDoc, deleteField, increment, setLogLevel, limit as firestoreLimit } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        import { initializeFirestore, persistentLocalCache, persistentMultipleTabManager, doc, setDoc, getDoc, collection, collectionGroup, addDoc, onSnapshot, query, orderBy, Timestamp, writeBatch, runTransaction, deleteDoc, getDocs, serverTimestamp, where, arrayUnion, updateDoc, deleteField, increment, setLogLevel, limit as firestoreLimit } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
         import { getStorage, ref as storageRef, uploadBytesResumable, getDownloadURL } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-storage.js";
         import { getMessaging, getToken, onMessage } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-messaging.js";
 
@@ -68,7 +68,9 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             'Maharashtra Goa', 'Mumbai', 'North East', 'Odisha', 'Punjab', 'Rajasthan', 'Tamil Nadu',
             'Uttar Pradesh East', 'Uttar Pradesh West', 'West Bengal'
         ];
-        const BACKEND_BASE_URL = 'https://rw-wallet.onrender.com';
+        const BACKEND_BASE_URL = (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
+            ? 'http://localhost:8080'
+            : 'https://rw-wallet.onrender.com';
         const RW_LOGO_URL = 'https://i.ibb.co/x8YBYwGG/6233389803554672153.jpg';
         const PLAY_STORE_LOGO_URL = 'https://upload.wikimedia.org/wikipedia/commons/d/d0/Google_Play_Arrow_logo.svg';
         const REFER_ICON_URL = 'https://cdn-icons-png.flaticon.com/512/929/929610.png';
@@ -81,7 +83,11 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
 
         const app = initializeApp(firebaseConfig);
         const auth = getAuth(app);
-        const db = getFirestore(app);
+        const db = initializeFirestore(app, {
+            localCache: persistentLocalCache({
+                tabManager: persistentMultipleTabManager()
+            })
+        });
         const storage = getStorage(app);
         setPersistence(auth, browserLocalPersistence).catch(error => {
             console.warn('Could not enable local auth persistence:', error);
@@ -1525,6 +1531,38 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                 });
 
             return backendAuthPromise;
+        };
+        
+        const fetchUserInvestmentsFromBackend = async (userId = currentUser?.uid) => {
+            try {
+                const token = await getBackendAuthToken();
+                const response = await fetchWithTimeout(`${BACKEND_BASE_URL}/api/partner-investments/user/${encodeURIComponent(userId)}`, {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                }, 10000);
+                if (!response.ok) throw new Error('Failed to load user investments');
+                const data = await response.json();
+                if (!data.ok) throw new Error(data.message || 'Failed to load user investments');
+                return data.investments;
+            } catch (err) {
+                console.warn('Backend user investments fetch failed:', err);
+                return [];
+            }
+        };
+
+        const fetchAdminInvestmentsFromBackend = async () => {
+            try {
+                const token = await getBackendAuthToken();
+                const response = await fetchWithTimeout(`${BACKEND_BASE_URL}/api/partner-investments`, {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                }, 10000);
+                if (!response.ok) throw new Error('Failed to load partner investments');
+                const data = await response.json();
+                if (!data.ok) throw new Error(data.message || 'Failed to load partner investments');
+                return data.investments;
+            } catch (err) {
+                console.warn('Backend admin investments fetch failed:', err);
+                return [];
+            }
         };
 
         const loadSocketIoClient = (timeoutMs = 2500) => {
@@ -3196,7 +3234,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                 getDocs(codesQuery),
                 loadAdminLoanRequestsMerged(),
                 getDocs(loansQuery),
-                getDocs(investmentsQuery),
+                fetchAdminInvestmentsFromBackend(),
                 getDocs(tasksQuery),
                 getDocs(adsQuery)
             ]);
@@ -3229,7 +3267,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                 console.warn('Admin loans refresh skipped:', loansResult.reason);
             }
             if (investmentsResult.status === 'fulfilled') {
-                applyAdminInvestmentsSnapshot(investmentsResult.value.docs);
+                applyAdminInvestmentsSnapshot(investmentsResult.value);
             } else {
                 console.warn('Admin investments refresh skipped:', investmentsResult.reason);
             }
@@ -3400,7 +3438,12 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
         };
 
         const applyAdminInvestmentsSnapshot = (docs = []) => {
-            allInvestmentsCache = docs.map(doc => ({ id: doc.id, ...doc.data() }));
+            allInvestmentsCache = docs.map(doc => {
+                if (doc && typeof doc.data === 'function') {
+                    return { id: doc.id, ...doc.data() };
+                }
+                return doc;
+            });
             processDuePartnerInvestmentsForAdmin();
             if (document.getElementById('admin-investments-page')) {
                 renderAdminInvestmentsPage();
@@ -3600,9 +3643,8 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             const loansSnap = await getDocs(loansQuery);
             applyAdminLoansSnapshot(loansSnap.docs);
 
-            const investmentsQuery = query(collection(db, `artifacts/${appId}/public/data/partner_investments`), orderBy("createdAt", "desc"));
-            const investmentsSnap = await getDocs(investmentsQuery);
-            applyAdminInvestmentsSnapshot(investmentsSnap.docs);
+            const backendInvestments = await fetchAdminInvestmentsFromBackend();
+            applyAdminInvestmentsSnapshot(backendInvestments);
 
             const tasksQuery = query(collection(db, `artifacts/${appId}/public/data/tasks`), orderBy("createdAt", "desc"));
             const tasksSnap = await getDocs(tasksQuery);
@@ -13317,12 +13359,19 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
 
             processDuePartnerInvestmentsForUser(currentUser.uid)
                 .catch(error => console.warn('Partner due processing skipped:', error))
-                .finally(() => getDocs(query(
-                    collection(db, `artifacts/${appId}/public/data/partner_investments`),
-                    where("userId", "==", currentUser.uid)
-                ))
-                    .then((snap) => {
-                        const freshInvestments = snap.docs.map(d => ({ id: d.id, ...d.data() }))
+                .finally(() => fetchUserInvestmentsFromBackend(currentUser.uid)
+                    .then((investments) => {
+                        allInvestmentsCache = allInvestmentsCache.filter(inv => inv.userId !== currentUser.uid).concat(investments);
+                        const freshInvestments = investments
+                            .map(inv => {
+                                return {
+                                    ...inv,
+                                    startDate: inv.startDate?.seconds ? new Date(inv.startDate.seconds * 1000) : inv.startDate,
+                                    endDate: inv.endDate?.seconds ? new Date(inv.endDate.seconds * 1000) : inv.endDate,
+                                    nextPayoutAt: inv.nextPayoutAt?.seconds ? new Date(inv.nextPayoutAt.seconds * 1000) : inv.nextPayoutAt,
+                                    createdAt: inv.createdAt?.seconds ? new Date(inv.createdAt.seconds * 1000) : inv.createdAt
+                                };
+                            })
                             .sort((a, b) => (toDate(b.createdAt)?.getTime() || 0) - (toDate(a.createdAt)?.getTime() || 0));
                         renderPartnerTrackList(freshInvestments);
                     })
@@ -15595,7 +15644,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                         recipientMobile: currentUserData.mobile || ''
                     });
                 });
-                await syncRecentTransactionsToCloud(currentUser.uid);
+                syncRecentTransactionsToCloud(currentUser.uid).catch(error => console.warn('Take loan background transaction sync failed:', error));
                 showNotification('Loan amount added to wallet.');
                 hidePage();
             } catch (e) {
@@ -15651,7 +15700,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                         recipientMobile: ''
                     });
                 });
-                await syncRecentTransactionsToCloud(currentUser.uid);
+                syncRecentTransactionsToCloud(currentUser.uid).catch(error => console.warn('Repay loan background transaction sync failed:', error));
                 showNotification('Loan repaid successfully.');
                 hidePage();
             } catch (e) {
@@ -15675,53 +15724,43 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                 return showNotification(getInsufficientWalletMessage(currentUserData), true);
             }
 
+            const btn = document.getElementById('confirm-partner-investment-btn');
+            if (btn) {
+                btn.disabled = true;
+                btn.innerText = 'Investing...';
+            }
+
             try {
-                const userRef = doc(db, `artifacts/${appId}/public/data/users`, currentUser.uid);
-                const investmentRef = doc(collection(db, `artifacts/${appId}/public/data/partner_investments`));
-                const invoiceId = `INV-${investmentRef.id.slice(0, 8).toUpperCase()}`;
-
-                await runTransaction(db, async (tx) => {
-                    const userDoc = await tx.get(userRef);
-                    if (!userDoc.exists()) throw new Error('User account not found.');
-                    const balance = userDoc.data().balance || 0;
-                    if (amount < PARTNER_MIN_INVESTMENT) throw new Error(`Minimum partner investment is ${formatCurrency(PARTNER_MIN_INVESTMENT)}.`);
-                    if (getSpendableWalletBalance(userDoc.data()) < amount) throw new Error(getInsufficientWalletMessage(userDoc.data()));
-
-                    tx.update(userRef, { balance: balance - amount });
-                    tx.set(investmentRef, {
-                        userId: currentUser.uid,
-                        userName: currentUserData.name || 'User',
-                        userEmail: currentUserData.email || currentUser.email || '',
-                        userMobile: currentUserData.mobile || '',
+                const token = await getBackendAuthToken();
+                const response = await fetchWithTimeout(`${BACKEND_BASE_URL}/api/partner-investments`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${token}`
+                    },
+                    body: JSON.stringify({
                         amount,
                         months,
-                        interestRate: PARTNER_INTEREST_RATE,
                         monthlyInterest,
                         totalInterest,
-                        paidInterest: 0,
-                        monthsPaid: 0,
-                        startDate: Timestamp.fromDate(startDate),
-                        endDate: Timestamp.fromDate(endDate),
-                        nextPayoutAt: Timestamp.fromDate(addDays(startDate, 30)),
-                        status: 'active',
-                        invoiceId,
-                        createdAt: serverTimestamp()
-                    });
-                    tx.set(doc(collection(userRef, 'transactions')), {
-                        type: 'debit',
-                        amount,
-                        comment: 'Partner Investment Started',
-                        timestamp: serverTimestamp(),
-                        transactionId: investmentRef.id,
-                        status: 'completed',
-                        recipientName: 'Reviews World Partner Plan',
-                        recipientMobile: ''
-                    });
-                });
+                        startDate: startDate.toISOString(),
+                        endDate: endDate.toISOString()
+                    })
+                }, 20000);
+
+                if (!response.ok) {
+                    const errData = await response.json().catch(() => ({}));
+                    throw new Error(errData.message || 'Server error during investment');
+                }
+
+                const resData = await response.json();
+                if (!resData.ok) {
+                    throw new Error(resData.message || 'Investment failed');
+                }
 
                 const invoiceData = {
-                    id: investmentRef.id,
-                    invoiceId,
+                    id: resData.investmentId,
+                    invoiceId: resData.invoiceId,
                     userName: currentUserData.name || 'User',
                     userEmail: currentUserData.email || currentUser.email || '',
                     userMobile: currentUserData.mobile || '',
@@ -15736,7 +15775,9 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                     status: 'active',
                     createdAt: new Date()
                 };
-                await syncRecentTransactionsToCloud(currentUser.uid);
+
+                syncRecentTransactionsToCloud(currentUser.uid).catch(error => console.warn('Partner background transaction sync failed:', error));
+
                 renderModal('Investment Created',
                     `<div class="text-center space-y-3">
                         <div class="w-16 h-16 rounded-full bg-emerald-100 mx-auto p-3"><img src="${PARTNER_ICON_URL}" class="w-full h-full object-contain" alt="Partner"></div>
@@ -15751,20 +15792,26 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             } catch (e) {
                 console.error('Partner investment failed:', e);
                 showNotification(`Error: ${e.message}`, true);
+            } finally {
+                if (btn) {
+                    btn.disabled = false;
+                    btn.innerText = 'Invest Now';
+                }
             }
         };
 
         const processDuePartnerInvestmentsForUser = async (userId) => {
-            const snap = await getDocs(query(
-                collection(db, `artifacts/${appId}/public/data/partner_investments`),
-                where("userId", "==", userId),
-                where("status", "==", "active")
-            ));
-            for (const d of snap.docs) {
-                const inv = { id: d.id, ...d.data() };
-                if (toDate(inv.nextPayoutAt) && toDate(inv.nextPayoutAt) <= new Date()) {
-                    await processPartnerInterest(inv.id);
+            try {
+                const investments = await fetchUserInvestmentsFromBackend(userId);
+                allInvestmentsCache = allInvestmentsCache.filter(inv => inv.userId !== userId).concat(investments);
+                const activeInvestments = investments.filter(inv => inv.status === 'active');
+                for (const inv of activeInvestments) {
+                    if (toDate(inv.nextPayoutAt) && toDate(inv.nextPayoutAt) <= new Date()) {
+                        await processPartnerInterest(inv.id);
+                    }
                 }
+            } catch (err) {
+                console.warn('Process due partner investments failed:', err);
             }
         };
 
@@ -15788,46 +15835,25 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
         };
 
         const processPartnerInterest = async (investmentId) => {
-            const investmentRef = doc(db, `artifacts/${appId}/public/data/partner_investments`, investmentId);
-            await runTransaction(db, async (tx) => {
-                const invDoc = await tx.get(investmentRef);
-                if (!invDoc.exists()) throw new Error('Investment not found.');
-                const inv = invDoc.data();
-                if (inv.status !== 'active') throw new Error('Investment is not active.');
-                const nextPayout = toDate(inv.nextPayoutAt);
-                if (!nextPayout || nextPayout > new Date()) throw new Error('30 days are not completed yet.');
-
-                const userRef = doc(db, `artifacts/${appId}/public/data/users`, inv.userId);
-                const userDoc = await tx.get(userRef);
-                if (!userDoc.exists()) throw new Error('User not found.');
-
-                const monthsPaid = inv.monthsPaid || 0;
-                const nextMonthsPaid = monthsPaid + 1;
-                const monthlyInterest = inv.monthlyInterest || Number(((inv.amount || 0) * (inv.interestRate || PARTNER_INTEREST_RATE)).toFixed(2));
-                const isFinal = nextMonthsPaid >= (inv.months || 1);
-                const creditAmount = isFinal ? Number((monthlyInterest + (inv.amount || 0)).toFixed(2)) : monthlyInterest;
-
-                tx.update(userRef, { balance: (userDoc.data().balance || 0) + creditAmount });
-                tx.update(investmentRef, {
-                    paidInterest: Number(((inv.paidInterest || 0) + monthlyInterest).toFixed(2)),
-                    monthsPaid: nextMonthsPaid,
-                    nextPayoutAt: isFinal ? deleteField() : Timestamp.fromDate(addDays(nextPayout, 30)),
-                    status: isFinal ? 'completed' : 'active',
-                    completedAt: isFinal ? serverTimestamp() : (inv.completedAt || null)
-                });
-                tx.set(doc(collection(userRef, 'transactions')), {
-                    type: 'credit',
-                    amount: creditAmount,
-                    comment: isFinal ? 'Partner Investment Maturity' : 'Partner Investment Interest',
-                    timestamp: serverTimestamp(),
-                    transactionId: `PARTNER-${investmentId}-${nextMonthsPaid}`,
-                    status: 'completed',
-                    isAdminTransaction: true,
-                    senderName: 'Reviews World',
-                    recipientName: inv.userName || 'User',
-                    recipientMobile: inv.userMobile || ''
-                });
-            });
+            try {
+                const token = await getBackendAuthToken();
+                const response = await fetchWithTimeout(`${BACKEND_BASE_URL}/api/partner-investments/${encodeURIComponent(investmentId)}/interest`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${token}`
+                    }
+                }, 15000);
+                if (!response.ok) {
+                    const data = await response.json().catch(() => ({}));
+                    throw new Error(data.message || 'Failed to process interest');
+                }
+                const data = await response.json();
+                if (!data.ok) throw new Error(data.message || 'Failed to process interest');
+            } catch (err) {
+                console.error('Process partner interest failed:', err);
+                throw err;
+            }
         };
 
         const processDueLoanRepayment = async (loanId) => {
@@ -16499,7 +16525,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                         status: 'completed'
                     });
                 });
-                await syncRecentTransactionsToCloud(currentUser.uid);
+                syncRecentTransactionsToCloud(currentUser.uid).catch(error => console.warn('Redeem background transaction sync failed:', error));
                 showNotification(`Success! Added ${formatCurrency(redeemedAmount)} to your wallet.`, false, true);
                 window.closeModal();
             } catch (e) {

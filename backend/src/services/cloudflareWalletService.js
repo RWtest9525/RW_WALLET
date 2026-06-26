@@ -29,6 +29,9 @@ function initFirebaseAdmin() {
 
   if (process.env.FIREBASE_SERVICE_ACCOUNT_JSON) {
     const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT_JSON);
+    if (serviceAccount.private_key) {
+      serviceAccount.private_key = serviceAccount.private_key.replace(/\\n/g, '\n');
+    }
     return admin.initializeApp({
       credential: admin.credential.cert(serviceAccount)
     });
@@ -1802,6 +1805,204 @@ setInterval(() => {
 }, 60000).unref?.();
 
 function registerRoutes(app, { d1, r2 }) {
+  // ── Partner Investment Endpoints ─────────────────────────────────────────
+  app.post('/api/partner-investments', requireHttpAuth, async (req, res) => {
+    try {
+      const userId = req.auth.sub;
+      const { amount, months, monthlyInterest, totalInterest, startDate, endDate } = req.body;
+
+      if (!amount || amount < 25) {
+        return res.status(400).json({ ok: false, error: 'INVALID_AMOUNT', message: 'Minimum partner investment is ₹25.' });
+      }
+      if (!months || months <= 0 || months > 60) {
+        return res.status(400).json({ ok: false, error: 'INVALID_MONTHS', message: 'Invalid investment duration.' });
+      }
+
+      const db = admin.firestore();
+      const userRef = db.doc(`artifacts/digital-wallet-prod/public/data/users/${userId}`);
+      const investmentRef = db.collection(`artifacts/digital-wallet-prod/public/data/partner_investments`).doc();
+      const invoiceId = `INV-${investmentRef.id.slice(0, 8).toUpperCase()}`;
+
+      await db.runTransaction(async (tx) => {
+        const userDoc = await tx.get(userRef);
+        if (!userDoc.exists) throw new Error('User account not found.');
+        const userData = userDoc.data();
+        const balance = Number(userData.balance || 0);
+
+        const getLoanReservedAmount = (user) => {
+          if (Number(user.activeLoanVersion || 0) < 2) return 0;
+          const reserveStartValue = user.loanReserveStartsAt || user.activeLoanDueDate || user.loanDueDate;
+          const reserveStartsAt = reserveStartValue && reserveStartValue.toDate ? reserveStartValue.toDate() : (reserveStartValue ? new Date(reserveStartValue) : null);
+          const repaymentBasis = String(user.activeLoanRepaymentBasis || user.loanRepaymentBasis || '').toLowerCase();
+          if (reserveStartsAt && reserveStartsAt > new Date()) return 0;
+          if (!reserveStartsAt && repaymentBasis.includes('withdrawal')) return 0;
+          const explicit = Number(user.loanLockedAmount ?? user.loan_locked_amount ?? 0);
+          const rawReserve = Number.isFinite(explicit) && explicit > 0 ? explicit : 0;
+          return Math.max(0, Math.min(Number(user.balance || 0), rawReserve));
+        };
+
+        const spendable = Math.max(0, balance - getLoanReservedAmount(userData));
+        if (spendable < amount) throw new Error('Insufficient wallet balance.');
+
+        tx.update(userRef, { balance: balance - amount });
+
+        const start = new Date(startDate);
+        const end = new Date(endDate);
+        const nextPayout = new Date(start);
+        nextPayout.setDate(nextPayout.getDate() + 30);
+
+        tx.set(investmentRef, {
+          userId,
+          userName: userData.name || 'User',
+          userEmail: userData.email || req.auth.email || '',
+          userMobile: userData.mobile || '',
+          amount,
+          months,
+          interestRate: 0.01,
+          monthlyInterest,
+          totalInterest,
+          paidInterest: 0,
+          monthsPaid: 0,
+          startDate: admin.firestore.Timestamp.fromDate(start),
+          endDate: admin.firestore.Timestamp.fromDate(end),
+          nextPayoutAt: admin.firestore.Timestamp.fromDate(nextPayout),
+          status: 'active',
+          invoiceId,
+          createdAt: admin.firestore.FieldValue.serverTimestamp()
+        });
+
+        const txRef = userRef.collection('transactions').doc();
+        tx.set(txRef, {
+          type: 'debit',
+          amount,
+          comment: 'Partner Investment Started',
+          timestamp: admin.firestore.FieldValue.serverTimestamp(),
+          transactionId: investmentRef.id,
+          status: 'completed',
+          recipientName: 'Reviews World Partner Plan',
+          recipientMobile: ''
+        });
+      });
+
+      res.status(201).json({ ok: true, investmentId: investmentRef.id, invoiceId });
+    } catch (error) {
+      console.error('Create partner investment failed:', error);
+      res.status(500).json({ ok: false, error: 'INVESTMENT_FAILED', message: error.message });
+    }
+  });
+
+  app.get('/api/partner-investments/user/:userId', requireHttpAuth, async (req, res) => {
+    try {
+      const userId = req.params.userId;
+      if (req.auth.sub !== userId && !req.auth.isAdmin) {
+        return res.status(403).json({ ok: false, error: 'FORBIDDEN' });
+      }
+
+      const db = admin.firestore();
+      const snap = await db.collection('artifacts/digital-wallet-prod/public/data/partner_investments')
+        .where('userId', '==', userId)
+        .orderBy('createdAt', 'desc')
+        .get();
+      const investments = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      res.json({ ok: true, investments });
+    } catch (error) {
+      console.error('List user partner investments failed:', error);
+      res.status(500).json({ ok: false, error: 'LOAD_INVESTMENTS_FAILED', message: error.message });
+    }
+  });
+
+  app.get('/api/partner-investments', requireHttpAuth, async (req, res) => {
+    try {
+      if (!req.auth.isAdmin) {
+        return res.status(403).json({ ok: false, error: 'ADMIN_REQUIRED' });
+      }
+
+      const db = admin.firestore();
+      const snap = await db.collection('artifacts/digital-wallet-prod/public/data/partner_investments')
+        .orderBy('createdAt', 'desc')
+        .get();
+      const investments = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      res.json({ ok: true, investments });
+    } catch (error) {
+      console.error('List all partner investments failed:', error);
+      res.status(500).json({ ok: false, error: 'LOAD_ALL_INVESTMENTS_FAILED', message: error.message });
+    }
+  });
+
+  app.post('/api/partner-investments/:investmentId/interest', requireHttpAuth, async (req, res) => {
+    try {
+      const investmentId = req.params.investmentId;
+      const db = admin.firestore();
+      const investmentRef = db.doc(`artifacts/digital-wallet-prod/public/data/partner_investments/${investmentId}`);
+
+      const invDocCheck = await investmentRef.get();
+      if (!invDocCheck.exists) {
+        return res.status(404).json({ ok: false, error: 'NOT_FOUND', message: 'Investment not found.' });
+      }
+      const invData = invDocCheck.data();
+      if (invData.userId !== req.auth.sub && !req.auth.isAdmin) {
+        return res.status(403).json({ ok: false, error: 'FORBIDDEN', message: 'Access denied.' });
+      }
+
+      await db.runTransaction(async (tx) => {
+        const invDoc = await tx.get(investmentRef);
+        if (!invDoc.exists) throw new Error('Investment not found.');
+        const inv = invDoc.data();
+        if (inv.status !== 'active') throw new Error('Investment is not active.');
+        const nextPayout = inv.nextPayoutAt && inv.nextPayoutAt.toDate ? inv.nextPayoutAt.toDate() : (inv.nextPayoutAt ? new Date(inv.nextPayoutAt) : null);
+        if (!nextPayout || nextPayout > new Date()) throw new Error('30 days are not completed yet.');
+
+        const userRef = db.doc(`artifacts/digital-wallet-prod/public/data/users/${inv.userId}`);
+        const userDoc = await tx.get(userRef);
+        if (!userDoc.exists) throw new Error('User not found.');
+
+        const monthsPaid = inv.monthsPaid || 0;
+        const nextMonthsPaid = monthsPaid + 1;
+        const monthlyInterest = inv.monthlyInterest || Number(((inv.amount || 0) * (inv.interestRate || 0.01)).toFixed(2));
+        const isFinal = nextMonthsPaid >= (inv.months || 1);
+        const creditAmount = isFinal ? Number((monthlyInterest + (inv.amount || 0)).toFixed(2)) : monthlyInterest;
+
+        tx.update(userRef, { balance: (userDoc.data().balance || 0) + creditAmount });
+
+        const invUpdates = {
+          paidInterest: Number(((inv.paidInterest || 0) + monthlyInterest).toFixed(2)),
+          monthsPaid: nextMonthsPaid,
+          status: isFinal ? 'completed' : 'active'
+        };
+
+        if (isFinal) {
+          invUpdates.nextPayoutAt = admin.firestore.FieldValue.delete();
+          invUpdates.completedAt = admin.firestore.FieldValue.serverTimestamp();
+        } else {
+          const nextPayoutDate = new Date(nextPayout);
+          nextPayoutDate.setDate(nextPayoutDate.getDate() + 30);
+          invUpdates.nextPayoutAt = admin.firestore.Timestamp.fromDate(nextPayoutDate);
+        }
+
+        tx.update(investmentRef, invUpdates);
+
+        const txRef = userRef.collection('transactions').doc();
+        tx.set(txRef, {
+          type: 'credit',
+          amount: creditAmount,
+          comment: isFinal ? 'Partner Investment Maturity' : 'Partner Investment Interest',
+          timestamp: admin.firestore.FieldValue.serverTimestamp(),
+          transactionId: `PARTNER-${investmentId}-${nextMonthsPaid}`,
+          status: 'completed',
+          isAdminTransaction: true,
+          senderName: 'Reviews World',
+          recipientName: inv.userName || 'User',
+          recipientMobile: inv.userMobile || ''
+        });
+      });
+
+      res.json({ ok: true });
+    } catch (error) {
+      console.error('Process partner interest failed:', error);
+      res.status(500).json({ ok: false, error: 'PAYOUT_FAILED', message: error.message });
+    }
+  });
+
   app.post('/api/session/firebase', async (req, res) => {
     try {
       const idToken = String(req.body.idToken || '');
@@ -3708,6 +3909,202 @@ ${memoriesContext}`
       res.status(500).json({ ok: false, error: 'DELETE_LIST_FAILED' });
     }
   });
+
+  // Partner Investments APIs
+  app.get('/api/partner-investments', requireHttpAuth, async (req, res) => {
+    if (!req.auth.isAdmin) return res.status(403).json({ ok: false, error: 'ADMIN_REQUIRED' });
+    try {
+      const db = admin.firestore();
+      const snap = await db.collection('artifacts/rw-wallet-june-26/public/data/partner_investments')
+        .orderBy('createdAt', 'desc')
+        .get();
+      const investments = snap.docs.map(doc => {
+        const data = doc.data();
+        return {
+          id: doc.id,
+          ...data,
+          startDate: data.startDate ? data.startDate.toDate().toISOString() : null,
+          endDate: data.endDate ? data.endDate.toDate().toISOString() : null,
+          nextPayoutAt: data.nextPayoutAt ? data.nextPayoutAt.toDate().toISOString() : null,
+          createdAt: data.createdAt ? data.createdAt.toDate().toISOString() : null
+        };
+      });
+      res.json(investments);
+    } catch (error) {
+      console.error('Fetch all partner investments failed:', error);
+      res.status(500).json({ ok: false, error: 'FETCH_INVESTMENTS_FAILED', message: error.message });
+    }
+  });
+
+  app.get('/api/partner-investments/user/:userId', requireHttpAuth, async (req, res) => {
+    const { userId } = req.params;
+    if (req.auth.sub !== userId && !req.auth.isAdmin) {
+      return res.status(403).json({ ok: false, error: 'UNAUTHORIZED' });
+    }
+    try {
+      const db = admin.firestore();
+      const snap = await db.collection('artifacts/rw-wallet-june-26/public/data/partner_investments')
+        .where('userId', '==', userId)
+        .get();
+      const investments = snap.docs.map(doc => {
+        const data = doc.data();
+        return {
+          id: doc.id,
+          ...data,
+          startDate: data.startDate ? data.startDate.toDate().toISOString() : null,
+          endDate: data.endDate ? data.endDate.toDate().toISOString() : null,
+          nextPayoutAt: data.nextPayoutAt ? data.nextPayoutAt.toDate().toISOString() : null,
+          createdAt: data.createdAt ? data.createdAt.toDate().toISOString() : null
+        };
+      });
+      res.json(investments);
+    } catch (error) {
+      console.error('Fetch user partner investments failed:', error);
+      res.status(500).json({ ok: false, error: 'FETCH_USER_INVESTMENTS_FAILED', message: error.message });
+    }
+  });
+
+  app.post('/api/partner-investments', requireHttpAuth, async (req, res) => {
+    const userId = req.auth.sub;
+    const { amount, months, monthlyInterest, totalInterest, startDate, endDate } = req.body;
+    if (!amount || amount <= 0 || !months || months <= 0) {
+      return res.status(400).json({ ok: false, error: 'INVALID_PARAMETERS' });
+    }
+    const PARTNER_MIN_INVESTMENT = 100;
+    if (amount < PARTNER_MIN_INVESTMENT) {
+      return res.status(400).json({ ok: false, error: 'MINIMUM_INVESTMENT_REQUIRED' });
+    }
+
+    try {
+      const db = admin.firestore();
+      const userRef = db.doc(`artifacts/rw-wallet-june-26/public/data/users/${userId}`);
+      const investmentRef = db.collection('artifacts/rw-wallet-june-26/public/data/partner_investments').doc();
+      const invoiceId = `INV-${investmentRef.id.slice(0, 8).toUpperCase()}`;
+
+      let result = await db.runTransaction(async (tx) => {
+        const userDoc = await tx.get(userRef);
+        if (!userDoc.exists) throw new Error('User account not found.');
+        const userData = userDoc.data();
+        const balance = userData.balance || 0;
+
+        // Spendable balance check
+        const locked = userData.loanLockedAmount || 0;
+        const pro = userData.isProProfile ? (userData.proLockAmount || 0) : 0;
+        const spendable = balance - locked - pro;
+
+        if (spendable < amount) {
+          throw new Error('Insufficient wallet balance.');
+        }
+
+        // 1. Deduct user balance
+        tx.update(userRef, { balance: balance - amount });
+
+        // 2. Create investment document
+        tx.set(investmentRef, {
+          userId,
+          userName: userData.name || 'User',
+          userEmail: userData.email || '',
+          userMobile: userData.mobile || '',
+          amount,
+          months,
+          interestRate: 0.01,
+          monthlyInterest,
+          totalInterest,
+          paidInterest: 0,
+          monthsPaid: 0,
+          startDate: admin.firestore.Timestamp.fromDate(new Date(startDate)),
+          endDate: admin.firestore.Timestamp.fromDate(new Date(endDate)),
+          nextPayoutAt: admin.firestore.Timestamp.fromDate(new Date(new Date(startDate).getTime() + 30 * 24 * 60 * 60 * 1000)),
+          status: 'active',
+          invoiceId,
+          createdAt: admin.firestore.FieldValue.serverTimestamp()
+        });
+
+        // 3. Log transaction
+        const txRef = userRef.collection('transactions').doc();
+        tx.set(txRef, {
+          type: 'debit',
+          amount,
+          comment: 'Partner Investment Started',
+          timestamp: admin.firestore.FieldValue.serverTimestamp(),
+          transactionId: investmentRef.id,
+          status: 'completed',
+          recipientName: 'Reviews World Partner Plan',
+          recipientMobile: ''
+        });
+
+        return { investmentId: investmentRef.id, invoiceId };
+      });
+
+      res.json({ ok: true, ...result });
+    } catch (error) {
+      console.error('Create partner investment transaction failed:', error);
+      res.status(500).json({ ok: false, error: 'TRANSACTION_FAILED', message: error.message });
+    }
+  });
+
+  app.post('/api/partner-investments/:investmentId/interest', requireHttpAuth, async (req, res) => {
+    const { investmentId } = req.params;
+    try {
+      const db = admin.firestore();
+      const investmentRef = db.doc(`artifacts/rw-wallet-june-26/public/data/partner_investments/${investmentId}`);
+
+      await db.runTransaction(async (tx) => {
+        const invDoc = await tx.get(investmentRef);
+        if (!invDoc.exists) throw new Error('Investment not found.');
+        const inv = invDoc.data();
+        if (inv.status !== 'active') throw new Error('Investment is not active.');
+        
+        // Authorization check: User can process their own, or admin
+        if (req.auth.sub !== inv.userId && !req.auth.isAdmin) {
+          throw new Error('Unauthorized');
+        }
+
+        const nextPayout = inv.nextPayoutAt ? inv.nextPayoutAt.toDate() : null;
+        if (!nextPayout || nextPayout > new Date()) throw new Error('30 days are not completed yet.');
+
+        const userRef = db.doc(`artifacts/rw-wallet-june-26/public/data/users/${inv.userId}`);
+        const userDoc = await tx.get(userRef);
+        if (!userDoc.exists) throw new Error('User not found.');
+
+        const monthsPaid = inv.monthsPaid || 0;
+        const nextMonthsPaid = monthsPaid + 1;
+        const monthlyInterest = inv.monthlyInterest || Number(((inv.amount || 0) * 0.01).toFixed(2));
+        const isFinal = nextMonthsPaid >= (inv.months || 1);
+        const creditAmount = isFinal ? Number((monthlyInterest + (inv.amount || 0)).toFixed(2)) : monthlyInterest;
+
+        tx.update(userRef, { balance: (userDoc.data().balance || 0) + creditAmount });
+        
+        const nextPayoutAtDate = new Date(nextPayout.getTime() + 30 * 24 * 60 * 60 * 1000);
+        tx.update(investmentRef, {
+          paidInterest: Number(((inv.paidInterest || 0) + monthlyInterest).toFixed(2)),
+          monthsPaid: nextMonthsPaid,
+          nextPayoutAt: isFinal ? admin.firestore.FieldValue.delete() : admin.firestore.Timestamp.fromDate(nextPayoutAtDate),
+          status: isFinal ? 'completed' : 'active',
+          completedAt: isFinal ? admin.firestore.FieldValue.serverTimestamp() : (inv.completedAt || null)
+        });
+
+        const txRef = userRef.collection('transactions').doc();
+        tx.set(txRef, {
+          type: 'credit',
+          amount: creditAmount,
+          comment: isFinal ? 'Partner Investment Maturity' : 'Partner Investment Interest',
+          timestamp: admin.firestore.FieldValue.serverTimestamp(),
+          transactionId: `PARTNER-${investmentId}-${nextMonthsPaid}`,
+          status: 'completed',
+          isAdminTransaction: true,
+          senderName: 'Reviews World',
+          recipientName: inv.userName || 'User',
+          recipientMobile: inv.userMobile || ''
+        });
+      });
+
+      res.json({ ok: true });
+    } catch (error) {
+      console.error('Process partner interest failed:', error);
+      res.status(500).json({ ok: false, error: 'INTEREST_PROCESS_FAILED', message: error.message });
+    }
+  });
 }
 
 function requireHttpAuth(req, res, next) {
@@ -3902,10 +4299,14 @@ async function createCloudflareWalletService() {
   const d1 = new D1Client();
   const r2 = createR2Client();
 
-  await initSchema(d1);
-  cleanupExpiredReadChats(d1).catch((error) => console.error('Initial chat cleanup failed:', error));
-  cleanupExpiredNotifications(d1).catch((error) => console.error('Initial notification cleanup failed:', error));
-  cleanupExpiredReservations(d1).catch((error) => console.error('Initial reservation cleanup failed:', error));
+  try {
+    await initSchema(d1);
+  } catch (error) {
+    console.warn('Cloudflare D1 schema initialization failed (expected if local D1 is not configured):', error.message);
+  }
+  cleanupExpiredReadChats(d1).catch((error) => console.warn('Initial chat cleanup skipped:', error.message));
+  cleanupExpiredNotifications(d1).catch((error) => console.warn('Initial notification cleanup skipped:', error.message));
+  cleanupExpiredReservations(d1).catch((error) => console.warn('Initial reservation cleanup skipped:', error.message));
   const cleanupTimer = setInterval(() => {
     cleanupExpiredReadChats(d1).catch((error) => console.error('Scheduled chat cleanup failed:', error));
     cleanupExpiredNotifications(d1).catch((error) => console.error('Scheduled notification cleanup failed:', error));
@@ -3930,7 +4331,7 @@ async function createCloudflareWalletService() {
   };
   scheduleAutoPayoutAt8PM();
 
-  processDailyLists(d1).catch((error) => console.error('Initial daily list compilation failed:', error));
+  processDailyLists(d1).catch((error) => console.warn('Initial daily list compilation skipped:', error.message));
   const dailyListTimer = setInterval(() => {
     processDailyLists(d1).catch((error) => console.error('Scheduled daily list compilation failed:', error));
   }, 15 * 60 * 1000);
