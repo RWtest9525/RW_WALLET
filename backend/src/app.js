@@ -39,6 +39,7 @@ async function createApp(io, { startedAt = new Date().toISOString() } = {}) {
 
   const projectRoot = path.join(__dirname, '..', '..');
   app.use(express.static(projectRoot));
+  app.use('/.well-known', express.static(path.join(projectRoot, 'public', '.well-known')));
 
   app.get('/', (req, res) => {
     res.sendFile(path.join(projectRoot, 'index.html'));
