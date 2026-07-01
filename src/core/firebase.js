@@ -47,6 +47,14 @@ const initFirebaseApp = () => {
                 currentUser = user;
                 localStorage.setItem('lastLoggedInUser', user.uid);
                 
+                // OneSignal user identification
+                if (window.OneSignalManager) {
+                    window.OneSignalManager.login(user.uid);
+                    if (user.email) {
+                        window.OneSignalManager.setEmail(user.email);
+                    }
+                }
+                
                 // Set persistence
                 setPersistence(auth, browserLocalPersistence).catch(e => console.warn("Persistence set failed:", e));
                 
@@ -109,6 +117,12 @@ const initFirebaseApp = () => {
                 currentUser = null;
                 currentUserData = null;
                 localStorage.removeItem('lastLoggedInUser');
+                
+                // OneSignal logout
+                if (window.OneSignalManager) {
+                    window.OneSignalManager.logout();
+                }
+                
                 if (typeof handleSignOut === 'function') handleSignOut();
             }
         });

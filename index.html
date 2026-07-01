@@ -24,12 +24,15 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="/src/styles/tailwind.generated.css">
     <link rel="stylesheet" href="/src/styles/app.css">
+    <!-- OneSignal Web Push SDK -->
+    <script src="https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.page.js" defer></script>
 </head>
 
 <body class="bg-gray-100 dark:bg-gray-900 text-gray-800 dark:text-gray-200 font-sans">
     <div id="rw-wallet-root"></div>
 
     <!-- <script src="/puter.js"></script> -->
+    <script type="module" src="/src/core/onesignal.js"></script>
     <script type="module" src="/src/shell.js"></script>
     <script type="module" src="/src/app.js"></script>
     <script type="module" src="/src/main.js"></script>
