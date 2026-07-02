@@ -294,7 +294,10 @@ const showAdminTaskPage = () => {
                         const configRef = doc(db, `artifacts/${appId}/settings`, 'app_config');
                         await setDoc(configRef, { task_page_enabled: nextVal }, { merge: true });
                         showNotification(`User task page is now ${nextVal ? 'ON (Real tasks shown)' : 'OFF (Coming Soon shown)'}`);
-                        appConfigCache.task_page_enabled = nextVal;
+                        appConfigCache = { ...appConfigCache, task_page_enabled: nextVal };
+                        if (typeof rememberAppConfig === 'function') {
+                            rememberAppConfig(appConfigCache);
+                        }
                         showAdminTaskPage();
                     } catch (error) {
                         console.error('Failed to toggle task page status:', error);
