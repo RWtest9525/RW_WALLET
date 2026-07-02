@@ -26,8 +26,8 @@ root.outerHTML = String.raw`
                             onload="this.classList.remove('hidden'); this.classList.add('loaded'); document.getElementById('auth-logo-fallback')?.classList.add('hidden');"
                             onerror="this.classList.add('hidden'); document.getElementById('auth-logo-fallback')?.classList.remove('hidden');">
                         <div>
-                            <h2 class="text-2xl font-bold">Digital Wallet</h2>
-                            <p class="text-xs text-gray-500 dark:text-gray-400">REVIEWS WORLD</p>
+                            <h2 class="text-2xl font-bold">Reviews World</h2>
+                            <p class="text-xs text-gray-500 dark:text-gray-400">Official Companion App</p>
                         </div>
                     </div>
                     <h3 id="auth-title" class="text-xl font-bold text-center mb-2">Login to your Wallet</h3>
@@ -127,8 +127,8 @@ root.outerHTML = String.raw`
                         onload="this.classList.remove('hidden'); this.classList.add('loaded'); document.getElementById('header-logo-fallback')?.classList.add('hidden');"
                         onerror="this.classList.add('hidden'); document.getElementById('header-logo-fallback')?.classList.remove('hidden');">
                     <div>
-                        <h1 class="text-xl font-bold">Digital Wallet</h1>
-                        <p class="text-xs text-gray-500 dark:text-gray-400 mt-0.5">REVIEWS WORLD</p>
+                        <h1 class="text-xl font-bold">Reviews World</h1>
+                        <p class="text-xs text-gray-500 dark:text-gray-400 mt-0.5">Official Companion App</p>
                     </div>
                 </div>
                 <button id="notification-header-btn" class="relative h-12 w-12 rounded-2xl bg-blue-50 dark:bg-blue-900/30 border border-blue-100 dark:border-blue-800 p-2 shadow-sm hover:scale-105 transition" title="Notifications">
@@ -271,14 +271,6 @@ root.outerHTML = String.raw`
                                         <img src="https://cdn-icons-png.flaticon.com/512/4108/4108841.png" alt="Mobile recharge" class="w-full h-full object-contain">
                                     </span>
                                     <span class="text-xs sm:text-sm leading-tight">Mobile Recharge</span>
-                                </button>
-                                <button id="loan-btn"
-                                    class="relative group w-full min-h-28 flex flex-col items-center justify-between gap-2 bg-indigo-50 dark:bg-indigo-900/20 text-indigo-700 dark:text-indigo-200 font-semibold p-3 rounded-xl hover:bg-indigo-100 dark:hover:bg-indigo-900/30 transition border border-indigo-200 dark:border-indigo-800 text-center">
-                                    <span class="absolute right-1.5 top-1.5 rounded-full bg-red-600 px-1.5 py-0.5 text-[9px] font-bold text-white shadow-sm">2% intrest</span>
-                                    <span class="w-12 h-12 rounded-xl bg-indigo-500 flex items-center justify-center shadow-sm p-2">
-                                        <img src="https://cdn-icons-png.flaticon.com/512/9197/9197103.png" alt="Take Loan" class="w-full h-full object-contain">
-                                    </span>
-                                    <span class="text-xs sm:text-sm leading-tight">Take Loan</span>
                                 </button>
                                 <button id="partner-btn"
                                     class="relative group w-full min-h-28 flex flex-col items-center justify-between gap-2 bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-200 font-semibold p-3 rounded-xl hover:bg-emerald-100 dark:hover:bg-emerald-900/30 transition border border-emerald-200 dark:border-emerald-800 text-center">

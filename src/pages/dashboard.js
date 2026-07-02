@@ -1280,40 +1280,7 @@ const showUserTaskPage = () => {
             const isTaskPageEnabled = !!appConfigCache?.task_page_enabled;
             let taskCategories = [];
 
-            if (!isTaskPageEnabled) {
-                taskCategories = [
-                    {
-                        label: 'App Review',
-                        accent: 'task-accent-blue',
-                        logo: PLAY_STORE_LOGO_URL,
-                        items: [
-                            { title: 'App Review', reward: 'Rs 8' },
-                            { title: 'App Review', reward: 'Rs 10' },
-                            { title: 'App Review', reward: 'Rs 12' }
-                        ]
-                    },
-                    {
-                        label: 'Map Review',
-                        accent: 'task-accent-emerald',
-                        logo: 'https://cdn-icons-png.flaticon.com/512/854/854878.png',
-                        items: [
-                            { title: 'Map Review', reward: 'Rs 15' },
-                            { title: 'Map Review', reward: 'Rs 20' },
-                            { title: 'Map Review', reward: 'Rs 10' }
-                        ]
-                    },
-                    {
-                        label: 'Social Media Task',
-                        accent: 'task-accent-rose',
-                        logo: 'https://cdn-icons-png.flaticon.com/512/4187/4187336.png',
-                        items: [
-                            { title: 'Social Task', reward: 'Rs 5' },
-                            { title: 'Social Task', reward: 'Rs 8' },
-                            { title: 'Social Task', reward: 'Rs 7' }
-                        ]
-                    }
-                ];
-            } else {
+            if (isTaskPageEnabled) {
                 const appReviewItems = [];
                 const mapReviewItems = [];
                 const socialTaskItems = [];
@@ -1397,7 +1364,16 @@ const showUserTaskPage = () => {
                 </section>`;
 
             let bodyContent = '';
-            if (isTaskPageEnabled && taskCategories.length === 0) {
+            if (!isTaskPageEnabled) {
+                bodyContent = `
+                    <div class="rounded-3xl border border-dashed border-gray-200 dark:border-gray-700 p-8 text-center bg-white dark:bg-gray-800 shadow-sm">
+                        <div class="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-indigo-50 dark:bg-indigo-900/20 mb-4">
+                            <img src="https://cdn-icons-png.flaticon.com/512/3176/3176366.png" alt="Coming soon" class="h-8 w-8 object-contain">
+                        </div>
+                        <h3 class="text-lg font-black text-gray-900 dark:text-white">Missions Coming Soon</h3>
+                        <p class="mt-2 text-sm text-gray-500 dark:text-gray-400">New activities and updates are coming soon. Keep the app updated for future releases.</p>
+                    </div>`;
+            } else if (taskCategories.length === 0) {
                 bodyContent = `
                     <div class="rounded-3xl border border-dashed border-gray-200 dark:border-gray-700 p-8 text-center bg-white dark:bg-gray-800 shadow-sm">
                         <div class="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-cyan-50 dark:bg-cyan-900/20 mb-4">

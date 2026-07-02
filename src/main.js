@@ -598,7 +598,8 @@ document.getElementById('pay-to-wallet-btn').addEventListener('click', () => ope
 
 document.getElementById('mobile-recharge-btn').addEventListener('click', () => openUserQuickAction(showMobileRechargePage));
 
-document.getElementById('loan-btn').addEventListener('click', openLoanQuickAction);
+const loanBtn = document.getElementById('loan-btn');
+if (loanBtn) loanBtn.addEventListener('click', openLoanQuickAction);
 
 document.getElementById('partner-btn').addEventListener('click', () => openUserQuickAction(showPartnerPage));
 
