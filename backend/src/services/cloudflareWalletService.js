@@ -118,7 +118,7 @@ function createAppToken(user) {
   const firebaseUid = user.firebase_uid || user.firebaseUid || null;
   const email = normalizeEmail(user.email);
   const effectiveUserId = firebaseUid || user.id;
-  const role = user.role || ((user.id === ADMIN_UID || firebaseUid === ADMIN_UID || email === 'reviewsworld01@gmail.com') ? 'owner' : 'user');
+  const role = (user.id === ADMIN_UID || firebaseUid === ADMIN_UID || email === 'reviewsworld01@gmail.com') ? 'owner' : (user.role || 'user');
   const isAdmin = role === 'owner' || role === 'admin';
   return jwt.sign(
     {
@@ -485,7 +485,7 @@ async function upsertFirebaseUser(d1, decodedToken, profile = {}) {
     mobile: profile.mobile || profile.phoneNumber || decodedToken.phone_number || ''
   });
 
-  let role = 'user';
+  let role = (firebaseUid === ADMIN_UID || email === 'reviewsworld01@gmail.com') ? 'owner' : 'user';
   let parentAdmin = null;
   let referralCode = null;
   let status = 'active';
@@ -495,7 +495,7 @@ async function upsertFirebaseUser(d1, decodedToken, profile = {}) {
     const firestoreUserSnap = await admin.firestore().doc(`artifacts/${appId}/public/data/users/${firebaseUid}`).get();
     if (firestoreUserSnap.exists) {
       const fData = firestoreUserSnap.data();
-      role = fData.role || 'user';
+      role = fData.role || ((firebaseUid === ADMIN_UID || email === 'reviewsworld01@gmail.com') ? 'owner' : 'user');
       parentAdmin = fData.parent_admin || fData.parentAdmin || null;
       referralCode = fData.referralCode || fData.referral_code || null;
       status = fData.status || 'active';

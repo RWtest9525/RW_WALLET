@@ -296,7 +296,7 @@ const prefetchTransactionHistory = (userId = currentUser?.uid, { force = false }
                     })
                 ]);
                 const activeHistoryCache = currentUser?.uid === userId ? unifiedHistoryCache : readHistoryItemsFromCache(userId);
-                const cachedPending = (activeHistoryCache || []).filter(item => String(item.key || '').startsWith('req-') || item.status === 'pending');
+                const cachedPending = (activeHistoryCache || []).filter(item => String(item.status || '').toLowerCase() === 'pending');
                 const pendingHistoryItems = pendingWithdrawals.map(normalizePendingRequestForHistory);
                 const mergedUserHistory = mergeTransactionsByKey(firebaseTransactions, cloudTransactions, cachedPending, pendingHistoryItems);
                 writeHistoryItemsToCache(userId, mergedUserHistory);
@@ -2461,7 +2461,8 @@ const getLatestTransactionsForBot = async (limit = 5) => {
 
             try {
                 const mergedHistory = await prefetchTransactionHistory(currentUser.uid, { force: !cachedHistory.length });
-                const combinedHistory = mergeTransactionsByKey(mergedHistory || [], cachedHistory);
+                const pendingCached = cachedHistory.filter(item => String(item.status || '').toLowerCase() === 'pending');
+                const combinedHistory = mergeTransactionsByKey(mergedHistory || [], pendingCached);
                 return combinedHistory.slice(0, limit);
             } catch (error) {
                 console.warn('Bot merged transaction lookup failed:', error);
