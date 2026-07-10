@@ -114,12 +114,59 @@ const getAdminTaskIconButtonMini = (action, taskId, title, svgPath, tone = 'slat
         };
 
 const setAdminTaskPanel = (panel = 'manage') => {
-            const normalized = panel === 'add' ? 'add' : 'manage';
+            const validPanels = ['manage', 'add', 'ads', 'submissions'];
+            const normalized = validPanels.includes(panel) ? panel : 'manage';
             window.adminTaskPanel = normalized;
             const addSection = document.getElementById('admin-task-add-section');
             const manageSection = document.getElementById('admin-task-manage-section');
+            const adsSection = document.getElementById('admin-ads-section');
+            const subsSection = document.getElementById('admin-submissions-section');
             if (addSection) addSection.classList.toggle('hidden', normalized !== 'add');
             if (manageSection) manageSection.classList.toggle('hidden', normalized !== 'manage');
+            if (adsSection) adsSection.classList.toggle('hidden', normalized !== 'ads');
+            if (subsSection) subsSection.classList.toggle('hidden', normalized !== 'submissions');
+
+            // Lazy-load ads when tab is first opened
+            if (normalized === 'ads' && !window._adsTabInitialized) {
+                window._adsTabInitialized = true;
+                document.getElementById('admin-ad-form')?.addEventListener('submit', handleSaveAdminAd);
+                document.getElementById('admin-ad-reset-btn')?.addEventListener('click', resetAdminAdForm);
+                if (typeof renderAdminAdsList === 'function') renderAdminAdsList();
+                getDocs(query(collection(db, `artifacts/${appId}/public/data/ads`), orderBy("createdAt", "desc")))
+                    .then(snapshot => { if (typeof applyAdsSnapshot === 'function') applyAdsSnapshot(snapshot.docs); })
+                    .catch(error => console.warn('Ads refresh skipped:', error));
+            }
+
+            // Lazy-load submissions when tab is first opened
+            if (normalized === 'submissions' && !window._subsTabInitialized) {
+                window._subsTabInitialized = true;
+                adminSubmissionsView = { view: 'dates', selectedDate: null, selectedApp: null };
+                const container = document.getElementById('admin-submissions-content');
+                if (container) {
+                    container.innerHTML = `
+                        <section class="rounded-2xl border border-gray-150 dark:border-gray-800 bg-white dark:bg-gray-800 p-4 shadow-sm space-y-3">
+                            <div class="flex flex-wrap items-center gap-2">
+                                <input id="admin-sub-search" type="text" placeholder="Search user or task..." class="flex-1 min-w-[140px] rounded-xl bg-gray-100 dark:bg-gray-700 px-3 py-2 text-sm font-semibold outline-none focus:ring-2 focus:ring-orange-500">
+                                <select id="admin-sub-filter" class="rounded-xl bg-gray-100 dark:bg-gray-700 px-3 py-2 text-sm font-semibold">
+                                    <option value="all">All</option>
+                                    <option value="pending" selected>Pending</option>
+                                    <option value="approved">Approved</option>
+                                    <option value="rejected">Rejected</option>
+                                    <option value="paid">Paid</option>
+                                </select>
+                                <button id="admin-sub-refresh-btn" class="rounded-xl bg-orange-600 px-4 py-2 text-sm font-bold text-white hover:bg-orange-700 transition">Refresh</button>
+                            </div>
+                            <div id="admin-sub-list" class="space-y-3">
+                                <div class="py-8 text-center text-sm text-gray-400">Loading submissions...</div>
+                            </div>
+                        </section>`;
+                    loadAdminSubmissions();
+                    document.getElementById('admin-sub-refresh-btn')?.addEventListener('click', loadAdminSubmissions);
+                    document.getElementById('admin-sub-search')?.addEventListener('input', renderAdminSubmissions);
+                    document.getElementById('admin-sub-filter')?.addEventListener('change', renderAdminSubmissions);
+                }
+            }
+
             document.querySelectorAll('[data-admin-task-panel]').forEach(button => {
                 const isActive = button.dataset.adminTaskPanel === normalized;
                 button.classList.toggle('bg-cyan-600', isActive);
@@ -173,9 +220,11 @@ const showAdminTaskPage = () => {
                         </div>
                     </section>
 
-                    <div class="grid grid-cols-2 gap-2 rounded-2xl border border-gray-100 bg-white p-2 shadow-sm dark:border-gray-700 dark:bg-gray-900">
-                        <button type="button" data-admin-task-panel="manage" class="rounded-xl px-3 py-3 text-sm font-black transition">Managing Tasks</button>
-                        <button type="button" data-admin-task-panel="add" class="rounded-xl px-3 py-3 text-sm font-black transition">Add New Task</button>
+                    <div class="grid grid-cols-4 gap-1.5 rounded-2xl border border-gray-100 bg-white p-1.5 shadow-sm dark:border-gray-700 dark:bg-gray-900">
+                        <button type="button" data-admin-task-panel="manage" class="rounded-xl px-2 py-2.5 text-xs font-black transition">Tasks</button>
+                        <button type="button" data-admin-task-panel="add" class="rounded-xl px-2 py-2.5 text-xs font-black transition">Add Task</button>
+                        <button type="button" data-admin-task-panel="ads" class="rounded-xl px-2 py-2.5 text-xs font-black transition">Ads</button>
+                        <button type="button" data-admin-task-panel="submissions" class="rounded-xl px-2 py-2.5 text-xs font-black transition">Submissions</button>
                     </div>
 
                     <section id="admin-task-add-section" class="hidden bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 p-4 sm:p-5">
@@ -280,11 +329,76 @@ const showAdminTaskPage = () => {
                         </div>
                         <div id="admin-task-list" class="grid grid-cols-1 md:grid-cols-2 gap-3 max-h-[72vh] overflow-y-auto pr-1"></div>
                     </section>
+
+                    <section id="admin-ads-section" class="hidden space-y-4">
+                        <div class="rounded-2xl border border-gray-100 dark:border-gray-700 bg-white dark:bg-gray-800 p-4 sm:p-5 shadow-sm">
+                            <div class="mb-4 flex items-center justify-between gap-3">
+                                <div>
+                                    <h3 class="text-lg font-black">Add Advertisement</h3>
+                                    <p class="text-xs text-gray-500 dark:text-gray-400">Paste image link or YouTube link. Users see it instantly in the home carousel.</p>
+                                </div>
+                                <span class="flex h-10 w-10 items-center justify-center rounded-full bg-fuchsia-50 text-2xl font-black text-fuchsia-600 dark:bg-fuchsia-900/30 dark:text-fuchsia-200">+</span>
+                            </div>
+                            <form id="admin-ad-form" class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                <input type="hidden" id="admin-ad-edit-id" value="">
+                                <div>
+                                    <label class="text-xs font-black uppercase text-gray-400">Ad Title</label>
+                                    <input id="admin-ad-title" placeholder="Ad title" class="mt-1 w-full rounded-xl bg-gray-100 dark:bg-gray-700 px-4 py-3 focus:outline-none focus:ring-2 focus:ring-fuchsia-500">
+                                </div>
+                                <div>
+                                    <label class="text-xs font-black uppercase text-gray-400">Type</label>
+                                    <select id="admin-ad-type" class="mt-1 w-full rounded-xl bg-gray-100 dark:bg-gray-700 px-4 py-3 focus:outline-none focus:ring-2 focus:ring-fuchsia-500">
+                                        <option value="auto">Auto detect</option>
+                                        <option value="image">Image / Banner</option>
+                                        <option value="youtube">YouTube Video</option>
+                                    </select>
+                                </div>
+                                <div class="sm:col-span-2">
+                                    <label class="text-xs font-black uppercase text-gray-400">Image / YouTube Link</label>
+                                    <input id="admin-ad-media-url" placeholder="https://..." class="mt-1 w-full rounded-xl bg-gray-100 dark:bg-gray-700 px-4 py-3 focus:outline-none focus:ring-2 focus:ring-fuchsia-500">
+                                </div>
+                                <div class="sm:col-span-2">
+                                    <label class="text-xs font-black uppercase text-gray-400">Subtitle</label>
+                                    <input id="admin-ad-subtitle" placeholder="Small text shown on ad" class="mt-1 w-full rounded-xl bg-gray-100 dark:bg-gray-700 px-4 py-3 focus:outline-none focus:ring-2 focus:ring-fuchsia-500">
+                                </div>
+                                <div>
+                                    <label class="text-xs font-black uppercase text-gray-400">Order</label>
+                                    <input id="admin-ad-order" type="number" min="0" step="1" value="0" class="mt-1 w-full rounded-xl bg-gray-100 dark:bg-gray-700 px-4 py-3 focus:outline-none focus:ring-2 focus:ring-fuchsia-500">
+                                </div>
+                                <div>
+                                    <label class="text-xs font-black uppercase text-gray-400">Status</label>
+                                    <select id="admin-ad-status" class="mt-1 w-full rounded-xl bg-gray-100 dark:bg-gray-700 px-4 py-3 focus:outline-none focus:ring-2 focus:ring-fuchsia-500">
+                                        <option value="active">Active</option>
+                                        <option value="paused">Paused</option>
+                                    </select>
+                                </div>
+                                <div class="sm:col-span-2 flex flex-col sm:flex-row gap-2">
+                                    <button id="admin-ad-save-btn" type="submit" class="flex-1 rounded-xl bg-fuchsia-600 px-4 py-3 text-sm font-black text-white hover:bg-fuchsia-700 transition">Add Ad</button>
+                                    <button id="admin-ad-reset-btn" type="button" class="rounded-xl bg-gray-100 dark:bg-gray-700 px-4 py-3 text-sm font-black text-gray-700 dark:text-gray-200">Clear</button>
+                                </div>
+                            </form>
+                        </div>
+                        <div class="rounded-2xl border border-gray-100 dark:border-gray-700 bg-white dark:bg-gray-800 p-4 sm:p-5 shadow-sm">
+                            <div class="mb-4 flex items-center justify-between">
+                                <h3 class="text-lg font-black">Active Ads</h3>
+                                <span id="admin-ads-count" class="text-xs font-bold text-gray-400">0 ads</span>
+                            </div>
+                            <div id="admin-ads-list" class="space-y-3"></div>
+                        </div>
+                    </section>
+
+                    <section id="admin-submissions-section" class="hidden">
+                        <div id="admin-submissions-content" class="space-y-4">
+                            <p class="text-center text-sm text-gray-400 py-8">Loading submissions...</p>
+                        </div>
+                    </section>
                 </div>
                 </div>
                 ${getPageFooter()}`;
             showPage(content, { returnTo: 'admin', keepBottomNav: true });
             setBottomNavActive('bottom-admin-btn');
+            window._adsTabInitialized = false;
+            window._subsTabInitialized = false;
             document.querySelectorAll('[data-admin-task-panel]').forEach(button => {
                 button.addEventListener('click', () => setAdminTaskPanel(button.dataset.adminTaskPanel));
             });

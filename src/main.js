@@ -574,12 +574,6 @@ document.getElementById('admin-chats-btn').addEventListener('click', () => openA
 
 document.getElementById('admin-tasks-btn').addEventListener('click', () => openAdminQuickAction(showAdminTaskPage));
 
-document.getElementById('admin-ads-btn')?.addEventListener('click', () => openAdminQuickAction(showAdminAdsPage));
-
-document.getElementById('admin-submissions-btn')?.addEventListener('click', () => openAdminQuickAction(showAdminTaskSubmissionsPage));
-
-document.getElementById('admin-audit-btn')?.addEventListener('click', () => openAdminQuickAction(showAdminAuditPage));
-
 document.getElementById('withdraw-fund-btn').addEventListener('click', () => openUserQuickAction(showWithdrawPage));
 
 document.getElementById('redeem-gift-card-btn').addEventListener('click', () => {
