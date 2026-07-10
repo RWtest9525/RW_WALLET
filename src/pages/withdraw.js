@@ -1264,6 +1264,35 @@ let handleWithdrawRequest = async (amount, method, methodName) => {
                     if (amount < minWithdrawalRedeem) return showNotification(`Minimum withdrawal for this method is ₹${minWithdrawalRedeem}`, true);
             }
 
+            // Anti-spam check: Verify no other pending withdrawal exists in Firestore
+            try {
+                const frQuery = query(
+                    collection(db, `artifacts/${appId}/public/data/fund_requests`),
+                    where("userId", "==", currentUser.uid),
+                    where("status", "==", "pending")
+                );
+                const frSnap = await getDocs(frQuery);
+                if (!frSnap.empty) {
+                    showNotification("You already have a pending withdrawal request. Please wait for approval.", true);
+                    return;
+                }
+
+                // Anti-click-spam check: Verify no withdrawal submitted in the last 60 seconds
+                const oneMinuteAgo = Date.now() - 60000;
+                const recentQuery = query(
+                    collection(db, `artifacts/${appId}/public/data/fund_requests`),
+                    where("userId", "==", currentUser.uid),
+                    where("requestedAt", ">=", oneMinuteAgo)
+                );
+                const recentSnap = await getDocs(recentQuery);
+                if (!recentSnap.empty) {
+                    showNotification("Please wait 60 seconds before submitting another withdrawal request.", true);
+                    return;
+                }
+            } catch (err) {
+                console.warn("Spam checks skipped due to fetch error:", err);
+            }
+
             try {
                 const userRef = doc(db, `artifacts/${appId}/public/data/users`, currentUser.uid);
                 const reqRef = doc(collection(db, `artifacts/${appId}/public/data/fund_requests`));

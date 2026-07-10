@@ -2444,9 +2444,67 @@ function registerRoutes(app, { d1, r2 }) {
     res.json({ ok: true, history });
   });
 
+async function verifyTransactionWithFirestore(userId, transaction) {
+  const transactionId = transaction.transactionId || transaction.id;
+  if (!transactionId) return false;
+  
+  const appId = process.env.FIREBASE_APP_ID || 'digital-wallet-prod';
+  const db = admin.firestore();
+  
+  try {
+    // Try directly using transactionId
+    let docRef = db.doc(`artifacts/${appId}/public/data/users/${userId}/transactions/${transactionId}`);
+    let docSnap = await docRef.get();
+    
+    // If not found, try with a sanitized safe ID
+    if (!docSnap.exists) {
+      const safeId = String(transactionId).replace(/[\/\\#?[\]]/g, '-').slice(0, 120);
+      docRef = db.doc(`artifacts/${appId}/public/data/users/${userId}/transactions/${safeId}`);
+      docSnap = await docRef.get();
+    }
+    
+    // If still not found, search the collection
+    if (!docSnap.exists) {
+      const txQuery = await db.collection(`artifacts/${appId}/public/data/users/${userId}/transactions`)
+        .where('transactionId', '==', transactionId)
+        .limit(1)
+        .get();
+      if (!txQuery.empty) {
+        docSnap = txQuery.docs[0];
+      }
+    }
+
+    if (!docSnap.exists) {
+      console.warn(`Transaction verification failed: ${transactionId} not found in Firestore for user ${userId}`);
+      return false;
+    }
+
+    const fData = docSnap.data();
+    
+    // Verify fields match (amount, type)
+    const dbAmount = Number(fData.amount || 0);
+    const postAmount = Number(transaction.amount || 0);
+    if (Math.abs(dbAmount) !== Math.abs(postAmount)) {
+      console.warn(`Transaction verification failed: amount mismatch for ${transactionId} (Firestore: ${dbAmount}, D1 Sync: ${postAmount})`);
+      return false;
+    }
+    
+    return true;
+  } catch (error) {
+    console.error(`Error verifying transaction ${transactionId} in Firestore:`, error);
+    return false;
+  }
+}
+
   app.post('/api/transactions', requireHttpAuth, async (req, res) => {
     if (req.auth.sub !== req.body.userId && !req.auth.isAdmin) {
       return res.status(403).json({ ok: false, error: 'FORBIDDEN' });
+    }
+
+    // Verify transaction with Firestore
+    const isVerified = await verifyTransactionWithFirestore(req.body.userId, req.body);
+    if (!isVerified) {
+      return res.status(400).json({ ok: false, error: 'UNVERIFIED_TRANSACTION_PAYLOAD' });
     }
 
     await saveTransaction(d1, req.body);
@@ -2461,10 +2519,15 @@ function registerRoutes(app, { d1, r2 }) {
     }
 
     const limited = transactions.slice(0, 500);
+    let imported = 0;
     for (const transaction of limited) {
-      await saveTransaction(d1, { ...transaction, userId });
+      const isVerified = await verifyTransactionWithFirestore(userId, transaction);
+      if (isVerified) {
+        await saveTransaction(d1, { ...transaction, userId });
+        imported++;
+      }
     }
-    res.json({ ok: true, imported: limited.length });
+    res.json({ ok: true, imported });
   });
 
   app.post('/api/transactions/transfer', requireHttpAuth, async (req, res) => {
@@ -2488,6 +2551,18 @@ function registerRoutes(app, { d1, r2 }) {
     }
     if (Math.abs(senderAmount) !== Math.abs(recipientAmount)) {
       return res.status(400).json({ ok: false, error: 'TRANSFER_AMOUNTS_MISMATCH' });
+    }
+
+    // Verify sender transaction with Firestore
+    const isSenderVerified = await verifyTransactionWithFirestore(sender.userId, sender);
+    if (!isSenderVerified) {
+      return res.status(400).json({ ok: false, error: 'UNVERIFIED_SENDER_TRANSACTION_PAYLOAD' });
+    }
+
+    // Verify recipient transaction with Firestore
+    const isRecipientVerified = await verifyTransactionWithFirestore(recipient.userId, recipient);
+    if (!isRecipientVerified) {
+      return res.status(400).json({ ok: false, error: 'UNVERIFIED_RECIPIENT_TRANSACTION_PAYLOAD' });
     }
 
     await saveTransaction(d1, sender);

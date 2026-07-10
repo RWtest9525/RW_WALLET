@@ -2614,6 +2614,19 @@ const handlePayToWallet = async (recipientData, amount, comment) => {
             if (!preventDuplicateRequest('pay-to-wallet')) return;
 
             const btn = document.getElementById('final-pay-btn');
+            const coolDownKey = `${recipientData.uid}-${amount}`;
+            window.lastTransferTimeMap = window.lastTransferTimeMap || new Map();
+            const lastTransfer = window.lastTransferTimeMap.get(coolDownKey) || 0;
+            if (Date.now() - lastTransfer < 60000) {
+                showNotification("Duplicate transfer detected. Please wait 60 seconds before sending the same amount to the same user again.", true);
+                if (btn) {
+                    btn.disabled = false;
+                    btn.textContent = 'Confirm & Send';
+                }
+                pendingRequests.delete('pay-to-wallet');
+                return;
+            }
+
             if (btn) {
                 btn.disabled = true;
                 btn.innerHTML = '<span class="flex items-center justify-center"><svg class="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg> Processing...</span>';
@@ -2735,6 +2748,8 @@ const handlePayToWallet = async (recipientData, amount, comment) => {
                     recordCloudTransfer(senderCloudTxn, recipientCloudTxn, recipientData.uid),
                     syncRecentTransactionsToCloud(currentUser.uid)
                 ]).catch(error => console.warn('Pay to wallet background sync failed:', error));
+                window.lastTransferTimeMap = window.lastTransferTimeMap || new Map();
+                window.lastTransferTimeMap.set(`${recipientData.uid}-${amount}`, Date.now());
                 showNotification(`Success! Sent ${formatCurrency(amount)} to ${recipientData.name || recipientData.mobile}`, false, true);
                 window.closeModal();
                 showTransactionDetails(instantTransaction?.key || senderTxnId);
