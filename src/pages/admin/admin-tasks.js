@@ -243,7 +243,12 @@ const showAdminTaskPage = () => {
                             </div>
                             <div id="admin-task-payment-days-wrap" class="hidden">
                                 <label class="text-xs font-black uppercase text-gray-400">Payment Day</label>
-                                <input id="admin-task-payment-days" type="number" min="1" step="1" placeholder="2 / 3 / 7" class="mt-1 w-full px-4 py-3 bg-gray-100 dark:bg-gray-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-cyan-500">
+                                <select id="admin-task-payment-days" class="mt-1 w-full px-4 py-3 bg-gray-100 dark:bg-gray-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-cyan-500 font-bold">
+                                    <option value="2">2nd Day</option>
+                                    <option value="3">3rd Day</option>
+                                    <option value="5">5th Day</option>
+                                    <option value="7" selected>7th Day (Default)</option>
+                                </select>
                             </div>
                             <div>
                                 <label class="text-xs font-black uppercase text-gray-400">List Compile Time (IST)</label>
@@ -514,6 +519,10 @@ const getAdminTaskFormData = (existingTask = null) => {
                 paymentMode,
                 paymentDelayDays: Number.isFinite(paymentDays) && paymentDays > 0 ? paymentDays : 0,
                 paymentLabel: paymentMode === 'days' && paymentDays > 0 ? `${paymentDays} day payment` : 'Instant payment',
+                listDays: Number.isFinite(paymentDays) && paymentDays > 0 ? paymentDays : 7,
+                list_days: Number.isFinite(paymentDays) && paymentDays > 0 ? paymentDays : 7,
+                listDate: existingTask?.listDate || existingTask?.list_date || new Date().toISOString().split('T')[0],
+                list_date: existingTask?.listDate || existingTask?.list_date || new Date().toISOString().split('T')[0],
                 listTime,
                 instructions: document.getElementById('admin-task-instructions')?.value.trim() || '',
                 autoCloseDaily: true,

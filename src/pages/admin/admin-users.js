@@ -2,7 +2,7 @@
 
 const isAdminUserRecord = (user = {}) => {
             const email = String(user.email || '').trim().toLowerCase();
-            return user.id === ADMIN_UID || user.uid === ADMIN_UID || email === 'reviewsworld01@gmail.com';
+            return user.id === ADMIN_UID || user.uid === ADMIN_UID || email === 'reviewsworld01@gmail.com' || user.role === 'admin' || user.role === 'owner';
         };
 
 const applyAdminUsersCache = (users = []) => {
@@ -25,7 +25,10 @@ const applyAdminUsersCache = (users = []) => {
             const fifteenDaysAgo = new Date();
             fifteenDaysAgo.setDate(fifteenDaysAgo.getDate() - 15);
 
-            const otherUsers = allUsersCache.filter(u => !isAdminUserRecord(u));
+            let otherUsers = allUsersCache.filter(u => !isAdminUserRecord(u));
+            if (currentUserData?.role === 'admin') {
+                otherUsers = otherUsers.filter(u => u.parentAdmin === currentUser.uid || u.parent_admin === currentUser.uid);
+            }
             otherUsers.forEach(u => {
                     const balance = getUserAvailableBalance(u);
                     totalFunds += balance;
@@ -116,36 +119,132 @@ const showAdminUsersPageWithFilter = (filter) => {
         };
 
 const showAdminUsersPage = () => {
-            const content = `
-                ${getPageHeader('User Management')}
-                <div class="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-md">
-                    <div class="flex flex-col sm:flex-row gap-3 mb-4">
-                        <input type="text" id="user-search-input-page" placeholder="Search by name, email, or mobile..." class="flex-grow px-4 py-2 bg-gray-100 dark:bg-gray-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
-                        <select id="user-filter-select-page" class="px-4 py-2 bg-gray-100 dark:bg-gray-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm">
-                            <option value="all">All Users</option>
-                            <option value="pending_signup">Pending Signup Approval</option>
-                            <option value="new">New Members (15 Days)</option>
-                            <option value="active">Active Users</option>
-                            <option value="inactive">Inactive Users</option>
-                            <option value="flagged">Flagged Users</option>
-                            <option value="pro">Pro Verified Users</option>
-                            <option value="updated_web">New Version</option>
-                            <option value="not_updated_web">Old Version</option>
-                            <option value="minus_balance">Minus Balance Users</option>
-                            <option value="zero_balance">0 Balance Users</option>
-                        </select>
-                    </div>
-                    <div id="admin-users-list-page" class="max-h-[70vh] overflow-y-auto"></div>
+    const pendingUsers = getPendingSignupUsers()
+        .sort((a, b) => timestampToMillis(b.signupRequestedAt || b.createdAt) - timestampToMillis(a.signupRequestedAt || a.createdAt));
+    const newPendingCount = pendingUsers.filter(isNewSignupUser).length;
+    const oldPendingCount = pendingUsers.length - newPendingCount;
+
+    const content = `
+        ${getPageHeader('Users')}
+        <div class="max-w-4xl mx-auto space-y-6">
+            <!-- Tabs Navigation -->
+            <div class="flex border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-2 rounded-2xl shadow-sm">
+                <button id="tab-active-btn" class="flex-1 py-3 text-sm font-bold text-center text-blue-600 border-b-2 border-blue-600 transition" onclick="switchUsersTab('active')">Active Users</button>
+                <button id="tab-approvals-btn" class="flex-1 relative py-3 text-sm font-bold text-center text-gray-500 hover:text-blue-600 transition animate-fade-in" onclick="switchUsersTab('approvals')">
+                    Approve Signups
+                    <span id="users-tab-approvals-badge" class="absolute top-1.5 right-2 min-w-5 h-5 bg-red-500 text-white text-[10px] font-black rounded-full flex items-center justify-center hidden"></span>
+                </button>
+            </div>
+
+            <!-- Tab 1: Active Users -->
+            <div id="users-active-section" class="bg-white dark:bg-gray-800 p-6 rounded-2xl shadow-md border border-gray-100 dark:border-gray-700 space-y-4">
+                <div class="flex flex-col sm:flex-row gap-3">
+                    <input type="text" id="user-search-input-page" placeholder="Search by name, email, or mobile..." class="flex-grow px-4 py-2.5 bg-gray-50 dark:bg-gray-700 border border-gray-150 dark:border-gray-600 rounded-xl text-sm outline-none font-bold">
+                    <select id="user-filter-select-page" class="px-4 py-2.5 bg-gray-50 dark:bg-gray-700 border border-gray-150 dark:border-gray-600 rounded-xl text-sm outline-none font-bold">
+                        <option value="all">All Users</option>
+                        <option value="pending_signup">Pending Signup Approval</option>
+                        <option value="new">New Members (15 Days)</option>
+                        <option value="active">Active Users</option>
+                        <option value="inactive">Inactive Users</option>
+                        <option value="flagged">Flagged Users</option>
+                        <option value="pro">Pro Verified Users</option>
+                        <option value="updated_web">New Version</option>
+                        <option value="not_updated_web">Old Version</option>
+                        <option value="minus_balance">Minus Balance Users</option>
+                        <option value="zero_balance">0 Balance Users</option>
+                    </select>
                 </div>
-                ${getPageFooter()}`;
-            showPage(content);
-            const usersToRender = allUsersCache
-                .filter(u => !isAdminUserRecord(u))
-                .sort((a, b) => (a.name || '').localeCompare(b.name || ''));
-            renderAdminUsersList(usersToRender);
-            document.getElementById('user-search-input-page').oninput = updateAdminUserListView;
-            document.getElementById('user-filter-select-page').onchange = updateAdminUserListView;
-        };
+                <div id="admin-users-list-page" class="max-h-[70vh] overflow-y-auto space-y-3"></div>
+            </div>
+
+            <!-- Tab 2: Approve Signups -->
+            <div id="users-approvals-section" class="bg-white dark:bg-gray-800 p-6 rounded-2xl shadow-md border border-gray-100 dark:border-gray-700 space-y-4 hidden animate-fade-in">
+                <div class="flex items-center justify-between gap-3">
+                    <div>
+                        <h3 class="text-lg font-bold">Pending Signups</h3>
+                        <p class="text-xs text-gray-500">${pendingUsers.length} user(s) waiting for admin approval.</p>
+                    </div>
+                    <button id="refresh-signup-approvals-btn" class="px-4 py-2 rounded-xl bg-gray-100 dark:bg-gray-700 text-xs font-bold transition hover:bg-gray-200 dark:hover:bg-gray-600">Refresh</button>
+                </div>
+                <div class="grid grid-cols-2 gap-3 text-xs font-black">
+                    <div class="rounded-2xl border border-emerald-100 bg-emerald-50 px-4 py-3 text-emerald-700 dark:border-emerald-800 dark:bg-emerald-900/20 dark:text-emerald-200">
+                        New Web Users: ${newPendingCount}
+                    </div>
+                    <div class="rounded-2xl border border-rose-100 bg-rose-50 px-4 py-3 text-rose-700 dark:border-rose-800 dark:bg-rose-900/20 dark:text-rose-200">
+                        Old Users: ${oldPendingCount}
+                    </div>
+                </div>
+                <div id="signup-approvals-list" class="space-y-3 max-h-[70vh] overflow-y-auto">
+                    ${pendingUsers.length ? pendingUsers.map(user => {
+                        const category = getSignupUserCategory(user);
+                        const isOld = category === 'Old User';
+                        return `
+                        <div class="rounded-xl border border-amber-100 dark:border-amber-800 bg-amber-50/60 dark:bg-amber-900/20 p-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                            <div class="min-w-0 flex items-start gap-3">
+                                <span class="${isOld ? 'signup-old-pulse bg-red-600' : 'bg-emerald-500'} mt-1.5 h-3 w-3 shrink-0 rounded-full shadow"></span>
+                                <div class="min-w-0">
+                                    <span class="mb-1 inline-flex rounded-full px-2 py-0.5 text-[10px] font-black uppercase ${isOld ? 'bg-red-100 text-red-700 dark:bg-red-900/30' : 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30'}">${category}</span>
+                                    <p class="font-bold text-gray-900 dark:text-gray-100 truncate">${escapeHtml(user.name || 'No Name')}</p>
+                                    <p class="text-xs text-gray-500 truncate">Email: ${escapeHtml(user.email || '')}</p>
+                                    <p class="text-xs text-gray-500 truncate">Mobile: ${escapeHtml(user.mobile || 'No Mobile')}</p>
+                                    <p class="text-[10px] font-bold text-amber-700 mt-1">Requested: ${formatDateDDMMYY(user.signupRequestedAt || user.createdAt || Date.now())}</p>
+                                </div>
+                            </div>
+                            <div class="flex gap-2 shrink-0">
+                                <button data-action="view-user-dashboard" data-userid="${user.id || user.uid}" class="px-3 py-2 rounded-lg bg-blue-600 text-white text-xs font-black hover:bg-blue-700">View</button>
+                                <button data-action="approve-signup-user" data-userid="${user.id || user.uid}" class="px-3 py-2 rounded-lg bg-emerald-600 text-white text-xs font-black hover:bg-emerald-700">Approve</button>
+                                <button data-action="cancel-signup-user" data-userid="${user.id || user.uid}" data-username="${escapeHtml(user.name || user.email || 'User')}" class="px-3 py-2 rounded-lg bg-red-600 text-white text-xs font-black hover:bg-red-700">Cancel</button>
+                            </div>
+                        </div>
+                    `;
+                    }).join('') : '<p class="text-center py-8 text-sm text-gray-500">No pending signup approvals.</p>'}
+                </div>
+            </div>
+        </div>
+        ${getPageFooter()}
+    `;
+
+    showPage(content, { returnTo: 'admin' });
+    setBottomNavActive('bottom-admin-btn');
+
+    const approvalsBadge = document.getElementById('users-tab-approvals-badge');
+    if (approvalsBadge) {
+        approvalsBadge.textContent = pendingUsers.length;
+        approvalsBadge.classList.toggle('hidden', pendingUsers.length <= 0);
+    }
+
+    const usersToRender = allUsersCache
+        .filter(u => !isAdminUserRecord(u))
+        .sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+    renderAdminUsersList(usersToRender);
+    document.getElementById('user-search-input-page').oninput = updateAdminUserListView;
+    document.getElementById('user-filter-select-page').onchange = updateAdminUserListView;
+
+    document.getElementById('refresh-signup-approvals-btn')?.addEventListener('click', () => {
+        showAdminUsersPage();
+        switchUsersTab('approvals');
+        refreshAdminDashboardCaches().catch(() => {});
+    });
+};
+
+const switchUsersTab = (tab) => {
+    const tabs = ['active', 'approvals'];
+    tabs.forEach(t => {
+        const btn = document.getElementById(`tab-${t}-btn`);
+        const sec = document.getElementById(`users-${t}-section`);
+        if (t === tab) {
+            btn?.classList.add('text-blue-600', 'border-b-2', 'border-blue-600');
+            btn?.classList.remove('text-gray-500');
+            sec?.classList.remove('hidden');
+        } else {
+            btn?.classList.remove('text-blue-600', 'border-b-2', 'border-blue-600');
+            btn?.classList.add('text-gray-500');
+            sec?.classList.add('hidden');
+        }
+    });
+};
+
+window.switchUsersTab = switchUsersTab;
 
 const renderAdminUsersList = (users) => {
             const listEl = document.getElementById('admin-users-list-page');
@@ -220,6 +319,9 @@ const updateAdminUserListView = () => {
             let usersToRender = allUsersCache.filter(u => !isAdminUserRecord(u) && (
                 !searchTerm || userMatchesSearch(u, searchTerm)
             ));
+            if (currentUserData?.role === 'admin') {
+                usersToRender = usersToRender.filter(u => u.parentAdmin === currentUser.uid || u.parent_admin === currentUser.uid);
+            }
 
             // Apply filter
             if (filterValue === 'active') {

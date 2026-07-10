@@ -8,6 +8,7 @@ const Tesseract = require('tesseract.js');
 const Jimp = require('jimp');
 const { google } = require('googleapis');
 const { Readable } = require('stream');
+const gplay = require('google-play-scraper');
 
 const REQUIRED_ENV = [
   'APP_JWT_SECRET',
@@ -117,14 +118,17 @@ function createAppToken(user) {
   const firebaseUid = user.firebase_uid || user.firebaseUid || null;
   const email = normalizeEmail(user.email);
   const effectiveUserId = firebaseUid || user.id;
-  const isAdmin = user.id === ADMIN_UID || firebaseUid === ADMIN_UID || email === 'reviewsworld01@gmail.com';
+  const role = user.role || ((user.id === ADMIN_UID || firebaseUid === ADMIN_UID || email === 'reviewsworld01@gmail.com') ? 'owner' : 'user');
+  const isAdmin = role === 'owner' || role === 'admin';
   return jwt.sign(
     {
       sub: effectiveUserId,
       d1UserId: user.id,
       email,
       firebaseUid,
-      isAdmin
+      isAdmin,
+      role,
+      status: user.status || 'active'
     },
     process.env.APP_JWT_SECRET,
     { expiresIn: '7d' }
@@ -170,6 +174,10 @@ async function initSchema(d1) {
 
   await ensureColumn(d1, 'users', 'name', 'TEXT');
   await ensureColumn(d1, 'users', 'mobile', 'TEXT');
+  await ensureColumn(d1, 'users', 'role', 'TEXT');
+  await ensureColumn(d1, 'users', 'status', 'TEXT');
+  await ensureColumn(d1, 'users', 'parent_admin', 'TEXT');
+  await ensureColumn(d1, 'users', 'referral_code', 'TEXT');
 
   await d1.query(`
     CREATE TABLE IF NOT EXISTS chat_rooms (
@@ -381,6 +389,11 @@ async function initSchema(d1) {
   await d1.query(`CREATE INDEX IF NOT EXISTS idx_task_submissions_manual ON task_submissions (manual_status, submitted_at DESC)`);
   await d1.query(`CREATE INDEX IF NOT EXISTS idx_task_submissions_payout ON task_submissions (payout_status, manual_status, submitted_at)`);
 
+  await ensureColumn(d1, 'task_submissions', 'day3_status', 'TEXT');
+  await ensureColumn(d1, 'task_submissions', 'day7_status', 'TEXT');
+  await ensureColumn(d1, 'task_submissions', 'day3_paid', 'INTEGER');
+  await ensureColumn(d1, 'task_submissions', 'day7_paid', 'INTEGER');
+
   await d1.query(`
     CREATE TABLE IF NOT EXISTS sync_audit_log (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -435,13 +448,13 @@ function normalizeProfile(profile = {}) {
   };
 }
 
-async function createUser(d1, { id, firebaseUid = null, email, passwordHash, migratedAt = null, profile = {} }) {
+async function createUser(d1, { id, firebaseUid = null, email, passwordHash, migratedAt = null, profile = {}, role = 'user', parentAdmin = null, referralCode = null, status = 'active' }) {
   const createdAt = nowMs();
   const cleanProfile = normalizeProfile(profile);
   await d1.query(
-    `INSERT INTO users (id, firebase_uid, email, password_hash, name, mobile, created_at, migrated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-    [id, firebaseUid, normalizeEmail(email), passwordHash, cleanProfile.name, cleanProfile.mobile, createdAt, migratedAt]
+    `INSERT INTO users (id, firebase_uid, email, password_hash, name, mobile, created_at, migrated_at, role, parent_admin, referral_code, status)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [id, firebaseUid, normalizeEmail(email), passwordHash, cleanProfile.name, cleanProfile.mobile, createdAt, migratedAt, role, parentAdmin, referralCode, status]
   );
 
   return {
@@ -452,7 +465,11 @@ async function createUser(d1, { id, firebaseUid = null, email, passwordHash, mig
     name: cleanProfile.name,
     mobile: cleanProfile.mobile,
     created_at: createdAt,
-    migrated_at: migratedAt
+    migrated_at: migratedAt,
+    role,
+    parent_admin: parentAdmin,
+    referral_code: referralCode,
+    status
   };
 }
 
@@ -467,6 +484,26 @@ async function upsertFirebaseUser(d1, decodedToken, profile = {}) {
     name: profile.name || decodedToken.name || '',
     mobile: profile.mobile || profile.phoneNumber || decodedToken.phone_number || ''
   });
+
+  let role = 'user';
+  let parentAdmin = null;
+  let referralCode = null;
+  let status = 'active';
+
+  const appId = process.env.FIREBASE_APP_ID || 'digital-wallet-prod';
+  try {
+    const firestoreUserSnap = await admin.firestore().doc(`artifacts/${appId}/public/data/users/${firebaseUid}`).get();
+    if (firestoreUserSnap.exists) {
+      const fData = firestoreUserSnap.data();
+      role = fData.role || 'user';
+      parentAdmin = fData.parent_admin || fData.parentAdmin || null;
+      referralCode = fData.referralCode || fData.referral_code || null;
+      status = fData.status || 'active';
+    }
+  } catch (err) {
+    console.error('Failed to fetch user from Firestore during session creation:', err);
+  }
+
   const existing = await d1.first(
     'SELECT * FROM users WHERE firebase_uid = ? OR email = ? LIMIT 1',
     [firebaseUid, email]
@@ -477,17 +514,23 @@ async function upsertFirebaseUser(d1, decodedToken, profile = {}) {
       await d1.query('UPDATE users SET firebase_uid = ? WHERE id = ?', [firebaseUid, existing.id]);
       existing.firebase_uid = firebaseUid;
     }
-    if (cleanProfile.name || cleanProfile.mobile) {
-      await d1.query(
-        `UPDATE users
-         SET name = COALESCE(NULLIF(?, ''), name),
-             mobile = COALESCE(NULLIF(?, ''), mobile)
-         WHERE id = ?`,
-        [cleanProfile.name, cleanProfile.mobile, existing.id]
-      );
-      existing.name = cleanProfile.name || existing.name;
-      existing.mobile = cleanProfile.mobile || existing.mobile;
-    }
+    await d1.query(
+      `UPDATE users
+       SET name = COALESCE(NULLIF(?, ''), name),
+           mobile = COALESCE(NULLIF(?, ''), mobile),
+           role = ?,
+           parent_admin = ?,
+           referral_code = ?,
+           status = ?
+       WHERE id = ?`,
+      [cleanProfile.name, cleanProfile.mobile, role, parentAdmin, referralCode, status, existing.id]
+    );
+    existing.name = cleanProfile.name || existing.name;
+    existing.mobile = cleanProfile.mobile || existing.mobile;
+    existing.role = role;
+    existing.parent_admin = parentAdmin;
+    existing.referral_code = referralCode;
+    existing.status = status;
     return existing;
   }
 
@@ -497,7 +540,11 @@ async function upsertFirebaseUser(d1, decodedToken, profile = {}) {
     email,
     passwordHash: '',
     migratedAt: nowMs(),
-    profile: cleanProfile
+    profile: cleanProfile,
+    role,
+    parentAdmin,
+    referralCode,
+    status
   });
 }
 
@@ -670,28 +717,33 @@ async function saveFundRequest(d1, { requestId, userId, type = 'withdrawal', amo
   );
 }
 
-async function listFundRequests(d1, { status = 'pending', type = null, userId = null, limit = 200 } = {}) {
+async function listFundRequests(d1, { status = 'pending', type = null, userId = null, parentAdmin = null, limit = 200 } = {}) {
   const conditions = [];
   const params = [];
   if (status) {
-    conditions.push('status = ?');
+    conditions.push('fr.status = ?');
     params.push(status);
   }
   if (type) {
-    conditions.push('type = ?');
+    conditions.push('fr.type = ?');
     params.push(type);
   }
   if (userId) {
-    conditions.push('user_id = ?');
+    conditions.push('fr.user_id = ?');
     params.push(userId);
+  }
+  if (parentAdmin) {
+    conditions.push('u.parent_admin = ?');
+    params.push(parentAdmin);
   }
   params.push(limit);
 
   const rows = await d1.all(
-    `SELECT request_id, user_id, type, amount, status, requested_at, processed_at, details_json
-     FROM fund_requests
+    `SELECT fr.request_id, fr.user_id, fr.type, fr.amount, fr.status, fr.requested_at, fr.processed_at, fr.details_json
+     FROM fund_requests fr
+     ${parentAdmin ? 'INNER JOIN users u ON fr.user_id = u.id' : ''}
      ${conditions.length ? `WHERE ${conditions.join(' AND ')}` : ''}
-     ORDER BY requested_at DESC
+     ORDER BY fr.requested_at DESC
      LIMIT ?`,
     params
   );
@@ -1095,50 +1147,7 @@ async function uploadToGoogleDrive(buffer, fileName, mimeType, rootFolderId, { a
 }
 
 async function extractAndStoreReviewerAvatar({ imageBuffer, reviewerName, nameLine = null, r2, userId = 'user', appName = 'Avatars' }) {
-  if (!imageBuffer || !reviewerName || String(reviewerName).toLowerCase() === 'unknown user') return { avatarUrl: '', avatarHash: '', avatarCrop: null };
-  const clean = (value) => String(value || '').toLowerCase().replace(/[^a-z0-9]/g, '');
-  let locatedLine = nameLine && nameLine.bbox ? nameLine : null;
-  if (!locatedLine) {
-    const { data } = await Tesseract.recognize(imageBuffer, 'eng', { logger: () => {} });
-    const target = clean(reviewerName);
-    locatedLine = (Array.isArray(data.lines) ? data.lines : []).find((line) => {
-      const value = clean(line.text);
-      return value && target && (value.includes(target) || target.includes(value));
-    }) || null;
-  }
-  if (!locatedLine?.bbox) throw new Error('REVIEWER_NAME_POSITION_NOT_FOUND');
-  const image = await Jimp.read(imageBuffer);
-  const { width, height } = image.bitmap;
-  const bbox = locatedLine.bbox;
-  const lineHeight = Math.max(12, Number(bbox.y1 || 0) - Number(bbox.y0 || 0));
-  const avatarSize = Math.max(32, Math.min(Math.round(lineHeight * 2.8), Math.round(width * 0.18), 120));
-  const gap = Math.max(6, Math.round(lineHeight * 0.45));
-  const nameCenterY = (Number(bbox.y0 || 0) + Number(bbox.y1 || 0)) / 2;
-  const cropX = Math.max(0, Math.min(Math.round(Number(bbox.x0 || 0) - gap - avatarSize), width - avatarSize));
-  const cropY = Math.max(0, Math.min(Math.round(nameCenterY - (avatarSize / 2)), height - avatarSize));
-  const cropW = Math.min(avatarSize, width - cropX);
-  const cropH = Math.min(avatarSize, height - cropY);
-  if (cropW < 24 || cropH < 24) throw new Error('REVIEWER_AVATAR_REGION_INVALID');
-  const avatar = image.clone().crop(cropX, cropY, cropW, cropH);
-  const avatarBuffer = await avatar.getBufferAsync(Jimp.MIME_JPEG);
-  const avatarHash = crypto.createHash('sha256').update(avatarBuffer).digest('hex');
-  const safeName = String(reviewerName).replace(/[<>:"/\\|?*]+/g, '_').trim().slice(0, 40) || 'reviewer';
-  const avatarFileName = `${safeName}-${avatarHash.slice(0, 12)}-avatar.jpg`;
-  let avatarUrl = '';
-  const driveFolderId = process.env.GOOGLE_DRIVE_FOLDER_ID;
-  if (driveFolderId && (process.env.GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON || process.env.FIREBASE_SERVICE_ACCOUNT_JSON)) {
-    try {
-      const driveResult = await uploadToGoogleDrive(avatarBuffer, avatarFileName, 'image/jpeg', driveFolderId, { appName });
-      avatarUrl = driveResult.directUrl;
-    } catch (error) {
-      console.error('[Avatar] Google Drive upload failed:', error.message);
-    }
-  }
-  if (!avatarUrl && r2 && process.env.CLOUDFLARE_R2_BUCKET) {
-    const key = `task-screenshots/avatars/${sanitizePathSegment(userId)}/${avatarFileName}`;
-    avatarUrl = await putR2Object(r2, key, avatarBuffer, 'image/jpeg');
-  }
-  return { avatarUrl, avatarHash, avatarCrop: { x: cropX, y: cropY, width: cropW, height: cropH } };
+  return { avatarUrl: '', avatarHash: '', avatarCrop: null };
 }
 
 // Clear folder cache every hour to pick up any manual Drive changes
@@ -1331,7 +1340,7 @@ async function saveTaskSubmission(d1, { id, taskId, userId, reservationId, assig
   return submissionId;
 }
 
-async function listTaskSubmissions(d1, { taskId = null, userId = null, manualStatus = null, ocrStatus = null, payoutStatus = null, limit = 200 } = {}) {
+async function listTaskSubmissions(d1, { taskId = null, userId = null, manualStatus = null, ocrStatus = null, payoutStatus = null, limit = 200, parentAdmin = null } = {}) {
   const conditions = [];
   const params = [];
   if (taskId) { conditions.push('ts.task_id = ?'); params.push(taskId); }
@@ -1339,6 +1348,7 @@ async function listTaskSubmissions(d1, { taskId = null, userId = null, manualSta
   if (manualStatus) { conditions.push('ts.manual_status = ?'); params.push(manualStatus); }
   if (ocrStatus) { conditions.push('ts.ocr_status = ?'); params.push(ocrStatus); }
   if (payoutStatus) { conditions.push('ts.payout_status = ?'); params.push(payoutStatus); }
+  if (parentAdmin) { conditions.push('u.parent_admin = ?'); params.push(parentAdmin); }
   params.push(limit);
   return d1.all(
     `SELECT ts.*, u.mobile as user_mobile 
@@ -1433,47 +1443,7 @@ async function processOcrAndGmailProfile(d1, r2, submissionId) {
 
     if (nameLine) {
       gmailName = nameLine.text.trim().replace(/[\r\n]+/g, ' ');
-      
-      // Crop Gmail avatar logo using Jimp
-      try {
-        const image = await Jimp.read(imgBuffer);
-        const imgWidth = image.bitmap.width;
-        const imgHeight = image.bitmap.height;
-        const bbox = nameLine.bbox;
-
-        if (bbox) {
-          const cropX = Math.max(0, Math.min(bbox.x0 - 85, imgWidth - 75));
-          const cropY = Math.max(0, Math.min(bbox.y0 - 15, imgHeight - 75));
-          const cropW = Math.min(75, imgWidth - cropX);
-          const cropH = Math.min(75, imgHeight - cropY);
-
-          if (cropW > 10 && cropH > 10) {
-            const avatar = image.clone().crop(cropX, cropY, cropW, cropH);
-            const avatarBuffer = await avatar.getBufferAsync(Jimp.MIME_JPEG);
-            const timestamp = Date.now();
-            const avatarFileName = `${timestamp}-${submissionId}-avatar.jpg`;
-
-            // Try uploading to Google Drive first
-            const driveFolderId = process.env.GOOGLE_DRIVE_FOLDER_ID;
-            if (driveFolderId && (process.env.GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON || process.env.FIREBASE_SERVICE_ACCOUNT_JSON)) {
-              try {
-                const driveResult = await uploadToGoogleDrive(avatarBuffer, avatarFileName, 'image/jpeg', driveFolderId, { appName: 'Avatars' });
-                gmailLogoUrl = driveResult.directUrl;
-              } catch (driveErr) {
-                console.error('[OCR] Avatar Drive upload failed:', driveErr.message);
-              }
-            }
-
-            // Fallback to R2
-            if (!gmailLogoUrl && r2 && process.env.CLOUDFLARE_R2_BUCKET) {
-              const key = `task-screenshots/avatars/${submission.user_id}/${avatarFileName}`;
-              gmailLogoUrl = await putR2Object(r2, key, avatarBuffer, 'image/jpeg');
-            }
-          }
-        }
-      } catch (cropErr) {
-        console.error('[OCR] Avatar cropping failed:', cropErr);
-      }
+      gmailLogoUrl = `https://ui-avatars.com/api/?name=${encodeURIComponent(gmailName)}&background=random`;
     }
 
     if (!gmailName) {
@@ -1573,6 +1543,7 @@ async function processAutoPayouts(d1) {
        AND payout_status = 'pending'
        AND scraper_status IN ('live_confirmed', 'not_applicable', 'checked', 'not_configured')
        AND submitted_at <= (? - (payout_delay_days * 86400000))
+       AND NOT (task_link LIKE '%play.google.com%' OR task_link LIKE '%details?id=%')
      ORDER BY submitted_at ASC
      LIMIT 100`,
     [now]
@@ -1626,6 +1597,224 @@ async function processAutoPayouts(d1) {
   return paidCount;
 }
 
+async function processPeriodicLiveChecksAndPayouts(d1) {
+  const now = nowMs();
+  const db = admin.firestore();
+
+  console.log('[Scheduler] Starting 3rd and 7th day live check and payout processor...');
+
+  // --- DAY 3 PROCESSING ---
+  const day3Eligible = await d1.all(
+    `SELECT * FROM task_submissions
+     WHERE manual_status = 'approved'
+       AND scraper_status = 'live_confirmed'
+       AND day3_status IS NULL
+       AND (task_link LIKE '%play.google.com%' OR task_link LIKE '%details?id=%')
+       AND submitted_at <= (? - (3 * 86400000))
+     ORDER BY submitted_at ASC LIMIT 100`,
+    [now]
+  );
+
+  const day3ReportRows = [['Submission ID', 'User Name', 'App Name', 'Reviewer Name', 'Comment', 'Submitted At', '3rd Day Status', 'Payout Amount', 'Paid Status']];
+
+  for (const sub of day3Eligible) {
+    try {
+      const packageId = extractPackageId(sub.task_link);
+      const reviewerName = String(sub.ocr_extracted_name || '').trim().toLowerCase();
+      let isStillLive = false;
+
+      if (packageId && reviewerName && reviewerName !== 'unknown user') {
+        const playReviews = await fetchPlayStoreReviewsForDate(packageId, sub.submitted_at);
+        isStillLive = playReviews.some(r => {
+          const rName = String(r.userName || '').trim().toLowerCase();
+          return rName.includes(reviewerName) || reviewerName.includes(rName);
+        });
+      }
+
+      const reward = Number(sub.reward || 0);
+      let paidStatus = 'not_applicable';
+      let payAmount = 0;
+
+      if (isStillLive) {
+        await updateTaskSubmission(d1, sub.id, {
+          day3Status: 'live',
+          day3Paid: 0
+        });
+        paidStatus = 'live_not_paid';
+      } else {
+        await updateTaskSubmission(d1, sub.id, {
+          day3Status: 'dropped',
+          day3Paid: 0
+        });
+        paidStatus = 'dropped_not_paid';
+      }
+
+      day3ReportRows.push([
+        sub.id,
+        sub.user_name || '',
+        sub.app_name || '',
+        sub.ocr_extracted_name || '',
+        sub.assigned_comment || '',
+        new Date(sub.submitted_at).toISOString(),
+        isStillLive ? 'Live' : 'Dropped',
+        String(payAmount),
+        paidStatus
+      ]);
+    } catch (err) {
+      console.error(`Day 3 verification/payout failed for ${sub.id}:`, err);
+    }
+  }
+
+  // --- DAY 7 PROCESSING ---
+  const day7Eligible = await d1.all(
+    `SELECT * FROM task_submissions
+     WHERE manual_status = 'approved'
+       AND scraper_status = 'live_confirmed'
+       AND day3_status = 'live'
+       AND day7_status IS NULL
+       AND (task_link LIKE '%play.google.com%' OR task_link LIKE '%details?id=%')
+       AND submitted_at <= (? - (7 * 86400000))
+     ORDER BY submitted_at ASC LIMIT 100`,
+    [now]
+  );
+
+  const day7ReportRows = [['Submission ID', 'User Name', 'App Name', 'Reviewer Name', 'Comment', 'Submitted At', '7th Day Status', 'Payout Amount', 'Paid Status']];
+
+  for (const sub of day7Eligible) {
+    try {
+      const packageId = extractPackageId(sub.task_link);
+      const reviewerName = String(sub.ocr_extracted_name || '').trim().toLowerCase();
+      let isStillLive = false;
+
+      if (packageId && reviewerName && reviewerName !== 'unknown user') {
+        const playReviews = await fetchPlayStoreReviewsForDate(packageId, sub.submitted_at);
+        isStillLive = playReviews.some(r => {
+          const rName = String(r.userName || '').trim().toLowerCase();
+          return rName.includes(reviewerName) || reviewerName.includes(rName);
+        });
+      }
+
+      const reward = Number(sub.reward || 0);
+      let paidStatus = 'skipped';
+      let payAmount = 0;
+
+      if (isStillLive) {
+        payAmount = reward;
+        if (reward > 0) {
+          const transactionId = `task_payout_day7_${sub.id}_${now}`;
+          await saveTransaction(d1, {
+            userId: sub.user_id,
+            transactionId,
+            type: 'credit',
+            amount: reward,
+            status: 'completed',
+            timestamp: now,
+            details: {
+              comment: `Day 7 Reward: ${sub.app_name || 'Task'}`,
+              source: 'task_auto_payout_day7',
+              taskId: sub.task_id,
+              submissionId: sub.id
+            }
+          });
+
+          // Sync to Firestore
+          const userRef = db.doc(`artifacts/digital-wallet-prod/public/data/users/${sub.user_id}`);
+          await userRef.update({
+            balance: admin.firestore.FieldValue.increment(reward)
+          }).catch(e => console.error(`[Day7-Payout] Firestore user balance update failed for ${sub.user_id}:`, e));
+
+          const txnId = `txn_${now}_${Math.random().toString(36).substr(2, 9)}`;
+          const txnRef = db.doc(`artifacts/digital-wallet-prod/public/data/users/${sub.user_id}/transactions/${txnId}`);
+          await txnRef.set({
+            type: 'credit',
+            amount: reward,
+            comment: `Day 7 Live Review Reward: ${sub.app_name || 'Task'}`,
+            timestamp: admin.firestore.FieldValue.serverTimestamp(),
+            transactionId: txnId,
+            status: 'completed',
+            isAdminTransaction: true,
+            senderName: 'Reviews World',
+            recipientName: sub.user_name || 'User'
+          }).catch(e => console.error(`[Day7-Payout] Firestore transaction write failed:`, e));
+
+          paidStatus = 'paid';
+        }
+
+        await updateTaskSubmission(d1, sub.id, {
+          day7Status: 'live',
+          day7Paid: 1,
+          payoutStatus: 'paid',
+          paidAt: now
+        });
+      } else {
+        await updateTaskSubmission(d1, sub.id, {
+          day7Status: 'dropped',
+          day7Paid: 0
+        });
+        paidStatus = 'not_paid_dropped';
+      }
+
+      day7ReportRows.push([
+        sub.id,
+        sub.user_name || '',
+        sub.app_name || '',
+        sub.ocr_extracted_name || '',
+        sub.assigned_comment || '',
+        new Date(sub.submitted_at).toISOString(),
+        isStillLive ? 'Live' : 'Dropped',
+        String(payAmount),
+        paidStatus
+      ]);
+    } catch (err) {
+      console.error(`Day 7 verification/payout failed for ${sub.id}:`, err);
+    }
+  }
+
+  // --- REPORT GENERATION & DRIVE UPLOADING ---
+  const drive = getGoogleDriveClient();
+  if (drive) {
+    const todayDateStr = new Date(now + 330 * 60 * 1000).toISOString().slice(0, 10);
+    const driveFolderId = process.env.GOOGLE_DRIVE_FOLDER_ID || 'root';
+
+    try {
+      const rwWalletRootId = await findOrCreateDriveFolder(drive, driveFolderId, 'rw wallet');
+      const reportsRootId = await findOrCreateDriveFolder(drive, rwWalletRootId, 'Reports');
+
+      if (day3Eligible.length > 0) {
+        const day3FolderId = await findOrCreateDriveFolder(drive, reportsRootId, '3rd_Day_Reports');
+        const csvContent = day3ReportRows.map(row => row.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(',')).join('\n');
+        await drive.files.create({
+          requestBody: {
+            name: `Day_3_Payout_Report_${todayDateStr}`,
+            mimeType: 'application/vnd.google-apps.spreadsheet',
+            parents: [day3FolderId]
+          },
+          media: { mimeType: 'text/csv', body: Readable.from([csvContent]) }
+        });
+        console.log(`[Scheduler] Uploaded Day 3 payout report to Drive.`);
+      }
+
+      if (day7Eligible.length > 0) {
+        const day7FolderId = await findOrCreateDriveFolder(drive, reportsRootId, '7th_Day_Reports');
+        const csvContent = day7ReportRows.map(row => row.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(',')).join('\n');
+        await drive.files.create({
+          requestBody: {
+            name: `Day_7_Payout_Report_${todayDateStr}`,
+            mimeType: 'application/vnd.google-apps.spreadsheet',
+            parents: [day7FolderId]
+          },
+          media: { mimeType: 'text/csv', body: Readable.from([csvContent]) }
+        });
+        console.log(`[Scheduler] Uploaded Day 7 payout report to Drive.`);
+      }
+    } catch (driveErr) {
+      console.error('[Scheduler] Drive upload for payout reports failed:', driveErr.message);
+    }
+  }
+
+  console.log('[Scheduler] Finished 3rd and 7th day live check and payout processor.');
+}
+
 async function processDailyLists(d1) {
   try {
     const drive = getGoogleDriveClient();
@@ -1653,6 +1842,20 @@ async function processDailyLists(d1) {
 
       const [listH, listM] = listTime.split(':').map(Number);
       if (currentHours < listH || (currentHours === listH && currentMinutes < listM)) {
+        continue;
+      }
+
+      // Check if today is the correct compile day (listDate + listDays)
+      const listDays = Number(task.listDays ?? task.list_days ?? 7);
+      const listDateStr = task.listDate || task.list_date || (task.targetDate ? task.targetDate.split('T')[0] : null);
+      if (!listDateStr) continue;
+
+      const [lyear, lmonth, lday] = listDateStr.split('-').map(Number);
+      const compileDate = new Date(lyear, lmonth - 1, lday);
+      compileDate.setDate(compileDate.getDate() + listDays);
+
+      const targetCompileDateStr = `${compileDate.getFullYear()}-${String(compileDate.getMonth() + 1).padStart(2, '0')}-${String(compileDate.getDate()).padStart(2, '0')}`;
+      if (todayDateStr !== targetCompileDateStr) {
         continue;
       }
 
@@ -1688,12 +1891,53 @@ async function processDailyLists(d1) {
 
       for (const sub of submissions) {
         if (sub.scraper_status !== 'live_confirmed') {
+          const userFullName = String(sub.user_name || '').trim().toLowerCase();
+          const ocrReviewerName = String(sub.ocr_extracted_name || '').trim().toLowerCase();
+          const isExactNameMatch = userFullName && ocrReviewerName && (userFullName === ocrReviewerName) && (ocrReviewerName !== 'unknown user');
+
           let isLive = false;
-          if (liveList && sub.ocr_extracted_name) {
-            isLive = liveList.content.toLowerCase().includes(sub.ocr_extracted_name.toLowerCase());
+          if (!isExactNameMatch) {
+            if (liveList && sub.ocr_extracted_name && sub.ocr_extracted_name.toLowerCase() !== 'unknown user') {
+              const lines = liveList.content.split(/\r?\n/).map(l => l.trim().toLowerCase()).filter(Boolean);
+              const nameClean = sub.ocr_extracted_name.trim().toLowerCase();
+              isLive = lines.some(line => {
+                const lineNameOnly = line.replace(/[a-f0-9]{32,64}/g, '').trim();
+                return line.includes(nameClean) || nameClean.includes(lineNameOnly);
+              });
+            }
+
+            const isPlayStore = String(sub.task_link || '').includes('play.google.com');
+            if (!isLive && isPlayStore) {
+              const packageId = extractPackageId(sub.task_link);
+              if (packageId && sub.ocr_extracted_name && sub.ocr_extracted_name.toLowerCase() !== 'unknown user') {
+                try {
+                  const playReviews = await fetchPlayStoreReviewsForDate(packageId, sub.submitted_at);
+                  const nameClean = sub.ocr_extracted_name.trim().toLowerCase();
+                  const foundReview = playReviews.find(r => {
+                    const rName = String(r.userName || '').trim().toLowerCase();
+                    return rName.includes(nameClean) || nameClean.includes(rName);
+                  });
+                  if (foundReview) {
+                    isLive = true;
+                  }
+                } catch (scrapeErr) {
+                  console.error(`[Scheduler-Scraper] Play Store check failed for sub ${sub.id}:`, scrapeErr.message);
+                }
+              }
+            }
           }
 
-          if (isLive) {
+          if (isExactNameMatch) {
+            await d1.query(
+              "UPDATE task_submissions SET scraper_status = 'name_matched_manual' WHERE id = ?",
+              [sub.id]
+            );
+            const firestoreSubRef = db.doc(`artifacts/digital-wallet-prod/public/data/task_submissions/${sub.id}`);
+            await firestoreSubRef.update({
+              scraperStatus: 'name_matched_manual'
+            }).catch(e => console.error(`[Scheduler] Firestore name_matched_manual sync failed for ${sub.id}:`, e));
+            sub.scraper_status = 'name_matched_manual';
+          } else if (isLive) {
             await d1.query(
               "UPDATE task_submissions SET scraper_status = 'live_confirmed', manual_status = 'approved', verified_at = ? WHERE id = ?",
               [Date.now(), sub.id]
@@ -2022,6 +2266,125 @@ function registerRoutes(app, { d1, r2 }) {
     }
   });
 
+  app.post('/api/admin/create-sub-admin', requireHttpAuth, async (req, res) => {
+    if (req.auth.sub !== ADMIN_UID && req.auth.role !== 'owner') {
+      return res.status(403).json({ ok: false, error: 'ONLY_OWNER_CAN_CREATE_SUB_ADMINS' });
+    }
+
+    const { email, password, name, mobile, referralCode } = req.body;
+    if (!email || !password || !name || !referralCode) {
+      return res.status(400).json({ ok: false, error: 'MISSING_REQUIRED_FIELDS' });
+    }
+
+    try {
+      const userRecord = await admin.auth().createUser({
+        email,
+        password,
+        displayName: name,
+        phoneNumber: mobile ? (mobile.startsWith('+') ? mobile : `+91${mobile}`) : undefined
+      });
+
+      const uid = userRecord.uid;
+      const cleanMobile = mobile ? mobile.replace(/\D/g, '').slice(-10) : '';
+
+      const db = admin.firestore();
+      const appId = process.env.FIREBASE_APP_ID || 'digital-wallet-prod';
+      await db.doc(`artifacts/${appId}/public/data/users/${uid}`).set({
+        uid,
+        email: normalizeEmail(email),
+        name,
+        mobile: cleanMobile,
+        phoneNumber: cleanMobile,
+        role: 'admin',
+        status: 'active',
+        referralCode: referralCode,
+        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+        signupApprovalStatus: 'approved',
+        accountStatus: 'active',
+        balance: 0
+      });
+
+      const passwordHash = await bcrypt.hash(password, 12);
+      await createUser(d1, {
+        id: uid,
+        firebaseUid: uid,
+        email,
+        passwordHash,
+        profile: { name, mobile: cleanMobile },
+        role: 'admin',
+        parentAdmin: null,
+        referralCode,
+        status: 'active'
+      });
+
+      return res.json({ ok: true, uid });
+    } catch (err) {
+      console.error('Failed to create sub-admin:', err);
+      return res.status(500).json({ ok: false, error: err.message || 'FAILED_TO_CREATE_SUB_ADMIN' });
+    }
+  });
+
+  app.post('/api/admin/suspend-sub-admin', requireHttpAuth, async (req, res) => {
+    if (req.auth.sub !== ADMIN_UID && req.auth.role !== 'owner') {
+      return res.status(403).json({ ok: false, error: 'FORBIDDEN' });
+    }
+    const { targetUid } = req.body;
+    if (!targetUid) return res.status(400).json({ ok: false, error: 'TARGET_UID_REQUIRED' });
+
+    try {
+      const db = admin.firestore();
+      const appId = process.env.FIREBASE_APP_ID || 'digital-wallet-prod';
+      await db.doc(`artifacts/${appId}/public/data/users/${targetUid}`).update({
+        status: 'suspended',
+        isDisabled: true
+      });
+      await d1.query('UPDATE users SET status = ? WHERE id = ?', ['suspended', targetUid]);
+      return res.json({ ok: true });
+    } catch (err) {
+      return res.status(500).json({ ok: false, error: err.message });
+    }
+  });
+
+  app.post('/api/admin/unsuspend-sub-admin', requireHttpAuth, async (req, res) => {
+    if (req.auth.sub !== ADMIN_UID && req.auth.role !== 'owner') {
+      return res.status(403).json({ ok: false, error: 'FORBIDDEN' });
+    }
+    const { targetUid } = req.body;
+    if (!targetUid) return res.status(400).json({ ok: false, error: 'TARGET_UID_REQUIRED' });
+
+    try {
+      const db = admin.firestore();
+      const appId = process.env.FIREBASE_APP_ID || 'digital-wallet-prod';
+      await db.doc(`artifacts/${appId}/public/data/users/${targetUid}`).update({
+        status: 'active',
+        isDisabled: false
+      });
+      await d1.query('UPDATE users SET status = ? WHERE id = ?', ['active', targetUid]);
+      return res.json({ ok: true });
+    } catch (err) {
+      return res.status(500).json({ ok: false, error: err.message });
+    }
+  });
+
+  app.post('/api/admin/delete-sub-admin', requireHttpAuth, async (req, res) => {
+    if (req.auth.sub !== ADMIN_UID && req.auth.role !== 'owner') {
+      return res.status(403).json({ ok: false, error: 'FORBIDDEN' });
+    }
+    const { targetUid } = req.body;
+    if (!targetUid) return res.status(400).json({ ok: false, error: 'TARGET_UID_REQUIRED' });
+
+    try {
+      await admin.auth().deleteUser(targetUid).catch(() => {});
+      const db = admin.firestore();
+      const appId = process.env.FIREBASE_APP_ID || 'digital-wallet-prod';
+      await db.doc(`artifacts/${appId}/public/data/users/${targetUid}`).delete();
+      await d1.query('DELETE FROM users WHERE id = ?', [targetUid]);
+      return res.json({ ok: true });
+    } catch (err) {
+      return res.status(500).json({ ok: false, error: err.message });
+    }
+  });
+
   app.post('/api/login', rateLimit({ windowMs: 60000, maxRequests: 10 }), async (req, res) => {
     try {
       const email = normalizeEmail(req.body.email);
@@ -2141,11 +2504,18 @@ function registerRoutes(app, { d1, r2 }) {
       return res.status(403).json({ ok: false, error: 'ADMIN_REQUIRED' });
     }
 
+    // Set parentAdmin limit for sub-admins
+    let parentAdmin = null;
+    if (req.auth.isAdmin && req.auth.role === 'admin') {
+      parentAdmin = req.auth.sub;
+    }
+
     const requestedStatus = req.query.status ? String(req.query.status) : 'pending';
     const requests = await listFundRequests(d1, {
       status: requestedStatus === 'all' ? null : requestedStatus,
       type: req.query.type ? String(req.query.type) : null,
       userId,
+      parentAdmin,
       limit: Math.min(Number(req.query.limit || 200), 500)
     });
     res.json({ ok: true, requests });
@@ -2828,70 +3198,9 @@ ${memoriesContext}`
           }
         }
 
-        // Find bbox for Jimp cropping if Tesseract was used
-        let nameLine = null;
-        if (tesseractLines.length > 0) {
-          const cleanName = cleanStr(gmailName);
-          for (let j = 0; j < tesseractLines.length; j++) {
-            if (cleanStr(tesseractLines[j].text).includes(cleanName)) {
-              nameLine = tesseractLines[j];
-              break;
-            }
-          }
-        }
-
-        if (nameLine) {
-          try {
-            const image = await Jimp.read(body);
-            const imgWidth = image.bitmap.width;
-            const imgHeight = image.bitmap.height;
-            const bbox = nameLine.bbox;
-            if (bbox) {
-              const cropX = Math.max(0, Math.min(bbox.x0 - 85, imgWidth - 75));
-              const cropY = Math.max(0, Math.min(bbox.y0 - 15, imgHeight - 75));
-              const cropW = Math.min(75, imgWidth - cropX);
-              const cropH = Math.min(75, imgHeight - cropY);
-              if (cropW > 10 && cropH > 10) {
-                const avatar = image.clone().crop(cropX, cropY, cropW, cropH);
-                const avatarBuffer = await avatar.getBufferAsync(Jimp.MIME_JPEG);
-                const safeComment = matchedComment.slice(0, 30).replace(/[<>:"/\\|?*]+/g, '_').trim();
-                const safeGmailName = gmailName.replace(/[<>:"/\\|?*]+/g, '_').trim().slice(0, 30) || 'Unknown';
-                const avatarFileName = `${safeGmailName} - ${safeComment} (logo).jpg`;
-
-                const driveFolderId = process.env.GOOGLE_DRIVE_FOLDER_ID;
-                if (driveFolderId && (process.env.GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON || process.env.FIREBASE_SERVICE_ACCOUNT_JSON)) {
-                  try {
-                    const driveResult = await uploadToGoogleDrive(avatarBuffer, avatarFileName, 'image/jpeg', driveFolderId, { appName });
-                    gmailLogoUrl = driveResult.directUrl;
-                  } catch (driveErr) {
-                    console.error('[OCR-Upload] Avatar Drive upload failed:', driveErr.message);
-                  }
-                }
-                if (!gmailLogoUrl && r2 && process.env.CLOUDFLARE_R2_BUCKET) {
-                  const key = `task-screenshots/avatars/${req.auth.sub}/${avatarFileName}`;
-                  gmailLogoUrl = await putR2Object(r2, key, avatarBuffer, 'image/jpeg');
-                }
-              }
-            }
-          } catch (cropErr) {
-            console.error('[OCR-Upload] Avatar cropping failed:', cropErr);
-          }
-        }
-      }
-
-      try {
-        const avatarResult = await extractAndStoreReviewerAvatar({
-          imageBuffer: body,
-          reviewerName: gmailName,
-          r2,
-          userId: req.auth.sub,
-          appName
-        });
-        if (avatarResult.avatarUrl) gmailLogoUrl = avatarResult.avatarUrl;
-        avatarHash = avatarResult.avatarHash || avatarHash;
-        avatarCrop = avatarResult.avatarCrop || null;
-      } catch (avatarErr) {
-        console.warn('[OCR-Upload] Reviewer avatar capture skipped:', avatarErr.message || avatarErr);
+        gmailLogoUrl = `https://ui-avatars.com/api/?name=${encodeURIComponent(gmailName)}&background=random`;
+        avatarHash = '';
+        avatarCrop = null;
       }
       const safeComment = (matchedComment || 'screenshot').slice(0, 30).replace(/[<>:"/\\|?*]+/g, '_').trim();
 
@@ -3250,6 +3559,7 @@ ${memoriesContext}`
 
   app.get('/api/admin/task-submissions', requireHttpAuth, async (req, res) => {
     if (!req.auth.isAdmin) return res.status(403).json({ ok: false, error: 'ADMIN_REQUIRED' });
+    const isSubAdmin = req.auth.role === 'admin' && req.auth.sub !== ADMIN_UID;
     const db = admin.firestore();
     const submissions = await listTaskSubmissions(d1, {
       taskId: req.query.taskId || null,
@@ -3257,7 +3567,8 @@ ${memoriesContext}`
       manualStatus: req.query.manualStatus || null,
       ocrStatus: req.query.ocrStatus || null,
       payoutStatus: req.query.payoutStatus || null,
-      limit: Math.min(Number(req.query.limit || 200), 500)
+      limit: Math.min(Number(req.query.limit || 200), 500),
+      parentAdmin: isSubAdmin ? req.auth.sub : null
     });
 
     const missingTaskIds = [...new Set(submissions.map(s => s.task_id).filter(id => id && taskLogoCache[id] === undefined))];
@@ -3492,6 +3803,72 @@ ${memoriesContext}`
     }
   });
 
+function extractPackageId(value) {
+  const raw = String(value ?? '').trim();
+  if (!raw) return '';
+  if (raw.startsWith('http://') || raw.startsWith('https://')) {
+    try {
+      const url = new URL(raw);
+      const packageId = url.searchParams.get('id');
+      return packageId ? packageId.trim() : '';
+    } catch {
+      return '';
+    }
+  }
+  return raw;
+}
+
+async function fetchPlayStoreReviewsForDate(packageId, targetDateMs) {
+  const targetDateStr = new Date(targetDateMs + 330 * 60 * 1000).toISOString().slice(0, 10);
+  let continuationToken;
+  let keepGoing = true;
+  let pageCount = 0;
+  const allReviews = [];
+
+  console.log(`[Scraper] Fetching reviews for package ${packageId}, target IST date ${targetDateStr}`);
+  while (keepGoing && pageCount < 15) {
+    try {
+      const response = await gplay.reviews({
+        appId: packageId,
+        sort: gplay.sort.NEWEST,
+        paginate: true,
+        nextPaginationToken: continuationToken,
+        lang: 'en',
+        country: 'in',
+        num: 150
+      });
+
+      if (!response.data || response.data.length === 0) {
+        break;
+      }
+
+      allReviews.push(...response.data);
+      continuationToken = response.nextPaginationToken;
+      pageCount++;
+
+      const oldestReview = response.data[response.data.length - 1];
+      const oldestDateStr = new Date(oldestReview.date + 330 * 60 * 1000).toISOString().slice(0, 10);
+      if (oldestDateStr < targetDateStr) {
+        keepGoing = false;
+      }
+
+      if (!continuationToken) {
+        keepGoing = false;
+      }
+    } catch (err) {
+      console.error(`[Scraper] gplay.reviews page ${pageCount} error:`, err.message);
+      break;
+    }
+  }
+
+  const filtered = allReviews.filter(review => {
+    const reviewDateStr = new Date(review.date + 330 * 60 * 1000).toISOString().slice(0, 10);
+    return reviewDateStr === targetDateStr;
+  });
+  console.log(`[Scraper] Done. Total fetched ${allReviews.length}, target date matches: ${filtered.length}`);
+  return filtered;
+}
+
   // ── Scraper Endpoints ────────────────────────────────────────────────────
   app.post('/api/admin/scraper/check-review', requireHttpAuth, async (req, res) => {
     if (!req.auth.isAdmin) return res.status(403).json({ ok: false, error: 'ADMIN_REQUIRED' });
@@ -3509,24 +3886,73 @@ ${memoriesContext}`
         [appNameLower]
       );
 
-      let details = {};
-      try { details = sub.details_json ? JSON.parse(sub.details_json) : {}; } catch {}
-      const avatarHash = String(details.avatarHash || '').trim().toLowerCase();
+      const userFullName = String(sub.user_name || '').trim().toLowerCase();
+      const ocrReviewerName = String(sub.ocr_extracted_name || '').trim().toLowerCase();
+      const isExactNameMatch = userFullName && ocrReviewerName && (userFullName === ocrReviewerName) && (ocrReviewerName !== 'unknown user');
+
       let isLive = false;
       let matchSource = '';
+
+      if (isExactNameMatch) {
+        console.warn(`[Scraper-Check] Exact name match security warning for user ${sub.user_name} on submission ${submissionId}`);
+        const scraperResult = {
+          checked: true,
+          isPlayStore: String(sub.task_link || taskLink || '').includes('play.google.com'),
+          found: false,
+          message: 'Security bypass: Reviewer name matches platform name exactly. Admin manual review required.',
+          checkedAt: nowMs()
+        };
+
+        await updateTaskSubmission(d1, submissionId, {
+          scraperStatus: 'name_matched_manual',
+          scraperResultJson: scraperResult
+        });
+
+        // Sync to Firestore
+        const db = admin.firestore();
+        const firestoreSubRef = db.doc(`artifacts/digital-wallet-prod/public/data/task_submissions/${submissionId}`);
+        await firestoreSubRef.update({
+          scraperStatus: 'name_matched_manual'
+        }).catch(e => console.error(`[Scraper-Check] Firestore sync failed for ${submissionId}:`, e));
+
+        return res.json({ ok: true, result: scraperResult });
+      }
+
+      // Check live list (name only)
       if (liveList && sub.ocr_extracted_name && sub.ocr_extracted_name.toLowerCase() !== 'unknown user') {
         const lines = liveList.content.split(/\r?\n/).map(l => l.trim().toLowerCase()).filter(Boolean);
         const nameClean = sub.ocr_extracted_name.trim().toLowerCase();
         isLive = lines.some(line => {
-          const lineHash = (line.match(/[a-f0-9]{32,64}/) || [])[0] || '';
           const lineNameOnly = line.replace(/[a-f0-9]{32,64}/g, '').trim();
-          const nameMatches = line.includes(nameClean) || nameClean.includes(lineNameOnly);
-          return lineHash ? (nameMatches && avatarHash && lineHash === avatarHash) : nameMatches;
+          return line.includes(nameClean) || nameClean.includes(lineNameOnly);
         });
-        if (isLive) matchSource = avatarHash ? 'live_list_name_avatar' : 'live_list_name';
+        if (isLive) matchSource = 'live_list_name';
       }
+
       const isPlayStore = String(sub.task_link || taskLink || '').includes('play.google.com');
 
+      // Scraper fallback check
+      if (!isLive && isPlayStore) {
+        const packageId = extractPackageId(sub.task_link || taskLink);
+        if (packageId && sub.ocr_extracted_name && sub.ocr_extracted_name.toLowerCase() !== 'unknown user') {
+          try {
+            const playReviews = await fetchPlayStoreReviewsForDate(packageId, sub.submitted_at);
+            const nameClean = sub.ocr_extracted_name.trim().toLowerCase();
+            const foundReview = playReviews.find(r => {
+              const rName = String(r.userName || '').trim().toLowerCase();
+              return rName.includes(nameClean) || nameClean.includes(rName);
+            });
+            if (foundReview) {
+              isLive = true;
+              matchSource = 'play_store_live_scraper';
+            }
+          } catch (scrapeErr) {
+            console.error('Play Store scraper check failed:', scrapeErr);
+          }
+        }
+      }
+
+      const db = admin.firestore();
       if (isLive) {
         // Automatically confirm and approve submission
         const scraperResult = {
@@ -3535,9 +3961,7 @@ ${memoriesContext}`
           found: true,
           source: matchSource,
           reviewerName: sub.ocr_extracted_name || '',
-          avatarHash,
-          reviewerIdentity: avatarHash ? `${sub.ocr_extracted_name || ''}:${avatarHash}` : (sub.ocr_extracted_name || ''),
-          message: 'Review verified: Reviewer found in Active Reviewers List!',
+          message: 'Review verified: Reviewer found on Play Store / List!',
           checkedAt: nowMs()
         };
 
@@ -3559,14 +3983,14 @@ ${memoriesContext}`
 
         return res.json({ ok: true, result: scraperResult });
       } else {
-        // Not found in live list
+        // Not found
         const scraperResult = {
           checked: true,
           isPlayStore,
           found: false,
           message: isPlayStore
-            ? 'Not found in Active Reviewers List. Running Play Store check requires python scraper or manual confirm.'
-            : 'Non-Play-Store link or not found in reviewer list — manual verification required.',
+            ? 'Not found on Play Store or list. Review might not be live yet or deleted.'
+            : 'Non-Play-Store link or reviewer name not found — manual verification required.',
           checkedAt: nowMs()
         };
 
@@ -4311,6 +4735,7 @@ async function createCloudflareWalletService() {
     cleanupExpiredReadChats(d1).catch((error) => console.error('Scheduled chat cleanup failed:', error));
     cleanupExpiredNotifications(d1).catch((error) => console.error('Scheduled notification cleanup failed:', error));
     processAutoPayouts(d1).catch((error) => console.error('Scheduled auto-payout failed:', error));
+    processPeriodicLiveChecksAndPayouts(d1).catch((error) => console.error('Scheduled periodic live checks payout failed:', error));
   }, 60 * 60 * 1000);
   cleanupTimer.unref?.();
 
@@ -4324,8 +4749,10 @@ async function createCloudflareWalletService() {
     const delay = target.getTime() - ist.getTime();
     setTimeout(() => {
       processAutoPayouts(d1).catch(e => console.error('Scheduled auto-payout failed:', e));
+      processPeriodicLiveChecksAndPayouts(d1).catch(e => console.error('Scheduled periodic live checks failed:', e));
       setInterval(() => {
         processAutoPayouts(d1).catch(e => console.error('Daily auto-payout failed:', e));
+        processPeriodicLiveChecksAndPayouts(d1).catch(e => console.error('Daily periodic live checks failed:', e));
       }, 24 * 60 * 60 * 1000).unref?.();
     }, delay).unref?.();
   };
@@ -4363,7 +4790,8 @@ async function createCloudflareWalletService() {
     listSyncAuditLogs: (opts) => listSyncAuditLogs(d1, opts),
     resolveSyncAuditLog: (logId) => resolveSyncAuditLog(d1, logId),
     getSyncAuditSummary: () => getSyncAuditSummary(d1),
-    processAutoPayouts: () => processAutoPayouts(d1)
+    processAutoPayouts: () => processAutoPayouts(d1),
+    processPeriodicLiveChecksAndPayouts: () => processPeriodicLiveChecksAndPayouts(d1)
   };
 }
 
@@ -4391,5 +4819,6 @@ module.exports = {
   listSyncAuditLogs,
   resolveSyncAuditLog,
   getSyncAuditSummary,
-  processAutoPayouts
+  processAutoPayouts,
+  processPeriodicLiveChecksAndPayouts
 };

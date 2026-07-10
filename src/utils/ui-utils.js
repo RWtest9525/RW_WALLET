@@ -2374,8 +2374,13 @@ const runAfterFirstPaint = (callback) => {
             }
         };
 
-const getPendingSignupUsers = () =>
-            allUsersCache.filter(u => !isAdminUserRecord(u) && isUserApprovalPending(u));
+const getPendingSignupUsers = () => {
+    let list = allUsersCache.filter(u => !isAdminUserRecord(u) && isUserApprovalPending(u));
+    if (currentUserData?.role === 'admin') {
+        list = list.filter(u => u.parentAdmin === currentUser.uid || u.parent_admin === currentUser.uid);
+    }
+    return list;
+};
 
 const isNewSignupUser = (user = {}) =>
             user.signupSource === 'web' ||

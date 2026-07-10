@@ -23,6 +23,8 @@ import './pages/admin/admin-chats.js';
 import './pages/admin/admin-audit.js';
 import './pages/admin/admin-lists.js';
 import './pages/admin/admin-notifications.js';
+import './pages/admin/admin-manage-admins.js';
+import './pages/admin/admin-manage-settings.js';
 import './core/firebase.js';
 
 // Setup Event listeners and routing at DOM load
@@ -556,17 +558,11 @@ document.getElementById('admin-withdrawals-btn').addEventListener('click', () =>
 
 document.getElementById('admin-users-btn').addEventListener('click', () => openAdminQuickAction(showAdminUsersPage));
 
-document.getElementById('admin-signup-approvals-btn').addEventListener('click', () => openAdminQuickAction(showAdminSignupApprovalsPage));
+document.getElementById('admin-manage-settings-btn')?.addEventListener('click', () => openAdminQuickAction(showAdminManageSettingsPage));
+
+document.getElementById('admin-manage-admins-btn')?.addEventListener('click', () => openAdminQuickAction(showAdminManageAdminsPage));
 
 document.getElementById('admin-gift-codes-btn').addEventListener('click', () => openAdminQuickAction(showAdminGiftCodesPage));
-
-document.getElementById('admin-withdrawal-history-btn').addEventListener('click', () => openAdminQuickAction(showWithdrawalHistoryPage));
-
-document.getElementById('admin-withdraw-settings-btn').addEventListener('click', () => openAdminQuickAction(showAdminWithdrawSettingsModal));
-
-document.getElementById('admin-maintenance-btn')?.addEventListener('click', () => openAdminQuickAction(showMaintenanceSettingsPage));
-
-document.getElementById('admin-whats-new-btn')?.addEventListener('click', () => openAdminQuickAction(showWhatsNewSettingsPage));
 
 document.getElementById('admin-recharge-requests-btn').addEventListener('click', () => openAdminQuickAction(showAdminRechargeRequestsPage));
 

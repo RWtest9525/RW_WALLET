@@ -414,7 +414,6 @@ const showSettingsPage = () => {
                         ${renderSettingAction('settings-admin-rates', 'Rate Settings', 'https://cdn-icons-png.flaticon.com/512/3524/3524659.png', 'emerald')}
                         ${renderSettingAction('settings-admin-maintenance', 'Maintenance Mode', 'https://cdn-icons-png.flaticon.com/512/2099/2099058.png', 'red')}
                         ${renderSettingAction('settings-admin-whats-new', "What's New Popup", 'https://cdn-icons-png.flaticon.com/512/1828/1828884.png', 'blue')}
-                        ${renderSettingAction('settings-admin-live-lists', 'Live List Finder', 'https://cdn-icons-png.flaticon.com/512/2620/2620743.png', 'indigo')}
                     </div>` : ''}
                     <button id="settings-logout-btn" class="flex items-center justify-center w-full p-4 rounded-2xl bg-red-50 dark:bg-red-900/20 border border-red-100 dark:border-red-800 text-red-600 dark:text-red-300 font-bold">Logout</button>
                 </div>
@@ -438,7 +437,6 @@ const showSettingsPage = () => {
                 document.getElementById('settings-admin-rates').onclick = showAdminWithdrawSettingsModal;
                 document.getElementById('settings-admin-maintenance').onclick = showMaintenanceSettingsPage;
                 document.getElementById('settings-admin-whats-new').onclick = showWhatsNewSettingsPage;
-                document.getElementById('settings-admin-live-lists').onclick = showAdminLiveListsPage;
             }
 
             if (!isAdmin) {

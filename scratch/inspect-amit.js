@@ -20,7 +20,7 @@ async function main() {
   const txsData = await txsRes.json();
   const docs = txsData.documents || [];
   console.log(`Found ${docs.length} transactions:`);
-  
+
   for (const doc of docs) {
     const fields = doc.fields || {};
     const type = fields.type?.stringValue || '';
@@ -29,7 +29,7 @@ async function main() {
     const timestamp = fields.timestamp?.timestampValue || '';
     const status = fields.status?.stringValue || '';
     const txId = fields.transactionId?.stringValue || doc.name.split('/').pop();
-    
+
     console.log(`- ID: ${txId}, Type: ${type}, Amount: ${amount}, Status: ${status}, Comment: "${comment}", Time: ${timestamp}`);
   }
 }

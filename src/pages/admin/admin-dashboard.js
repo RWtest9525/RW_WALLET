@@ -108,20 +108,30 @@ const fetchAdminInvestmentsFromBackend = async () => {
             }
         };
 
-const hasCachedAdminSession = () => getCachedSessionUserId() === ADMIN_UID;
+const hasCachedAdminSession = () => {
+    const cachedUid = getCachedSessionUserId();
+    if (!cachedUid) return false;
+    if (cachedUid === ADMIN_UID) return true;
+    const cachedUser = readJsonCache(getUserCacheKey(cachedUid));
+    return cachedUser && (cachedUser.role === 'admin' || cachedUser.role === 'owner');
+};
 
-const hasAdminSessionReadyOrCached = () => currentUser?.uid === ADMIN_UID || hasCachedAdminSession();
+const hasAdminSessionReadyOrCached = () => {
+    const isCurrentAdmin = currentUser?.uid === ADMIN_UID || currentUserData?.role === 'admin' || currentUserData?.role === 'owner';
+    return isCurrentAdmin || hasCachedAdminSession();
+};
 
 const ensureAdminSessionReady = () => {
-            if (currentUser?.uid === ADMIN_UID) return true;
-            if (hasCachedAdminSession()) {
-                showAdminMainPage();
-                showNotification('Admin data is opening. Please wait a moment.', true, false);
-                return false;
-            }
-            showNotification(currentUser ? 'Admin access only.' : 'Please login first.', true);
-            return false;
-        };
+    const isCurrentAdmin = currentUser?.uid === ADMIN_UID || currentUserData?.role === 'admin' || currentUserData?.role === 'owner';
+    if (isCurrentAdmin) return true;
+    if (hasCachedAdminSession()) {
+        showAdminMainPage();
+        showNotification('Admin data is opening. Please wait a moment.', true, false);
+        return false;
+    }
+    showNotification(currentUser ? 'Admin access only.' : 'Please login first.', true);
+    return false;
+};
 
 const applyAdminBottomChrome = (isAdmin) => {
             document.getElementById('admin-tab-button')?.classList.toggle('hidden', !isAdmin);
@@ -479,6 +489,9 @@ const showAdminMainPage = () => {
             switchTab('admin-panel');
             setBottomNavActive('bottom-admin-btn');
             updateAdminLoanRequestBadge();
+
+            const isOwner = currentUser?.uid === ADMIN_UID || currentUser?.email === 'reviewsworld01@gmail.com' || currentUserData?.role === 'owner';
+            document.getElementById('admin-manage-admins-btn')?.classList.toggle('hidden', !isOwner);
         };
 
 const isAdminReviewTask = (task = {}) => getAdminTaskFamily(task) === 'review';
@@ -716,62 +729,9 @@ const markAdminSupportChatSeen = (roomId, messages = readSupportChatCache(roomId
         };
 
 const showAdminSignupApprovalsPage = () => {
-            const pendingUsers = getPendingSignupUsers()
-                .sort((a, b) => timestampToMillis(b.signupRequestedAt || b.createdAt) - timestampToMillis(a.signupRequestedAt || a.createdAt));
-            const newPendingCount = pendingUsers.filter(isNewSignupUser).length;
-            const oldPendingCount = pendingUsers.length - newPendingCount;
-            const content = `
-                ${getPageHeader('Approve User Signup')}
-                <div class="max-w-3xl mx-auto bg-white dark:bg-gray-800 p-4 sm:p-6 rounded-xl shadow-md border border-gray-100 dark:border-gray-700">
-                    <div class="flex items-center justify-between gap-3 mb-4">
-                        <div>
-                            <h3 class="text-lg font-bold">Pending Account Creation</h3>
-                            <p class="text-xs text-gray-500 dark:text-gray-400">${pendingUsers.length} user(s) waiting for admin approval.</p>
-                        </div>
-                        <button id="refresh-signup-approvals-btn" class="px-3 py-2 rounded-lg bg-gray-100 dark:bg-gray-700 text-xs font-bold">Refresh</button>
-                    </div>
-                    <div class="mb-4 grid grid-cols-2 gap-2 text-xs font-black">
-                        <div class="rounded-2xl border border-emerald-100 bg-emerald-50 px-3 py-2 text-emerald-700 dark:border-emerald-800 dark:bg-emerald-900/20 dark:text-emerald-200">
-                            New Web Users: ${newPendingCount}
-                        </div>
-                        <div class="rounded-2xl border border-rose-100 bg-rose-50 px-3 py-2 text-rose-700 dark:border-rose-800 dark:bg-rose-900/20 dark:text-rose-200">
-                            Old Users: ${oldPendingCount}
-                        </div>
-                    </div>
-                    <div id="signup-approvals-list" class="space-y-2 max-h-[70vh] overflow-y-auto">
-                        ${pendingUsers.length ? pendingUsers.map(user => {
-                            const category = getSignupUserCategory(user);
-                            const isOld = category === 'Old User';
-                            return `
-                            <div class="rounded-xl border border-amber-100 dark:border-amber-800 bg-amber-50/60 dark:bg-amber-900/20 p-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-                                <div class="min-w-0 flex items-start gap-3">
-                                    <span class="${isOld ? 'signup-old-pulse bg-red-600' : 'bg-emerald-500'} mt-1 h-3 w-3 shrink-0 rounded-full shadow"></span>
-                                    <div class="min-w-0">
-                                    <span class="mb-1 inline-flex rounded-full px-2 py-0.5 text-[10px] font-black uppercase ${isOld ? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-200' : 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-200'}">${category}</span>
-                                    <p class="font-bold text-gray-900 dark:text-gray-100 truncate">${escapeHtml(user.name || 'No Name')}</p>
-                                    <p class="text-xs text-gray-600 dark:text-gray-300 truncate">${escapeHtml(user.email || '')}</p>
-                                    <p class="text-xs text-gray-600 dark:text-gray-300 truncate">${escapeHtml(user.mobile || 'No Mobile')}</p>
-                                    <p class="text-[10px] font-semibold text-amber-700 dark:text-amber-200 mt-1">Requested: ${formatDateDDMMYY(user.signupRequestedAt || user.createdAt || Date.now())}</p>
-                                    </div>
-                                </div>
-                                <div class="flex gap-2 shrink-0">
-                                    <button data-action="view-user-dashboard" data-userid="${user.id || user.uid}" class="px-3 py-2 rounded-lg bg-blue-600 text-white text-xs font-black">View</button>
-                                    <button data-action="approve-signup-user" data-userid="${user.id || user.uid}" class="px-3 py-2 rounded-lg bg-emerald-600 text-white text-xs font-black">Approve</button>
-                                    <button data-action="cancel-signup-user" data-userid="${user.id || user.uid}" data-username="${escapeHtml(user.name || user.email || 'User')}" class="px-3 py-2 rounded-lg bg-red-600 text-white text-xs font-black">Cancel</button>
-                                </div>
-                            </div>
-                        `;
-                        }).join('') : '<p class="text-center py-8 text-sm text-gray-500 dark:text-gray-400">No pending signup approval.</p>'}
-                    </div>
-                </div>
-                ${getPageFooter()}`;
-            showPage(content, { returnTo: 'admin', keepBottomNav: true });
-            setBottomNavActive('bottom-admin-btn');
-            document.getElementById('refresh-signup-approvals-btn')?.addEventListener('click', () => {
-                showAdminSignupApprovalsPage();
-                refreshAdminDashboardCaches().catch(error => console.warn('Signup approval refresh skipped:', error));
-            });
-        };
+    showAdminUsersPage();
+    switchUsersTab('approvals');
+};
 
 const showAdminGiftCodesPage = () => {
             const content = `
@@ -824,8 +784,15 @@ const renderAdminFundRequests = (requests) => {
             const listEl = document.getElementById('admin-fund-requests-list-page');
             if (!listEl) return;
 
-            const search = adminPendingWithdrawalSearch;
-            const pendingRequests = [...requests].filter(r => {
+            const search = adminPendingWithdrawalSearch || '';
+            let pendingRequests = [...requests];
+            if (currentUserData?.role === 'admin') {
+                pendingRequests = pendingRequests.filter(r => {
+                    const u = allUsersCache.find(user => (user.id || user.uid) === r.userId);
+                    return u && (u.parentAdmin === currentUser.uid || u.parent_admin === currentUser.uid);
+                });
+            }
+            pendingRequests = pendingRequests.filter(r => {
                 if (!search) return true;
                 return [
                     r.userName,
@@ -1434,7 +1401,7 @@ const handleUpdateAdminWallet = async () => {
             const comment = document.getElementById('admin-fund-comment-input').value.trim();
             if (isNaN(amount) || !comment) return showNotification('Invalid amount or remarks.', true);
 
-            const adminRef = doc(db, `artifacts/${appId}/public/data/users`, ADMIN_UID);
+            const adminRef = doc(db, `artifacts/${appId}/public/data/users`, currentUser.uid);
             try {
                 await runTransaction(db, async (tx) => {
                     const adminDoc = await tx.get(adminRef);

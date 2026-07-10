@@ -96,18 +96,71 @@ const handleAuth = async (e) => {
                     }
                 } else {
                     if (!name || !mobile) {
-                        // This is an error, so reset the button
                         throw new Error('Name and Mobile Number are required.');
                     }
                     if (!/^\d{10}$/.test(mobile)) {
                         throw new Error('Mobile number must be exactly 10 digits.');
                     }
+                    const referralCodeInput = document.getElementById('referral_code');
+                    const referralCode = referralCodeInput ? referralCodeInput.value.trim() : '';
+                    if (!referralCode) {
+                        throw new Error('Referral code is mandatory.');
+                    }
+
+                    // Verify referral code validity
+                    let parentAdmin = ADMIN_UID;
+                    let referredBy = null;
+
+                    if (referralCode.toUpperCase().startsWith('RWADMIN')) {
+                        // Check if admin exists in Firestore users
+                        const adminQ = query(
+                            collection(db, `artifacts/${appId}/public/data/users`),
+                            where("role", "==", "admin"),
+                            where("referralCode", "==", referralCode.toUpperCase())
+                        );
+                        const adminSnap = await getDocs(adminQ);
+                        if (adminSnap.empty && referralCode.toUpperCase() !== 'RWADMIN01' && referralCode.toUpperCase() !== 'RWADMIN02') {
+                            throw new Error('Invalid Admin referral code.');
+                        }
+                        if (!adminSnap.empty) {
+                            parentAdmin = adminSnap.docs[0].id;
+                        } else {
+                            parentAdmin = ADMIN_UID;
+                        }
+                    } else {
+                        // Check if user exists in Firestore users
+                        const userQ = query(
+                            collection(db, `artifacts/${appId}/public/data/users`),
+                            where("referralCode", "==", referralCode)
+                        );
+                        const userSnap = await getDocs(userQ);
+                        if (userSnap.empty) {
+                            throw new Error('Invalid user referral code. Please check and try again.');
+                        }
+                        const referrerDoc = userSnap.docs[0];
+                        const referrerData = referrerDoc.data();
+                        referredBy = referrerDoc.id;
+                        parentAdmin = referrerData.parentAdmin || referrerData.parent_admin || ADMIN_UID;
+                    }
+
                     const existingMobileUser = await findExistingUserByMobile(mobile);
                     if (existingMobileUser) {
                         throw new Error('This mobile number is already registered. Please use another number.');
                     }
                     localSignupApprovalInProgress = true;
                     const cred = await createUserWithEmailAndPassword(auth, email, password);
+                    
+                    // Generate new unique 6-character referral code
+                    const generateReferralCode = () => {
+                        const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+                        let code = '';
+                        for (let i = 0; i < 6; i++) {
+                            code += chars.charAt(Math.floor(Math.random() * chars.length));
+                        }
+                        return code;
+                    };
+                    const userReferralCode = generateReferralCode();
+
                     const pendingUserData = {
                         uid: cred.user.uid,
                         email: cred.user.email,
@@ -126,7 +179,13 @@ const handleAuth = async (e) => {
                         webAppUpdatedOn: WEB_APP_UPDATE_DATE,
                         webAppLastSeenAt: serverTimestamp(),
                         signupRequestedAt: serverTimestamp(),
-                        createdAt: serverTimestamp()
+                        createdAt: serverTimestamp(),
+                        role: 'user',
+                        status: 'active',
+                        parentAdmin,
+                        parent_admin: parentAdmin,
+                        referredBy,
+                        referralCode: userReferralCode
                     };
                     await setDoc(doc(db, `artifacts/${appId}/public/data/users`, cred.user.uid), pendingUserData, { merge: true });
                     currentUser = cred.user;

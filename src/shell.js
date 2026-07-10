@@ -38,6 +38,8 @@ root.outerHTML = String.raw`
                                 class="w-full px-4 py-3 bg-gray-100 dark:bg-gray-700 border-transparent rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
                             <input type="tel" id="mobile" placeholder="Mobile Number"
                                 class="w-full px-4 py-3 bg-gray-100 dark:bg-gray-700 border-transparent rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+                            <input type="text" id="referral_code" placeholder="Referral Code (Mandatory)" required
+                                class="w-full px-4 py-3 bg-gray-100 dark:bg-gray-700 border-transparent rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
                         </div>
                         <input type="email" id="email" placeholder="Email Address" required
                             class="w-full px-4 py-3 bg-gray-100 dark:bg-gray-700 border-transparent rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
@@ -346,19 +348,26 @@ root.outerHTML = String.raw`
                                 <span class="text-sm font-medium text-blue-700 dark:text-blue-300">Withdrawals</span>
                             </button>
                             <button id="admin-users-btn"
-                                class="flex flex-col items-center justify-center p-3 min-h-28 bg-green-50 dark:bg-green-900/20 rounded-2xl hover:bg-green-100 dark:hover:bg-green-900/30 transition border border-green-200 dark:border-green-800 shadow-sm">
+                                class="relative flex flex-col items-center justify-center p-3 min-h-28 bg-green-50 dark:bg-green-900/20 rounded-2xl hover:bg-green-100 dark:hover:bg-green-900/30 transition border border-green-200 dark:border-green-800 shadow-sm">
+                                <span id="admin-signup-approval-badge" class="admin-alert-badge hidden absolute right-2 top-2 min-w-6 h-6 rounded-full bg-red-600 px-2 text-center text-xs font-black leading-6 text-white shadow"></span>
                                 <span class="flex h-12 w-12 items-center justify-center rounded-2xl bg-white dark:bg-gray-800 shadow-sm mb-2">
                                     <img src="https://cdn-icons-png.flaticon.com/512/681/681494.png" class="h-8 w-8 object-contain" alt="Users">
                                 </span>
                                 <span class="text-sm font-medium text-green-700 dark:text-green-300">Users</span>
                             </button>
-                            <button id="admin-signup-approvals-btn"
-                                class="relative flex flex-col items-center justify-center p-3 min-h-28 bg-amber-50 dark:bg-amber-900/20 rounded-2xl hover:bg-amber-100 dark:hover:bg-amber-900/30 transition border border-amber-200 dark:border-amber-800 shadow-sm">
-                                <span id="admin-signup-approval-badge" class="admin-alert-badge hidden absolute right-2 top-2 min-w-6 h-6 rounded-full bg-red-600 px-2 text-center text-xs font-black leading-6 text-white shadow"></span>
+                            <button id="admin-manage-settings-btn"
+                                class="flex flex-col items-center justify-center p-3 min-h-28 bg-purple-50 dark:bg-purple-900/20 rounded-2xl hover:bg-purple-100 dark:hover:bg-purple-900/30 transition border border-purple-200 dark:border-purple-800 shadow-sm">
                                 <span class="flex h-12 w-12 items-center justify-center rounded-2xl bg-white dark:bg-gray-800 shadow-sm mb-2">
-                                    <img src="https://cdn-icons-png.flaticon.com/512/10613/10613685.png" class="h-8 w-8 object-contain" alt="Signup Approvals">
+                                    <img src="https://cdn-icons-png.flaticon.com/512/3524/3524659.png" class="h-8 w-8 object-contain" alt="Manage Settings">
                                 </span>
-                                <span class="text-sm font-medium text-amber-700 dark:text-amber-300">Approve Signup</span>
+                                <span class="text-sm font-medium text-purple-700 dark:text-purple-300">Manage Settings</span>
+                            </button>
+                            <button id="admin-manage-admins-btn"
+                                class="flex flex-col items-center justify-center p-3 min-h-28 bg-violet-50 dark:bg-violet-900/20 rounded-2xl hover:bg-violet-100 dark:hover:bg-violet-900/30 transition border border-violet-200 dark:border-violet-800 shadow-sm hidden">
+                                <span class="flex h-12 w-12 items-center justify-center rounded-2xl bg-white dark:bg-gray-800 shadow-sm mb-2">
+                                    <img src="https://cdn-icons-png.flaticon.com/512/3135/3135715.png" class="h-8 w-8 object-contain" alt="Manage Admins">
+                                </span>
+                                <span class="text-sm font-medium text-violet-700 dark:text-violet-300">Manage Admins</span>
                             </button>
                             <button id="admin-gift-codes-btn"
                                 class="flex flex-col items-center justify-center p-3 min-h-28 bg-purple-50 dark:bg-purple-900/20 rounded-2xl hover:bg-purple-100 dark:hover:bg-purple-900/30 transition border border-purple-200 dark:border-purple-800 shadow-sm">
@@ -366,36 +375,6 @@ root.outerHTML = String.raw`
                                     <img src="https://cdn-icons-png.flaticon.com/512/2611/2611152.png" class="h-8 w-8 object-contain" alt="Gift Codes">
                                 </span>
                                 <span class="text-sm font-medium text-purple-700 dark:text-purple-300">Gift Codes</span>
-                            </button>
-                            <button id="admin-withdrawal-history-btn"
-                                class="flex flex-col items-center justify-center p-3 min-h-28 bg-yellow-50 dark:bg-yellow-900/20 rounded-2xl hover:bg-yellow-100 dark:hover:bg-yellow-900/30 transition border border-yellow-200 dark:border-yellow-800 shadow-sm">
-                                <span class="flex h-12 w-12 items-center justify-center rounded-2xl bg-white dark:bg-gray-800 shadow-sm mb-2">
-                                    <img src="https://cdn-icons-png.flaticon.com/512/3652/3652191.png" class="h-8 w-8 object-contain" alt="Withdrawal History">
-                                </span>
-                                <span class="text-sm font-medium text-yellow-700 dark:text-yellow-300">Withdrawal
-                                    History</span>
-                            </button>
-                            <button id="admin-withdraw-settings-btn"
-                                class="flex flex-col items-center justify-center p-3 min-h-28 bg-purple-50 dark:bg-purple-900/20 rounded-2xl hover:bg-purple-100 dark:hover:bg-purple-900/30 transition border border-purple-200 dark:border-purple-800 shadow-sm">
-                                <span class="flex h-12 w-12 items-center justify-center rounded-2xl bg-white dark:bg-gray-800 shadow-sm mb-2">
-                                    <img src="https://cdn-icons-png.flaticon.com/512/3524/3524659.png" class="h-8 w-8 object-contain" alt="Rate Settings">
-                                </span>
-                                <span class="text-sm font-medium text-purple-700 dark:text-purple-300">Rate
-                                    Settings</span>
-                            </button>
-                            <button id="admin-maintenance-btn"
-                                class="flex flex-col items-center justify-center p-3 min-h-28 bg-red-50 dark:bg-red-900/20 rounded-2xl hover:bg-red-100 dark:hover:bg-red-900/30 transition border border-red-200 dark:border-red-800 shadow-sm">
-                                <span class="flex h-12 w-12 items-center justify-center rounded-2xl bg-white dark:bg-gray-800 shadow-sm mb-2">
-                                    <img src="https://cdn-icons-png.flaticon.com/512/2099/2099058.png" class="h-8 w-8 object-contain" alt="Maintenance">
-                                </span>
-                                <span class="text-sm font-medium text-red-700 dark:text-red-300">Maintenance</span>
-                            </button>
-                            <button id="admin-whats-new-btn"
-                                class="flex flex-col items-center justify-center p-3 min-h-28 bg-blue-50 dark:bg-blue-900/20 rounded-2xl hover:bg-blue-100 dark:hover:bg-blue-900/30 transition border border-blue-200 dark:border-blue-800 shadow-sm">
-                                <span class="flex h-12 w-12 items-center justify-center rounded-2xl bg-white dark:bg-gray-800 shadow-sm mb-2">
-                                    <img src="https://cdn-icons-png.flaticon.com/512/1828/1828884.png" class="h-8 w-8 object-contain" alt="What's New">
-                                </span>
-                                <span class="text-sm font-medium text-blue-700 dark:text-blue-300">What's New</span>
                             </button>
                             <button id="admin-recharge-requests-btn"
                                 class="flex flex-col items-center justify-center p-3 min-h-28 bg-sky-50 dark:bg-sky-900/20 rounded-2xl hover:bg-sky-100 dark:hover:bg-sky-900/30 transition border border-sky-200 dark:border-sky-800 shadow-sm">
