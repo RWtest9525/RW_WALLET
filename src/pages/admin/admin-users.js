@@ -362,16 +362,66 @@ const updateAdminUserListView = () => {
 const showAdminUserDashboardPage = async (userId) => {
             const user = allUsersCache.find(u => u.id === userId) || {};
             adminViewedUserProfile = user;
+
+            const parentAdminId = user.parentAdmin || user.parent_admin || '';
+            let subAdminName = 'Reviews World';
+            if (parentAdminId && parentAdminId !== ADMIN_UID) {
+                const subAdmin = allUsersCache.find(u => u.id === parentAdminId || u.uid === parentAdminId);
+                if (subAdmin) {
+                    subAdminName = subAdmin.name || 'Sub-Admin';
+                } else {
+                    subAdminName = 'Sub-Admin (' + parentAdminId.slice(0, 6) + ')';
+                }
+            }
+
+            const referrerId = user.referredBy || '';
+            let referrerName = 'Direct Signup';
+            if (referrerId) {
+                const referrer = allUsersCache.find(u => u.id === referrerId || u.uid === referrerId);
+                referrerName = referrer ? (referrer.name || 'User') : 'User (' + referrerId.slice(0, 6) + ')';
+            }
+
             const content = `
                 ${getPageHeader('User Dashboard')}
                 <div class="max-w-3xl mx-auto space-y-4">
                     <div class="bg-white dark:bg-gray-800 p-5 rounded-2xl shadow-md border border-gray-100 dark:border-gray-700">
-                        <p class="text-xs uppercase font-bold text-gray-400">User Details</p>
-                        <h3 class="text-xl font-bold mt-1">${escapeHtml(user.name || 'User')}</h3>
-                        <p class="text-sm text-gray-500 dark:text-gray-400">${escapeHtml(user.email || '')}</p>
-                        <p class="text-sm text-gray-500 dark:text-gray-400">${escapeHtml(user.mobile || '')}</p>
-                        <p class="mt-2 inline-flex rounded-full px-2.5 py-1 text-[10px] font-black uppercase ${isUserOnUpdatedWebApp(user) ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-200' : 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-200'}">${isUserOnUpdatedWebApp(user) ? `Updated web app${getUserWebSeenMillis(user) ? ` - ${formatDateDDMMYY(getUserWebSeenMillis(user))}` : ''}` : 'Old app / not updated'}</p>
-                        <p class="mt-3 text-2xl font-black text-blue-600 dark:text-blue-300">${formatCurrency(getUserAvailableBalance(user))}</p>
+                        <div class="flex justify-between items-start gap-3">
+                            <div>
+                                <p class="text-xs uppercase font-bold text-gray-400">User Details</p>
+                                <h3 class="text-xl font-bold mt-1 text-gray-800 dark:text-gray-100">${escapeHtml(user.name || 'User')}</h3>
+                                <p class="text-sm text-gray-500 dark:text-gray-400">${escapeHtml(user.email || '')}</p>
+                                <p class="text-sm text-gray-500 dark:text-gray-400">${escapeHtml(user.mobile || '')}</p>
+                            </div>
+                            <div class="text-right">
+                                <span class="rounded-lg bg-emerald-50 dark:bg-emerald-900/30 border border-emerald-200 dark:border-emerald-850 px-3 py-1.5 text-lg font-black text-emerald-700 dark:text-emerald-200 leading-none">${formatCurrency(getUserAvailableBalance(user))}</span>
+                            </div>
+                        </div>
+
+                        <!-- Sub-Admin and Referral Details Grid -->
+                        <div class="mt-4 pt-3 border-t border-slate-100 dark:border-slate-700/80 grid grid-cols-2 gap-3 text-xs">
+                            <div>
+                                <span class="text-gray-400 dark:text-gray-500 block font-semibold">Sub-Admin</span>
+                                <p class="font-bold text-gray-700 dark:text-gray-300 capitalize">Member under: <span class="text-blue-600 dark:text-blue-400 font-extrabold">${escapeHtml(subAdminName)}</span></p>
+                            </div>
+                            <div>
+                                <span class="text-gray-400 dark:text-gray-500 block font-semibold">Referred By</span>
+                                <p class="font-bold text-gray-700 dark:text-gray-300 capitalize">${escapeHtml(referrerName)}</p>
+                            </div>
+                            <div>
+                                <span class="text-gray-400 dark:text-gray-500 block font-semibold">Join Date</span>
+                                <p class="font-bold text-gray-700 dark:text-gray-300">${user.createdAt ? formatDateDDMMYY(user.createdAt) : 'N/A'}</p>
+                            </div>
+                            <div>
+                                <span class="text-gray-400 dark:text-gray-500 block font-semibold">Last Active</span>
+                                <p class="font-bold text-gray-700 dark:text-gray-300">${user.webAppLastSeenAt ? formatDateDDMMYY(user.webAppLastSeenAt) : 'N/A'}</p>
+                            </div>
+                        </div>
+
+                        <div class="mt-4 pt-3 border-t border-slate-100 dark:border-slate-700/80 flex flex-wrap gap-1.5">
+                            <span class="inline-flex rounded-full px-2.5 py-0.5 text-[10px] font-black uppercase ${isUserOnUpdatedWebApp(user) ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-200' : 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-200'}">${isUserOnUpdatedWebApp(user) ? `Updated web app${getUserWebSeenMillis(user) ? ` - ${formatDateDDMMYY(getUserWebSeenMillis(user))}` : ''}` : 'Old app / not updated'}</span>
+                            <span class="inline-flex rounded-full bg-slate-100 dark:bg-slate-750 text-gray-600 dark:text-gray-300 px-2.5 py-0.5 text-[10px] font-black uppercase">Role: ${escapeHtml(user.role || 'user')}</span>
+                            ${user.referralCode ? `<span class="inline-flex rounded-full bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-300 px-2.5 py-0.5 text-[10px] font-black uppercase font-mono">CODE: ${escapeHtml(user.referralCode)}</span>` : ''}
+                        </div>
                     </div>
                     <div class="bg-yellow-50 dark:bg-yellow-900/20 p-4 rounded-2xl shadow-md border border-yellow-100 dark:border-yellow-800">
                         <div class="flex items-center justify-between gap-3 mb-3">

@@ -290,7 +290,12 @@ const renderSupportMessages = (messages, viewerRole) => {
             }
         };
 
-const getSupportRoomId = (chatUserId) => `support_${chatUserId}`;
+const getSupportRoomId = (chatUserId, adminId = ADMIN_UID) => {
+    if (!adminId || adminId === ADMIN_UID) {
+        return `support_${chatUserId}`;
+    }
+    return `support_${chatUserId}_${adminId}`;
+};
 
 const getSupportChatCacheKey = (roomId) => `rw_support_chat_${roomId}`;
 
@@ -397,34 +402,53 @@ const markSupportChatSeen = (roomId, messages = readSupportChatCache(roomId)) =>
             if (latestAdminTime) {
                 localStorage.setItem(getSupportChatSeenKey(roomId), String(latestAdminTime));
             }
-            supportChatUnreadCount = 0;
-            updateSupportChatUnreadBadges();
+            refreshSupportUnreadFromCache();
         };
 
-const refreshSupportUnreadFromCache = (roomId) => {
-            supportChatUnreadCount = calculateSupportUnreadCount(roomId);
+const refreshSupportUnreadFromCache = () => {
+            if (!currentUser || currentUser.uid === ADMIN_UID) return;
+            const parentAdminId = currentUserData?.parentAdmin || currentUserData?.parent_admin || '';
+            const mainRoomId = getSupportRoomId(currentUser.uid, ADMIN_UID);
+            let count = calculateSupportUnreadCount(mainRoomId);
+            
+            if (parentAdminId && parentAdminId !== ADMIN_UID) {
+                const subRoomId = getSupportRoomId(currentUser.uid, parentAdminId);
+                count += calculateSupportUnreadCount(subRoomId);
+            }
+            
+            supportChatUnreadCount = count;
             updateSupportChatUnreadBadges();
         };
 
 const preloadSupportChatForUser = async (userId = currentUser?.uid) => {
             if (!userId || userId === ADMIN_UID) return;
-            const roomId = getSupportRoomId(userId);
-            const cached = readSupportChatCache(roomId);
-            if (supportChatPreloadUserId === userId && cached.length) return;
+            const parentAdminId = currentUserData?.parentAdmin || currentUserData?.parent_admin || '';
+            const hasSubAdmin = parentAdminId && parentAdminId !== ADMIN_UID;
+            
+            const mainRoomId = getSupportRoomId(userId, ADMIN_UID);
+            const subRoomId = hasSubAdmin ? getSupportRoomId(userId, parentAdminId) : null;
+            
+            if (supportChatPreloadUserId === userId) return;
             supportChatPreloadUserId = userId;
-            if (cached.length) refreshSupportUnreadFromCache(roomId);
+            
+            refreshSupportUnreadFromCache();
 
-            await fetchSupportChatHistory(roomId, 200)
-                .then((history) => {
-                const merged = mergeSupportMessages(cached, history);
-                writeSupportChatCache(roomId, merged);
-                refreshSupportUnreadFromCache(roomId);
-                    return merged;
-                })
-                .catch((error) => {
-                    console.warn('Support chat preload failed:', error);
-                    return cached;
-                });
+            const preloadSingleRoom = async (roomId) => {
+                const cached = readSupportChatCache(roomId);
+                try {
+                    const history = await fetchSupportChatHistory(roomId, 200);
+                    const merged = mergeSupportMessages(cached, history);
+                    writeSupportChatCache(roomId, merged);
+                    refreshSupportUnreadFromCache();
+                } catch (error) {
+                    console.warn('Support chat preload failed for room:', roomId, error);
+                }
+            };
+
+            preloadSingleRoom(mainRoomId);
+            if (subRoomId) {
+                preloadSingleRoom(subRoomId);
+            }
         };
 
 const openSupportChatPage = async (chatUserId, viewerRole = 'user', chatMeta = {}) => {
@@ -433,11 +457,15 @@ const openSupportChatPage = async (chatUserId, viewerRole = 'user', chatMeta = {
                 activeChatUnsubscribe = null;
             }
             const isAdminView = viewerRole === 'admin';
-            const displayName = isAdminView ? (chatMeta.userName || 'User') : 'REVIEWS WORLD';
+            const displayName = isAdminView 
+                ? (chatMeta.userName || 'User') 
+                : (chatMeta.adminName || 'REVIEWS WORLD');
             const displayEmail = isAdminView
                 ? (chatMeta.userEmail || '')
-                : getSupportAdminEmail();
-            const logo = isAdminView ? 'https://cdn-icons-png.flaticon.com/512/3135/3135715.png' : getSupportLogo();
+                : (chatMeta.adminEmail || getSupportAdminEmail());
+            const logo = isAdminView 
+                ? 'https://cdn-icons-png.flaticon.com/512/3135/3135715.png' 
+                : (chatMeta.adminLogo || getSupportLogo());
             const initialMessage = chatMeta.initialMessage || '';
             const returnToBlocked = !!chatMeta.returnToBlocked;
             const content = `
@@ -527,7 +555,7 @@ const openSupportChatPage = async (chatUserId, viewerRole = 'user', chatMeta = {
                 messagesId: 'support-chat-messages'
             });
 
-            activeSupportRoomId = getSupportRoomId(chatUserId);
+            activeSupportRoomId = chatMeta.roomId || getSupportRoomId(chatUserId, chatMeta.adminId);
             activeSupportMessages = mergeSupportMessages(readSupportChatCache(activeSupportRoomId));
             writeSupportChatCache(activeSupportRoomId, activeSupportMessages);
             renderSupportMessages(activeSupportMessages, viewerRole);
@@ -1066,8 +1094,57 @@ const openRevyBotChatPage = () => {
             addRevyBotMessage(`Hi ${currentUserData?.name || 'there'}, I am REVY, RW AI BOT. I can instantly help with wallet balance, withdrawal status, transaction history, payment details, recharge, gift code, loan, invoices, password reset, and app usage.`);
         };
 
+const loadSubAdminChatCard = async (parentAdminId) => {
+            let subAdminProfile = null;
+            try {
+                const adminDoc = await getDoc(doc(db, `artifacts/${appId}/public/data/users`, parentAdminId));
+                if (adminDoc.exists()) {
+                    subAdminProfile = { id: parentAdminId, ...adminDoc.data() };
+                }
+            } catch (e) {
+                console.warn("Could not load sub-admin profile:", e);
+            }
+            
+            const container = document.getElementById('sub-admin-chat-card-wrapper');
+            if (!container) return;
+
+            const subAdminName = subAdminProfile?.name || 'My Admin';
+            const subAdminLogo = 'https://cdn-icons-png.flaticon.com/512/3135/3135715.png';
+            
+            const roomId = getSupportRoomId(currentUser.uid, parentAdminId);
+            const unreadCount = calculateSupportUnreadCount(roomId);
+
+            container.innerHTML = `
+                <button id="sub-admin-chat-card" class="w-full flex items-center gap-4 p-4 bg-white dark:bg-gray-800 border border-gray-100 dark:border-gray-700 rounded-2xl shadow-md text-left hover:bg-gray-50 dark:hover:bg-gray-700/50 transition animate-fade-in">
+                    <img src="${subAdminLogo}" alt="${escapeHtml(subAdminName)}" class="h-14 w-14 shrink-0 rounded-full object-contain bg-blue-50 p-2">
+                    <div class="flex-1 min-w-0">
+                        <h3 class="font-bold text-gray-900 dark:text-white inline-flex items-center gap-1">${escapeHtml(subAdminName)} ${getVerifiedBadge()}</h3>
+                        <p class="text-sm text-gray-500 dark:text-gray-400 truncate">Chat with your team admin</p>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <span id="sub-admin-chat-unread-badge" class="${unreadCount > 0 ? '' : 'hidden'} min-w-6 h-6 rounded-full bg-red-600 px-2 text-center text-xs font-black leading-6 text-white shadow">${unreadCount}</span>
+                        <span class="text-blue-600 dark:text-blue-300 font-bold">Chat</span>
+                    </div>
+                </button>
+            `;
+            container.classList.remove('hidden');
+            
+            document.getElementById('sub-admin-chat-card').onclick = () => {
+                openSupportChatPage(currentUser.uid, 'user', {
+                    adminId: parentAdminId,
+                    adminName: subAdminName,
+                    adminEmail: subAdminProfile?.email || '',
+                    adminMobile: subAdminProfile?.mobile || '',
+                    adminLogo: subAdminLogo
+                });
+            };
+        };
+
 const showHelpSupportPage = () => {
             if (!ensureUserSessionReady()) return;
+            const parentAdminId = currentUserData?.parentAdmin || currentUserData?.parent_admin || '';
+            const hasSubAdmin = parentAdminId && parentAdminId !== ADMIN_UID;
+
             const content = `
                 ${getPageHeader('Help', { showBack: false })}
                 <div class="max-w-lg mx-auto space-y-4">
@@ -1088,6 +1165,7 @@ const showHelpSupportPage = () => {
                         <span id="support-chat-unread-badge" class="hidden min-w-6 h-6 rounded-full bg-red-600 px-2 text-center text-xs font-black leading-6 text-white shadow"></span>
                         <span class="text-blue-600 dark:text-blue-300 font-bold">Chat</span>
                     </button>
+                    <div id="sub-admin-chat-card-wrapper" class="hidden"></div>
                 </div>
                 ${getPageFooter()}`;
             showPage(content, { keepBottomNav: true });
@@ -1095,7 +1173,11 @@ const showHelpSupportPage = () => {
             setBottomNavActive('bottom-help-btn');
             updateSupportChatUnreadBadges();
             document.getElementById('revy-ai-chat-card').onclick = openRevyBotChatPage;
-            document.getElementById('reviews-world-chat-card').onclick = () => openSupportChatPage(currentUser.uid, 'user');
+            document.getElementById('reviews-world-chat-card').onclick = () => openSupportChatPage(currentUser.uid, 'user', { adminId: ADMIN_UID });
+            
+            if (hasSubAdmin) {
+                loadSubAdminChatCard(parentAdminId);
+            }
         };
 
 // Expose functions to window for global access

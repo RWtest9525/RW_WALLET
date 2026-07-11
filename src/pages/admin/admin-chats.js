@@ -12,7 +12,7 @@ const calculateAdminChatUnreadCount = (chats = allSupportChatsCache) => chats.fi
             const lastSenderId = chat.lastSenderId || chat.last_sender_id || '';
             const updatedAt = timestampToMillis(chat.updatedAt || chat.updated_at);
             const seenAt = Number(localStorage.getItem(getAdminSupportChatSeenKey(roomId)) || 0);
-            return lastSenderId && lastSenderId !== ADMIN_UID && updatedAt > seenAt;
+            return lastSenderId && lastSenderId !== currentUser?.uid && updatedAt > seenAt;
         }).length;
 
 const refreshAdminChatUnreadCount = () => {
@@ -21,7 +21,7 @@ const refreshAdminChatUnreadCount = () => {
         };
 
 const preloadAdminChatRooms = (chats = allSupportChatsCache) => {
-            if (currentUser?.uid !== ADMIN_UID) return;
+            if (!hasAdminSessionReadyOrCached()) return;
             chats.slice(0, 25).forEach(chat => {
                 const roomId = chat.roomId || getSupportRoomId(chat.userId || chat.id);
                 if (!roomId) return;
@@ -37,7 +37,7 @@ const preloadAdminChatRooms = (chats = allSupportChatsCache) => {
         };
 
 const subscribeAdminChatRooms = async (chats = allSupportChatsCache) => {
-            if (currentUser?.uid !== ADMIN_UID) return;
+            if (!hasAdminSessionReadyOrCached()) return;
             const socket = await getSupportSocket();
             if (adminChatBackgroundHandlers) {
                 socket.off('new_message', adminChatBackgroundHandlers.message);
@@ -99,7 +99,7 @@ const subscribeAdminChatRooms = async (chats = allSupportChatsCache) => {
         };
 
 const loadAdminChatsFromBackend = async ({ silent = false, retry = true, subscribeRealtime = false } = {}) => {
-            if (currentUser?.uid !== ADMIN_UID) return;
+            if (!hasAdminSessionReadyOrCached()) return;
             try {
                 const token = await getBackendAuthToken();
                 const response = await fetchWithTimeout(`${BACKEND_BASE_URL}/api/admin/chats?limit=200`, {
@@ -109,7 +109,7 @@ const loadAdminChatsFromBackend = async ({ silent = false, retry = true, subscri
                 if (!response.ok || !data.ok) {
                     throw new Error(data.error || 'Admin chat load failed');
                 }
-                allSupportChatsCache = (data.chats || []).map(chat => ({
+                let chatList = (data.chats || []).map(chat => ({
                     id: chat.user_id || chat.room_id?.replace(/^support_/, ''),
                     userId: chat.user_id || chat.room_id?.replace(/^support_/, ''),
                     roomId: chat.room_id || getSupportRoomId(chat.user_id || ''),
@@ -120,6 +120,10 @@ const loadAdminChatsFromBackend = async ({ silent = false, retry = true, subscri
                     lastSenderId: chat.last_sender_id || '',
                     updatedAt: chat.updated_at || Date.now()
                 }));
+                if (currentUser?.uid !== ADMIN_UID) {
+                    chatList = chatList.filter(chat => chat.roomId && chat.roomId.endsWith(`_${currentUser.uid}`));
+                }
+                allSupportChatsCache = chatList;
                 refreshAdminChatUnreadCount();
                 renderAdminChatsList();
                 preloadAdminChatRooms(allSupportChatsCache);
@@ -147,10 +151,14 @@ const getAdminChatUserMeta = (user = {}) => ({
         });
 
 const ensureAdminChatUsersLoaded = async () => {
-            if (currentUser?.uid !== ADMIN_UID || allUsersCache.length) return;
+            if (!hasAdminSessionReadyOrCached() || allUsersCache.length) return;
             try {
                 const usersSnap = await getDocs(query(collection(db, `artifacts/${appId}/public/data/users`)));
-                allUsersCache = usersSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+                let list = usersSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+                if (currentUser?.uid !== ADMIN_UID) {
+                    list = list.filter(u => u.parentAdmin === currentUser.uid || u.parent_admin === currentUser.uid);
+                }
+                allUsersCache = list;
             } catch (error) {
                 console.warn('Admin chat user search load failed:', error);
             }
@@ -184,7 +192,7 @@ const renderAdminChatsList = () => {
 
             const chatRows = chatsToRender.map(chat => {
                     const roomId = chat.roomId || getSupportRoomId(chat.userId || chat.id);
-                    const isUnread = (chat.lastSenderId || '') !== ADMIN_UID && timestampToMillis(chat.updatedAt) > Number(localStorage.getItem(getAdminSupportChatSeenKey(roomId)) || 0);
+                    const isUnread = (chat.lastSenderId || '') !== currentUser?.uid && timestampToMillis(chat.updatedAt) > Number(localStorage.getItem(getAdminSupportChatSeenKey(roomId)) || 0);
                     return `
                     <button data-chat-userid="${chat.userId || chat.id}" class="admin-chat-row w-full flex items-center gap-3 p-4 bg-white dark:bg-gray-800 border border-gray-100 dark:border-gray-700 rounded-2xl shadow-sm text-left hover:bg-gray-50 dark:hover:bg-gray-700/50 transition">
                         <img src="https://cdn-icons-png.flaticon.com/512/3135/3135715.png" alt="${escapeHtml(chat.userName || 'User')}" class="h-12 w-12 rounded-full object-contain bg-blue-50 p-2">
@@ -231,8 +239,13 @@ const renderAdminChatsList = () => {
                     const chat = allSupportChatsCache.find(item => (item.userId || item.id) === row.dataset.chatUserid);
                     const searchedUser = allUsersCache.map(getAdminChatUserMeta).find(item => item.userId === row.dataset.chatUserid);
                     const chatMeta = chat || searchedUser || {};
-                    markAdminSupportChatSeen(chatMeta.roomId || getSupportRoomId(row.dataset.chatUserid), readSupportChatCache(chatMeta.roomId || getSupportRoomId(row.dataset.chatUserid)));
-                    openSupportChatPage(row.dataset.chatUserid, 'admin', chatMeta);
+                    const roomId = chatMeta.roomId || getSupportRoomId(row.dataset.chatUserid, currentUser?.uid !== ADMIN_UID ? currentUser.uid : ADMIN_UID);
+                    markAdminSupportChatSeen(roomId, readSupportChatCache(roomId));
+                    openSupportChatPage(row.dataset.chatUserid, 'admin', {
+                        ...chatMeta,
+                        roomId,
+                        adminId: currentUser?.uid !== ADMIN_UID ? currentUser.uid : ADMIN_UID
+                    });
                 };
             });
         };
