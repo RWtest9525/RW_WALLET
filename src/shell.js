@@ -38,7 +38,7 @@ root.outerHTML = String.raw`
                                 class="w-full px-4 py-3 bg-gray-100 dark:bg-gray-700 border-transparent rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
                             <input type="tel" id="mobile" placeholder="Mobile Number"
                                 class="w-full px-4 py-3 bg-gray-100 dark:bg-gray-700 border-transparent rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
-                            <input type="text" id="referral_code" placeholder="Referral Code (Mandatory)" required
+                            <input type="text" id="referral_code" placeholder="Referral Code (Mandatory)"
                                 class="w-full px-4 py-3 bg-gray-100 dark:bg-gray-700 border-transparent rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
                         </div>
                         <input type="email" id="email" placeholder="Email Address" required
