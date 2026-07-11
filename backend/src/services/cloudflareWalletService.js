@@ -2914,7 +2914,7 @@ ${memoriesContext}`
           "Authorization": "Bearer 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"
         },
         body: JSON.stringify({
-          model: "meta/llama-3.3-70b-instruct",
+          model: "meta/llama-3.1-8b-instruct",
           messages: messages,
           temperature: 0.2,
           top_p: 0.7,

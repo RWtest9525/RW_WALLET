@@ -943,11 +943,11 @@ const renderRevyBotMessages = () => {
             if (revyBotTyping) {
                 html += `
                     <div class="flex justify-start">
-                        <div class="chat-bubble-admin bg-white dark:bg-gray-800 border border-gray-100 dark:border-gray-700 px-4 py-3 rounded-2xl shadow-sm">
-                            <div class="flex items-center gap-1.5 py-1">
-                                <span class="h-2 w-2 rounded-full bg-gray-400 dark:bg-gray-500 animate-bounce" style="animation-delay: 0ms"></span>
-                                <span class="h-2 w-2 rounded-full bg-gray-400 dark:bg-gray-500 animate-bounce" style="animation-delay: 150ms"></span>
-                                <span class="h-2 w-2 rounded-full bg-gray-400 dark:bg-gray-500 animate-bounce" style="animation-delay: 300ms"></span>
+                        <div class="bg-white dark:bg-gray-800 border border-gray-100 dark:border-gray-700 px-3 py-2 rounded-2xl shadow-sm inline-flex items-center max-w-[60px]">
+                            <div class="flex items-center gap-1 py-0.5 justify-center w-full">
+                                <span class="h-1.5 w-1.5 rounded-full bg-blue-600 dark:bg-blue-400 animate-bounce" style="animation-delay: 0ms"></span>
+                                <span class="h-1.5 w-1.5 rounded-full bg-blue-500 dark:bg-blue-400/80 animate-bounce" style="animation-delay: 150ms"></span>
+                                <span class="h-1.5 w-1.5 rounded-full bg-blue-400 dark:bg-blue-400/60 animate-bounce" style="animation-delay: 300ms"></span>
                             </div>
                         </div>
                     </div>`;
@@ -1013,15 +1013,13 @@ const openRevyBotChatPage = (isAdminView = false) => {
                         <div id="revy-quick-options" class="shrink-0 flex gap-2 overflow-x-auto px-3 py-2 border-t border-gray-100 dark:border-gray-700 bg-white dark:bg-gray-800">
                             ${[
                                 ['how to earn', 'Earn'],
-                                ['how to add fund', 'Add Fund'],
                                 ['how to withdraw', 'Withdraw'],
                                 ['pending withdrawal', 'Pending'],
                                 ['pay to wallet', 'Pay'],
                                 ['transaction history', 'History'],
                                 ['payment method', 'Profile'],
                                 ['become partner investment', 'Partner'],
-                                ['loan help', 'Loan'],
-                                ['contact admin', 'Admin']
+                                ['loan help', 'Loan']
                             ].map(([question, label]) => `<button data-revy-question="${question}" class="revy-option shrink-0 px-3 py-1.5 rounded-full bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-200 text-xs font-bold">${label}</button>`).join('')}
                         </div>
                         <div id="revy-chat-composer" class="shrink-0 flex items-center gap-2 p-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] border-t border-gray-100 dark:border-gray-700 bg-white dark:bg-gray-800">
@@ -1100,11 +1098,7 @@ const openRevyBotChatPage = (isAdminView = false) => {
                 if (revyKeyboardCleanup) revyKeyboardCleanup();
                 closeRevyBotSession();
             };
-            if (window.revyBotAdminView) {
-                addRevyBotMessage(`Hi Admin (Owner), I am REVY. You can test my responses or train my memory by asking me to save/remember facts (e.g. "remember that withdrawal takes 2 hours"). Only messages from reviewsworld01@gmail.com will be saved to memory.`);
-            } else {
-                addRevyBotMessage(`Hi ${currentUserData?.name || 'there'}, I am REVY, RW AI BOT. I can instantly help with wallet balance, withdrawal status, transaction history, payment details, recharge, gift code, loan, invoices, password reset, and app usage.`);
-            }
+            addRevyBotMessage(`Hi ${currentUserData?.name || 'there'}, I am REVY, RW AI BOT. I can instantly help with wallet balance, withdrawal status, transaction history, payment details, recharge, gift code, loan, invoices, password reset, and app usage.`);
         };
 
 const loadSubAdminChatCard = async (parentAdminId) => {
