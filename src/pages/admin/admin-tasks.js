@@ -273,7 +273,7 @@ const showAdminTaskPage = () => {
                                 <label class="text-xs font-black uppercase text-gray-400">Task Title</label>
                                 <input id="admin-task-title" placeholder="Example: PopClub app review" class="mt-1 w-full px-4 py-3 bg-gray-100 dark:bg-gray-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-cyan-500">
                             </div>
-                            <div class="sm:col-span-2">
+                            <div id="admin-task-link-wrapper" class="sm:col-span-2">
                                 <label class="text-xs font-black uppercase text-gray-400">Task Link</label>
                                 <div class="mt-1 flex gap-2">
                                     <input id="admin-task-link" placeholder="https://..." class="min-w-0 flex-1 px-4 py-3 bg-gray-100 dark:bg-gray-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-cyan-500">
@@ -619,7 +619,7 @@ const updateAdminTaskDynamicFields = (preferredSubtype = '') => {
 
             const newsWrap = document.getElementById('admin-task-news-links-wrap');
             const linkInput = document.getElementById('admin-task-link');
-            const linkWrap = linkInput ? linkInput.closest('.sm:col-span-2') : null;
+            const linkWrap = document.getElementById('admin-task-link-wrapper');
             if (selectedSubtype === 'read_news') {
                 if (newsWrap) newsWrap.classList.remove('hidden');
                 if (linkWrap) linkWrap.classList.add('hidden');
