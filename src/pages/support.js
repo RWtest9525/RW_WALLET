@@ -28,9 +28,13 @@ const installChatViewportLock = ({ shellId, composerId, inputId, messagesId }) =
             const pageContainer = document.getElementById('page-container');
             if (!shell || !composer || !input || !messages) return null;
 
-            const isSmallTouchScreen = () =>
-                window.matchMedia?.('(pointer: coarse)')?.matches ||
-                Math.min(window.innerWidth || 0, window.innerHeight || 0) <= 768;
+            const isSmallTouchScreen = () => {
+                const ua = navigator.userAgent || '';
+                const isDesktopOS = /Windows|Macintosh|Linux/i.test(ua) && !/Android|iPhone|iPad|iPod/i.test(ua);
+                if (isDesktopOS) return false;
+                return window.matchMedia?.('(pointer: coarse)')?.matches ||
+                       Math.min(window.innerWidth || 0, window.innerHeight || 0) <= 768;
+            };
 
             if (!isSmallTouchScreen()) {
                 // On desktop/laptop screen sizes, bypass viewport locking to prevent layout shrinking
