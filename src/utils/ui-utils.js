@@ -2922,6 +2922,18 @@ const proceedWithRequestAction = async (userId, requestId, newStatus, txnId, req
                         .catch(error => console.warn('Loan repayment start update skipped:', error));
                 }
 
+                if (currentUser?.uid && currentUser.uid !== ADMIN_UID) {
+                    if (newStatus === 'completed') {
+                        if (typeof trackSubAdminActivity === 'function') {
+                            trackSubAdminActivity('withdraw_approved', amount, currentUser.uid);
+                        }
+                    } else if (newStatus === 'rejected') {
+                        if (typeof trackSubAdminActivity === 'function') {
+                            trackSubAdminActivity('withdraw_rejected', amount, currentUser.uid);
+                        }
+                    }
+                }
+
                 const processedRequest = {
                     ...(requestData || {}),
                     id: requestId,

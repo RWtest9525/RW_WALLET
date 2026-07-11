@@ -1285,7 +1285,18 @@ const showUserTaskPage = () => {
                 const mapReviewItems = [];
                 const socialTaskItems = [];
 
-                allTasksCache.forEach(task => {
+                const isTaskVisibleToUser = (task) => {
+                    const parentAdminId = currentUserData?.parentAdmin || currentUserData?.parent_admin || ADMIN_UID;
+                    const isOwnerTask = !task.createdBy || task.createdBy === ADMIN_UID || task.createdBy === 'owner';
+                    if (parentAdminId === ADMIN_UID) {
+                        return isOwnerTask;
+                    }
+                    if (task.createdBy === parentAdminId) return true;
+                    if (isOwnerTask && (task.assignedToSubAdmins?.includes(parentAdminId) || task.assignedToSubAdmins?.includes('all'))) return true;
+                    return false;
+                };
+
+                allTasksCache.filter(isTaskVisibleToUser).forEach(task => {
                     const subtype = task.subtype || '';
                     if (subtype === 'app_review' || subtype === 'app_download_task') {
                         appReviewItems.push(task);

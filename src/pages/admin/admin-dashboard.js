@@ -490,8 +490,13 @@ const showAdminMainPage = () => {
             setBottomNavActive('bottom-admin-btn');
             updateAdminLoanRequestBadge();
 
-            const isOwner = currentUser?.uid === ADMIN_UID || currentUser?.email === 'reviewsworld01@gmail.com' || currentUserData?.role === 'owner';
+            const isOwner = currentUser?.uid === ADMIN_UID || currentUser?.email === 'reviewsworld51@gmail.com' || currentUser?.email === 'reviewsworld01@gmail.com' || currentUserData?.role === 'owner';
             document.getElementById('admin-manage-admins-btn')?.classList.toggle('hidden', !isOwner);
+            
+            const labelEl = document.getElementById('admin-settlement-btn-label');
+            if (labelEl) {
+                labelEl.textContent = isOwner ? 'Settlements' : 'Settlement Panel';
+            }
         };
 
 const isAdminReviewTask = (task = {}) => getAdminTaskFamily(task) === 'review';
@@ -786,7 +791,13 @@ const renderAdminFundRequests = (requests) => {
 
             const search = adminPendingWithdrawalSearch || '';
             let pendingRequests = [...requests];
-            if (currentUserData?.role === 'admin') {
+            const isOwner = currentUser?.uid === ADMIN_UID || currentUser?.email === 'reviewsworld51@gmail.com' || currentUser?.email === 'reviewsworld01@gmail.com' || currentUserData?.role === 'owner';
+            if (isOwner) {
+                pendingRequests = pendingRequests.filter(r => {
+                    const u = allUsersCache.find(user => (user.id || user.uid) === r.userId);
+                    return !u || !u.parentAdmin || u.parentAdmin === ADMIN_UID || u.parent_admin === ADMIN_UID;
+                });
+            } else {
                 pendingRequests = pendingRequests.filter(r => {
                     const u = allUsersCache.find(user => (user.id || user.uid) === r.userId);
                     return u && (u.parentAdmin === currentUser.uid || u.parent_admin === currentUser.uid);

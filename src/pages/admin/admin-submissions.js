@@ -403,6 +403,19 @@ const renderAdminSubmissions = () => {
             const filter = document.getElementById('admin-sub-filter')?.value || 'all';
 
             let subs = [...adminSubmissionsCache];
+            const isOwner = currentUser?.uid === ADMIN_UID || currentUser?.email === 'reviewsworld51@gmail.com' || currentUser?.email === 'reviewsworld01@gmail.com' || currentUserData?.role === 'owner';
+            if (isOwner) {
+                subs = subs.filter(sub => {
+                    const task = allTasksCache.find(t => t.id === (sub.task_id || sub.taskId));
+                    const isOwnerTask = !task || !task.createdBy || task.createdBy === ADMIN_UID || task.createdBy === 'owner';
+                    return isOwnerTask;
+                });
+            } else {
+                subs = subs.filter(sub => {
+                    const task = allTasksCache.find(t => t.id === (sub.task_id || sub.taskId));
+                    return task && task.createdBy === currentUser.uid;
+                });
+            }
             if (filter !== 'all') {
                 if (filter === 'paid') {
                     subs = subs.filter(s => s.payout_status === 'paid');
@@ -676,6 +689,21 @@ const renderAdminSubmissions = () => {
                                 body: JSON.stringify({ manualStatus: 'approved', verifiedAt: Date.now() })
                             }, 8000);
                             showNotification('Submission approved.');
+
+                            const submission = adminSubmissionsCache.find(s => s.id === subId);
+                            if (submission) {
+                                const user = allUsersCache.find(u => u.id === submission.user_id || u.uid === submission.user_id);
+                                const subAdminId = user?.parentAdmin || user?.parent_admin;
+                                if (subAdminId && subAdminId !== ADMIN_UID) {
+                                    const task = allTasksCache.find(t => t.id === submission.task_id);
+                                    const isOwnerTask = !task || !task.createdBy || task.createdBy === ADMIN_UID || task.createdBy === 'owner';
+                                    if (isOwnerTask) {
+                                        if (typeof trackSubAdminActivity === 'function') {
+                                            trackSubAdminActivity('owner_task_completed', Number(submission.reward || 0), subAdminId);
+                                        }
+                                    }
+                                }
+                            }
                         } else if (action === 'reject-submission') {
                             await fetchWithTimeout(`${BACKEND_BASE_URL}/api/admin/task-submissions/${encodeURIComponent(subId)}`, {
                                 method: 'PATCH',

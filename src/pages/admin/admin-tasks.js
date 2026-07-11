@@ -1,5 +1,22 @@
 // File: src/pages/admin/admin-tasks.js
 
+const isTaskVisibleToAdmin = (task) => {
+    const isOwner = currentUser?.uid === ADMIN_UID || currentUser?.email === 'reviewsworld51@gmail.com' || currentUser?.email === 'reviewsworld01@gmail.com' || currentUserData?.role === 'owner';
+    if (isOwner) return true; // Owner sees all tasks
+    const isOwnerTask = !task.createdBy || task.createdBy === ADMIN_UID || task.createdBy === 'owner';
+    if (task.createdBy === currentUser?.uid) return true;
+    if (isOwnerTask && (task.assignedToSubAdmins?.includes(currentUser?.uid) || task.assignedToSubAdmins?.includes('all'))) return true;
+    return false;
+};
+
+const canAdminManageTask = (task) => {
+    const isOwner = currentUser?.uid === ADMIN_UID || currentUser?.email === 'reviewsworld51@gmail.com' || currentUser?.email === 'reviewsworld01@gmail.com' || currentUserData?.role === 'owner';
+    if (isOwner) return true; // Owner can manage all tasks
+    const isOwnerTask = !task.createdBy || task.createdBy === ADMIN_UID || task.createdBy === 'owner';
+    if (isOwnerTask) return false; // Sub-admins cannot edit/delete/manage owner tasks
+    return task.createdBy === currentUser?.uid; // Sub-admin can manage their own tasks
+};
+
 const applyAdminTasksSnapshot = (docs = []) => {
             allTasksCache = docs.map(doc => ({ id: doc.id, ...doc.data() }));
             if (document.getElementById('admin-task-list')) {
@@ -180,7 +197,8 @@ const setAdminTaskPanel = (panel = 'manage') => {
         };
 
 const showAdminTaskPage = () => {
-            if (!currentUser || currentUser.uid !== ADMIN_UID) return showNotification('Admin access only.', true);
+            const isCurrentAdmin = currentUser?.uid === ADMIN_UID || currentUser?.email === 'reviewsworld51@gmail.com' || currentUser?.email === 'reviewsworld01@gmail.com' || currentUserData?.role === 'admin' || currentUserData?.role === 'owner';
+            if (!currentUser || !isCurrentAdmin) return showNotification('Admin access only.', true);
             currentMainSection = 'admin';
             const isTaskPageEnabled = !!appConfigCache?.task_page_enabled;
             const content = `
@@ -302,6 +320,12 @@ const showAdminTaskPage = () => {
                             <div>
                                 <label class="text-xs font-black uppercase text-gray-400">List Compile Time (IST)</label>
                                 <input id="admin-task-list-time" type="time" value="20:00" class="mt-1 w-full px-4 py-3 bg-gray-100 dark:bg-gray-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-cyan-500">
+                            </div>
+                            <div id="admin-task-assignment-container" class="sm:col-span-2 hidden bg-slate-50 dark:bg-slate-900/50 p-4 rounded-2xl border border-gray-100 dark:border-gray-700">
+                                <label class="text-xs font-black uppercase text-gray-405 dark:text-gray-400 block mb-2">Assign to Sub-Admins (Only Owner can assign)</label>
+                                <div id="admin-task-subadmins-list" class="flex flex-wrap gap-3 text-xs font-bold text-gray-700 dark:text-gray-300">
+                                    <!-- Populated dynamically -->
+                                </div>
                             </div>
                             <div class="sm:col-span-2">
                                 <label class="text-xs font-black uppercase text-gray-400">Instructions</label>
@@ -503,6 +527,40 @@ const showAdminTaskPage = () => {
                 });
                 linkInput.addEventListener('blur', handleLinkInput);
             };
+            
+            // Dynamically show and populate sub-admin assignment checkboxes
+            const assignmentContainer = document.getElementById('admin-task-assignment-container');
+            const subAdminsListEl = document.getElementById('admin-task-subadmins-list');
+            const isOwner = currentUser?.uid === ADMIN_UID || currentUser?.email === 'reviewsworld51@gmail.com' || currentUser?.email === 'reviewsworld01@gmail.com' || currentUserData?.role === 'owner';
+            if (isOwner) {
+                if (assignmentContainer) assignmentContainer.classList.remove('hidden');
+                if (subAdminsListEl) {
+                    const subAdmins = (allUsersCache || []).filter(u => u.role === 'admin' && u.id !== ADMIN_UID);
+                    subAdminsListEl.innerHTML = `
+                        <label class="inline-flex items-center gap-1.5 cursor-pointer bg-white dark:bg-gray-800 px-3 py-2 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm">
+                            <input type="checkbox" id="assign-all-subadmins" value="all" class="rounded text-cyan-600 focus:ring-cyan-500">
+                            All Sub-Admins
+                        </label>
+                        ${subAdmins.map(admin => `
+                            <label class="inline-flex items-center gap-1.5 cursor-pointer bg-white dark:bg-gray-800 px-3 py-2 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm">
+                                <input type="checkbox" name="assign-subadmin" value="${admin.id || admin.uid}" class="subadmin-assign-checkbox rounded text-cyan-600 focus:ring-cyan-500">
+                                ${escapeHtml(admin.name || 'Admin')}
+                            </label>
+                        `).join('')}
+                    `;
+                    // Setup select-all checkbox logic
+                    const selectAllCheckbox = document.getElementById('assign-all-subadmins');
+                    const itemCheckboxes = document.querySelectorAll('.subadmin-assign-checkbox');
+                    if (selectAllCheckbox) {
+                        selectAllCheckbox.addEventListener('change', () => {
+                            itemCheckboxes.forEach(cb => cb.checked = selectAllCheckbox.checked);
+                        });
+                    }
+                }
+            } else {
+                if (assignmentContainer) assignmentContainer.classList.add('hidden');
+            }
+
             attachPlayStoreScraper();
             getDocs(query(collection(db, `artifacts/${appId}/public/data/tasks`), orderBy("createdAt", "desc")))
                 .then(snapshot => applyAdminTasksSnapshot(snapshot.docs))
@@ -640,7 +698,26 @@ const getAdminTaskFormData = (existingTask = null) => {
                 listTime,
                 instructions: document.getElementById('admin-task-instructions')?.value.trim() || '',
                 autoCloseDaily: true,
-                expiresAt: existingTask?.expiresAt || null
+                expiresAt: existingTask?.expiresAt || null,
+                assignedToSubAdmins: (() => {
+                    let list = [];
+                    const isOwner = currentUser?.uid === ADMIN_UID || currentUser?.email === 'reviewsworld51@gmail.com' || currentUser?.email === 'reviewsworld01@gmail.com' || currentUserData?.role === 'owner';
+                    if (isOwner) {
+                        const selectAllCheckbox = document.getElementById('assign-all-subadmins');
+                        if (selectAllCheckbox && selectAllCheckbox.checked) {
+                            list.push('all');
+                        }
+                        const itemCheckboxes = document.querySelectorAll('.subadmin-assign-checkbox');
+                        itemCheckboxes.forEach(cb => {
+                            if (cb.checked) {
+                                list.push(cb.value);
+                            }
+                        });
+                    } else {
+                        list.push(currentUser.uid);
+                    }
+                    return list;
+                })()
             };
         };
 
@@ -663,10 +740,14 @@ const resetAdminTaskForm = () => {
 
 const handleSaveAdminTask = async (event) => {
             event.preventDefault();
-            if (currentUser?.uid !== ADMIN_UID) return showNotification('Admin access only.', true);
+            const isCurrentAdmin = currentUser?.uid === ADMIN_UID || currentUser?.email === 'reviewsworld51@gmail.com' || currentUser?.email === 'reviewsworld01@gmail.com' || currentUserData?.role === 'admin' || currentUserData?.role === 'owner';
+            if (!currentUser || !isCurrentAdmin) return showNotification('Admin access only.', true);
             const saveBtn = document.getElementById('admin-task-save-btn');
             const editId = document.getElementById('admin-task-edit-id')?.value || '';
             const existingTask = editId ? allTasksCache.find(task => task.id === editId) : null;
+            if (existingTask && !canAdminManageTask(existingTask)) {
+                return showNotification('You do not have permission to manage owner tasks.', true);
+            }
             const payload = getAdminTaskFormData(existingTask);
             if (!payload.title) return showNotification('Please enter task title.', true);
             if (!Number.isFinite(payload.rate) || payload.rate <= 0) return showNotification('Please enter a valid task rate.', true);
@@ -739,6 +820,7 @@ const handleSaveAdminTask = async (event) => {
 const editAdminTask = (taskId) => {
             const task = allTasksCache.find(item => item.id === taskId);
             if (!task) return;
+            if (!canAdminManageTask(task)) return showNotification('You do not have permission to manage owner tasks.', true);
             const family = getAdminTaskFamily(task);
             const subtype = getAdminTaskSubtype(task);
             document.getElementById('admin-task-edit-id').value = task.id;
@@ -772,6 +854,19 @@ const editAdminTask = (taskId) => {
                 instructionsInput.value = task.instructions || '';
                 instructionsInput.dataset.autoDefault = task.instructions ? 'false' : 'true';
             }
+            const isOwner = currentUser?.uid === ADMIN_UID || currentUser?.email === 'reviewsworld51@gmail.com' || currentUser?.email === 'reviewsworld01@gmail.com' || currentUserData?.role === 'owner';
+            if (isOwner) {
+                const assigned = task.assignedToSubAdmins || [];
+                const selectAllCheckbox = document.getElementById('assign-all-subadmins');
+                if (selectAllCheckbox) {
+                    selectAllCheckbox.checked = assigned.includes('all');
+                }
+                const itemCheckboxes = document.querySelectorAll('.subadmin-assign-checkbox');
+                itemCheckboxes.forEach(cb => {
+                    cb.checked = assigned.includes(cb.value) || assigned.includes('all');
+                });
+            }
+
             document.getElementById('admin-task-save-btn').textContent = 'Update Task';
             updateAdminTaskDynamicFields(subtype);
             setAdminTaskPanel('add');
@@ -781,6 +876,7 @@ const editAdminTask = (taskId) => {
 const handleToggleAdminTaskStatus = async (taskId) => {
             const task = allTasksCache.find(item => item.id === taskId);
             if (!task) return;
+            if (!canAdminManageTask(task)) return showNotification('You do not have permission to manage owner tasks.', true);
             const currentStatus = getAdminTaskEffectiveStatus(task);
             const nextStatus = currentStatus === 'active' ? 'draft' : 'active';
             const nextExpiresAt = nextStatus === 'active' ? getNextTaskMidnightMillis() : null;
@@ -805,6 +901,7 @@ const handleToggleAdminTaskStatus = async (taskId) => {
 const handleDeleteAdminTask = async (taskId) => {
             const task = allTasksCache.find(item => item.id === taskId);
             if (!task) return;
+            if (!canAdminManageTask(task)) return showNotification('You do not have permission to manage owner tasks.', true);
             renderModal('Delete Task',
                 `<p class="text-sm text-gray-600 dark:text-gray-300">Delete <strong>${escapeHtml(task.title || 'this task')}</strong>? This removes it from the manage task list.</p>`,
                 `<button onclick="window.closeModal()" class="px-4 py-2 text-sm bg-gray-200 dark:bg-gray-600 rounded-lg">Cancel</button>
@@ -826,6 +923,7 @@ const handleDeleteAdminTask = async (taskId) => {
 const handleEditAdminTaskComment = (taskId) => {
             const task = allTasksCache.find(item => item.id === taskId);
             if (!task || !isAdminReviewTask(task)) return;
+            if (!canAdminManageTask(task)) return showNotification('You do not have permission to manage owner tasks.', true);
             const existingComments = getTaskCommentPool(task).join('\n');
             renderModal('Review Comment',
                 `<div class="space-y-3">
@@ -862,8 +960,10 @@ const renderAdminTaskList = () => {
             if (!listEl) return;
             const search = (document.getElementById('admin-task-search')?.value || '').trim().toLowerCase();
             const filter = document.getElementById('admin-task-filter')?.value || 'all';
-            const tasks = [...allTasksCache].filter(task => {
-                const status = getAdminTaskEffectiveStatus(task);
+            const tasks = [...allTasksCache]
+                .filter(isTaskVisibleToAdmin)
+                .filter(task => {
+                    const status = getAdminTaskEffectiveStatus(task);
                 if (filter !== 'all' && status !== filter) return false;
                 if (!search) return true;
                 return [task.title, task.category, task.instructions, task.taskGroup, task.taskSubtypeLabel, status]
@@ -933,23 +1033,31 @@ const renderAdminTaskList = () => {
                                 <h4 class="mt-0.5 text-sm font-black text-gray-900 dark:text-white truncate" title="${escapeHtml(task.title || subtypeMeta.label)}">${escapeHtml(task.title || subtypeMeta.label)}</h4>
                                 <div class="mt-1 flex items-center gap-1 flex-wrap">
                                     <span class="rounded bg-cyan-50 dark:bg-cyan-900/20 px-1.5 py-0.5 text-[9px] font-bold text-cyan-700 dark:text-cyan-300">${escapeHtml(getAdminTaskFamilyLabel(family))}</span>
-                                    <span class="rounded px-1.5 py-0.5 text-[9px] font-bold ${statusClass}">${isLive ? 'Live' : status === 'closed' ? 'Closed' : 'Off'}</span>
+                    <span class="rounded px-1.5 py-0.5 text-[9px] font-bold ${statusClass}">${isLive ? 'Live' : status === 'closed' ? 'Closed' : 'Off'}</span>
                                     <span class="text-[9px] font-bold text-gray-400 dark:text-gray-500">Lim: ${task.limit || 'Open'}</span>
                                     ${expiresAt ? `<span class="text-[9px] font-bold text-amber-600 dark:text-amber-400">Close: ${escapeHtml(closesText)}</span>` : ''}
                                 </div>
                             </div>
                         </div>
                         <div class="mt-3 pt-2 border-t border-gray-50 dark:border-gray-700/50 flex items-center justify-between gap-2">
-                            <button type="button" data-action="toggle-admin-task-status" data-taskid="${task.id}" class="inline-flex items-center gap-1.5 text-xs font-black ${isLive ? 'text-emerald-600 dark:text-emerald-400' : 'text-gray-400 dark:text-gray-500'}">
-                                <span class="relative inline-flex h-5 w-9 rounded-full ${isLive ? 'bg-emerald-500' : 'bg-gray-300 dark:bg-gray-600'} transition">
-                                    <span class="absolute top-0.5 left-0.5 h-4 w-4 rounded-full bg-white shadow transition transform ${isLive ? 'translate-x-4' : 'translate-x-0'}"></span>
-                                </span>
-                                ${isLive ? 'ON' : 'OFF'}
-                            </button>
-                            <div class="flex gap-1">
-                                ${isAdminReviewTask(task) ? getAdminTaskIconButtonMini('manage-task-comments', task.id, 'Comments', '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a10.6 10.6 0 0 1-4.51-.98L3 20l1.26-3.78A7.55 7.55 0 0 1 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"></path>', 'blue') : ''}
-                                ${getAdminTaskIconButtonMini('edit-admin-task', task.id, 'Edit', '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L10.582 16.07a4.5 4.5 0 0 1-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 0 1 1.13-1.897l8.932-8.931z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19.5 7.125 16.875 4.5"></path>', 'slate')}
-                                ${getAdminTaskIconButtonMini('delete-admin-task', task.id, 'Delete', '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="m14.74 9-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673A2.25 2.25 0 0 1 15.916 21H8.084a2.25 2.25 0 0 1-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 0 0-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 0 1 3.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 0 0-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 0 0-7.5 0"></path>', 'red')}
+                            ${canAdminManageTask(task) ? `
+                                <button type="button" data-action="toggle-admin-task-status" data-taskid="${task.id}" class="inline-flex items-center gap-1.5 text-xs font-black ${isLive ? 'text-emerald-600 dark:text-emerald-400' : 'text-gray-400 dark:text-gray-500'}">
+                                    <span class="relative inline-flex h-5 w-9 rounded-full ${isLive ? 'bg-emerald-500' : 'bg-gray-300 dark:bg-gray-600'} transition">
+                                        <span class="absolute top-0.5 left-0.5 h-4 w-4 rounded-full bg-white shadow transition transform ${isLive ? 'translate-x-4' : 'translate-x-0'}"></span>
+                                    </span>
+                                    ${isLive ? 'ON' : 'OFF'}
+                                </button>
+                                <div class="flex gap-1">
+                                    ${isAdminReviewTask(task) ? getAdminTaskIconButtonMini('manage-task-comments', task.id, 'Comments', '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a10.6 10.6 0 0 1-4.51-.98L3 20l1.26-3.78A7.55 7.55 0 0 1 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"></path>', 'blue') : ''}
+                                    ${getAdminTaskIconButtonMini('edit-admin-task', task.id, 'Edit', '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L10.582 16.07a4.5 4.5 0 0 1-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 0 1 1.13-1.897l8.932-8.931z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19.5 7.125 16.875 4.5"></path>', 'slate')}
+                                    ${getAdminTaskIconButtonMini('delete-admin-task', task.id, 'Delete', '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="m14.74 9-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673A2.25 2.25 0 0 1 15.916 21H8.084a2.25 2.25 0 0 1-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 0 0-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 0 1 3.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 0 0-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 0 0-7.5 0"></path>', 'red')}
+                                </div>
+                            ` : `
+                                <div class="inline-flex items-center gap-1.5 text-xs font-bold text-slate-400 dark:text-slate-500">
+                                    Status: <span class="uppercase font-black ${isLive ? 'text-emerald-500' : 'text-amber-500'}">${isLive ? 'Live' : 'Off'}</span> (Owner Task)
+                                </div>
+                                <div class="text-[10px] text-gray-400 font-bold bg-gray-50 dark:bg-gray-700/50 px-2 py-1 rounded-lg">View Only</div>
+                            `}
                         </div>
                     </div>`;
             }).join('') : '<p class="md:col-span-2 rounded-2xl border border-dashed border-gray-200 py-8 text-center text-sm font-semibold text-gray-500 dark:border-gray-700 dark:text-gray-400">No matching task found.</p>';

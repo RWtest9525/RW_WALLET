@@ -413,6 +413,13 @@ root.outerHTML = String.raw`
                                 </span>
                                 <span class="text-sm font-medium text-cyan-700 dark:text-cyan-300">Manage Task</span>
                             </button>
+                            <button id="admin-settlement-btn"
+                                class="flex flex-col items-center justify-center p-3 min-h-28 bg-amber-50 dark:bg-amber-900/20 rounded-2xl hover:bg-amber-100 dark:hover:bg-amber-900/30 transition border border-amber-200 dark:border-amber-800 shadow-sm">
+                                <span class="flex h-12 w-12 items-center justify-center rounded-2xl bg-white dark:bg-gray-800 shadow-sm mb-2">
+                                    <img src="https://cdn-icons-png.flaticon.com/512/584/584026.png" class="h-8 w-8 object-contain" alt="Settlement">
+                                </span>
+                                <span id="admin-settlement-btn-label" class="text-sm font-medium text-amber-700 dark:text-amber-300">Settlements</span>
+                            </button>
                         </div>
                     </div>
                 </div>

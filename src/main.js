@@ -25,6 +25,7 @@ import './pages/admin/admin-lists.js';
 import './pages/admin/admin-notifications.js';
 import './pages/admin/admin-manage-admins.js';
 import './pages/admin/admin-manage-settings.js';
+import './pages/admin/admin-settlements.js';
 import './core/firebase.js';
 
 // Setup Event listeners and routing at DOM load
@@ -573,6 +574,7 @@ document.getElementById('admin-investments-btn').addEventListener('click', () =>
 document.getElementById('admin-chats-btn').addEventListener('click', () => openAdminQuickAction(showAdminChatsPage));
 
 document.getElementById('admin-tasks-btn').addEventListener('click', () => openAdminQuickAction(showAdminTaskPage));
+document.getElementById('admin-settlement-btn')?.addEventListener('click', () => openAdminQuickAction(showAdminSettlementPage));
 
 document.getElementById('withdraw-fund-btn').addEventListener('click', () => openUserQuickAction(showWithdrawPage));
 
