@@ -263,6 +263,15 @@ const renderLocalWithdrawalHistoryList = () => {
         }
 
         const escapedDetail = escapeHtml(payoutDetails);
+        const methodId = normalizeWithdrawalMethodId(w);
+        const logoUrl = typeof WITHDRAW_METHOD_LOGOS !== 'undefined' ? WITHDRAW_METHOD_LOGOS[methodId] : null;
+        const methodSymbolHtml = logoUrl ? `
+            <span class="inline-flex items-center justify-center rounded bg-slate-50 dark:bg-slate-700 px-1.5 py-0.5 h-[18px] border border-slate-200/60 dark:border-slate-700/80" title="${escapeHtml(w.method || 'N/A')}">
+                <img src="${logoUrl}" class="h-3 max-w-[40px] object-contain" alt="${escapeHtml(w.method || 'N/A')}">
+            </span>
+        ` : `
+            <span class="inline-flex items-center gap-0.5 rounded bg-gray-100 dark:bg-gray-700 px-1.5 py-0.5 text-[10px] font-bold text-gray-600 dark:text-gray-300 leading-none">${escapeHtml(w.method || 'N/A')}</span>
+        `;
 
         return `
             <div class="relative mb-2.5 rounded-xl border border-slate-200 dark:border-slate-700/80 bg-white dark:bg-gray-800 overflow-hidden shadow-sm hover:shadow transition-all duration-200 animate-fade-in">
@@ -274,7 +283,7 @@ const renderLocalWithdrawalHistoryList = () => {
                                 <span class="rounded px-1.5 py-0.5 text-[9px] font-bold ${statusBg} ${statusColor} leading-none">${statusText}</span>
                             </div>
                             <div class="flex flex-wrap items-center gap-1.5">
-                                <span class="inline-flex items-center gap-0.5 rounded bg-gray-100 dark:bg-gray-700 px-1.5 py-0.5 text-[10px] font-bold text-gray-600 dark:text-gray-300 leading-none">${escapeHtml(w.method || 'N/A')}</span>
+                                ${methodSymbolHtml}
                                 <span class="inline-flex items-center gap-0.5 rounded bg-indigo-50 dark:bg-indigo-900/30 px-1.5 py-0.5 text-[10px] font-bold text-indigo-600 dark:text-indigo-300 max-w-[150px] sm:max-w-[200px] truncate leading-none" title="${escapedDetail}">${escapedDetail}</span>
                                 ${payoutDetails && payoutDetails !== 'N/A' ? `
                                     <button data-action="copy-text" data-text="${escapedDetail}" class="inline-flex h-5 w-5 items-center justify-center rounded bg-indigo-100 dark:bg-indigo-900/40 text-indigo-600 dark:text-indigo-300 hover:bg-indigo-200 dark:hover:bg-indigo-800/60 transition" title="Copy">

@@ -846,6 +846,16 @@ const renderAdminFundRequests = (requests) => {
                         <option value="flipkart_gift">Flipkart</option>
                     </select>
                 ` : '';
+
+                const logoUrl = typeof WITHDRAW_METHOD_LOGOS !== 'undefined' ? WITHDRAW_METHOD_LOGOS[methodId] : null;
+                const methodSymbolHtml = logoUrl ? `
+                    <span class="inline-flex items-center justify-center rounded bg-slate-50 dark:bg-slate-700 px-1.5 py-0.5 h-[18px] border border-slate-200/60 dark:border-slate-700/80" title="${escapeHtml(methodName)}">
+                        <img src="${logoUrl}" class="h-3 max-w-[40px] object-contain" alt="${escapeHtml(methodName)}">
+                    </span>
+                ` : `
+                    <span class="inline-flex items-center gap-0.5 rounded bg-gray-100 dark:bg-gray-700 px-1.5 py-0.5 text-[10px] font-bold text-gray-600 dark:text-gray-300 leading-none">${escapeHtml(methodName)}</span>
+                `;
+
                 return `
                 <div class="relative mb-2 rounded-xl border ${needsBalanceCut ? 'border-rose-300 dark:border-rose-900/50 bg-rose-50/10 dark:bg-rose-950/5' : 'border-slate-200 dark:border-slate-700/80 bg-white dark:bg-gray-800'} overflow-hidden shadow-sm hover:shadow transition-all duration-200">
                     ${needsBalanceCut ? '<span class="absolute left-0 top-0 bottom-0 w-1 bg-red-500 rounded-l-xl"></span>' : ''}
@@ -857,7 +867,7 @@ const renderAdminFundRequests = (requests) => {
                                     ${needsBalanceCut ? '<span class="rounded bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-200 px-1 py-0.2 text-[8px] font-black uppercase tracking-wider">Uncut</span>' : ''}
                                 </div>
                                 <div class="flex flex-wrap items-center gap-1.5">
-                                    <span class="inline-flex items-center gap-0.5 rounded bg-gray-100 dark:bg-gray-700 px-1.5 py-0.5 text-[10px] font-bold text-gray-600 dark:text-gray-300 leading-none">${escapeHtml(methodName)}</span>
+                                    ${methodSymbolHtml}
                                     <span class="inline-flex items-center gap-0.5 rounded bg-indigo-50 dark:bg-indigo-900/30 px-1.5 py-0.5 text-[10px] font-bold text-indigo-600 dark:text-indigo-300 max-w-[150px] sm:max-w-[200px] truncate leading-none" title="${escapedDetail}">${escapedDetail}</span>
                                     ${detailText && detailText !== 'N/A' ? `
                                         <button data-action="copy-text" data-text="${escapedDetail}" class="inline-flex h-5 w-5 items-center justify-center rounded bg-indigo-100 dark:bg-indigo-900/40 text-indigo-600 dark:text-indigo-300 hover:bg-indigo-200 dark:hover:bg-indigo-800/60 transition" title="Copy">
