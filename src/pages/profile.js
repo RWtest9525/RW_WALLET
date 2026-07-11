@@ -195,8 +195,8 @@ const showProfilePage = (focusMethod = '') => {
                 <div class="flex items-center gap-3 bg-gray-50 dark:bg-gray-900/60 p-4 rounded-2xl border border-gray-150 dark:border-gray-800 text-left">
                     <img src="${escapeHtml(currentAvatar)}" class="h-12 w-12 rounded-xl border border-gray-200 dark:border-gray-755 shrink-0 bg-white p-1">
                     <div>
-                        <p class="text-xs font-black uppercase text-gray-400 tracking-wider">Admin Logo</p>
-                        <h4 class="text-sm font-extrabold text-gray-850 dark:text-white mt-0.5">Application Logo (Fixed)</h4>
+                        <h4 class="text-sm font-extrabold text-gray-850 dark:text-white">${escapeHtml(currentUserData.name || 'Admin')}</h4>
+                        <p class="text-xs font-bold text-gray-500 dark:text-gray-400 mt-0.5">${escapeHtml(currentUserData.mobile || currentUserData.phoneNumber || currentUserData.email || '')}</p>
                     </div>
                 </div>`;
             }
@@ -221,14 +221,15 @@ const showProfilePage = (focusMethod = '') => {
                 paymentDetailsForm = renderPaymentDetailsForm(activePaymentMethod, getProfilePaymentDetails(activePaymentMethod));
             }
             const savedPaymentSummary = activePaymentMethod ? getProfilePaymentSummaryText(activePaymentMethod) : '';
-            const savedPaymentCard = activePaymentMethod ? `
+            const isPaymentMethodSaved = activePaymentMethod && !!savedPaymentSummary.trim();
+            const savedPaymentCard = isPaymentMethodSaved ? `
                     <div class="rounded-xl border border-emerald-100 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-900/20 p-3">
                         <p class="text-xs font-semibold uppercase text-emerald-600 dark:text-emerald-300">Saved Payment Method</p>
                         <p class="mt-1 text-sm font-bold text-gray-900 dark:text-white">${escapeHtml(getProfilePaymentMethodLabel(activePaymentMethod, currentUserData))}</p>
                         ${savedPaymentSummary ? `<p class="mt-1 text-sm text-gray-600 dark:text-gray-300 break-words">${escapeHtml(savedPaymentSummary)}</p>` : ''}
                         <button type="button" id="delete-payment-method-btn" class="mt-3 w-full rounded-lg bg-red-50 dark:bg-red-900/30 px-3 py-2 text-sm font-bold text-red-600 dark:text-red-200">Delete payment method</button>
                     </div>` : '';
-            const paymentMethodControl = activePaymentMethod ? `
+            const paymentMethodControl = isPaymentMethodSaved ? `
                     <input type="hidden" id="profile-payment-method" value="${escapeHtml(activePaymentMethod)}">` : `
                     <div class="space-y-1">
                         <label class="text-sm font-medium text-gray-500 dark:text-gray-400">Payment Method</label>

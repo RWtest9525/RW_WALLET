@@ -116,7 +116,7 @@ const refreshSubAdminsList = async () => {
                     <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center p-4 bg-gray-50 dark:bg-gray-700/50 rounded-xl border border-gray-100 dark:border-gray-700 gap-3">
                         <div class="flex-1 min-w-0">
                             <p class="font-bold text-gray-900 dark:text-white">${escapeHtml(adminData.name || 'Admin')}</p>
-                            <p class="text-xs text-gray-500">${escapeHtml(adminData.email)} | Code: <strong class="text-blue-600">${escapeHtml(adminData.referralCode || '')}</strong></p>
+                            <p class="text-xs text-gray-500">${escapeHtml(adminData.email)} | Mobile: <strong>${escapeHtml(adminData.mobile || adminData.phoneNumber || 'N/A')}</strong> | Code: <strong class="text-blue-600">${escapeHtml(adminData.referralCode || '')}</strong></p>
                             <p class="text-xs">Status: <span class="${statusColor}">${escapeHtml(adminData.status || 'active')}</span></p>
                             ${pwDisplay}
                         </div>
