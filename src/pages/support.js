@@ -5,17 +5,54 @@ const getSupportSocket = async ({ timeoutMs = 2500 } = {}) => {
             const token = await getBackendAuthToken();
             if (supportSocket?.connected) return supportSocket;
 
-            supportSocket = window.io(BACKEND_BASE_URL, {
-                transports: ['websocket', 'polling'],
-                auth: { token }
-            });
+            if (!supportSocket) {
+                supportSocket = window.io(BACKEND_BASE_URL, {
+                    transports: ['websocket', 'polling'],
+                    auth: { token },
+                    autoConnect: false
+                });
 
-            supportSocket.on('connect_error', async (error) => {
-                console.warn('Support socket connection failed:', error?.message || error);
-                if (/token|auth/i.test(error.message || '')) {
-                    backendAuthToken = '';
-                }
-            });
+                supportSocket.on('connect_error', async (error) => {
+                    console.warn('Support socket connection failed:', error?.message || error);
+                    if (/token|auth/i.test(error.message || '')) {
+                        backendAuthToken = '';
+                    }
+                });
+            } else {
+                supportSocket.auth = { token };
+            }
+
+            if (!supportSocket.connected) {
+                supportSocket.connect();
+                await new Promise((resolve, reject) => {
+                    let done = false;
+                    const onConnect = () => {
+                        if (done) return;
+                        done = true;
+                        cleanup();
+                        resolve(supportSocket);
+                    };
+                    const onConnectError = (error) => {
+                        if (done) return;
+                        done = true;
+                        cleanup();
+                        reject(error || new Error('Connection failed'));
+                    };
+                    const timeout = setTimeout(() => {
+                        if (done) return;
+                        done = true;
+                        cleanup();
+                        reject(new Error('Connection timeout'));
+                    }, timeoutMs);
+                    const cleanup = () => {
+                        clearTimeout(timeout);
+                        supportSocket.off('connect', onConnect);
+                        supportSocket.off('connect_error', onConnectError);
+                    };
+                    supportSocket.on('connect', onConnect);
+                    supportSocket.on('connect_error', onConnectError);
+                });
+            }
 
             return supportSocket;
         };
