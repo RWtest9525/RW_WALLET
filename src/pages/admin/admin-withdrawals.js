@@ -283,13 +283,17 @@ const renderLocalWithdrawalHistoryList = () => {
                                 <span class="rounded px-1.5 py-0.5 text-[9px] font-bold ${statusBg} ${statusColor} leading-none">${statusText}</span>
                             </div>
                             <div class="flex flex-wrap items-center gap-1.5">
-                                ${methodSymbolHtml}
-                                <span class="inline-flex items-center gap-0.5 rounded bg-indigo-50 dark:bg-indigo-900/30 px-1.5 py-0.5 text-[10px] font-bold text-indigo-600 dark:text-indigo-300 max-w-[150px] sm:max-w-[200px] truncate leading-none" title="${escapedDetail}">${escapedDetail}</span>
-                                ${payoutDetails && payoutDetails !== 'N/A' ? `
-                                    <button data-action="copy-text" data-text="${escapedDetail}" class="inline-flex h-5 w-5 items-center justify-center rounded bg-indigo-100 dark:bg-indigo-900/40 text-indigo-600 dark:text-indigo-300 hover:bg-indigo-200 dark:hover:bg-indigo-800/60 transition" title="Copy">
-                                        <svg class="h-2.5 w-2.5 pointer-events-none" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
-                                    </button>
-                                ` : ''}
+                                <div class="flex items-center gap-1.5 min-w-0">
+                                    ${methodSymbolHtml}
+                                    <div class="flex items-center gap-1 bg-indigo-50 dark:bg-indigo-900/30 border border-indigo-100/50 dark:border-indigo-900/30 px-1.5 py-0.5 rounded text-[10px] font-bold text-indigo-600 dark:text-indigo-300 min-w-0">
+                                        <span class="truncate max-w-[140px] xs:max-w-[180px] sm:max-w-[240px] leading-none" title="${escapedDetail}">${escapedDetail}</span>
+                                        ${payoutDetails && payoutDetails !== 'N/A' ? `
+                                            <button data-action="copy-text" data-text="${escapedDetail}" class="shrink-0 h-[18px] w-[18px] flex items-center justify-center rounded bg-indigo-200/50 dark:bg-indigo-800/60 text-indigo-700 dark:text-indigo-200 hover:bg-indigo-300/60 transition" title="Copy">
+                                                <svg class="h-2.5 w-2.5 pointer-events-none" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+                                            </button>
+                                        ` : ''}
+                                    </div>
+                                </div>
                             </div>
                         </div>
                         <div class="shrink-0">
