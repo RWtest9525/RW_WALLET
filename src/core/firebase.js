@@ -15,9 +15,14 @@ const initFirebaseApp = () => {
         const auth = getAuth(app);
         
         // Initialize Firestore with Persistent Cache
-        const db = initializeFirestore(app, {
-            localCache: persistentLocalCache()
-        });
+        let db;
+        if (window.db) {
+            db = window.db;
+        } else {
+            db = initializeFirestore(app, {
+                localCache: persistentLocalCache()
+            });
+        }
         
         const storage = getStorage(app);
         let messaging = null;
