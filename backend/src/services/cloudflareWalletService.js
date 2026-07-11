@@ -2277,15 +2277,31 @@ function registerRoutes(app, { d1, r2 }) {
     }
 
     try {
-      const userRecord = await admin.auth().createUser({
-        email,
-        password,
-        displayName: name,
-        phoneNumber: mobile ? (mobile.startsWith('+') ? mobile : `+91${mobile}`) : undefined
-      });
-
-      const uid = userRecord.uid;
+      let uid;
+      let userRecord;
       const cleanMobile = mobile ? mobile.replace(/\D/g, '').slice(-10) : '';
+
+      try {
+        userRecord = await admin.auth().createUser({
+          email,
+          password,
+          displayName: name,
+          phoneNumber: mobile ? (mobile.startsWith('+') ? mobile : `+91${mobile}`) : undefined
+        });
+        uid = userRecord.uid;
+      } catch (authErr) {
+        if (authErr.code === 'auth/email-already-exists' || (authErr.message && authErr.message.includes('already in use'))) {
+          userRecord = await admin.auth().getUserByEmail(email);
+          uid = userRecord.uid;
+          await admin.auth().updateUser(uid, {
+            password,
+            displayName: name,
+            phoneNumber: mobile ? (mobile.startsWith('+') ? mobile : `+91${mobile}`) : undefined
+          });
+        } else {
+          throw authErr;
+        }
+      }
 
       const db = admin.firestore();
       const appId = process.env.FIREBASE_APP_ID || 'digital-wallet-prod';
@@ -2302,20 +2318,28 @@ function registerRoutes(app, { d1, r2 }) {
         signupApprovalStatus: 'approved',
         accountStatus: 'active',
         balance: 0
-      });
+      }, { merge: true });
 
       const passwordHash = await bcrypt.hash(password, 12);
-      await createUser(d1, {
-        id: uid,
-        firebaseUid: uid,
-        email,
-        passwordHash,
-        profile: { name, mobile: cleanMobile },
-        role: 'admin',
-        parentAdmin: null,
-        referralCode,
-        status: 'active'
-      });
+      const existingDbUser = await findUserByEmail(d1, email);
+      if (existingDbUser) {
+        await d1.query(
+          `UPDATE users SET password_hash = ?, name = ?, mobile = ?, role = ?, referral_code = ?, status = ? WHERE id = ?`,
+          [passwordHash, name, cleanMobile, 'admin', referralCode, 'active', existingDbUser.id]
+        );
+      } else {
+        await createUser(d1, {
+          id: uid,
+          firebaseUid: uid,
+          email,
+          passwordHash,
+          profile: { name, mobile: cleanMobile },
+          role: 'admin',
+          parentAdmin: null,
+          referralCode,
+          status: 'active'
+        });
+      }
 
       return res.json({ ok: true, uid });
     } catch (err) {
