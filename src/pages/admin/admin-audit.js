@@ -1,27 +1,41 @@
 // File: src/pages/admin/admin-audit.js
 
+const getAdminFilteredFundRequests = () => {
+            if (!Array.isArray(allFundRequestsCache)) return [];
+            const isOwner = currentUser?.uid === ADMIN_UID || currentUser?.email === 'reviewsworld51@gmail.com' || currentUser?.email === 'reviewsworld01@gmail.com' || currentUserData?.role === 'owner';
+            return allFundRequestsCache.filter(r => {
+                const u = allUsersCache.find(user => (user.id || user.uid) === r.userId);
+                if (isOwner) {
+                    return !u || !u.parentAdmin || u.parentAdmin === ADMIN_UID || u.parent_admin === ADMIN_UID;
+                } else {
+                    return u && (u.parentAdmin === currentUser?.uid || u.parent_admin === currentUser?.uid);
+                }
+            });
+        };
+
 const updateAdminPendingRequestSummary = () => {
-            const totalPendingAmount = allFundRequestsCache.reduce((total, req) => total + (req.amount || 0), 0);
+            const filteredRequests = getAdminFilteredFundRequests();
+            const totalPendingAmount = filteredRequests.reduce((total, req) => total + (req.amount || 0), 0);
             const pendingElement = document.getElementById('admin-pending-withdrawals');
             if (pendingElement) {
-                pendingElement.innerHTML = `${allFundRequestsCache.length}<br><span class="text-sm font-normal">${formatCurrency(totalPendingAmount)}</span>`;
+                pendingElement.innerHTML = `${filteredRequests.length}<br><span class="text-sm font-normal">${formatCurrency(totalPendingAmount)}</span>`;
             }
             const analyticsPendingElement = document.getElementById('analytics-pending-reqs');
             if (analyticsPendingElement) {
-                analyticsPendingElement.textContent = allFundRequestsCache.length;
+                analyticsPendingElement.textContent = filteredRequests.length;
             }
             ['admin-withdrawal-request-badge'].forEach((id) => {
                 const badge = document.getElementById(id);
                 if (!badge) return;
-                badge.textContent = allFundRequestsCache.length > 99 ? '99+' : String(allFundRequestsCache.length || '');
-                badge.classList.toggle('hidden', allFundRequestsCache.length <= 0);
+                badge.textContent = filteredRequests.length > 99 ? '99+' : String(filteredRequests.length || '');
+                badge.classList.toggle('hidden', filteredRequests.length <= 0);
             });
             const analyticsPendingAmountElement = document.getElementById('analytics-pending-amount');
             if (analyticsPendingAmountElement) {
                 analyticsPendingAmountElement.textContent = formatCurrency(totalPendingAmount);
             }
             rememberAdminDashboardMetrics({
-                pendingWithdrawals: allFundRequestsCache.length,
+                pendingWithdrawals: filteredRequests.length,
                 pendingWithdrawalAmount: formatCurrency(totalPendingAmount)
             });
         };

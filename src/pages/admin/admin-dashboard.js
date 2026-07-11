@@ -1,7 +1,8 @@
 // File: src/pages/admin/admin-dashboard.js
 
 const refreshAdminFundRequestsFromCloud = async () => {
-            if (currentUser?.uid !== ADMIN_UID) return;
+            const isCurrentAdmin = currentUser?.uid === ADMIN_UID || currentUserData?.role === 'admin' || currentUserData?.role === 'owner';
+            if (!isCurrentAdmin) return;
             try {
                 const cloudRequests = await loadCloudFundRequests({ status: 'pending' });
                 let firebasePendingRequests = [];
@@ -251,7 +252,8 @@ const refreshAdminDashboardCaches = async () => {
         };
 
 const initializeAdminFundRequestsRealtime = () => {
-            if (currentUser?.uid !== ADMIN_UID || adminFundRequestsRealtimeStarted) return;
+            const isCurrentAdmin = currentUser?.uid === ADMIN_UID || currentUserData?.role === 'admin' || currentUserData?.role === 'owner';
+            if (!isCurrentAdmin || adminFundRequestsRealtimeStarted) return;
             adminFundRequestsRealtimeStarted = true;
             refreshAdminFundRequestsFromCloud().catch(error => {
                 console.warn('Admin fund request refresh skipped:', error);
@@ -320,7 +322,8 @@ const applyAdminInvestmentsSnapshot = (docs = []) => {
         };
 
 const initializeAdminSecondaryRealtime = () => {
-            if (currentUser?.uid !== ADMIN_UID || adminSecondaryRealtimeStarted) return;
+            const isCurrentAdmin = currentUser?.uid === ADMIN_UID || currentUserData?.role === 'admin' || currentUserData?.role === 'owner';
+            if (!isCurrentAdmin || adminSecondaryRealtimeStarted) return;
             adminSecondaryRealtimeStarted = true;
             refreshAdminSecondaryCaches().catch(error => console.warn('Admin secondary data refresh skipped:', error));
         };
@@ -351,7 +354,8 @@ const refreshAdminSecondaryCaches = async () => {
         };
 
 const refreshAdminLoanCaches = async () => {
-            if (currentUser?.uid !== ADMIN_UID) return;
+            const isCurrentAdmin = currentUser?.uid === ADMIN_UID || currentUserData?.role === 'admin' || currentUserData?.role === 'owner';
+            if (!isCurrentAdmin) return;
             const loansQuery = query(collection(db, `artifacts/${appId}/public/data/loans`), orderBy("createdAt", "desc"));
             const [loanRequestsResult, loansResult] = await Promise.allSettled([
                 loadAdminLoanRequestsMerged(),

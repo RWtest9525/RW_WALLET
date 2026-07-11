@@ -96,7 +96,8 @@ const hydrateAdminUsersFromCache = () => {
         };
 
 const initializeAdminUsersRealtime = () => {
-            if (currentUser?.uid !== ADMIN_UID || adminUsersRealtimeStarted) return;
+            const isCurrentAdmin = currentUser?.uid === ADMIN_UID || currentUserData?.role === 'admin' || currentUserData?.role === 'owner';
+            if (!isCurrentAdmin || adminUsersRealtimeStarted) return;
             adminUsersRealtimeStarted = true;
             const usersQuery = query(collection(db, `artifacts/${appId}/public/data/users`));
             unsubscribers.push(onSnapshot(usersQuery, (snapshot) => {
