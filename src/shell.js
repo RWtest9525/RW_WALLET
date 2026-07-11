@@ -425,6 +425,13 @@ root.outerHTML = String.raw`
                                 </span>
                                 <span id="admin-settlement-btn-label" class="text-sm font-medium text-amber-700 dark:text-amber-300">Settlements</span>
                             </button>
+                            <button id="admin-train-ai-btn"
+                                class="flex flex-col items-center justify-center p-3 min-h-28 bg-orange-50 dark:bg-orange-900/20 rounded-2xl hover:bg-orange-100 dark:hover:bg-orange-900/30 transition border border-orange-200 dark:border-orange-800 shadow-sm hidden">
+                                <span class="flex h-12 w-12 items-center justify-center rounded-2xl bg-white dark:bg-gray-800 shadow-sm mb-2">
+                                    <img src="https://cdn-icons-png.flaticon.com/512/2103/2103633.png" class="h-8 w-8 object-contain" alt="Train AI">
+                                </span>
+                                <span class="text-sm font-medium text-orange-700 dark:text-orange-300 font-bold">Train AI</span>
+                            </button>
                         </div>
                     </div>
                 </div>

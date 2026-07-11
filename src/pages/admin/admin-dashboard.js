@@ -503,6 +503,7 @@ const showAdminMainPage = () => {
             document.getElementById('admin-manage-admins-btn')?.classList.toggle('hidden', !isOwner);
             document.getElementById('admin-loans-btn')?.classList.toggle('hidden', !isOwner);
             document.getElementById('admin-investments-btn')?.classList.toggle('hidden', !isOwner);
+            document.getElementById('admin-train-ai-btn')?.classList.toggle('hidden', !isOwner);
             
             const labelEl = document.getElementById('admin-settlement-btn-label');
             if (labelEl) {
