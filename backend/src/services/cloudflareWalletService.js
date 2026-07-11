@@ -2151,9 +2151,13 @@ function registerRoutes(app, { d1, r2 }) {
       const db = admin.firestore();
       const snap = await db.collection('artifacts/digital-wallet-prod/public/data/partner_investments')
         .where('userId', '==', userId)
-        .orderBy('createdAt', 'desc')
         .get();
       const investments = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      investments.sort((a, b) => {
+        const timeA = a.createdAt?.toDate ? a.createdAt.toDate().getTime() : (a.createdAt || 0);
+        const timeB = b.createdAt?.toDate ? b.createdAt.toDate().getTime() : (b.createdAt || 0);
+        return timeB - timeA;
+      });
       res.json({ ok: true, investments });
     } catch (error) {
       console.error('List user partner investments failed:', error);
