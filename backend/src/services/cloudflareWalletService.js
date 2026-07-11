@@ -907,7 +907,7 @@ async function createNotification(d1, { title = '', message = '', audience = 'se
     [id, String(title || '').trim().slice(0, 160), cleanMessage, senderId, String(audience || 'selected').slice(0, 40), createdAt, expiresAt]
   );
 
-  const chunkSize = 100;
+  const chunkSize = 25;
   for (let index = 0; index < uniqueRecipients.length; index += chunkSize) {
     const chunk = uniqueRecipients.slice(index, index + chunkSize);
     const valuesSql = chunk.map(() => '(?, ?, ?, NULL)').join(', ');
