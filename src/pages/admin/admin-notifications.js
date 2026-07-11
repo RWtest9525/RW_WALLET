@@ -137,7 +137,7 @@ const sendAdminNotification = async () => {
                     body: JSON.stringify({ title, message, audience: mode, recipients })
                 }, 10000);
                 const data = await response.json().catch(() => ({}));
-                if (!response.ok || !data.ok) throw new Error(data.error || 'Send failed');
+                if (!response.ok || !data.ok) throw new Error(data.message || data.error || 'Send failed');
                 document.getElementById('admin-notification-message').value = '';
                 adminNotificationSelectedUsers = [];
                 renderAdminNotificationSelectedUsers();
