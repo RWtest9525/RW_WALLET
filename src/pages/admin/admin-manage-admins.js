@@ -90,7 +90,7 @@ const handleCreateSubAdmin = async (e) => {
 
     try {
         const token = await getBackendAuthToken();
-        const res = await fetch(`${BACKEND_URL}/api/admin/create-sub-admin`, {
+        const res = await fetch(`${BACKEND_BASE_URL}/api/admin/create-sub-admin`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -113,7 +113,7 @@ const handleSuspendAdmin = async (targetUid) => {
     if (!confirm('Are you sure you want to suspend this sub-admin?')) return;
     try {
         const token = await getBackendAuthToken();
-        const res = await fetch(`${BACKEND_URL}/api/admin/suspend-sub-admin`, {
+        const res = await fetch(`${BACKEND_BASE_URL}/api/admin/suspend-sub-admin`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -133,7 +133,7 @@ const handleSuspendAdmin = async (targetUid) => {
 const handleUnsuspendAdmin = async (targetUid) => {
     try {
         const token = await getBackendAuthToken();
-        const res = await fetch(`${BACKEND_URL}/api/admin/unsuspend-sub-admin`, {
+        const res = await fetch(`${BACKEND_BASE_URL}/api/admin/unsuspend-sub-admin`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -154,7 +154,7 @@ const handleDeleteAdmin = async (targetUid) => {
     if (!confirm('Are you sure you want to delete this sub-admin? This action cannot be undone.')) return;
     try {
         const token = await getBackendAuthToken();
-        const res = await fetch(`${BACKEND_URL}/api/admin/delete-sub-admin`, {
+        const res = await fetch(`${BACKEND_BASE_URL}/api/admin/delete-sub-admin`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
