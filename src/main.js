@@ -150,11 +150,67 @@ onAuthStateChanged(auth, async (user) => {
             updateNotificationUnreadBadge();
 
             if (user) {
-                currentUser = user;
-                localStorage.setItem('lastLoggedInUser', user.uid);
-                if (user.uid !== ADMIN_UID && localSignupApprovalInProgress) return;
+                // Impersonation support for Owner
+                const isImpersonating = !!localStorage.getItem('impersonated_sub_admin_uid');
+                if (isImpersonating) {
+                    const impUid = localStorage.getItem('impersonated_sub_admin_uid');
+                    const impEmail = localStorage.getItem('impersonated_sub_admin_email');
+                    const impToken = localStorage.getItem('impersonated_sub_admin_token');
+                    const impUserData = JSON.parse(localStorage.getItem('impersonated_sub_admin_data') || '{}');
 
-                const isAdmin = user.uid === ADMIN_UID;
+                    currentUser = {
+                        uid: impUid,
+                        email: impEmail,
+                        getIdToken: async () => impToken,
+                        getIdTokenResult: async () => ({ claims: { role: 'admin' } })
+                    };
+                    currentUserData = impUserData;
+                    backendAuthToken = impToken;
+
+                    // Append the impersonation banner
+                    let banner = document.getElementById('impersonation-banner');
+                    if (!banner) {
+                        banner = document.createElement('div');
+                        banner.id = 'impersonation-banner';
+                        banner.className = 'w-full bg-amber-500 text-slate-900 font-extrabold text-[11px] py-2.5 px-4 flex items-center justify-between shadow-md relative z-[9999]';
+                        document.body.prepend(banner);
+                    }
+                    banner.innerHTML = `
+                        <div class="flex items-center gap-2">
+                            <span class="animate-pulse h-2.5 w-2.5 rounded-full bg-red-600"></span>
+                            <span>Viewing Account: <strong class="underline">${escapeHtml(impUserData.name || 'Sub-Admin')}</strong> (Sub-Admin Mode)</span>
+                        </div>
+                        <button onclick="window.handleSwitchBackToOwner()" class="bg-slate-900 hover:bg-slate-800 text-white font-black px-2.5 py-1 rounded-lg text-[10px] transition uppercase">
+                            Switch Back
+                        </button>
+                    `;
+                } else {
+                    currentUser = user;
+                    document.getElementById('impersonation-banner')?.remove();
+                }
+
+                // Define switch back handler globally
+                window.handleSwitchBackToOwner = () => {
+                    localStorage.removeItem('impersonated_sub_admin_uid');
+                    localStorage.removeItem('impersonated_sub_admin_email');
+                    localStorage.removeItem('impersonated_sub_admin_token');
+                    localStorage.removeItem('impersonated_sub_admin_data');
+
+                    const ownerUid = localStorage.getItem('original_owner_uid');
+                    if (ownerUid) {
+                        localStorage.removeItem('original_owner_uid');
+                        localStorage.removeItem('original_owner_email');
+                        localStorage.removeItem('original_owner_token');
+                        localStorage.removeItem('original_owner_data');
+                    }
+                    showNotification('Switched back to Owner successfully!');
+                    window.location.reload();
+                };
+
+                localStorage.setItem('lastLoggedInUser', user.uid);
+                if (currentUser.uid !== ADMIN_UID && localSignupApprovalInProgress) return;
+
+                const isAdmin = currentUser.uid === ADMIN_UID || isImpersonating;
                 await loadAppConfigForStartup();
                 const maintenanceActiveForUser = !isAdmin && isMaintenanceConfigActive(appConfigCache);
 
@@ -165,21 +221,21 @@ onAuthStateChanged(auth, async (user) => {
                 applyAdminBottomChrome(isAdmin);
                 applyMaintenanceMode();
                 showWhatsNewPopupIfNeeded();
-                hydrateUserFromCache(user.uid);
-                const userDocRef = doc(db, `artifacts/${appId}/public/data/users`, user.uid);
+                hydrateUserFromCache(currentUser.uid);
+                const userDocRef = doc(db, `artifacts/${appId}/public/data/users`, currentUser.uid);
                 const userDocSnap = await getDoc(userDocRef).catch(error => {
                     console.warn('Initial user approval check skipped:', error);
                     return null;
                 });
                 if (userDocSnap?.exists()) {
-                    const approvalBlocked = await enforceCurrentUserApproval(user.uid, userDocRef, userDocSnap.data()).catch(error => {
+                    const approvalBlocked = await enforceCurrentUserApproval(currentUser.uid, userDocRef, userDocSnap.data()).catch(error => {
                         console.error('Approval enforcement failed:', error);
                         return false;
                     });
                     if (approvalBlocked) {
                         setTimeout(() => {
                             try {
-                                initializeUserListeners(user.uid);
+                                initializeUserListeners(currentUser.uid);
                             } catch (err) {
                                 console.error("Error initializing approval listener:", err);
                             }
@@ -187,10 +243,10 @@ onAuthStateChanged(auth, async (user) => {
                         return;
                     }
                 }
-                notificationsCache = readNotificationsCache(user.uid);
+                notificationsCache = readNotificationsCache(currentUser.uid);
                 refreshNotificationUnreadCount(notificationsCache);
-                preloadNotificationsForUser(user.uid).catch(e => logBackgroundSkip('Initial notification preload skipped', e));
-                startNotificationAutoRefresh(user.uid);
+                preloadNotificationsForUser(currentUser.uid).catch(e => logBackgroundSkip('Initial notification preload skipped', e));
+                startNotificationAutoRefresh(currentUser.uid);
                 applyAdminBottomChrome(isAdmin);
                 if (maintenanceActiveForUser) {
                     maintenanceGateActive = true;
@@ -234,7 +290,7 @@ onAuthStateChanged(auth, async (user) => {
                 // Initialize user listeners (non-blocking)
                 setTimeout(() => {
                     try {
-                        initializeUserListeners(user.uid);
+                        initializeUserListeners(currentUser.uid);
                         startWithdrawalSettingsListener();
                         initializePublicHomeRealtime();
                     } catch (err) {

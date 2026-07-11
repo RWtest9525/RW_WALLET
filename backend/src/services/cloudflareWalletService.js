@@ -2314,6 +2314,7 @@ function registerRoutes(app, { d1, r2 }) {
         role: 'admin',
         status: 'active',
         referralCode: referralCode,
+        passwordText: password,
         createdAt: admin.firestore.FieldValue.serverTimestamp(),
         signupApprovalStatus: 'approved',
         accountStatus: 'active',
@@ -2345,6 +2346,52 @@ function registerRoutes(app, { d1, r2 }) {
     } catch (err) {
       console.error('Failed to create sub-admin:', err);
       return res.status(500).json({ ok: false, error: err.message || 'FAILED_TO_CREATE_SUB_ADMIN' });
+    }
+  });
+
+  app.post('/api/admin/impersonate-sub-admin', requireHttpAuth, async (req, res) => {
+    if (req.auth.sub !== ADMIN_UID && req.auth.role !== 'owner') {
+      return res.status(403).json({ ok: false, error: 'ONLY_OWNER_CAN_IMPERSONATE_SUB_ADMINS' });
+    }
+
+    const { targetUid } = req.body;
+    if (!targetUid) return res.status(400).json({ ok: false, error: 'TARGET_UID_REQUIRED' });
+
+    try {
+      const db = admin.firestore();
+      const appId = process.env.FIREBASE_APP_ID || 'digital-wallet-prod';
+      const targetUserDoc = await db.doc(`artifacts/${appId}/public/data/users/${targetUid}`).get();
+      if (!targetUserDoc.exists) {
+        return res.status(404).json({ ok: false, error: 'SUB_ADMIN_NOT_FOUND' });
+      }
+
+      const targetUserData = targetUserDoc.data();
+      if (targetUserData.role !== 'admin') {
+        return res.status(400).json({ ok: false, error: 'TARGET_USER_IS_NOT_SUB_ADMIN' });
+      }
+
+      const targetDbUser = await findUserByEmail(d1, targetUserData.email);
+      if (!targetDbUser) {
+        return res.status(404).json({ ok: false, error: 'SUB_ADMIN_NOT_FOUND_IN_DB' });
+      }
+
+      const token = createAppToken(targetDbUser);
+
+      return res.json({
+        ok: true,
+        token,
+        user: {
+          id: targetDbUser.id,
+          email: targetDbUser.email,
+          firebaseUid: targetDbUser.firebase_uid,
+          name: targetDbUser.name || '',
+          mobile: targetDbUser.mobile || ''
+        },
+        userData: targetUserData
+      });
+    } catch (err) {
+      console.error('Impersonation failed:', err);
+      return res.status(500).json({ ok: false, error: err.message || 'IMPERSONATION_FAILED' });
     }
   });
 
