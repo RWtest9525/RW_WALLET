@@ -167,18 +167,18 @@ onAuthStateChanged(auth, async (user) => {
                     currentUserData = impUserData;
                     backendAuthToken = impToken;
 
-                    // Small floating switch-back button (bottom-right, no banner)
-                    let switchBtn = document.getElementById('impersonation-banner');
-                    if (!switchBtn) {
-                        switchBtn = document.createElement('button');
-                        switchBtn.id = 'impersonation-banner';
-                        switchBtn.className = 'fixed bottom-20 right-3 z-[9999] flex items-center gap-1.5 bg-slate-900 hover:bg-slate-800 text-white font-black px-3 py-2 rounded-full text-[10px] shadow-lg transition active:scale-95 uppercase border border-white/20';
-                        switchBtn.onclick = () => window.handleSwitchBackToOwner();
-                        document.body.appendChild(switchBtn);
+                    // Toggle visibility of switch-back button in the header
+                    const switchBtn = document.getElementById('impersonation-switch-btn');
+                    if (switchBtn) {
+                        switchBtn.classList.remove('hidden');
                     }
-                    switchBtn.innerHTML = `<svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4"></path></svg> Switch Back`;
+                    document.getElementById('impersonation-banner')?.remove();
                 } else {
                     currentUser = user;
+                    const switchBtn = document.getElementById('impersonation-switch-btn');
+                    if (switchBtn) {
+                        switchBtn.classList.add('hidden');
+                    }
                     document.getElementById('impersonation-banner')?.remove();
                 }
 
