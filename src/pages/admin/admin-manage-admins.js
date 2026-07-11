@@ -294,10 +294,12 @@ const handleImpersonateAdmin = async (targetUid, targetName) => {
         localStorage.setItem('impersonated_sub_admin_uid', data.uid);
         localStorage.setItem('impersonated_sub_admin_email', data.email);
         localStorage.setItem('impersonated_sub_admin_token', data.token);
+        const subAdminDoc = allUsersCache.find(u => u.id === targetUid || u.uid === targetUid) || {};
         localStorage.setItem('impersonated_sub_admin_data', JSON.stringify({
-            name: data.name || targetName,
-            email: data.email,
-            uid: data.uid,
+            ...subAdminDoc,
+            name: subAdminDoc.name || data.name || targetName,
+            email: subAdminDoc.email || data.email,
+            uid: subAdminDoc.uid || data.uid,
             role: 'admin'
         }));
 

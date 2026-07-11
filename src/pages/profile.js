@@ -168,7 +168,7 @@ const getProfilePaymentMethodLabel = (method, data = currentUserData || {}) => (
 
 const showProfilePage = (focusMethod = '') => {
             if (!currentUserData) return showNotification('User data not loaded. Please wait.', true);
-            const isAdminProfile = currentUser?.uid === ADMIN_UID;
+            const isAdminProfile = currentUser?.uid === ADMIN_UID || currentUserData?.role === 'admin' || currentUserData?.role === 'owner';
             const websiteLinks = Array.isArray(currentUserData.websiteLinks) ? currentUserData.websiteLinks.slice(0, 3) : [];
             const activePaymentMethod = focusMethod || normalizeProfilePaymentMethod(currentUserData);
 

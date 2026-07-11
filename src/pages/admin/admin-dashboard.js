@@ -141,13 +141,18 @@ const applyAdminBottomChrome = (isAdmin) => {
                 bottomAdminButton.hidden = !isAdmin;
                 bottomAdminButton.classList.toggle('hidden', !isAdmin);
             }
+            const bottomHelpButton = document.getElementById('bottom-help-btn');
+            if (bottomHelpButton) {
+                bottomHelpButton.hidden = isAdmin;
+                bottomHelpButton.classList.toggle('hidden', isAdmin);
+            }
             document.getElementById('bottom-task-btn')?.classList.remove('hidden');
             const bottomHomeLabel = document.getElementById('bottom-home-label');
             if (bottomHomeLabel) bottomHomeLabel.textContent = 'Wallet';
             const bottomGrid = document.getElementById('bottom-nav-grid');
             if (bottomGrid) {
-                bottomGrid.style.setProperty('--bottom-nav-count', isAdmin ? '6' : '5');
-                bottomGrid.className = `mx-auto grid w-full max-w-xl ${isAdmin ? 'grid-cols-6' : 'grid-cols-5'} items-center px-2 pt-2 text-[10px] sm:text-xs font-semibold text-gray-500 dark:text-gray-400`;
+                bottomGrid.style.setProperty('--bottom-nav-count', '5');
+                bottomGrid.className = `mx-auto grid w-full max-w-xl grid-cols-5 items-center px-2 pt-2 text-[10px] sm:text-xs font-semibold text-gray-500 dark:text-gray-400`;
             }
         };
 

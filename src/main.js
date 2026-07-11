@@ -164,7 +164,7 @@ onAuthStateChanged(auth, async (user) => {
                         getIdToken: async () => impToken,
                         getIdTokenResult: async () => ({ claims: { role: 'admin' } })
                     };
-                    currentUserData = impUserData;
+                    currentUserData = { ...impUserData, ...currentUserData };
                     backendAuthToken = impToken;
 
                     // Toggle visibility of switch-back button in the header
