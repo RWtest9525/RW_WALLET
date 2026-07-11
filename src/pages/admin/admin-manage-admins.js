@@ -4,27 +4,35 @@ const showAdminManageAdminsPage = async () => {
     if (!currentUser) return;
     const content = `
         ${getPageHeader('Manage Admins')}
-        <div class="max-w-4xl mx-auto space-y-6">
-            <!-- Add Sub-Admin Card -->
-            <div class="bg-white dark:bg-gray-800 p-6 rounded-2xl shadow-md border border-gray-100 dark:border-gray-700">
-                <h3 class="text-lg font-bold mb-4">Add New Sub-Admin</h3>
+        <div class="max-w-4xl mx-auto space-y-6 pb-24 px-4">
+            <!-- Header Row with Toggle Button -->
+            <div class="flex items-center justify-between">
+                <h3 class="text-xl font-black text-gray-900 dark:text-white">Existing Sub-Admins</h3>
+                <button id="toggle-add-subadmin-btn" class="inline-flex items-center gap-1.5 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-black rounded-xl text-xs transition hover:scale-105 active:scale-95 shadow-md">
+                    <svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M12 4v16m8-8H4"></path></svg>
+                    Add Sub-Admin
+                </button>
+            </div>
+
+            <!-- Add Sub-Admin Card (Hidden by default) -->
+            <div id="add-subadmin-card" class="hidden bg-white dark:bg-gray-800 p-6 rounded-2xl shadow-md border border-gray-100 dark:border-gray-700 space-y-4">
+                <h3 class="text-base font-extrabold text-gray-900 dark:text-white">Add New Sub-Admin</h3>
                 <form id="create-subadmin-form" class="space-y-4">
                     <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                        <input type="text" id="subadmin-name" placeholder="Full Name" required class="px-4 py-3 bg-gray-100 dark:bg-gray-700 rounded-lg focus:outline-none">
-                        <input type="email" id="subadmin-email" placeholder="Email" required class="px-4 py-3 bg-gray-100 dark:bg-gray-700 rounded-lg focus:outline-none">
-                        <input type="password" id="subadmin-password" placeholder="Password" required class="px-4 py-3 bg-gray-100 dark:bg-gray-700 rounded-lg focus:outline-none">
-                        <input type="tel" id="subadmin-mobile" placeholder="Mobile (Optional)" class="px-4 py-3 bg-gray-100 dark:bg-gray-700 rounded-lg focus:outline-none">
-                        <input type="text" id="subadmin-refcode" placeholder="Referral Code (e.g. RWADMIN03)" required class="px-4 py-3 bg-gray-100 dark:bg-gray-700 rounded-lg focus:outline-none">
+                        <input type="text" id="subadmin-name" placeholder="Full Name" required class="px-4 py-3 bg-gray-100 dark:bg-gray-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm font-semibold">
+                        <input type="email" id="subadmin-email" placeholder="Email" required class="px-4 py-3 bg-gray-100 dark:bg-gray-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm font-semibold">
+                        <input type="password" id="subadmin-password" placeholder="Password" required class="px-4 py-3 bg-gray-100 dark:bg-gray-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm font-semibold">
+                        <input type="tel" id="subadmin-mobile" placeholder="Mobile (Optional)" class="px-4 py-3 bg-gray-100 dark:bg-gray-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm font-semibold">
+                        <input type="text" id="subadmin-refcode" placeholder="Referral Code (e.g. RWADMIN03)" required class="px-4 py-3 bg-gray-100 dark:bg-gray-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm font-semibold">
                     </div>
-                    <button type="submit" class="w-full sm:w-auto px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-lg transition">Create Sub-Admin</button>
+                    <button type="submit" class="w-full sm:w-auto px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white font-black rounded-xl text-sm transition">Create Sub-Admin</button>
                 </form>
             </div>
 
             <!-- List of Sub-Admins -->
-            <div class="bg-white dark:bg-gray-800 p-6 rounded-2xl shadow-md border border-gray-100 dark:border-gray-700">
-                <h3 class="text-lg font-bold mb-4">Existing Sub-Admins</h3>
+            <div class="bg-white dark:bg-gray-800 p-6 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700">
                 <div id="sub-admins-list-container" class="space-y-3">
-                    <div class="text-center py-4 text-gray-500">Loading sub-admins...</div>
+                    <div class="text-center py-8 text-gray-400 text-sm font-semibold">Loading sub-admins...</div>
                 </div>
             </div>
         </div>
@@ -33,7 +41,26 @@ const showAdminManageAdminsPage = async () => {
     showPage(content, { returnTo: 'admin' });
     setBottomNavActive('bottom-admin-btn');
 
+    // Add form submit listener
     document.getElementById('create-subadmin-form').addEventListener('submit', handleCreateSubAdmin);
+
+    // Toggle button handler
+    document.getElementById('toggle-add-subadmin-btn').addEventListener('click', () => {
+        const card = document.getElementById('add-subadmin-card');
+        const btn = document.getElementById('toggle-add-subadmin-btn');
+        if (card.classList.contains('hidden')) {
+            card.classList.remove('hidden');
+            btn.innerHTML = `<svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M6 18L18 6M6 6l12 12"></path></svg> Close Form`;
+            btn.classList.replace('bg-blue-600', 'bg-gray-600');
+            btn.classList.replace('hover:bg-blue-700', 'hover:bg-gray-700');
+        } else {
+            card.classList.add('hidden');
+            btn.innerHTML = `<svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M12 4v16m8-8H4"></path></svg> Add Sub-Admin`;
+            btn.classList.replace('bg-gray-600', 'bg-blue-600');
+            btn.classList.replace('hover:bg-gray-700', 'hover:bg-blue-700');
+        }
+    });
+
     await refreshSubAdminsList();
 };
 
