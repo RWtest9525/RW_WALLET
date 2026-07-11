@@ -26,7 +26,6 @@ import './pages/admin/admin-notifications.js';
 import './pages/admin/admin-manage-admins.js';
 import './pages/admin/admin-manage-settings.js';
 import './pages/admin/admin-settlements.js';
-import './pages/admin/admin-train-ai.js';
 import './core/firebase.js';
 
 // Setup Event listeners and routing at DOM load
@@ -625,7 +624,7 @@ document.getElementById('admin-chats-btn').addEventListener('click', () => openA
 
 document.getElementById('admin-tasks-btn').addEventListener('click', () => openAdminQuickAction(showAdminTaskPage));
 document.getElementById('admin-settlement-btn')?.addEventListener('click', () => openAdminQuickAction(showAdminSettlementPage));
-document.getElementById('admin-train-ai-btn')?.addEventListener('click', () => openAdminQuickAction(showAdminTrainAiPage));
+document.getElementById('admin-train-ai-btn')?.addEventListener('click', () => openAdminQuickAction(() => openRevyBotChatPage(true)));
 
 document.getElementById('withdraw-fund-btn').addEventListener('click', () => openUserQuickAction(showWithdrawPage));
 

@@ -754,10 +754,14 @@ const closeRevyBotSession = () => {
             revyBotTimer = null;
             revyBotMessages = [];
             revyBotLastQuestion = '';
-            hidePage();
-            currentMainSection = 'home';
-            switchTab('user-panel');
-            setBottomNavActive('bottom-home-btn');
+            if (window.revyBotAdminView) {
+                showAdminMainPage();
+            } else {
+                hidePage();
+                currentMainSection = 'home';
+                switchTab('user-panel');
+                setBottomNavActive('bottom-home-btn');
+            }
         };
 
 const getRevyBotReply = async (question) => {
@@ -984,7 +988,8 @@ const addRevyBotMessage = (text, senderRole = 'bot', actions = '') => {
             resetRevyBotTimer();
         };
 
-const openRevyBotChatPage = () => {
+const openRevyBotChatPage = (isAdminView = false) => {
+            window.revyBotAdminView = isAdminView;
             if (activeChatUnsubscribe) {
                 activeChatUnsubscribe();
                 activeChatUnsubscribe = null;
@@ -1029,7 +1034,7 @@ const openRevyBotChatPage = () => {
                 </div>
                 ${getPageFooter()}`;
             showPage(content, { fullHeight: true });
-            setBottomNavActive('bottom-help-btn');
+            setBottomNavActive(window.revyBotAdminView ? 'bottom-admin-btn' : 'bottom-help-btn');
             const revyKeyboardCleanup = installChatViewportLock({
                 shellId: 'revy-chat-shell',
                 composerId: 'revy-chat-composer',
@@ -1085,13 +1090,21 @@ const openRevyBotChatPage = () => {
             }
             document.getElementById('revy-back-btn').onclick = () => {
                 if (revyKeyboardCleanup) revyKeyboardCleanup();
-                showHelpSupportPage();
+                if (window.revyBotAdminView) {
+                    showAdminMainPage();
+                } else {
+                    showHelpSupportPage();
+                }
             };
             document.getElementById('revy-close-btn').onclick = () => {
                 if (revyKeyboardCleanup) revyKeyboardCleanup();
                 closeRevyBotSession();
             };
-            addRevyBotMessage(`Hi ${currentUserData?.name || 'there'}, I am REVY, RW AI BOT. I can instantly help with wallet balance, withdrawal status, transaction history, payment details, recharge, gift code, loan, invoices, password reset, and app usage.`);
+            if (window.revyBotAdminView) {
+                addRevyBotMessage(`Hi Admin (Owner), I am REVY. You can test my responses or train my memory by asking me to save/remember facts (e.g. "remember that withdrawal takes 2 hours"). Only messages from reviewsworld01@gmail.com will be saved to memory.`);
+            } else {
+                addRevyBotMessage(`Hi ${currentUserData?.name || 'there'}, I am REVY, RW AI BOT. I can instantly help with wallet balance, withdrawal status, transaction history, payment details, recharge, gift code, loan, invoices, password reset, and app usage.`);
+            }
         };
 
 const loadSubAdminChatCard = async (parentAdminId) => {
