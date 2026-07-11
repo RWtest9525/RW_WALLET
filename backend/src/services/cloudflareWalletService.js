@@ -3020,14 +3020,19 @@ ${memoriesContext}`
     if (!req.auth.isAdmin) {
       return res.status(403).json({ ok: false, error: 'ADMIN_REQUIRED' });
     }
-    const notification = await createNotification(d1, {
-      title: req.body.title,
-      message: req.body.message,
-      audience: req.body.audience,
-      recipients: req.body.recipients,
-      senderId: req.auth.sub
-    });
-    res.json({ ok: true, notification });
+    try {
+      const notification = await createNotification(d1, {
+        title: req.body.title,
+        message: req.body.message,
+        audience: req.body.audience,
+        recipients: req.body.recipients,
+        senderId: req.auth.sub
+      });
+      res.json({ ok: true, notification });
+    } catch (error) {
+      console.error('Create notification failed:', error);
+      res.status(500).json({ ok: false, error: 'CREATE_NOTIFICATION_FAILED', message: error.message });
+    }
   });
 
   app.delete('/api/admin/notifications/:notificationId', requireHttpAuth, async (req, res) => {
