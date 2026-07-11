@@ -1723,6 +1723,12 @@ async function processPeriodicLiveChecksAndPayouts(d1) {
             balance: admin.firestore.FieldValue.increment(reward)
           }).catch(e => console.error(`[Day7-Payout] Firestore user balance update failed for ${sub.user_id}:`, e));
 
+          // Deduct from owner's wallet
+          const ownerRefDay7 = db.doc(`artifacts/digital-wallet-prod/public/data/users/${ADMIN_UID}`);
+          await ownerRefDay7.update({
+            balance: admin.firestore.FieldValue.increment(-reward)
+          }).catch(e => console.error(`[Day7-Payout] Owner fund deduction failed:`, e));
+
           const txnId = `txn_${now}_${Math.random().toString(36).substr(2, 9)}`;
           const txnRef = db.doc(`artifacts/digital-wallet-prod/public/data/users/${sub.user_id}/transactions/${txnId}`);
           await txnRef.set({
@@ -3476,6 +3482,12 @@ ${memoriesContext}`
         await userRef.update({
           balance: admin.firestore.FieldValue.increment(reward)
         }).catch(e => console.error(`[News Task] Firestore user balance update failed:`, e));
+
+        // 4b. Deduct from owner's wallet
+        const ownerRefNews = db.doc(`artifacts/digital-wallet-prod/public/data/users/${ADMIN_UID}`);
+        await ownerRefNews.update({
+          balance: admin.firestore.FieldValue.increment(-reward)
+        }).catch(e => console.error(`[News Task] Owner fund deduction failed:`, e));
 
         // 5. Save transaction in Firestore
         const txnId = `txn_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;

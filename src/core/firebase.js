@@ -44,7 +44,13 @@ const initFirebaseApp = () => {
         // Start Auth state change listener
         onAuthStateChanged(auth, async (user) => {
             if (user) {
-                currentUser = user;
+                // If impersonating a sub-admin, use their UID for all Firestore listeners
+                const isImpersonating = !!localStorage.getItem('impersonated_sub_admin_uid');
+                const effectiveUid = isImpersonating ? localStorage.getItem('impersonated_sub_admin_uid') : user.uid;
+
+                if (!isImpersonating) {
+                    currentUser = user;
+                }
                 localStorage.setItem('lastLoggedInUser', user.uid);
                 
                 // OneSignal user identification
@@ -58,13 +64,13 @@ const initFirebaseApp = () => {
                 // Set persistence
                 setPersistence(auth, browserLocalPersistence).catch(e => console.warn("Persistence set failed:", e));
                 
-                // Realtime user profile listener
-                const userRef = doc(db, `artifacts/${appId}/public/data/users`, user.uid);
+                // Realtime user profile listener — uses effectiveUid (sub-admin uid when impersonating)
+                const userRef = doc(db, `artifacts/${appId}/public/data/users`, effectiveUid);
                 onSnapshot(userRef, (docSnap) => {
                     if (docSnap.exists()) {
                         const userData = docSnap.data();
                         currentUserData = userData;
-                        localStorage.setItem(`rw_wallet_user_cache_${user.uid}`, JSON.stringify(userData));
+                        localStorage.setItem(`rw_wallet_user_cache_${effectiveUid}`, JSON.stringify(userData));
                         
                         // Hydrate UI elements
                         const balanceEl = document.getElementById('user-balance');
@@ -72,30 +78,33 @@ const initFirebaseApp = () => {
                         if (balanceEl && typeof formatCompactInr === 'function') balanceEl.textContent = formatCompactInr(userData.balance || 0);
                         if (adminBalanceEl && typeof formatCompactInr === 'function') adminBalanceEl.textContent = formatCompactInr(userData.balance || 0);
                         
-                        if (userData.isFlagged || userData.isDisabled) {
-                            if (typeof showBlockedAccountPage === 'function') showBlockedAccountPage(userData);
-                        } else if (userData.approvalStatus === 'pending' || userData.signupApprovalStatus === 'pending' || userData.accountStatus === 'pending_approval') {
-                            if (typeof showVerificationPendingPage === 'function') showVerificationPendingPage(userData);
-                        } else if (userData.approvalStatus === 'rejected' || userData.signupApprovalStatus === 'rejected' || userData.accountStatus === 'rejected') {
-                            if (typeof showVerificationPendingPage === 'function') showVerificationPendingPage(userData);
-                        } else {
-                            // If page was blocked/pending, return to dashboard
-                            if (document.getElementById('verification-pending-container') || document.getElementById('dashboard-content')?.classList.contains('hidden')) {
-                                document.getElementById('dashboard-content')?.classList.remove('hidden');
-                                document.getElementById('bottom-nav')?.classList.remove('hidden');
-                                const pageContainer = document.getElementById('page-container');
-                                if (pageContainer) {
-                                    pageContainer.innerHTML = '';
-                                    pageContainer.classList.add('hidden');
+                        // Skip blocked/pending checks for impersonated sessions
+                        if (!isImpersonating) {
+                            if (userData.isFlagged || userData.isDisabled) {
+                                if (typeof showBlockedAccountPage === 'function') showBlockedAccountPage(userData);
+                            } else if (userData.approvalStatus === 'pending' || userData.signupApprovalStatus === 'pending' || userData.accountStatus === 'pending_approval') {
+                                if (typeof showVerificationPendingPage === 'function') showVerificationPendingPage(userData);
+                            } else if (userData.approvalStatus === 'rejected' || userData.signupApprovalStatus === 'rejected' || userData.accountStatus === 'rejected') {
+                                if (typeof showVerificationPendingPage === 'function') showVerificationPendingPage(userData);
+                            } else {
+                                // If page was blocked/pending, return to dashboard
+                                if (document.getElementById('verification-pending-container') || document.getElementById('dashboard-content')?.classList.contains('hidden')) {
+                                    document.getElementById('dashboard-content')?.classList.remove('hidden');
+                                    document.getElementById('bottom-nav')?.classList.remove('hidden');
+                                    const pageContainer = document.getElementById('page-container');
+                                    if (pageContainer) {
+                                        pageContainer.innerHTML = '';
+                                        pageContainer.classList.add('hidden');
+                                    }
                                 }
                             }
                         }
                     }
                 });
                 
-                // Realtime transactions history listener (for UI reactivity)
+                // Realtime transactions history listener — uses effectiveUid
                 const txQuery = query(
-                    collection(db, `artifacts/${appId}/public/data/users/${user.uid}/transactions`),
+                    collection(db, `artifacts/${appId}/public/data/users/${effectiveUid}/transactions`),
                     orderBy('timestamp', 'desc'),
                     firestoreLimit(FIRESTORE_TRANSACTION_READ_LIMIT)
                 );

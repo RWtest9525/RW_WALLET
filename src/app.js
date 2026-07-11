@@ -33,6 +33,8 @@ window.addEventListener('unhandledrejection', (event) => {
 const hydrateInstantShell = () => {
     const ADMIN_UID = 'mOs5Fmp4RoRzeBDH4pZLMOpQx7Q2';
     const lastUser = localStorage.getItem('lastLoggedInUser');
+    const isImpersonating = !!localStorage.getItem('impersonated_sub_admin_uid');
+    const effectiveUser = isImpersonating ? localStorage.getItem('impersonated_sub_admin_uid') : lastUser;
     const escapeHtml = (value = '') => String(value)
         .replace(/&/g, '&amp;')
         .replace(/</g, '&lt;')
@@ -47,7 +49,7 @@ const hydrateInstantShell = () => {
         document.getElementById('main-content').classList.remove('hidden');
         document.getElementById('auth-screen').classList.add('hidden');
         document.getElementById('bottom-task-btn')?.classList.remove('hidden');
-        if (lastUser === ADMIN_UID) {
+        if (lastUser === ADMIN_UID || isImpersonating) {
             document.getElementById('admin-tab-button')?.classList.remove('hidden');
             document.getElementById('bottom-admin-btn')?.classList.remove('hidden');
             document.getElementById('bottom-task-btn')?.classList.remove('hidden');
@@ -59,7 +61,7 @@ const hydrateInstantShell = () => {
             }
         }
         try {
-            const cachedUser = JSON.parse(localStorage.getItem(`rw_wallet_user_cache_${lastUser}`) || 'null');
+            const cachedUser = JSON.parse(localStorage.getItem(`rw_wallet_user_cache_${effectiveUser}`) || 'null');
             if (cachedUser) {
                 if (cachedUser.isFlagged || cachedUser.isDisabled) {
                     document.getElementById('dashboard-content')?.classList.add('hidden');

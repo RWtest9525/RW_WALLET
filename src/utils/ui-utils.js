@@ -486,16 +486,18 @@ const sanitizeUserForCache = (data = {}, uid = '') => ({
         });
 
 const hydrateUserFromCache = (userId) => {
-            const cached = readJsonCache(getUserCacheKey(userId));
+            const isImpersonating = !!localStorage.getItem('impersonated_sub_admin_uid');
+            const effectiveUid = isImpersonating ? localStorage.getItem('impersonated_sub_admin_uid') : userId;
+            const cached = readJsonCache(getUserCacheKey(effectiveUid));
             if (!cached) return false;
-            if (cached.isFlagged || cached.isDisabled || isUserApprovalPending(cached) || isUserApprovalRejected(cached)) {
+            if (!isImpersonating && (cached.isFlagged || cached.isDisabled || isUserApprovalPending(cached) || isUserApprovalRejected(cached))) {
                 return false;
             }
 
             currentUserData = cached;
             document.getElementById('user-balance').textContent = formatCompactBalance(cached.balance || 0);
             updateDollarBalanceDisplay(cached.balance || 0);
-            if (userId === ADMIN_UID) {
+            if (effectiveUid === ADMIN_UID || isImpersonating) {
                 document.getElementById('admin-wallet-balance').textContent = formatCompactBalance(cached.balance || 0);
             }
             return true;
