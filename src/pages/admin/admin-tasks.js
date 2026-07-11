@@ -16,6 +16,7 @@ const canAdminManageTask = (task) => {
     if (isOwnerTask) return false; // Sub-admins cannot edit/delete/manage owner tasks
     return task.createdBy === currentUser?.uid; // Sub-admin can manage their own tasks
 };
+const isAdminReviewTask = (task = {}) => getAdminTaskFamily(task) === 'review';
 
 const applyAdminTasksSnapshot = (docs = []) => {
             allTasksCache = docs.map(doc => ({ id: doc.id, ...doc.data() }));

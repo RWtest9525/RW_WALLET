@@ -1487,13 +1487,13 @@ const openAdminQuickAction = (handler) => {
                 if (result?.catch) {
                     result.catch(error => {
                         console.error('Admin quick action failed:', error);
-                        showNotification('This admin page could not open. Please try again.', true);
+                        showNotification(`Admin page error: ${error.message || error}`, true);
                     });
                 }
                 return result;
             } catch (error) {
                 console.error('Admin quick action failed:', error);
-                showNotification('This admin page could not open. Please try again.', true);
+                showNotification(`Admin page error: ${error.message || error}`, true);
                 return null;
             }
         };
