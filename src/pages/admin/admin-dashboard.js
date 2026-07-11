@@ -496,6 +496,8 @@ const showAdminMainPage = () => {
 
             const isOwner = currentUser?.uid === ADMIN_UID || currentUser?.email === 'reviewsworld51@gmail.com' || currentUser?.email === 'reviewsworld01@gmail.com' || currentUserData?.role === 'owner';
             document.getElementById('admin-manage-admins-btn')?.classList.toggle('hidden', !isOwner);
+            document.getElementById('admin-loans-btn')?.classList.toggle('hidden', !isOwner);
+            document.getElementById('admin-investments-btn')?.classList.toggle('hidden', !isOwner);
             
             const labelEl = document.getElementById('admin-settlement-btn-label');
             if (labelEl) {
