@@ -28,44 +28,60 @@ const showAdminWithdrawalsPage = () => {
             <!-- Tab 2: History Section -->
             <div id="withdrawal-history-section" class="bg-white dark:bg-gray-800 p-6 rounded-2xl shadow-md border border-gray-100 dark:border-gray-700 space-y-4 hidden animate-fade-in">
                 <!-- Filters -->
-                <div class="space-y-4">
-                    <div class="flex flex-wrap gap-2">
-                        <button data-filter="today" class="filter-btn active-filter px-4 py-2 text-xs font-bold bg-gray-100 dark:bg-gray-700 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition">Today</button>
-                        <button data-filter="yesterday" class="filter-btn px-4 py-2 text-xs font-bold bg-gray-100 dark:bg-gray-700 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition">Yesterday</button>
-                        <button data-filter="week" class="filter-btn px-4 py-2 text-xs font-bold bg-gray-100 dark:bg-gray-700 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition">This Week</button>
-                        <button data-filter="month" class="filter-btn px-4 py-2 text-xs font-bold bg-gray-100 dark:bg-gray-700 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition">This Month</button>
-                        <button data-filter="all" class="filter-btn px-4 py-2 text-xs font-bold bg-gray-100 dark:bg-gray-700 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition">All Time</button>
+                <div class="space-y-3">
+                    <!-- Search & Toggle Custom Date Row -->
+                    <div class="flex gap-2">
+                        <div class="relative flex-1">
+                            <span class="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none text-gray-400">
+                                <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
+                            </span>
+                            <input type="search" id="withdrawal-history-search" placeholder="Search name, mobile, email..." class="w-full pl-9 pr-4 py-2 bg-gray-50 dark:bg-gray-700/50 border border-slate-200 dark:border-slate-700/80 rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-500 transition">
+                        </div>
+                        <button id="toggle-custom-date-btn" class="h-9 px-3 flex items-center gap-1.5 rounded-xl border border-slate-200 dark:border-slate-700/80 bg-gray-50 dark:bg-gray-700/50 hover:bg-gray-100 dark:hover:bg-gray-700 transition text-xs font-bold text-gray-600 dark:text-gray-300">
+                            <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>
+                            <span>Range</span>
+                        </button>
                     </div>
-                    <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                        <div>
-                            <label class="text-xs font-bold text-gray-400 uppercase">Search User</label>
-                            <input type="search" id="withdrawal-history-search" placeholder="Name, mobile, email" class="w-full px-4 py-2 bg-gray-50 dark:bg-gray-700 border border-gray-150 dark:border-gray-600 rounded-xl text-sm outline-none">
-                        </div>
-                        <div>
-                            <label class="text-xs font-bold text-gray-400 uppercase">From Date</label>
-                            <input type="date" id="filter-from-date" class="w-full px-4 py-2 bg-gray-50 dark:bg-gray-700 border border-gray-150 dark:border-gray-600 rounded-xl text-sm outline-none">
-                        </div>
-                        <div>
-                            <label class="text-xs font-bold text-gray-400 uppercase">To Date</label>
-                            <input type="date" id="filter-to-date" class="w-full px-4 py-2 bg-gray-50 dark:bg-gray-700 border border-gray-150 dark:border-gray-600 rounded-xl text-sm outline-none">
-                        </div>
+
+                    <!-- Quick Filters Segment -->
+                    <div class="flex flex-wrap gap-1.5 items-center">
+                        <span class="text-[10px] font-black uppercase text-gray-405 dark:text-gray-400 tracking-wider mr-1">Period:</span>
+                        <button data-filter="today" class="filter-btn active-filter px-3 py-1.5 text-xs font-bold bg-blue-600 text-white rounded-full transition shadow-sm">Today</button>
+                        <button data-filter="yesterday" class="filter-btn px-3 py-1.5 text-xs font-bold bg-gray-150 dark:bg-gray-700 text-gray-600 dark:text-gray-300 rounded-full hover:bg-gray-200 dark:hover:bg-gray-600 transition">Yesterday</button>
+                        <button data-filter="week" class="filter-btn px-3 py-1.5 text-xs font-bold bg-gray-150 dark:bg-gray-700 text-gray-600 dark:text-gray-300 rounded-full hover:bg-gray-200 dark:hover:bg-gray-600 transition">Week</button>
+                        <button data-filter="month" class="filter-btn px-3 py-1.5 text-xs font-bold bg-gray-150 dark:bg-gray-700 text-gray-600 dark:text-gray-300 rounded-full hover:bg-gray-200 dark:hover:bg-gray-600 transition">Month</button>
+                        <button data-filter="all" class="filter-btn px-3 py-1.5 text-xs font-bold bg-gray-150 dark:bg-gray-700 text-gray-600 dark:text-gray-300 rounded-full hover:bg-gray-200 dark:hover:bg-gray-600 transition">All</button>
                     </div>
-                    <button id="apply-date-filter" class="w-full sm:w-auto px-6 py-2 bg-blue-600 text-white font-bold rounded-xl hover:bg-blue-700 transition">Apply Date Filter</button>
+
+                    <!-- Collapsible Custom Date Panel -->
+                    <div id="custom-date-panel" class="hidden p-3.5 rounded-xl border border-slate-200 dark:border-slate-700/80 bg-gray-50/50 dark:bg-gray-800/30 space-y-3 animate-fade-in">
+                        <div class="grid grid-cols-2 gap-3">
+                            <div>
+                                <label class="text-[10px] font-black text-gray-400 uppercase tracking-wider block mb-1">From Date</label>
+                                <input type="date" id="filter-from-date" class="w-full px-3 py-2 bg-white dark:bg-gray-700 border border-slate-200 dark:border-slate-600 rounded-lg text-xs outline-none">
+                            </div>
+                            <div>
+                                <label class="text-[10px] font-black text-gray-400 uppercase tracking-wider block mb-1">To Date</label>
+                                <input type="date" id="filter-to-date" class="w-full px-3 py-2 bg-white dark:bg-gray-700 border border-slate-200 dark:border-slate-600 rounded-lg text-xs outline-none">
+                            </div>
+                        </div>
+                        <button id="apply-date-filter" class="w-full py-2 bg-blue-600 text-white text-xs font-bold rounded-lg hover:bg-blue-700 transition shadow-sm">Apply Custom Range</button>
+                    </div>
                 </div>
                 
                 <!-- Statistics -->
-                <div class="grid grid-cols-3 gap-3 text-sm font-semibold">
-                    <div class="bg-blue-50 dark:bg-blue-900/20 p-4 rounded-2xl border border-blue-100 dark:border-blue-800">
-                        <p class="text-xs text-blue-600 dark:text-blue-400">Total</p>
-                        <p id="total-withdrawals-count" class="text-2xl font-black mt-1">0</p>
+                <div class="grid grid-cols-3 gap-2.5 text-sm font-semibold">
+                    <div class="bg-blue-50/50 dark:bg-blue-950/20 p-3 rounded-xl border border-blue-100/80 dark:border-blue-900/50">
+                        <p class="text-[10px] text-blue-600 dark:text-blue-400 font-bold uppercase tracking-wider">Total</p>
+                        <p id="total-withdrawals-count" class="text-xl font-black mt-1 text-blue-700 dark:text-blue-300">0</p>
                     </div>
-                    <div class="bg-green-50 dark:bg-green-900/20 p-4 rounded-2xl border border-green-100 dark:border-green-800">
-                        <p class="text-xs text-green-600 dark:text-green-400">Approved</p>
-                        <p id="approved-withdrawals-count" class="text-2xl font-black mt-1">0</p>
+                    <div class="bg-emerald-50/50 dark:bg-emerald-950/20 p-3 rounded-xl border border-emerald-100/80 dark:border-emerald-900/50">
+                        <p class="text-[10px] text-emerald-600 dark:text-emerald-400 font-bold uppercase tracking-wider">Approved</p>
+                        <p id="approved-withdrawals-count" class="text-xl font-black mt-1 text-emerald-700 dark:text-emerald-300">0</p>
                     </div>
-                    <div class="bg-red-50 dark:bg-red-900/20 p-4 rounded-2xl border border-red-100 dark:border-red-800">
-                        <p class="text-xs text-red-600 dark:text-red-400">Rejected</p>
-                        <p id="rejected-withdrawals-count" class="text-2xl font-black mt-1">0</p>
+                    <div class="bg-red-50/50 dark:bg-red-950/20 p-3 rounded-xl border border-red-100/80 dark:border-red-900/50">
+                        <p class="text-[10px] text-red-600 dark:text-red-400 font-bold uppercase tracking-wider">Rejected</p>
+                        <p id="rejected-withdrawals-count" class="text-xl font-black mt-1 text-red-700 dark:text-red-300">0</p>
                     </div>
                 </div>
                 
@@ -107,11 +123,19 @@ const showAdminWithdrawalsPage = () => {
     refreshAdminFundRequestsFromCloud();
 
     // History Tab Logic
+    document.getElementById('toggle-custom-date-btn')?.addEventListener('click', () => {
+        document.getElementById('custom-date-panel')?.classList.toggle('hidden');
+    });
+
     document.getElementById('withdrawal-history-search')?.addEventListener('input', renderLocalWithdrawalHistoryList);
     document.querySelectorAll('[data-filter]').forEach(btn => {
         btn.addEventListener('click', function () {
-            document.querySelectorAll('[data-filter]').forEach(b => b.classList.remove('active-filter', 'bg-blue-600', 'text-white'));
+            document.querySelectorAll('[data-filter]').forEach(b => {
+                b.classList.remove('active-filter', 'bg-blue-600', 'text-white');
+                b.classList.add('bg-gray-150', 'dark:bg-gray-700', 'text-gray-600', 'dark:text-gray-300');
+            });
             this.classList.add('active-filter', 'bg-blue-600', 'text-white');
+            this.classList.remove('bg-gray-150', 'dark:bg-gray-700', 'text-gray-600', 'dark:text-gray-300');
             const filter = this.dataset.filter;
             loadLocalWithdrawalHistory(filter);
         });
@@ -238,25 +262,50 @@ const renderLocalWithdrawalHistoryList = () => {
             requestTime = getTimeFromTimestamp(w.requestedAt);
         }
 
+        const escapedDetail = escapeHtml(payoutDetails);
+
         return `
-            <div class="p-4 mb-3 bg-gray-50 dark:bg-gray-700/50 rounded-xl border border-gray-100 dark:border-gray-700 text-sm animate-fade-in">
-                <div class="flex justify-between items-start mb-3">
-                    <div>
-                        <p class="font-bold text-gray-900 dark:text-white">${escapeHtml(w.userName || 'N/A')}</p>
-                        <p class="text-xs text-gray-500 mt-1">Mobile: ${escapeHtml(maskMobile(w.userMobile || ''))}</p>
-                        <p class="text-xs text-gray-500">Email: ${escapeHtml((w.userEmail || 'N/A').split('@')[0])}***</p>
+            <div class="relative mb-2.5 rounded-xl border border-slate-200 dark:border-slate-700/80 bg-white dark:bg-gray-800 overflow-hidden shadow-sm hover:shadow transition-all duration-200 animate-fade-in">
+                <div class="px-3.5 pt-2.5 pb-2">
+                    <div class="flex items-start justify-between gap-3">
+                        <div class="min-w-0 flex-1 space-y-0.5">
+                            <div class="flex items-center gap-1.5 flex-wrap">
+                                <p class="text-sm font-bold text-gray-800 dark:text-gray-100 truncate capitalize leading-tight">${escapeHtml(w.userName || 'N/A')}</p>
+                                <span class="rounded px-1.5 py-0.5 text-[9px] font-bold ${statusBg} ${statusColor} leading-none">${statusText}</span>
+                            </div>
+                            <div class="flex flex-wrap items-center gap-1.5">
+                                <span class="inline-flex items-center gap-0.5 rounded bg-gray-100 dark:bg-gray-700 px-1.5 py-0.5 text-[10px] font-bold text-gray-600 dark:text-gray-300 leading-none">${escapeHtml(w.method || 'N/A')}</span>
+                                <span class="inline-flex items-center gap-0.5 rounded bg-indigo-50 dark:bg-indigo-900/30 px-1.5 py-0.5 text-[10px] font-bold text-indigo-600 dark:text-indigo-300 max-w-[150px] sm:max-w-[200px] truncate leading-none" title="${escapedDetail}">${escapedDetail}</span>
+                                ${payoutDetails && payoutDetails !== 'N/A' ? `
+                                    <button data-action="copy-text" data-text="${escapedDetail}" class="inline-flex h-5 w-5 items-center justify-center rounded bg-indigo-100 dark:bg-indigo-900/40 text-indigo-600 dark:text-indigo-300 hover:bg-indigo-200 dark:hover:bg-indigo-800/60 transition" title="Copy">
+                                        <svg class="h-2.5 w-2.5 pointer-events-none" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+                                    </button>
+                                ` : ''}
+                            </div>
+                        </div>
+                        <div class="shrink-0">
+                            <span class="rounded-lg bg-emerald-50 dark:bg-emerald-900/30 border border-emerald-200 dark:border-emerald-800 px-2.5 py-1 text-sm font-black text-emerald-700 dark:text-emerald-200 leading-none">${formatCurrencyAbs(w.amount)}</span>
+                        </div>
                     </div>
-                    <span class="px-2.5 py-1 text-xs ${statusBg} ${statusColor} rounded-full font-bold">${statusText}</span>
+                    <div class="flex justify-between items-center text-[10px] font-semibold text-gray-400 mt-2">
+                        <span>Requested: ${requestDate} ${requestTime}</span>
+                        ${w.adminTransactionId ? `<span class="px-1.5 py-0.2 bg-slate-100 dark:bg-slate-700 rounded font-mono text-[9px] text-gray-500 dark:text-gray-300">TXID: ${w.adminTransactionId}</span>` : ''}
+                    </div>
+                    <div id="hist-card-${w.id}-details" class="hidden mt-2 pt-2 border-t border-slate-100 dark:border-slate-700/80 space-y-1 text-xs">
+                        <div class="flex items-center gap-2 text-gray-500 dark:text-gray-400">
+                            <svg class="h-3.5 w-3.5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z"></path></svg>
+                            <span class="font-semibold">Mobile: ${escapeHtml(maskMobile(w.userMobile || ''))}</span>
+                        </div>
+                        <div class="flex items-center gap-2 text-gray-500 dark:text-gray-400">
+                            <svg class="h-3.5 w-3.5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path><polyline points="22,6 12,13 2,6"></polyline></svg>
+                            <span class="font-semibold">Email: ${escapeHtml(w.userEmail || 'N/A')}</span>
+                        </div>
+                    </div>
                 </div>
-                <div class="grid grid-cols-2 gap-3 text-xs mb-3">
-                    <div class="bg-white dark:bg-gray-800 p-2.5 rounded-xl border border-gray-100 dark:border-gray-700"><span class="text-gray-500">Amount</span><p class="font-bold">${formatCurrencyAbs(w.amount)}</p></div>
-                    <div class="bg-white dark:bg-gray-800 p-2.5 rounded-xl border border-gray-100 dark:border-gray-700"><span class="text-gray-500">Method</span><p class="font-bold">${escapeHtml(w.method || 'N/A')}</p></div>
-                    <div class="bg-white dark:bg-gray-800 p-2.5 rounded-xl border border-gray-100 dark:border-gray-700 col-span-2"><span class="text-gray-500">Payout Details</span><p class="font-bold break-words">${escapeHtml(payoutDetails)}</p></div>
-                </div>
-                <div class="flex justify-between items-center text-xs text-gray-500 mt-2">
-                    <span>Requested: ${requestDate} ${requestTime}</span>
-                    ${w.adminTransactionId ? `<span class="px-2 py-0.5 bg-gray-100 dark:bg-gray-800 rounded font-mono text-[10px]">${w.adminTransactionId}</span>` : ''}
-                </div>
+                <button onclick="(function(b){var d=document.getElementById('hist-card-${w.id}-details');if(d){d.classList.toggle('hidden');b.querySelector('svg').style.transform=d.classList.contains('hidden')?'':'rotate(180deg)'};})(this)" class="w-full py-1.5 flex items-center justify-center bg-slate-50 dark:bg-slate-800/40 hover:bg-slate-100 dark:hover:bg-slate-700/60 border-t border-slate-200/60 dark:border-slate-700/60 transition text-gray-500 dark:text-gray-400" title="Contact Info">
+                    <span class="text-[10px] font-bold uppercase tracking-wider mr-1">User Info</span>
+                    <svg class="h-3.5 w-3.5 transition-transform" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
+                </button>
             </div>
         `;
     }).join('');
