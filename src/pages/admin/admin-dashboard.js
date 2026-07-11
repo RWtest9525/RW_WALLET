@@ -847,38 +847,39 @@ const renderAdminFundRequests = (requests) => {
                     </select>
                 ` : '';
                 return `
-                <div class="relative mb-1.5 rounded-xl border ${needsBalanceCut ? 'border-red-200 dark:border-red-800/60' : 'border-gray-100 dark:border-gray-700'} bg-white dark:bg-gray-800 overflow-hidden shadow-sm">
+                <div class="relative mb-2 rounded-xl border ${needsBalanceCut ? 'border-rose-300 dark:border-rose-900/50 bg-rose-50/10 dark:bg-rose-950/5' : 'border-slate-200 dark:border-slate-700/80 bg-white dark:bg-gray-800'} overflow-hidden shadow-sm hover:shadow transition-all duration-200">
                     ${needsBalanceCut ? '<span class="absolute left-0 top-0 bottom-0 w-1 bg-red-500 rounded-l-xl"></span>' : ''}
-                    <div class="px-3 py-2.5 ${needsBalanceCut ? 'pl-4' : ''}">
-                        <div class="flex items-center justify-between gap-2">
-                            <div class="min-w-0 flex-1">
-                                <p class="text-sm font-bold text-gray-800 dark:text-gray-100 truncate capitalize">${r.userName || 'No Name'}</p>
+                    <div class="px-3.5 pt-2.5 pb-2 ${needsBalanceCut ? 'pl-4' : ''}">
+                        <div class="flex items-start justify-between gap-3">
+                            <div class="min-w-0 flex-1 space-y-0.5">
+                                <div class="flex items-center gap-1.5 flex-wrap">
+                                    <p class="text-sm font-bold text-gray-800 dark:text-gray-100 truncate capitalize leading-tight">${r.userName || 'No Name'}</p>
+                                    ${needsBalanceCut ? '<span class="rounded bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-200 px-1 py-0.2 text-[8px] font-black uppercase tracking-wider">Uncut</span>' : ''}
+                                </div>
+                                <div class="flex flex-wrap items-center gap-1.5">
+                                    <span class="inline-flex items-center gap-0.5 rounded bg-gray-100 dark:bg-gray-700 px-1.5 py-0.5 text-[10px] font-bold text-gray-600 dark:text-gray-300 leading-none">${escapeHtml(methodName)}</span>
+                                    <span class="inline-flex items-center gap-0.5 rounded bg-indigo-50 dark:bg-indigo-900/30 px-1.5 py-0.5 text-[10px] font-bold text-indigo-600 dark:text-indigo-300 max-w-[150px] sm:max-w-[200px] truncate leading-none" title="${escapedDetail}">${escapedDetail}</span>
+                                    ${detailText && detailText !== 'N/A' ? `
+                                        <button data-action="copy-text" data-text="${escapedDetail}" class="inline-flex h-5 w-5 items-center justify-center rounded bg-indigo-100 dark:bg-indigo-900/40 text-indigo-600 dark:text-indigo-300 hover:bg-indigo-200 dark:hover:bg-indigo-800/60 transition" title="Copy">
+                                            <svg class="h-2.5 w-2.5 pointer-events-none" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+                                        </button>
+                                    ` : ''}
+                                    ${giftTypeControl}
+                                </div>
                             </div>
-                            <span class="shrink-0 rounded-lg bg-emerald-50 dark:bg-emerald-900/30 border border-emerald-200 dark:border-emerald-800 px-2.5 py-1 text-sm font-black text-emerald-700 dark:text-emerald-200">${formatCurrency(r.amount)}</span>
+                            <div class="shrink-0 flex flex-col items-end gap-1">
+                                <span class="rounded-lg bg-emerald-50 dark:bg-emerald-900/30 border border-emerald-200 dark:border-emerald-800 px-2 py-0.5 text-xs sm:text-sm font-black text-emerald-700 dark:text-emerald-200 leading-none">${formatCurrency(r.amount)}</span>
+                                <div class="flex items-center gap-1">
+                                    <button data-action="mark-as-paid" data-userid="${r.userId}" data-requestid="${r.id}" class="inline-flex h-7 w-7 items-center justify-center rounded-lg bg-emerald-100 dark:bg-emerald-900/40 text-emerald-600 dark:text-emerald-300 hover:bg-emerald-200 dark:hover:bg-emerald-800/60 transition shadow-sm" title="Approve Payment">
+                                        <svg class="h-3.5 w-3.5 pointer-events-none" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                                    </button>
+                                    <button data-action="reject-request" data-userid="${r.userId}" data-requestid="${r.id}" class="inline-flex h-7 w-7 items-center justify-center rounded-lg bg-red-100 dark:bg-red-900/40 text-red-600 dark:text-red-300 hover:bg-red-200 dark:hover:bg-red-800/60 transition shadow-sm" title="Reject">
+                                        <svg class="h-3.5 w-3.5 pointer-events-none" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                                    </button>
+                                </div>
+                            </div>
                         </div>
-                        <div class="mt-1.5 flex flex-wrap items-center gap-1.5">
-                            <span class="inline-flex items-center gap-1 rounded-md bg-gray-100 dark:bg-gray-700 px-2 py-0.5 text-[11px] font-bold text-gray-600 dark:text-gray-300">${escapeHtml(methodName)}</span>
-                            <span class="inline-flex items-center gap-1 rounded-md bg-indigo-50 dark:bg-indigo-900/30 px-2 py-0.5 text-[11px] font-bold text-indigo-600 dark:text-indigo-300 max-w-[200px] truncate" title="${escapedDetail}">${escapedDetail}</span>
-                            ${detailText && detailText !== 'N/A' ? `
-                                <button data-action="copy-text" data-text="${escapedDetail}" class="inline-flex h-6 w-6 items-center justify-center rounded-md bg-indigo-100 dark:bg-indigo-900/40 text-indigo-600 dark:text-indigo-300 hover:bg-indigo-200 dark:hover:bg-indigo-800/60 transition" title="Copy">
-                                    <svg class="h-3 w-3 pointer-events-none" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
-                                </button>
-                            ` : ''}
-                            ${giftTypeControl}
-                            ${needsBalanceCut ? '<span class="rounded-full bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-200 px-1.5 py-0.5 text-[9px] font-black uppercase">Uncut</span>' : ''}
-                        </div>
-                        <div class="mt-2 flex items-center gap-1.5">
-                            <button data-action="mark-as-paid" data-userid="${r.userId}" data-requestid="${r.id}" class="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-100 dark:bg-emerald-900/40 text-emerald-600 dark:text-emerald-300 hover:bg-emerald-200 dark:hover:bg-emerald-800/60 transition shadow-sm" title="Approve Payment">
-                                <svg class="h-4 w-4 pointer-events-none" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
-                            </button>
-                            <button data-action="reject-request" data-userid="${r.userId}" data-requestid="${r.id}" class="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-red-100 dark:bg-red-900/40 text-red-600 dark:text-red-300 hover:bg-red-200 dark:hover:bg-red-800/60 transition shadow-sm" title="Reject">
-                                <svg class="h-4 w-4 pointer-events-none" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
-                            </button>
-                            <button onclick="(function(b){var d=document.getElementById('${cardId}-details');if(d){d.classList.toggle('hidden');b.querySelector('svg').style.transform=d.classList.contains('hidden')?'':'rotate(180deg)'};})(this)" class="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-600 transition shadow-sm" title="Contact Info">
-                                <svg class="h-4 w-4 transition-transform" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
-                            </button>
-                        </div>
-                        <div id="${cardId}-details" class="hidden mt-2 pt-2 border-t border-gray-100 dark:border-gray-700 space-y-1">
+                        <div id="${cardId}-details" class="hidden mt-2 pt-2 border-t border-slate-100 dark:border-slate-700/80 space-y-1">
                             <div class="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400">
                                 <svg class="h-3.5 w-3.5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z"></path></svg>
                                 <span class="font-semibold">${r.userMobile || r.mobile || 'No Mobile'}</span>
@@ -889,6 +890,10 @@ const renderAdminFundRequests = (requests) => {
                             </div>
                         </div>
                     </div>
+                    <button onclick="(function(b){var d=document.getElementById('${cardId}-details');if(d){d.classList.toggle('hidden');b.querySelector('svg').style.transform=d.classList.contains('hidden')?'':'rotate(180deg)'};})(this)" class="w-full py-1.5 flex items-center justify-center bg-slate-50 dark:bg-slate-800/40 hover:bg-slate-100 dark:hover:bg-slate-700/60 border-t border-slate-200/60 dark:border-slate-700/60 transition text-gray-500 dark:text-gray-400" title="Contact Info">
+                        <span class="text-[10px] font-bold uppercase tracking-wider mr-1">Contact Info</span>
+                        <svg class="h-3.5 w-3.5 transition-transform" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
+                    </button>
                 </div>`;
             };
 
