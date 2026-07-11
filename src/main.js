@@ -167,23 +167,16 @@ onAuthStateChanged(auth, async (user) => {
                     currentUserData = impUserData;
                     backendAuthToken = impToken;
 
-                    // Append the impersonation banner
-                    let banner = document.getElementById('impersonation-banner');
-                    if (!banner) {
-                        banner = document.createElement('div');
-                        banner.id = 'impersonation-banner';
-                        banner.className = 'w-full bg-amber-500 text-slate-900 font-extrabold text-[11px] py-2.5 px-4 flex items-center justify-between shadow-md relative z-[9999]';
-                        document.body.prepend(banner);
+                    // Small floating switch-back button (bottom-right, no banner)
+                    let switchBtn = document.getElementById('impersonation-banner');
+                    if (!switchBtn) {
+                        switchBtn = document.createElement('button');
+                        switchBtn.id = 'impersonation-banner';
+                        switchBtn.className = 'fixed bottom-20 right-3 z-[9999] flex items-center gap-1.5 bg-slate-900 hover:bg-slate-800 text-white font-black px-3 py-2 rounded-full text-[10px] shadow-lg transition active:scale-95 uppercase border border-white/20';
+                        switchBtn.onclick = () => window.handleSwitchBackToOwner();
+                        document.body.appendChild(switchBtn);
                     }
-                    banner.innerHTML = `
-                        <div class="flex items-center gap-2">
-                            <span class="animate-pulse h-2.5 w-2.5 rounded-full bg-red-600"></span>
-                            <span>Viewing Account: <strong class="underline">${escapeHtml(impUserData.name || 'Sub-Admin')}</strong> (Sub-Admin Mode)</span>
-                        </div>
-                        <button onclick="window.handleSwitchBackToOwner()" class="bg-slate-900 hover:bg-slate-800 text-white font-black px-2.5 py-1 rounded-lg text-[10px] transition uppercase">
-                            Switch Back
-                        </button>
-                    `;
+                    switchBtn.innerHTML = `<svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4"></path></svg> Switch Back`;
                 } else {
                     currentUser = user;
                     document.getElementById('impersonation-banner')?.remove();
