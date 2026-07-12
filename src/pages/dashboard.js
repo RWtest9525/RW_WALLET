@@ -2546,18 +2546,10 @@ const showUserTaskDetailsPage = async (taskId) => {
                                         <h3 class="text-base md:text-lg font-black text-white mt-1.5 truncate pr-1 leading-tight">${escapeHtml(appName)}</h3>
                                     </div>
                                 </div>
-                                
-                                <!-- Reward / Timer Right-Aligned -->
-                                <div class="flex flex-col items-end shrink-0 gap-1.5">
-                                    <div class="flex flex-col items-end">
-                                        <span class="text-xl md:text-2xl font-black">${formatCurrency(reward).replace('.00', '')}</span>
-                                        <span class="text-[8px] font-bold text-white/70 uppercase tracking-wider mt-0.5 leading-none">Per Submit</span>
-                                    </div>
-                                    <!-- Glowing Ticking Timer -->
-                                    <div id="task-card-timer-container" class="timer-pulse-glow bg-white/20 backdrop-blur-md border border-white/30 rounded-xl px-2.5 py-1 flex items-center gap-1.5 text-[9px] font-black text-white tracking-wide shadow-sm">
-                                        <span class="h-2 w-2 rounded-full bg-white blink-indicator shrink-0"></span>
-                                        <span id="task-card-timer" class="font-mono">--:--</span>
-                                    </div>
+                                <!-- Reward Right-Aligned -->
+                                <div class="flex flex-col items-end shrink-0">
+                                    <span class="text-xl md:text-2xl font-black">${formatCurrency(reward).replace('.00', '')}</span>
+                                    <span class="text-[8px] font-bold text-white/70 uppercase tracking-wider mt-0.5 leading-none">Per Submit</span>
                                 </div>
                             </div>
 
@@ -2566,7 +2558,7 @@ const showUserTaskDetailsPage = async (taskId) => {
                                 <!-- Payout Column -->
                                 <div class="flex items-center gap-2">
                                     <span class="p-2 rounded-xl ${acc.iconBg} shrink-0">
-                                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>
+                                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 0 0 2 2z"></path></svg>
                                     </span>
                                     <div class="min-w-0">
                                         <p class="text-[8px] font-black text-gray-400 uppercase tracking-wider leading-none">Payout</p>
@@ -2585,14 +2577,16 @@ const showUserTaskDetailsPage = async (taskId) => {
                                     </div>
                                 </div>
 
-                                <!-- Reward Column -->
+                                <!-- Remaining Time Column (Timer) -->
                                 <div class="flex items-center gap-2 border-l border-slate-100 dark:border-slate-800/80 pl-2">
-                                    <span class="p-2 rounded-xl ${acc.iconBg} shrink-0">
-                                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z"></path></svg>
-                                    </span>
+                                    <!-- Ticking Glowing Timer Badge -->
+                                    <div id="task-card-timer-container" class="timer-pulse-glow bg-amber-500/10 dark:bg-amber-500/20 border border-amber-500/30 rounded-xl px-2 py-1 flex items-center gap-1.5 text-[10px] font-black text-amber-600 dark:text-amber-400 shadow-sm shrink-0">
+                                        <span class="h-2 w-2 rounded-full bg-amber-500 blink-indicator shrink-0"></span>
+                                        <span id="task-card-timer" class="font-mono text-[11px] tracking-wide">--:--</span>
+                                    </div>
                                     <div class="min-w-0">
-                                        <p class="text-[8px] font-black text-gray-400 uppercase tracking-wider leading-none">Reward</p>
-                                        <p class="text-[11px] font-bold text-slate-800 dark:text-slate-200 mt-1 truncate">${formatCurrency(reward).replace('.00', '')}</p>
+                                        <p class="text-[8px] font-black text-gray-400 uppercase tracking-wider leading-none">Time Left</p>
+                                        <p class="text-[9px] font-bold text-slate-500 dark:text-slate-400 mt-0.5 truncate leading-none">To Complete</p>
                                     </div>
                                 </div>
                             </div>
@@ -2744,6 +2738,13 @@ const showUserTaskDetailsPage = async (taskId) => {
                 activeTaskReservationTimer = null;
             }
 
+            if (!isBulk) {
+                activeTaskReservation = {
+                    comment: initialComment,
+                    expiresAt: Date.now() + 5 * 60 * 1000
+                };
+            }
+
             // Ticking Function for Timer Badge
             const timerEl = document.getElementById('task-card-timer');
             const timerContainerEl = document.getElementById('task-card-timer-container');
@@ -2780,7 +2781,7 @@ const showUserTaskDetailsPage = async (taskId) => {
                         if (remaining <= 0) {
                             if (timerEl) timerEl.textContent = 'Expired';
                             if (timerContainerEl) {
-                                timerContainerEl.className = 'bg-red-500/20 backdrop-blur-md border border-red-500/40 rounded-xl px-2.5 py-1 flex items-center gap-1.5 text-[9px] font-black text-red-200 tracking-wide shadow-[0_0_12px_rgba(239,68,68,0.4)]';
+                                timerContainerEl.className = 'bg-red-500/10 dark:bg-red-950/20 border border-red-500/30 rounded-xl px-2 py-1 flex items-center gap-1.5 text-[10px] font-black text-red-600 dark:text-red-400 shadow-sm shrink-0';
                             }
                             clearInterval(activeTaskReservationTimer);
                             activeTaskReservationTimer = null;
@@ -2804,7 +2805,7 @@ const showUserTaskDetailsPage = async (taskId) => {
                 if (commentEl) commentEl.textContent = `"${reservation.comment}"`;
                 
                 if (timerContainerEl) {
-                    timerContainerEl.className = 'timer-pulse-glow bg-white/20 backdrop-blur-md border border-white/30 rounded-xl px-2.5 py-1 flex items-center gap-1.5 text-[9px] font-black text-white tracking-wide shadow-sm';
+                    timerContainerEl.className = 'timer-pulse-glow bg-amber-500/10 dark:bg-amber-500/20 border border-amber-500/30 rounded-xl px-2 py-1 flex items-center gap-1.5 text-[10px] font-black text-amber-600 dark:text-amber-400 shadow-sm shrink-0';
                 }
                 startLocalTimer();
             };
@@ -2886,6 +2887,7 @@ const showUserTaskDetailsPage = async (taskId) => {
                 renderBulkCommentsList();
                 startLocalTimer();
             } else {
+                startLocalTimer();
                 const initBackgroundReservation = async () => {
                     try {
                         const reservation = await reserveTaskReviewComment(task);
@@ -3021,9 +3023,41 @@ const showUserTaskDetailsPage = async (taskId) => {
             }
 
             const fileInput = document.getElementById('task-proof-input');
+            const submitBtn = document.getElementById('task-submit-mission-btn');
             if (fileInput) {
                 fileInput.onchange = (event) => {
                     const files = Array.from(event.target.files || []);
+                    if (files.length === 0) {
+                        if (submitBtn) submitBtn.disabled = true;
+                        return;
+                    }
+                    
+                    if (isBulk) {
+                        window.TaskUploadQueueManager.addFiles(
+                            task.id,
+                            files,
+                            isBulk,
+                            task,
+                            reward,
+                            appName,
+                            taskLink,
+                            image,
+                            taskTitle,
+                            commentPool,
+                            submittedComments
+                        );
+                        fileInput.value = '';
+                    } else {
+                        const labelEl = document.getElementById('task-proof-label');
+                        if (labelEl) labelEl.textContent = files[0].name;
+                        if (submitBtn) submitBtn.disabled = false;
+                    }
+                };
+            }
+
+            if (submitBtn) {
+                submitBtn.onclick = () => {
+                    const files = Array.from(fileInput.files || []);
                     if (files.length === 0) return;
                     
                     window.TaskUploadQueueManager.addFiles(
@@ -3040,7 +3074,11 @@ const showUserTaskDetailsPage = async (taskId) => {
                         submittedComments
                     );
                     
+                    const queueContainer = document.getElementById('upload-queue-container');
+                    if (queueContainer) queueContainer.classList.remove('hidden');
+                    
                     fileInput.value = '';
+                    submitBtn.disabled = true;
                 };
             }
 
