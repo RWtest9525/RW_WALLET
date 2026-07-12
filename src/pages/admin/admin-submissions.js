@@ -450,6 +450,24 @@ const renderAdminSubmissions = () => {
         });
     }
 
+    // Extract unique dates that actually have submissions
+    const dateCounts = {};
+    subs.forEach(s => {
+        const dStr = getSubmissionLocalDateStr(s.submitted_at || s.submittedAt);
+        if (dStr) {
+            dateCounts[dStr] = (dateCounts[dStr] || 0) + 1;
+        }
+    });
+
+    const availableDates = Object.keys(dateCounts).sort((a, b) => b.localeCompare(a));
+    
+    // Ensure selectedDate is always present in availableDates so select value is valid
+    if (!availableDates.includes(selectedDate)) {
+        availableDates.push(selectedDate);
+        dateCounts[selectedDate] = subs.filter(s => getSubmissionLocalDateStr(s.submitted_at || s.submittedAt) === selectedDate).length;
+        availableDates.sort((a, b) => b.localeCompare(a));
+    }
+
     // Filter by selected date
     const dateSubs = subs.filter(s => getSubmissionLocalDateStr(s.submitted_at || s.submittedAt) === selectedDate);
 
@@ -581,7 +599,7 @@ const renderAdminSubmissions = () => {
 
                     <!-- Screenshot Grid -->
                     ${filteredSubs.length === 0 ? `
-                        <div class="py-12 text-center text-sm text-gray-450 border border-dashed border-gray-200 dark:border-gray-700 rounded-2xl">
+                        <div class="py-12 text-center text-sm text-gray-455 border border-dashed border-gray-200 dark:border-gray-700 rounded-2xl">
                             No screenshots found matching this filter.
                         </div>
                     ` : `
@@ -624,11 +642,14 @@ const renderAdminSubmissions = () => {
                         <p class="text-xs text-gray-500 dark:text-gray-400">Track and manage task submissions by date.</p>
                     </div>
                     <div class="relative flex items-center">
-                        <input type="date" id="admin-sub-date-input" value="${selectedDate}" class="absolute inset-0 opacity-0 cursor-pointer z-10">
-                        <button type="button" class="flex items-center gap-2 rounded-xl bg-gray-100 dark:bg-gray-750 px-3.5 py-2 text-xs font-black text-gray-800 dark:text-gray-200 border border-gray-200/40 shadow-sm">
-                            <span>${formatDatePickerDate(selectedDate)}</span>
-                            <span class="text-slate-500 font-extrabold font-mono text-[10px]">🔁</span>
-                        </button>
+                        <select id="admin-sub-date-select" class="appearance-none rounded-xl bg-gray-100 hover:bg-gray-200 dark:bg-gray-750 dark:hover:bg-gray-700 px-3.5 py-2 pr-8 text-xs font-black text-gray-850 dark:text-gray-200 border border-gray-200/40 dark:border-gray-700/50 shadow-sm focus:outline-none cursor-pointer">
+                            ${availableDates.map(dStr => {
+                                const count = dateCounts[dStr] || 0;
+                                const label = formatDatePickerDate(dStr);
+                                return `<option value="${dStr}" ${dStr === selectedDate ? 'selected' : ''}>${label} (${count} subs)</option>`;
+                            }).join('')}
+                        </select>
+                        <div class="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-500 dark:text-gray-400 text-[10px]">▼</div>
                     </div>
                 </div>
 
@@ -739,9 +760,9 @@ const renderAdminSubmissions = () => {
     shellEl.innerHTML = html;
 
     // Bind Event Listeners
-    const dateInput = document.getElementById('admin-sub-date-input');
-    if (dateInput) {
-        dateInput.onchange = (e) => {
+    const dateSelect = document.getElementById('admin-sub-date-select');
+    if (dateSelect) {
+        dateSelect.onchange = (e) => {
             window.adminSubmissionsView.selectedDate = e.target.value;
             renderAdminSubmissions();
         };
