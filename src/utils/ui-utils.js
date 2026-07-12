@@ -1795,7 +1795,7 @@ const getTaskTier = (u) => {
 
 const isBulkTaskUser = () => {
             const tier = getTaskTier(currentUserData);
-            return tier === 'bulker' || tier === 'super_bulker' || currentUser?.uid === ADMIN_UID;
+            return tier === 'bulker' || tier === 'super_bulker';
         };
 
 const getTaskReservationDocId = (taskId, userId) => getSafeTransactionDocId(`task-reservation-${taskId}-${userId}`);

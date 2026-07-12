@@ -3106,7 +3106,7 @@ ${memoriesContext}`
 
   // ── Screenshot Upload Endpoint ───────────────────────────────────────────
   // ── Screenshot Upload Endpoint ───────────────────────────────────────────
-  app.post('/api/uploads/task-screenshot', requireHttpAuth, rateLimit({ windowMs: 60000, maxRequests: 10 }), async (req, res) => {
+  app.post('/api/uploads/task-screenshot', requireHttpAuth, rateLimit({ windowMs: 60000, maxRequests: 600 }), async (req, res) => {
     try {
       const db = admin.firestore();
       const declaredSize = Number(req.headers['content-length'] || req.query.size || 0);
@@ -3431,7 +3431,7 @@ ${memoriesContext}`
   });
 
   // ── Task Submission Endpoints ────────────────────────────────────────────
-  app.post('/api/task-submissions', requireHttpAuth, rateLimit({ windowMs: 60000, maxRequests: 10 }), async (req, res) => {
+  app.post('/api/task-submissions', requireHttpAuth, rateLimit({ windowMs: 60000, maxRequests: 600 }), async (req, res) => {
     try {
       const { taskId, assignedComment, screenshotUrl } = req.body;
       const userId = req.auth.sub;
