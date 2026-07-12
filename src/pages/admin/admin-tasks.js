@@ -158,31 +158,14 @@ const setAdminTaskPanel = (panel = 'manage') => {
             // Lazy-load submissions when tab is first opened
             if (normalized === 'submissions' && !window._subsTabInitialized) {
                 window._subsTabInitialized = true;
-                adminSubmissionsView = { view: 'dates', selectedDate: null, selectedApp: null };
-                const container = document.getElementById('admin-submissions-content');
-                if (container) {
-                    container.innerHTML = `
-                        <section class="rounded-2xl border border-gray-150 dark:border-gray-800 bg-white dark:bg-gray-800 p-4 shadow-sm space-y-3">
-                            <div class="flex flex-wrap items-center gap-2">
-                                <input id="admin-sub-search" type="text" placeholder="Search user or task..." class="flex-1 min-w-[140px] rounded-xl bg-gray-100 dark:bg-gray-700 px-3 py-2 text-sm font-semibold outline-none focus:ring-2 focus:ring-orange-500">
-                                <select id="admin-sub-filter" class="rounded-xl bg-gray-100 dark:bg-gray-700 px-3 py-2 text-sm font-semibold">
-                                    <option value="all">All</option>
-                                    <option value="pending" selected>Pending</option>
-                                    <option value="approved">Approved</option>
-                                    <option value="rejected">Rejected</option>
-                                    <option value="paid">Paid</option>
-                                </select>
-                                <button id="admin-sub-refresh-btn" class="rounded-xl bg-orange-600 px-4 py-2 text-sm font-bold text-white hover:bg-orange-700 transition">Refresh</button>
-                            </div>
-                            <div id="admin-sub-list" class="space-y-3">
-                                <div class="py-8 text-center text-sm text-gray-400">Loading submissions...</div>
-                            </div>
-                        </section>`;
-                    loadAdminSubmissions();
-                    document.getElementById('admin-sub-refresh-btn')?.addEventListener('click', loadAdminSubmissions);
-                    document.getElementById('admin-sub-search')?.addEventListener('input', renderAdminSubmissions);
-                    document.getElementById('admin-sub-filter')?.addEventListener('change', renderAdminSubmissions);
-                }
+                const d = new Date();
+                window.adminSubmissionsView = {
+                    selectedDate: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`,
+                    selectedTaskId: '',
+                    selectedDetailTab: 'submissions',
+                    selectedSubFilter: 'all'
+                };
+                loadAdminSubmissions();
             }
 
             document.querySelectorAll('[data-admin-task-panel]').forEach(button => {
@@ -204,48 +187,66 @@ const showAdminTaskPage = () => {
             const isTaskPageEnabled = !!appConfigCache?.task_page_enabled;
             const content = `
                 ${getPageHeader('Manage Task')}
-                <div class="pb-24">
-                <div class="max-w-5xl mx-auto space-y-4 sm:space-y-5">
-                    <section class="overflow-hidden rounded-3xl bg-gradient-to-br from-slate-950 via-cyan-900 to-emerald-700 p-5 text-white shadow-xl">
-                        <p class="text-[10px] font-black uppercase text-white/60">Admin Control</p>
-                        <div class="mt-2 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-                            <div>
-                                <h3 class="text-2xl font-black">Manage Task Board</h3>
-                                <p class="mt-1 max-w-2xl text-sm font-semibold leading-6 text-white/70">Create review or social tasks here. New tasks stay OFF until you turn them ON.</p>
-                            </div>
-                            <div class="grid grid-cols-3 gap-2 text-center text-xs">
-                                <div class="rounded-2xl bg-white/12 px-4 py-3">
-                                    <p class="font-black text-white" id="admin-task-total-count">0</p>
-                                    <p class="text-white/60">Total</p>
+                <div class="pb-24 max-w-7xl mx-auto p-4 md:p-6">
+                    <!-- 2-Column Laptop View Split Layout -->
+                    <div class="flex flex-col lg:flex-row gap-6 items-start">
+                        
+                        <!-- Left Sidebar Panel -->
+                        <div class="w-full lg:w-80 shrink-0 space-y-4">
+                            <!-- Stats & Toggle Card -->
+                            <section class="overflow-hidden rounded-3xl bg-gradient-to-br from-slate-950 via-cyan-900 to-emerald-700 p-5 text-white shadow-xl text-left">
+                                <p class="text-[9px] font-black uppercase text-white/60">Admin Control</p>
+                                <h3 class="text-lg font-black mt-1">Manage Task Board</h3>
+                                <p class="mt-1 text-xs font-semibold leading-normal text-white/70">Create review or social tasks here. New tasks stay OFF until you turn them ON.</p>
+                                
+                                <div class="grid grid-cols-3 gap-2 text-center text-xs mt-4">
+                                    <div class="rounded-xl bg-white/12 p-2">
+                                        <p class="font-black text-white" id="admin-task-total-count">0</p>
+                                        <p class="text-[8px] text-white/60 uppercase">Total</p>
+                                    </div>
+                                    <div class="rounded-xl bg-white/12 p-2">
+                                        <p class="font-black text-emerald-200" id="admin-task-active-count">0</p>
+                                        <p class="text-[8px] text-white/60 uppercase">Live</p>
+                                    </div>
+                                    <div class="rounded-xl bg-white/12 p-2">
+                                        <p class="font-black text-amber-200" id="admin-task-draft-count">0</p>
+                                        <p class="text-[8px] text-white/60 uppercase">Off</p>
+                                    </div>
                                 </div>
-                                <div class="rounded-2xl bg-white/12 px-4 py-3">
-                                    <p class="font-black text-emerald-200" id="admin-task-active-count">0</p>
-                                    <p class="text-white/60">Live</p>
+                                <div class="mt-4 pt-3 border-t border-white/10 flex items-center justify-between">
+                                    <span class="text-xs font-bold text-white/95">Task Page (Users)</span>
+                                    <button type="button" id="admin-toggle-task-page-status" class="inline-flex items-center gap-1.5 text-xs font-black ${isTaskPageEnabled ? 'text-emerald-300' : 'text-white/70'}">
+                                        <span class="relative inline-flex h-4 w-7 rounded-full ${isTaskPageEnabled ? 'bg-emerald-500' : 'bg-white/20'} transition">
+                                            <span class="absolute top-0.5 left-0.5 h-3 w-3 rounded-full bg-white shadow transition transform ${isTaskPageEnabled ? 'translate-x-3' : 'translate-x-0'}"></span>
+                                        </span>
+                                        ${isTaskPageEnabled ? 'ON' : 'OFF'}
+                                    </button>
                                 </div>
-                                <div class="rounded-2xl bg-white/12 px-4 py-3">
-                                    <p class="font-black text-amber-200" id="admin-task-draft-count">0</p>
-                                    <p class="text-white/60">Off</p>
-                                </div>
+                            </section>
+
+                            <!-- Vertical Tab Menu -->
+                            <div class="flex flex-col gap-1.5 rounded-2xl border border-gray-100 bg-white p-2 shadow-sm dark:border-gray-850 dark:bg-gray-900">
+                                <button type="button" data-admin-task-panel="manage" class="w-full flex items-center gap-3 rounded-xl px-4 py-3 text-xs font-black uppercase tracking-wider text-left transition" style="outline: none;">
+                                    <span class="text-sm">📋</span>
+                                    <span>Tasks List</span>
+                                </button>
+                                <button type="button" data-admin-task-panel="add" class="w-full flex items-center gap-3 rounded-xl px-4 py-3 text-xs font-black uppercase tracking-wider text-left transition" style="outline: none;">
+                                    <span class="text-sm">➕</span>
+                                    <span>Add Task</span>
+                                </button>
+                                <button type="button" data-admin-task-panel="ads" class="w-full flex items-center gap-3 rounded-xl px-4 py-3 text-xs font-black uppercase tracking-wider text-left transition" style="outline: none;">
+                                    <span class="text-sm">📢</span>
+                                    <span>Manage Ads</span>
+                                </button>
+                                <button type="button" data-admin-task-panel="submissions" class="w-full flex items-center gap-3 rounded-xl px-4 py-3 text-xs font-black uppercase tracking-wider text-left transition" style="outline: none;">
+                                    <span class="text-sm">📥</span>
+                                    <span>Submissions</span>
+                                </button>
                             </div>
                         </div>
-                        <div class="mt-4 pt-3 border-t border-white/10 flex items-center justify-between">
-                            <span class="text-sm font-bold text-white/95">Task Page Status (for Users)</span>
-                            <button type="button" id="admin-toggle-task-page-status" class="inline-flex items-center gap-1.5 text-xs font-black ${isTaskPageEnabled ? 'text-emerald-300' : 'text-white/70'}">
-                                <span class="relative inline-flex h-5 w-9 rounded-full ${isTaskPageEnabled ? 'bg-emerald-500' : 'bg-white/20'} transition">
-                                    <span class="absolute top-0.5 left-0.5 h-4 w-4 rounded-full bg-white shadow transition transform ${isTaskPageEnabled ? 'translate-x-4' : 'translate-x-0'}"></span>
-                                </span>
-                                ${isTaskPageEnabled ? 'ON' : 'OFF'}
-                            </button>
-                        </div>
-                    </section>
 
-                    <div class="grid grid-cols-4 gap-1.5 rounded-2xl border border-gray-100 bg-white p-1.5 shadow-sm dark:border-gray-700 dark:bg-gray-900">
-                        <button type="button" data-admin-task-panel="manage" class="rounded-xl px-2 py-2.5 text-xs font-black transition">Tasks</button>
-                        <button type="button" data-admin-task-panel="add" class="rounded-xl px-2 py-2.5 text-xs font-black transition">Add Task</button>
-                        <button type="button" data-admin-task-panel="ads" class="rounded-xl px-2 py-2.5 text-xs font-black transition">Ads</button>
-                        <button type="button" data-admin-task-panel="submissions" class="rounded-xl px-2 py-2.5 text-xs font-black transition">Submissions</button>
-                    </div>
-
+                        <!-- Right Panel Area -->
+                        <div class="flex-1 w-full min-w-0">
                     <section id="admin-task-add-section" class="hidden bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 p-4 sm:p-5">
                         <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
                             <div>
@@ -413,10 +414,11 @@ const showAdminTaskPage = () => {
                     </section>
 
                     <section id="admin-submissions-section" class="hidden">
-                        <div id="admin-submissions-content" class="space-y-4">
-                            <p class="text-center text-sm text-gray-400 py-8">Loading submissions...</p>
+                        <div id="admin-submissions-page-shell" class="min-h-screen bg-slate-50 dark:bg-slate-950 pb-28">
+                            <div class="py-8 text-center text-sm text-gray-400">Loading submissions...</div>
                         </div>
                     </section>
+                </div>
                 </div>
                 </div>
                 ${getPageFooter()}`;
