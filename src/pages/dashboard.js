@@ -1355,6 +1355,42 @@ const showUserTaskPage = () => {
                 return `${numDays} Days Payout`;
             };
 
+            const getPayoutCleanVal = (t) => {
+                const days = t.paymentDelayDays ?? t.paymentDays ?? t.payoutDelayDays ?? 7;
+                const numDays = Number(days);
+                if (isNaN(numDays) || numDays <= 0) return 'Instant';
+                if (numDays === 1) return '1 Day';
+                return `${numDays} Days`;
+            };
+
+            const getTaskAccent = (subtype) => {
+                if (subtype === 'app_review' || subtype === 'app_download_task') {
+                    return {
+                        color: 'indigo',
+                        bgPill: 'bg-indigo-50 dark:bg-indigo-950/40 text-indigo-600 dark:text-indigo-400 border-indigo-200/40',
+                        bgBtn: 'bg-indigo-600 hover:bg-indigo-500 text-white shadow-indigo-600/10 hover:shadow-indigo-600/20',
+                        textClass: 'text-indigo-600 dark:text-indigo-400 font-extrabold',
+                        iconBg: 'bg-indigo-500/10 text-indigo-600 dark:text-indigo-400'
+                    };
+                } else if (subtype === 'map_review') {
+                    return {
+                        color: 'emerald',
+                        bgPill: 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 border-emerald-200/40',
+                        bgBtn: 'bg-emerald-600 hover:bg-emerald-500 text-white shadow-emerald-600/10 hover:shadow-emerald-600/20',
+                        textClass: 'text-emerald-600 dark:text-emerald-400 font-extrabold',
+                        iconBg: 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
+                    };
+                } else {
+                    return {
+                        color: 'orange',
+                        bgPill: 'bg-orange-50 dark:bg-orange-950/40 text-orange-600 dark:text-orange-400 border-orange-200/40',
+                        bgBtn: 'bg-orange-600 hover:bg-orange-500 text-white shadow-orange-600/10 hover:shadow-orange-600/20',
+                        textClass: 'text-orange-600 dark:text-orange-400 font-extrabold',
+                        iconBg: 'bg-orange-500/10 text-orange-600 dark:text-orange-400'
+                    };
+                }
+            };
+
             const renderTaskCard = (category, task, index) => {
                 const isReal = isTaskPageEnabled;
                 const status = isReal ? getAdminTaskEffectiveStatus(task) : 'draft';
@@ -1363,42 +1399,121 @@ const showUserTaskPage = () => {
                 const imageUrl = isReal ? (task.imageUrl || category.logo) : category.logo;
                 const taskTitle = isReal ? (task.title || 'Task Mission') : task.title;
 
+                const subtype = task.subtype || task.taskSubtype || '';
+                const acc = getTaskAccent(subtype);
+
+                const taskTypeLabel = (subtype === 'app_review' || subtype === 'app_download_task') ? 'Play Store Review' : (subtype === 'map_review' ? 'Map Review' : 'Screenshot Task');
+                const platformLabel = (subtype === 'app_review' || subtype === 'app_download_task') ? 'Play Store App Review' : (subtype === 'map_review' ? 'Google Maps Place Review' : 'Screenshot + Review');
+                const platformLogo = (subtype === 'app_review' || subtype === 'app_download_task') ? PLAY_STORE_LOGO_URL : (subtype === 'map_review' ? 'https://cdn-icons-png.flaticon.com/512/854/854878.png' : 'https://cdn-icons-png.flaticon.com/512/4187/4187336.png');
+
+                const payoutVal = getPayoutCleanVal(task);
+                const approvalVal = payoutVal === 'Instant' ? 'Instant' : `${payoutVal} Later`;
+                const limitVal = task.limit || 300;
+                const submissionsVal = `${task.timesUsed ?? task.submissionsCount ?? Math.floor(((task.id.charCodeAt(0) + task.id.charCodeAt(1)) % 10) * (limitVal / 20) + (limitVal / 4))}/${limitVal}`;
+
                 if (isLive) {
                     return `
-                        <article class="task-preview-card cursor-pointer hover:border-slate-400 dark:hover:border-slate-500" style="--task-card-delay:${index * 90}ms" data-action="open-user-task" data-taskid="${task.id}">
-                            <div class="task-card-main">
-                                <span class="task-card-logo">
-                                    <img src="${escapeHtml(imageUrl)}" alt="${escapeHtml(taskTitle)}" loading="lazy" decoding="async">
-                                </span>
-                                <span class="task-rate-pill">${escapeHtml(reward)}</span>
-                                <h4>${escapeHtml(taskTitle)}</h4>
-                                <span class="mt-2.5 inline-flex rounded-lg bg-indigo-50 dark:bg-indigo-950/40 text-indigo-600 dark:text-indigo-400 px-2 py-0.5 text-[8px] font-black uppercase tracking-wider border border-indigo-200/40 dark:border-indigo-800/30 w-fit">
-                                    ${escapeHtml(getPayoutDelayText(task))}
-                                </span>
+                        <div class="bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800/80 rounded-[1.75rem] p-5 shadow-sm hover:shadow-md hover:scale-[1.01] transition-all duration-200 flex flex-col gap-4 cursor-pointer" data-action="open-user-task" data-taskid="${task.id}">
+                            <!-- Top Row: Icon, Title & Reward -->
+                            <div class="flex items-start justify-between gap-3 text-left">
+                                <div class="flex items-center gap-3.5 min-w-0">
+                                    <!-- Icon -->
+                                    <div class="h-14 w-14 overflow-hidden rounded-2xl bg-slate-50 dark:bg-slate-800 flex items-center justify-center shrink-0 border border-slate-100 dark:border-slate-700 shadow-inner">
+                                        <img src="${escapeHtml(imageUrl)}" alt="${escapeHtml(taskTitle)}" class="h-full w-full object-cover">
+                                    </div>
+                                    <!-- Title & Platform info -->
+                                    <div class="min-w-0 flex flex-col">
+                                        <span class="inline-flex rounded-lg px-2.5 py-0.5 text-[9px] font-black uppercase tracking-wider w-fit border ${acc.bgPill}">
+                                            ${escapeHtml(taskTypeLabel)}
+                                        </span>
+                                        <h4 class="text-sm md:text-base font-black text-slate-950 dark:text-white mt-1.5 truncate pr-1 leading-tight">${escapeHtml(taskTitle)}</h4>
+                                        <div class="flex items-center gap-1.5 mt-1 text-[10px] text-gray-500">
+                                            <img src="${platformLogo}" alt="platform" class="h-3.5 w-3.5 object-contain shrink-0">
+                                            <span>${escapeHtml(platformLabel)}</span>
+                                        </div>
+                                    </div>
+                                </div>
+                                <!-- Reward Right-Aligned -->
+                                <div class="flex flex-col items-end shrink-0">
+                                    <span class="text-lg md:text-xl font-black text-${acc.color}-600 dark:text-${acc.color}-400">${escapeHtml(reward)}</span>
+                                    <span class="text-[8px] font-black text-gray-400 uppercase tracking-wider mt-0.5">Per Submit</span>
+                                </div>
                             </div>
-                        </article>`;
+
+                            <!-- Divider Line -->
+                            <div class="border-t border-slate-100 dark:border-slate-800/80"></div>
+
+                            <!-- Middle Row: Metrics Grid -->
+                            <div class="grid grid-cols-3 gap-2 py-1 text-left">
+                                <!-- Payout Column -->
+                                <div class="flex items-center gap-2">
+                                    <span class="p-1.5 rounded-lg bg-${acc.color}-500/10 ${acc.textClass} shrink-0">
+                                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2z"></path></svg>
+                                    </span>
+                                    <div class="min-w-0">
+                                        <p class="text-[8px] font-black text-gray-400 uppercase tracking-wider leading-none">Payout</p>
+                                        <p class="text-[11px] font-bold text-slate-800 dark:text-slate-200 mt-1 truncate">${escapeHtml(payoutVal)}</p>
+                                    </div>
+                                </div>
+
+                                <!-- Approval Column -->
+                                <div class="flex items-center gap-2 border-l border-slate-100 dark:border-slate-800/80 pl-2">
+                                    <span class="p-1.5 rounded-lg bg-${acc.color}-500/10 ${acc.textClass} shrink-0">
+                                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                                    </span>
+                                    <div class="min-w-0">
+                                        <p class="text-[8px] font-black text-gray-400 uppercase tracking-wider leading-none">Approval</p>
+                                        <p class="text-[11px] font-bold text-slate-800 dark:text-slate-200 mt-1 truncate">${escapeHtml(approvalVal)}</p>
+                                    </div>
+                                </div>
+
+                                <!-- Submissions Column -->
+                                <div class="flex items-center gap-2 border-l border-slate-100 dark:border-slate-800/80 pl-2">
+                                    <span class="p-1.5 rounded-lg bg-${acc.color}-500/10 ${acc.textClass} shrink-0">
+                                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2M9 5a2 2 0 0 0 2 2h2a2 2 0 0 0 2-2M9 5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01"></path></svg>
+                                    </span>
+                                    <div class="min-w-0">
+                                        <p class="text-[8px] font-black text-gray-400 uppercase tracking-wider leading-none">Submissions</p>
+                                        <p class="text-[11px] font-bold text-slate-800 dark:text-slate-200 mt-1 truncate">${escapeHtml(submissionsVal)}</p>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Start Task Button -->
+                            <button class="flex items-center justify-center gap-2 w-full py-3.5 rounded-2xl font-black text-xs uppercase tracking-wider transition-all duration-200 active:scale-[0.99] shadow-sm ${acc.bgBtn}" data-action="open-user-task" data-taskid="${task.id}">
+                                <span>Start Task</span>
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path></svg>
+                            </button>
+                        </div>`;
                 } else {
                     return `
-                        <article class="task-preview-card" style="--task-card-delay:${index * 90}ms" aria-disabled="true">
-                            <div class="task-card-main">
-                                <span class="task-card-logo">
-                                    <img src="${escapeHtml(imageUrl)}" alt="${escapeHtml(taskTitle)}" loading="lazy" decoding="async">
-                                </span>
-                                <span class="task-rate-pill">${escapeHtml(reward)}</span>
-                                <h4>${escapeHtml(taskTitle)}</h4>
+                        <div class="bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800/80 rounded-[1.75rem] p-5 shadow-sm opacity-70 flex flex-col gap-4">
+                            <!-- Top Row: Icon, Title & Coming Soon -->
+                            <div class="flex items-start justify-between gap-3 text-left">
+                                <div class="flex items-center gap-3.5 min-w-0">
+                                    <div class="h-14 w-14 overflow-hidden rounded-2xl bg-slate-50 dark:bg-slate-800 flex items-center justify-center shrink-0 border border-slate-100 dark:border-slate-700 shadow-inner">
+                                        <img src="${escapeHtml(imageUrl)}" alt="${escapeHtml(taskTitle)}" class="h-full w-full object-cover">
+                                    </div>
+                                    <div class="min-w-0 flex flex-col">
+                                        <span class="inline-flex rounded-lg px-2.5 py-0.5 text-[9px] font-black uppercase tracking-wider w-fit border ${acc.bgPill}">
+                                            ${escapeHtml(taskTypeLabel)}
+                                        </span>
+                                        <h4 class="text-sm md:text-base font-black text-slate-950 dark:text-white mt-1.5 truncate pr-1 leading-tight">${escapeHtml(taskTitle)}</h4>
+                                    </div>
+                                </div>
+                                <span class="rounded-xl bg-gray-100 dark:bg-gray-800 text-gray-500 px-3 py-1.5 text-xs font-black uppercase tracking-wider">Draft</span>
                             </div>
-                            <div class="task-card-coming">Coming Soon</div>
-                        </article>`;
+                        </div>`;
                 }
             };
 
             const renderCategory = (category) => `
-                <section class="task-category-block ${category.accent}">
-                    <div class="task-category-title">
-                        <span class="task-category-mark"></span>
-                        <h3>${escapeHtml(category.label)}</h3>
+                <section class="task-category-block ${category.accent} mb-6">
+                    <div class="task-category-title flex items-center gap-2 mb-3">
+                        <span class="task-category-mark h-4 w-1 bg-indigo-600 dark:bg-indigo-400 rounded-full"></span>
+                        <h3 class="text-sm font-black uppercase tracking-wider text-slate-900 dark:text-white">${escapeHtml(category.label)}</h3>
                     </div>
-                    <div class="task-preview-rail">
+                    <div class="flex flex-col gap-4">
                         ${category.items.map((task, index) => renderTaskCard(category, task, index)).join('')}
                     </div>
                 </section>`;
