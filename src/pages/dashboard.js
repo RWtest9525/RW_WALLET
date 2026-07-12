@@ -730,9 +730,15 @@ const getPageFooter = () => `</div>`;
 const showUserTaskHistoryPage = () => {
             if (!ensureUserSessionReady()) return;
             
-            // Store current active tab on window so it persists across renders
+            // Store current active tab and status filter on window so they persist
             if (typeof window.userTaskHistoryActiveTab === 'undefined') {
                 window.userTaskHistoryActiveTab = 'all';
+            }
+            if (typeof window.userTaskHistoryStatusFilter === 'undefined') {
+                window.userTaskHistoryStatusFilter = 'all';
+            }
+            if (typeof window.userTaskHistoryFilterDrawerOpen === 'undefined') {
+                window.userTaskHistoryFilterDrawerOpen = false;
             }
 
             const isBulker = isBulkTaskUser();
@@ -741,20 +747,16 @@ const showUserTaskHistoryPage = () => {
             const content = `
                 <header class="flex items-center justify-between p-4 bg-white dark:bg-gray-800 shadow-sm border-b border-gray-100 dark:border-gray-750 page-header-fixed">
                     <div class="flex items-center gap-3">
-                        <button class="page-back-btn p-2 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700 mr-1 shrink-0">
-                            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5"></path><path d="M12 19l-7-7 7-7"></path></svg>
+                        <button class="page-back-btn p-2 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700 mr-1 shrink-0 text-gray-700 dark:text-white" style="outline: none;">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="12" x2="21" y2="12"></line><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="18" x2="21" y2="18"></line></svg>
                         </button>
                         <h2 class="text-lg font-black text-gray-900 dark:text-white">${title}</h2>
                     </div>
                     <div class="flex items-center gap-2">
                         ${!isBulker ? `
-                        <select id="user-task-history-filter" class="rounded-xl bg-gray-50 dark:bg-gray-750 px-2.5 py-1.5 text-xs font-bold border border-gray-150 dark:border-gray-700 outline-none focus:ring-2 focus:ring-purple-500 shadow-sm cursor-pointer">
-                            <option value="all">All Status</option>
-                            <option value="pending">Pending</option>
-                            <option value="approved">Approved</option>
-                            <option value="paid">Paid</option>
-                            <option value="rejected">Rejected</option>
-                        </select>
+                        <button id="user-task-history-filter-toggle" class="p-2 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700 shrink-0 ${window.userTaskHistoryFilterDrawerOpen ? 'bg-purple-100 dark:bg-purple-950/30 text-purple-600 dark:text-purple-400' : 'text-gray-700 dark:text-white'}" style="outline: none;">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon></svg>
+                        </button>
                         ` : ''}
                     </div>
                 </header>
@@ -766,12 +768,27 @@ const showUserTaskHistoryPage = () => {
                             const isActive = window.userTaskHistoryActiveTab === tab;
                             const label = tab === 'all' ? 'All' : tab === 'play_store' ? 'Play Store' : 'Others';
                             return `
-                                <button type="button" data-action="select-history-tab" data-tab="${tab}" class="flex-1 text-center py-2 text-xs font-black rounded-lg transition-all ${isActive ? 'bg-purple-600 text-white shadow-sm' : 'text-gray-500 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200'}" style="outline: none;">
+                                <button type="button" data-action="select-history-tab" data-tab="${tab}" class="flex-1 text-center py-2 text-xs font-black rounded-lg transition-all ${isActive ? 'bg-purple-600 text-white shadow-sm' : 'text-gray-550 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200'}" style="outline: none;">
                                     ${label}
                                 </button>
                             `;
                         }).join('')}
                     </div>
+
+                    <!-- Toggleable Status Filter Chips (Single User Only) -->
+                    ${!isBulker && window.userTaskHistoryFilterDrawerOpen ? `
+                    <div class="flex flex-wrap items-center gap-1.5 p-1.5 bg-gray-50 dark:bg-gray-900 rounded-2xl border border-gray-150 dark:border-gray-750">
+                        ${['all', 'pending', 'approved', 'paid', 'rejected'].map(status => {
+                            const isActive = window.userTaskHistoryStatusFilter === status;
+                            const label = status === 'all' ? 'All Status' : status.charAt(0).toUpperCase() + status.slice(1);
+                            return `
+                                <button type="button" data-action="select-status-filter" data-status="${status}" class="flex-1 text-center py-1.5 text-[10px] font-black rounded-xl transition-all ${isActive ? 'bg-purple-600 text-white shadow-sm' : 'text-gray-500 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200'}" style="outline: none;">
+                                    ${label}
+                                </button>
+                            `;
+                        }).join('')}
+                    </div>
+                    ` : ''}
 
                     <!-- List Container -->
                     <div id="user-task-history-list" class="space-y-3.5">
@@ -788,21 +805,32 @@ const showUserTaskHistoryPage = () => {
                 pageEl.querySelectorAll('[data-action="select-history-tab"]').forEach(btn => {
                     btn.onclick = (e) => {
                         window.userTaskHistoryActiveTab = e.currentTarget.dataset.tab;
-                        // Re-open page to apply visual tab styles
                         showUserTaskHistoryPage();
                     };
                 });
+
+                // Bind Status Filter Chip Handlers
+                pageEl.querySelectorAll('[data-action="select-status-filter"]').forEach(btn => {
+                    btn.onclick = (e) => {
+                        window.userTaskHistoryStatusFilter = e.currentTarget.dataset.status;
+                        showUserTaskHistoryPage();
+                    };
+                });
+
+                // Bind Toggle Filter Drawer
+                const filterToggle = document.getElementById('user-task-history-filter-toggle');
+                if (filterToggle) {
+                    filterToggle.onclick = () => {
+                        window.userTaskHistoryFilterDrawerOpen = !window.userTaskHistoryFilterDrawerOpen;
+                        showUserTaskHistoryPage();
+                    };
+                }
             }
 
             if (userTaskHistoryCache && userTaskHistoryCache.length > 0) {
                 renderUserTaskHistory();
             }
             loadUserTaskHistory();
-
-            const statusFilter = document.getElementById('user-task-history-filter');
-            if (statusFilter) {
-                statusFilter.onchange = renderUserTaskHistory;
-            }
         };
 
 const loadUserTaskHistory = async () => {
@@ -832,7 +860,7 @@ const renderUserTaskHistory = () => {
             if (!listEl) return;
 
             const categoryTab = window.userTaskHistoryActiveTab || 'all';
-            const statusFilter = document.getElementById('user-task-history-filter')?.value || 'all';
+            const statusFilter = window.userTaskHistoryStatusFilter || 'all';
             const isBulker = isBulkTaskUser();
 
             let subs = [...userTaskHistoryCache];
@@ -1026,56 +1054,75 @@ window.showUserTaskHistoryDetail = (submissionId) => {
             try { details = s.details_json ? JSON.parse(s.details_json) : {}; } catch {}
             const gmailName = s.ocr_extracted_name || '';
             const appLogo = s.app_logo_url || 'https://cdn-icons-png.flaticon.com/512/3176/3176366.png';
-
             const isReviewTask = !!(s.assigned_comment && String(s.assigned_comment).trim().length > 0);
 
-            // Timeline setup
-            let step2Text = 'Task is being verified by admin';
-            let step2CircleClass = 'bg-amber-500 ring-4 ring-amber-100 dark:ring-amber-950 animate-pulse';
-            let step2Icon = `<svg class="h-3 w-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M12 8v4l3 3"></path></svg>`;
+            // Timeline setup (4 steps matching mockup)
+            let step2Text = 'Checking on Play Store';
+            let step2CircleClass = 'bg-gray-200 dark:bg-gray-700 ring-4 ring-gray-100 dark:ring-gray-900 text-gray-400';
+            let step2Icon = `<svg class="h-3 w-3" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path><path stroke-linecap="round" stroke-linejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path></svg>`;
+            let step2StatusText = 'Status: PENDING';
 
             if (s.manual_status === 'approved') {
-                step2Text = 'Task verified successfully';
-                step2CircleClass = 'bg-emerald-500 ring-4 ring-emerald-100 dark:ring-emerald-950';
-                step2Icon = `<svg class="h-3 w-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"></path></svg>`;
+                step2CircleClass = 'bg-emerald-500 ring-4 ring-emerald-100 dark:ring-emerald-955 text-white';
+                step2Icon = `<svg class="h-3 w-3" fill="none" stroke="currentColor" stroke-width="3" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"></path></svg>`;
+                step2StatusText = 'Status: APPROVED';
             } else if (s.manual_status === 'rejected') {
-                step2Text = isReviewTask && (s.scraper_status === 'not_live' || s.ocr_status === 'completed')
-                    ? 'Your review is not live, so it is rejected'
-                    : 'Your task is rejected';
-                step2CircleClass = 'bg-rose-500 ring-4 ring-rose-100 dark:ring-rose-950';
-                step2Icon = `<svg class="h-3 w-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M6 18L18 6M6 6l12 12"></path></svg>`;
+                step2Text = 'Review not found / Rejected';
+                step2CircleClass = 'bg-rose-500 ring-4 ring-rose-100 dark:ring-rose-955 text-white';
+                step2Icon = `<svg class="h-3 w-3" fill="none" stroke="currentColor" stroke-width="3" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"></path></svg>`;
+                step2StatusText = 'Status: REJECTED';
+            } else {
+                step2CircleClass = 'bg-purple-600 ring-4 ring-purple-100 dark:ring-purple-955 text-white animate-pulse';
             }
 
-            let step3Text = 'Amount initiation pending';
-            let step3CircleClass = 'bg-gray-200 dark:bg-gray-700 ring-4 ring-gray-100 dark:ring-gray-900';
-            let step3Icon = `<svg class="h-3 w-3 text-gray-400" fill="currentColor" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"></circle></svg>`;
+            let step3Text = 'In 7 Days';
+            let step3CircleClass = 'bg-gray-200 dark:bg-gray-700 ring-4 ring-gray-100 dark:ring-gray-900 text-gray-400';
+            let step3Icon = `<svg class="h-3 w-3" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 8v4l3 3"></path></svg>`;
+            let step3StatusText = 'Payment: PENDING';
 
             if (s.manual_status === 'approved') {
                 if (s.payout_status === 'paid') {
-                    step3Text = `Amount ₹${s.reward} credited to wallet`;
-                    step3CircleClass = 'bg-emerald-500 ring-4 ring-emerald-100 dark:ring-emerald-950';
-                    step3Icon = `<svg class="h-3 w-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"></path></svg>`;
+                    step3CircleClass = 'bg-emerald-500 ring-4 ring-emerald-100 dark:ring-emerald-955 text-white';
+                    step3Icon = `<svg class="h-3 w-3" fill="none" stroke="currentColor" stroke-width="3" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"></path></svg>`;
+                    step3StatusText = 'Payment: INITIATED';
                 } else {
-                    step3Text = 'Amount initiated for credit';
-                    step3CircleClass = 'bg-purple-600 ring-4 ring-purple-100 dark:ring-purple-950 animate-pulse';
-                    step3Icon = `<svg class="h-3 w-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M12 8v4l3 3"></path></svg>`;
+                    step3CircleClass = 'bg-amber-500 ring-4 ring-amber-100 dark:ring-amber-955 text-white animate-pulse';
+                    step3StatusText = 'Payment: IN PROGRESS';
                 }
             } else if (s.manual_status === 'rejected') {
-                step3Text = 'Credit cancelled due to rejection';
-                step3CircleClass = 'bg-gray-400 dark:bg-gray-600 ring-4 ring-gray-300 dark:ring-gray-850';
-                step3Icon = `<svg class="h-3 w-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M6 18L18 6M6 6l12 12"></path></svg>`;
+                step3Text = 'Payout Cancelled';
+                step3CircleClass = 'bg-gray-400 dark:bg-gray-600 ring-4 ring-gray-300 dark:ring-gray-850 text-white';
+                step3Icon = `<svg class="h-3 w-3" fill="none" stroke="currentColor" stroke-width="3" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"></path></svg>`;
+                step3StatusText = 'Payment: REJECTED';
+            }
+
+            let step4Text = 'After Approval';
+            let step4CircleClass = 'bg-gray-200 dark:bg-gray-700 ring-4 ring-gray-100 dark:ring-gray-900 text-gray-400';
+            let step4Icon = `<svg class="h-3 w-3" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3" fill="currentColor"></circle></svg>`;
+            let step4StatusText = 'Credit: PENDING';
+
+            if (s.manual_status === 'approved' && s.payout_status === 'paid') {
+                step4Text = `Amount ₹${s.reward} Credited`;
+                step4CircleClass = 'bg-emerald-500 ring-4 ring-emerald-100 dark:ring-emerald-955 text-white';
+                step4Icon = `<svg class="h-3 w-3" fill="none" stroke="currentColor" stroke-width="3" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"></path></svg>`;
+                step4StatusText = 'Credit: WALLET CREDITED';
+            } else if (s.manual_status === 'rejected') {
+                step4Text = 'Credit Cancelled';
+                step4CircleClass = 'bg-gray-450 dark:bg-gray-600 ring-4 ring-gray-300 dark:ring-gray-850 text-white';
+                step4Icon = `<svg class="h-3 w-3" fill="none" stroke="currentColor" stroke-width="3" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"></path></svg>`;
+                step4StatusText = 'Credit: CANCELLED';
             }
 
             const detailContent = `
                 <header class="flex items-center justify-between p-4 bg-white dark:bg-gray-800 shadow-sm border-b border-gray-100 dark:border-gray-750 page-header-fixed">
                     <div class="flex items-center gap-3">
-                        <button class="page-back-btn p-2 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700 mr-1 shrink-0">
-                            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5"></path><path d="M12 19l-7-7 7-7"></path></svg>
+                        <button class="page-back-btn p-2 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700 mr-1 shrink-0 text-gray-700 dark:text-white" style="outline: none;">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"></line><line x1="12" y1="19" x2="5" y2="12"></line><line x1="12" y1="5" x2="5" y2="12"></line></svg>
                         </button>
                         <h2 class="text-lg font-black text-gray-900 dark:text-white">Task Details</h2>
                     </div>
-                    <button class="p-2 rounded-full hover:bg-gray-250 dark:hover:bg-gray-700 shrink-0 text-gray-500" onclick="showHelpSupportPage()">
-                        <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                    <button class="p-2 rounded-full hover:bg-gray-250 dark:hover:bg-gray-700 shrink-0 text-gray-500" onclick="showHelpSupportPage()" style="outline: none;">
+                        <svg class="w-5 h-5 text-gray-600 dark:text-gray-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
                     </button>
                 </header>
 
@@ -1099,30 +1146,34 @@ window.showUserTaskHistoryDetail = (submissionId) => {
                             </div>
                         </div>
 
+                        <!-- 3 Detail Columns with beautiful SVGs -->
                         <div class="grid grid-cols-3 gap-2 text-center border-t border-gray-100 dark:border-gray-750 pt-4">
                             <div class="bg-gray-50 dark:bg-gray-900/40 p-2.5 rounded-xl border border-gray-100 dark:border-gray-800">
+                                <svg class="w-4 h-4 mx-auto mb-1 text-purple-600 dark:text-purple-400" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
                                 <p class="text-xs font-black text-gray-850 dark:text-gray-200">₹${s.reward}</p>
                                 <p class="text-[9px] font-bold text-gray-400 uppercase mt-0.5">Payout</p>
                             </div>
                             <div class="bg-gray-50 dark:bg-gray-900/40 p-2.5 rounded-xl border border-gray-100 dark:border-gray-800">
+                                <svg class="w-4 h-4 mx-auto mb-1 text-blue-500" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
                                 <p class="text-xs font-black text-gray-850 dark:text-gray-200">${s.manual_status === 'approved' ? 'Instant' : '7 Days'}</p>
                                 <p class="text-[9px] font-bold text-gray-400 uppercase mt-0.5">Approval Time</p>
                             </div>
                             <div class="bg-gray-50 dark:bg-gray-900/40 p-2.5 rounded-xl border border-gray-100 dark:border-gray-800">
+                                <svg class="w-4 h-4 mx-auto mb-1 text-green-500" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
                                 <p class="text-xs font-black text-gray-850 dark:text-gray-200 truncate">${isReviewTask ? 'Play Store' : 'Screenshot'}</p>
                                 <p class="text-[9px] font-bold text-gray-400 uppercase mt-0.5">Task Type</p>
                             </div>
                         </div>
                     </div>
 
-                    <!-- Stepper Timeline -->
+                    <!-- Stepper Timeline (4 steps matching mockup) -->
                     <div class="bg-white dark:bg-gray-800 p-5 rounded-2xl shadow-md border border-gray-150 dark:border-gray-700 space-y-4">
                         <p class="text-[10px] font-black uppercase text-gray-400 tracking-wider">Submission Timeline</p>
                         <div class="relative pl-7 space-y-6 before:absolute before:left-[11px] before:top-2 before:bottom-2 before:w-[2px] before:bg-gray-150 dark:before:bg-gray-700">
                             <!-- Step 1: Submission -->
                             <div class="relative flex gap-3.5 items-start">
-                                <span class="absolute -left-[27px] flex h-[24px] w-[24px] items-center justify-center rounded-full bg-emerald-500 ring-4 ring-emerald-100 dark:ring-emerald-955">
-                                    <svg class="h-3 w-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"></path></svg>
+                                <span class="absolute -left-[27px] flex h-[24px] w-[24px] items-center justify-center rounded-full bg-emerald-500 ring-4 ring-emerald-100 dark:ring-emerald-955 text-white">
+                                    <svg class="h-3 w-3" fill="none" stroke="currentColor" stroke-width="3" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"></path></svg>
                                 </span>
                                 <div class="min-w-0 flex-1">
                                     <p class="text-xs font-bold text-gray-800 dark:text-gray-200">Screenshot Sent to Admin</p>
@@ -1137,18 +1188,29 @@ window.showUserTaskHistoryDetail = (submissionId) => {
                                 </span>
                                 <div class="min-w-0 flex-1">
                                     <p class="text-xs font-bold text-gray-800 dark:text-gray-200">${step2Text}</p>
-                                    <p class="text-[9px] text-gray-400 font-semibold mt-0.5">Status: <span class="uppercase font-black text-purple-600 dark:text-purple-400">${s.manual_status || 'PENDING'}</span></p>
+                                    <p class="text-[9px] text-gray-400 font-semibold mt-0.5">${step2StatusText}</p>
                                 </div>
                             </div>
 
-                            <!-- Step 3: Payout -->
+                            <!-- Step 3: Wait / Payout -->
                             <div class="relative flex gap-3.5 items-start">
                                 <span class="absolute -left-[27px] flex h-[24px] w-[24px] items-center justify-center rounded-full ${step3CircleClass}">
                                     ${step3Icon}
                                 </span>
                                 <div class="min-w-0 flex-1">
                                     <p class="text-xs font-bold text-gray-800 dark:text-gray-200">${step3Text}</p>
-                                    <p class="text-[9px] text-gray-400 font-semibold mt-0.5">Payment: <span class="uppercase font-black text-purple-600 dark:text-purple-400">${s.payout_status || 'PENDING'}</span></p>
+                                    <p class="text-[9px] text-gray-400 font-semibold mt-0.5">${step3StatusText}</p>
+                                </div>
+                            </div>
+
+                            <!-- Step 4: Wallet Credit -->
+                            <div class="relative flex gap-3.5 items-start">
+                                <span class="absolute -left-[27px] flex h-[24px] w-[24px] items-center justify-center rounded-full ${step4CircleClass}">
+                                    ${step4Icon}
+                                </span>
+                                <div class="min-w-0 flex-1">
+                                    <p class="text-xs font-bold text-gray-800 dark:text-gray-200">${step4Text}</p>
+                                    <p class="text-[9px] text-gray-400 font-semibold mt-0.5">${step4StatusText}</p>
                                 </div>
                             </div>
                         </div>
@@ -1159,7 +1221,7 @@ window.showUserTaskHistoryDetail = (submissionId) => {
                         <p class="text-[10px] font-black uppercase text-gray-400 tracking-wider">Your Submission Proof</p>
                         
                         ${s.screenshot_url ? `
-                        <div class="relative overflow-hidden rounded-2xl bg-gray-50 dark:bg-gray-950 flex items-center justify-center py-4 border border-gray-100 dark:border-gray-800">
+                        <div class="relative overflow-hidden rounded-2xl bg-gray-50 dark:bg-gray-955 flex items-center justify-center py-4 border border-gray-100 dark:border-gray-800">
                             <img id="user-detail-screenshot-img" src="${escapeHtml(s.screenshot_url)}" alt="Screenshot Proof" class="h-44 w-28 rounded-xl border border-gray-200 dark:border-gray-750 object-cover cursor-zoom-in hover:scale-102 transition shadow-md">
                         </div>
                         <div class="flex justify-between items-center text-[10px] text-gray-400">
@@ -1180,7 +1242,7 @@ window.showUserTaskHistoryDetail = (submissionId) => {
                                     <span>Copy</span>
                                 </button>
                             </div>
-                            <p class="mt-1.5 text-xs font-bold text-gray-850 dark:text-gray-250 italic bg-gray-50 dark:bg-gray-900/50 p-3 rounded-xl border border-gray-150 dark:border-gray-755 leading-relaxed font-mono">
+                            <p class="mt-1.5 text-xs font-bold text-gray-850 dark:text-gray-255 italic bg-gray-50 dark:bg-gray-900/50 p-3 rounded-xl border border-gray-150 dark:border-gray-755 leading-relaxed font-mono">
                                 "${escapeHtml(s.assigned_comment)}"
                             </p>
                         </div>
@@ -1240,52 +1302,63 @@ window.showSubmissionStatusPage = (submissionId) => {
             const reviewSubs = userTaskHistoryCache.filter(x => x.assigned_comment && String(x.assigned_comment).trim().length > 0);
             const uploadedCount = reviewSubs.length;
             const underReviewCount = reviewSubs.filter(x => x.manual_status === 'pending').length;
-            const approvedCount = reviewSubs.filter(x => x.manual_status === 'approved').length;
             const rejectedCount = reviewSubs.filter(x => x.manual_status === 'rejected').length;
 
             const content = `
                 <header class="flex items-center justify-between p-4 bg-white dark:bg-gray-800 shadow-sm border-b border-gray-100 dark:border-gray-750 page-header-fixed">
                     <div class="flex items-center gap-3">
-                        <button class="page-back-btn p-2 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700 mr-1 shrink-0">
-                            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5"></path><path d="M12 19l-7-7 7-7"></path></svg>
+                        <button class="page-back-btn p-2 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700 mr-1 shrink-0 text-gray-700 dark:text-white" style="outline: none;">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"></line><line x1="12" y1="19" x2="5" y2="12"></line><line x1="12" y1="5" x2="5" y2="12"></line></svg>
                         </button>
                         <h2 class="text-lg font-black text-gray-900 dark:text-white">Submission Status</h2>
                     </div>
                 </header>
 
                 <div class="max-w-xl mx-auto space-y-4 pb-24 px-4 pt-4 text-left">
-                    <!-- Summary Counts Rows -->
+                    <!-- Summary Counts Rows with thick borders and premium SVGs -->
                     <div class="grid grid-cols-4 gap-2 text-center text-xs">
-                        <div class="bg-emerald-50/50 dark:bg-emerald-950/20 p-2.5 rounded-2xl border border-emerald-100 dark:border-emerald-900/30 shadow-sm">
-                            <span class="block text-lg font-black text-emerald-600 dark:text-emerald-400">${uploadedCount}</span>
-                            <span class="text-[9px] font-black text-emerald-500/80 uppercase tracking-wide">Uploaded</span>
+                        <div class="bg-emerald-50/40 dark:bg-emerald-950/20 p-2.5 rounded-2xl border-2 border-emerald-500/30 dark:border-emerald-500/20 shadow-sm flex flex-col justify-between min-h-[82px]">
+                            <svg class="w-4 h-4 mx-auto text-emerald-600 dark:text-emerald-400" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"></path></svg>
+                            <div>
+                                <span class="block text-base font-black text-emerald-600 dark:text-emerald-400 mt-1">${uploadedCount}</span>
+                                <span class="text-[8px] font-black text-emerald-500/80 uppercase tracking-wide">Uploaded</span>
+                            </div>
                         </div>
-                        <div class="bg-purple-50/50 dark:bg-purple-950/20 p-2.5 rounded-2xl border border-purple-100 dark:border-purple-900/30 shadow-sm">
-                            <span class="block text-lg font-black text-purple-600 dark:text-purple-400">${underReviewCount}</span>
-                            <span class="text-[9px] font-black text-purple-500/80 uppercase tracking-wide">Under Review</span>
+                        <div class="bg-purple-50/40 dark:bg-purple-950/20 p-2.5 rounded-2xl border-2 border-purple-500/30 dark:border-purple-500/20 shadow-sm flex flex-col justify-between min-h-[82px]">
+                            <svg class="w-4 h-4 mx-auto text-purple-600 dark:text-purple-400" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
+                            <div>
+                                <span class="block text-base font-black text-purple-600 dark:text-purple-400 mt-1">${underReviewCount}</span>
+                                <span class="text-[8px] font-black text-purple-500/80 uppercase tracking-wide">In Review</span>
+                            </div>
                         </div>
-                        <div class="bg-blue-50/50 dark:bg-blue-950/20 p-2.5 rounded-2xl border border-blue-100 dark:border-blue-900/30 shadow-sm">
-                            <span class="block text-lg font-black text-blue-600 dark:text-blue-400">${approvedCount}</span>
-                            <span class="text-[9px] font-black text-blue-500/80 uppercase tracking-wide">Approved</span>
+                        <div class="bg-blue-50/40 dark:bg-blue-950/20 p-2.5 rounded-2xl border-2 border-blue-500/30 dark:border-blue-500/20 shadow-sm flex flex-col justify-between min-h-[82px]">
+                            <svg class="w-4 h-4 mx-auto text-blue-600 dark:text-blue-400" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"></path></svg>
+                            <div>
+                                <span class="block text-base font-black text-blue-600 dark:text-blue-400 mt-1">${approvedCount}</span>
+                                <span class="text-[8px] font-black text-blue-500/80 uppercase tracking-wide">Approved</span>
+                            </div>
                         </div>
-                        <div class="bg-rose-50/50 dark:bg-rose-955/20 p-2.5 rounded-2xl border border-rose-100 dark:border-rose-900/30 shadow-sm">
-                            <span class="block text-lg font-black text-rose-600 dark:text-rose-455">${rejectedCount}</span>
-                            <span class="text-[9px] font-black text-rose-500/80 uppercase tracking-wide">Rejected</span>
+                        <div class="bg-rose-50/40 dark:bg-rose-955/20 p-2.5 rounded-2xl border-2 border-rose-500/30 dark:border-rose-500/20 shadow-sm flex flex-col justify-between min-h-[82px]">
+                            <svg class="w-4 h-4 mx-auto text-rose-600 dark:text-rose-455" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"></path></svg>
+                            <div>
+                                <span class="block text-base font-black text-rose-600 dark:text-rose-455 mt-1">${rejectedCount}</span>
+                                <span class="text-[8px] font-black text-rose-500/80 uppercase tracking-wide">Rejected</span>
+                            </div>
                         </div>
                     </div>
 
                     <!-- Submission Details Card -->
-                    <div class="bg-white dark:bg-gray-800 p-5 rounded-2xl shadow-md border border-gray-150 dark:border-gray-700 space-y-3.5">
+                    <div class="bg-white dark:bg-gray-800 p-5 rounded-2xl shadow-md border border-gray-150 dark:border-gray-700 space-y-3.5 shadow-sm">
                         <h4 class="text-sm font-extrabold text-gray-900 dark:text-white border-b border-gray-100 dark:border-gray-750 pb-2">Submission Details</h4>
                         
-                        <div class="space-y-3 text-xs font-semibold text-gray-650 dark:text-gray-300">
+                        <div class="space-y-3 text-xs font-semibold text-gray-655 dark:text-gray-300">
                             <div class="flex justify-between">
                                 <span class="text-gray-400">Task Name</span>
-                                <span class="font-extrabold text-gray-800 dark:text-white text-right max-w-[200px] truncate">${escapeHtml(s.app_name || 'Task Submission')}</span>
+                                <span class="font-extrabold text-gray-850 dark:text-white text-right max-w-[200px] truncate">${escapeHtml(s.app_name || 'Task Submission')}</span>
                             </div>
                             <div class="flex justify-between">
                                 <span class="text-gray-400">Task Type</span>
-                                <span class="font-extrabold text-gray-800 dark:text-white">Play Store Review</span>
+                                <span class="font-extrabold text-gray-850 dark:text-white">Play Store Review</span>
                             </div>
                             <div class="flex justify-between">
                                 <span class="text-gray-400">Payout</span>
@@ -1403,35 +1476,34 @@ window.showBulkerTaskOverview = (taskId) => {
                     <!-- Quick Actions -->
                     <div class="bg-white dark:bg-gray-800 p-5 rounded-2xl shadow-md border border-gray-150 dark:border-gray-700 space-y-3.5 shadow-sm">
                         <h4 class="text-[10px] font-black uppercase text-gray-400 tracking-wider">Quick Actions</h4>
-                        
-                        <div class="space-y-2 text-xs">
-                            <button class="w-full flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-900/40 rounded-xl hover:bg-purple-50 dark:hover:bg-purple-950/10 border border-gray-100 dark:border-gray-800 transition active:scale-[0.99] font-extrabold text-gray-800 dark:text-white" onclick="window.showBulkerAllSubmissions('${taskId}', 'all')">
-                                <span class="flex items-center gap-2">
-                                    <span class="text-purple-600">📁</span>
+                        <div class="space-y-2.5 text-xs">
+                            <button class="w-full flex items-center justify-between p-3.5 bg-gray-50 dark:bg-gray-900/40 rounded-2xl hover:bg-purple-50 dark:hover:bg-purple-950/10 border border-gray-150 dark:border-gray-800 transition active:scale-[0.99] font-extrabold text-gray-800 dark:text-white" onclick="window.showBulkerAllSubmissions('${taskId}', 'all')" style="outline: none;">
+                                <span class="flex items-center gap-2.5">
+                                    <svg class="w-4 h-4 text-purple-600 dark:text-purple-400 shrink-0" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
                                     <span>View All Submissions</span>
                                 </span>
-                                <svg class="h-3.5 w-3.5 text-gray-450" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M9 5l7 7-7 7"></path></svg>
+                                <svg class="h-4 w-4 text-purple-600 dark:text-purple-400" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"></path></svg>
                             </button>
-                            <button class="w-full flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-900/40 rounded-xl hover:bg-purple-50 dark:hover:bg-purple-950/10 border border-gray-100 dark:border-gray-800 transition active:scale-[0.99] font-extrabold text-gray-800 dark:text-white" onclick="window.showBulkerAllSubmissions('${taskId}', 'pending')">
-                                <span class="flex items-center gap-2">
-                                    <span class="text-amber-500">⏳</span>
+                            <button class="w-full flex items-center justify-between p-3.5 bg-gray-50 dark:bg-gray-900/40 rounded-2xl hover:bg-amber-50 dark:hover:bg-amber-950/10 border border-gray-150 dark:border-gray-800 transition active:scale-[0.99] font-extrabold text-gray-800 dark:text-white" onclick="window.showBulkerAllSubmissions('${taskId}', 'pending')" style="outline: none;">
+                                <span class="flex items-center gap-2.5">
+                                    <svg class="w-4 h-4 text-amber-500 shrink-0" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
                                     <span>View Pending (${pendingCount})</span>
                                 </span>
-                                <svg class="h-3.5 w-3.5 text-gray-455" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M9 5l7 7-7 7"></path></svg>
+                                <svg class="h-4 w-4 text-amber-500" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"></path></svg>
                             </button>
-                            <button class="w-full flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-900/40 rounded-xl hover:bg-purple-50 dark:hover:bg-purple-950/10 border border-gray-100 dark:border-gray-800 transition active:scale-[0.99] font-extrabold text-gray-800 dark:text-white" onclick="window.showBulkerAllSubmissions('${taskId}', 'rejected')">
-                                <span class="flex items-center gap-2">
-                                    <span class="text-rose-500">❌</span>
+                            <button class="w-full flex items-center justify-between p-3.5 bg-gray-50 dark:bg-gray-900/40 rounded-2xl hover:bg-rose-50 dark:hover:bg-rose-955/10 border border-gray-150 dark:border-gray-800 transition active:scale-[0.99] font-extrabold text-gray-800 dark:text-white" onclick="window.showBulkerAllSubmissions('${taskId}', 'rejected')" style="outline: none;">
+                                <span class="flex items-center gap-2.5">
+                                    <svg class="w-4 h-4 text-rose-500 shrink-0" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
                                     <span>View Rejected (${rejectedCount})</span>
                                 </span>
-                                <svg class="h-3.5 w-3.5 text-gray-450" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M9 5l7 7-7 7"></path></svg>
+                                <svg class="h-4 w-4 text-rose-500" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"></path></svg>
                             </button>
-                            <button class="w-full flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-900/40 rounded-xl hover:bg-purple-50 dark:hover:bg-purple-955 border border-gray-100 dark:border-gray-800 transition active:scale-[0.99] font-extrabold text-gray-850 dark:text-white" onclick="window.exportBulkerReport('${taskId}')">
-                                <span class="flex items-center gap-2">
-                                    <span class="text-blue-500">📥</span>
+                            <button class="w-full flex items-center justify-between p-3.5 bg-gray-50 dark:bg-gray-900/40 rounded-2xl hover:bg-blue-50 dark:hover:bg-blue-955/10 border border-gray-150 dark:border-gray-800 transition active:scale-[0.99] font-extrabold text-gray-800 dark:text-white" onclick="window.exportBulkerReport('${taskId}')" style="outline: none;">
+                                <span class="flex items-center gap-2.5">
+                                    <svg class="w-4 h-4 text-blue-500 shrink-0" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
                                     <span>Export Report (CSV)</span>
                                 </span>
-                                <svg class="h-3.5 w-3.5 text-gray-455" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
+                                <svg class="h-4 w-4 text-blue-500" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"></path></svg>
                             </button>
                         </div>
                     </div>
