@@ -1347,6 +1347,14 @@ const showUserTaskPage = () => {
                 ].filter(cat => cat.items.length > 0);
             }
 
+            const getPayoutDelayText = (t) => {
+                const days = t.paymentDelayDays ?? t.paymentDays ?? t.payoutDelayDays ?? 7;
+                const numDays = Number(days);
+                if (isNaN(numDays) || numDays <= 0) return 'Instant Payout';
+                if (numDays === 1) return '1 Day Payout';
+                return `${numDays} Days Payout`;
+            };
+
             const renderTaskCard = (category, task, index) => {
                 const isReal = isTaskPageEnabled;
                 const status = isReal ? getAdminTaskEffectiveStatus(task) : 'draft';
@@ -1364,6 +1372,9 @@ const showUserTaskPage = () => {
                                 </span>
                                 <span class="task-rate-pill">${escapeHtml(reward)}</span>
                                 <h4>${escapeHtml(taskTitle)}</h4>
+                                <span class="mt-2.5 inline-flex rounded-lg bg-indigo-50 dark:bg-indigo-950/40 text-indigo-600 dark:text-indigo-400 px-2 py-0.5 text-[8px] font-black uppercase tracking-wider border border-indigo-200/40 dark:border-indigo-800/30 w-fit">
+                                    ${escapeHtml(getPayoutDelayText(task))}
+                                </span>
                             </div>
                         </article>`;
                 } else {
@@ -2302,6 +2313,15 @@ const showUserTaskDetailsPage = async (taskId) => {
             const preSelected = selectDeterministicComment(commentPool, currentUser.uid, task.id);
             const initialComment = preSelected.comment;
 
+            const getPayoutDelayText = (t) => {
+                const days = t.paymentDelayDays ?? t.paymentDays ?? t.payoutDelayDays ?? 7;
+                const numDays = Number(days);
+                if (isNaN(numDays) || numDays <= 0) return 'Instant Payout';
+                if (numDays === 1) return '1 Day Payout';
+                return `${numDays} Days Payout`;
+            };
+            const payoutDelayText = getPayoutDelayText(task);
+
             let step2Html = '';
             if (isBulk) {
                 step2Html = `
@@ -2401,10 +2421,19 @@ const showUserTaskDetailsPage = async (taskId) => {
                                     <span class="inline-flex rounded-lg bg-indigo-50 dark:bg-indigo-900/30 px-2 py-0.5 text-[9px] font-black uppercase text-indigo-600 dark:text-indigo-400 tracking-wider mb-1">${escapeHtml(categoryLabel)}</span>
                                     <h3 class="text-base font-black text-slate-950 dark:text-white truncate pr-1">${escapeHtml(appName)}</h3>
                                     
-                                    <!-- Reward Badge below the name -->
-                                    <div class="inline-flex items-center gap-1.5 mt-2 rounded-xl bg-emerald-500/10 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 px-3 py-1 border border-emerald-500/20 text-xs font-black shadow-sm">
-                                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
-                                        <span>Reward: ${formatCurrency(reward).replace('.00', '')}</span>
+                                    <!-- Badges Section below the name -->
+                                    <div class="flex flex-wrap gap-2 mt-2">
+                                        <!-- Reward Capsule -->
+                                        <div class="inline-flex items-center gap-1.5 rounded-xl bg-emerald-500/10 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 px-3 py-1 border border-emerald-500/20 text-xs font-black shadow-sm">
+                                            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                                            <span>Reward: ${formatCurrency(reward).replace('.00', '')}</span>
+                                        </div>
+                                        
+                                        <!-- Payout Delay Capsule -->
+                                        <div class="inline-flex items-center gap-1.5 rounded-xl bg-indigo-500/10 dark:bg-indigo-500/20 text-indigo-600 dark:text-indigo-400 px-3 py-1 border border-indigo-500/20 text-xs font-black shadow-sm">
+                                            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 2m6-2A9 9 0 113 12a9 9 0 0118 0z"></path></svg>
+                                            <span>${escapeHtml(payoutDelayText)}</span>
+                                        </div>
                                     </div>
                                 </div>
                             </div>
