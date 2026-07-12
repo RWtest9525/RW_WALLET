@@ -393,6 +393,7 @@ const loadAdminSubmissions = async () => {
                 }
             }
             adminSubmissionsLoading = false;
+            renderAdminSubmissions();
         };
 
 const getSubmissionLocalDateStr = (submittedAt) => {
