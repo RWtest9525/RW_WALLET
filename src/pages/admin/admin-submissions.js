@@ -393,369 +393,350 @@ const loadAdminSubmissions = async () => {
                 }
             }
             adminSubmissionsLoading = false;
-            renderAdminSubmissions();
         };
+
+const getSubmissionLocalDateStr = (submittedAt) => {
+    if (!submittedAt) return '';
+    const d = new Date(timestampToMillis(submittedAt));
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+};
+
+const formatDatePickerDate = (dateStr) => {
+    if (!dateStr) return 'Select Date';
+    const [y, m, d] = dateStr.split('-').map(Number);
+    const dateObj = new Date(y, m - 1, d);
+    return dateObj.toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' });
+};
 
 const renderAdminSubmissions = () => {
-            const listEl = document.getElementById('admin-sub-list');
-            if (!listEl) return;
-            const search = (document.getElementById('admin-sub-search')?.value || '').trim().toLowerCase();
-            const filter = document.getElementById('admin-sub-filter')?.value || 'all';
+    const shellEl = document.getElementById('admin-submissions-page-shell');
+    if (!shellEl) return;
 
-            let subs = [...adminSubmissionsCache];
-            const isOwner = currentUser?.uid === ADMIN_UID || currentUser?.email === 'reviewsworld51@gmail.com' || currentUser?.email === 'reviewsworld01@gmail.com' || currentUserData?.role === 'owner';
-            if (isOwner) {
-                subs = subs.filter(sub => {
-                    const task = allTasksCache.find(t => t.id === (sub.task_id || sub.taskId));
-                    const isOwnerTask = !task || !task.createdBy || task.createdBy === ADMIN_UID || task.createdBy === 'owner';
-                    return isOwnerTask;
-                });
-            } else {
-                subs = subs.filter(sub => {
-                    const task = allTasksCache.find(t => t.id === (sub.task_id || sub.taskId));
-                    return task && task.createdBy === currentUser.uid;
-                });
-            }
-            if (filter !== 'all') {
-                if (filter === 'paid') {
-                    subs = subs.filter(s => s.payout_status === 'paid');
-                } else {
-                    subs = subs.filter(s => s.manual_status === filter);
-                }
-            }
-            if (search) {
-                subs = subs.filter(s =>
-                    [s.user_name, s.user_email, s.app_name, s.task_id, s.assigned_comment]
-                        .some(v => String(v || '').toLowerCase().includes(search))
-                );
-            }
+    if (typeof adminSubmissionsView === 'undefined') {
+        const d = new Date();
+        window.adminSubmissionsView = {
+            view: 'overview',
+            selectedDate: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`,
+            selectedTaskId: '',
+            selectedDetailTab: 'submissions',
+            selectedSubFilter: 'all'
+        };
+    }
 
-            // Update counts on top metrics
-            const total = adminSubmissionsCache.length;
-            const pending = adminSubmissionsCache.filter(s => s.manual_status === 'pending').length;
-            const approved = adminSubmissionsCache.filter(s => s.manual_status === 'approved').length;
-            const paid = adminSubmissionsCache.filter(s => s.payout_status === 'paid').length;
-            const totalEl = document.getElementById('admin-sub-total');
-            const pendingEl = document.getElementById('admin-sub-pending');
-            const approvedEl = document.getElementById('admin-sub-approved');
-            const paidEl = document.getElementById('admin-sub-paid');
-            if (totalEl) totalEl.textContent = total;
-            if (pendingEl) pendingEl.textContent = pending;
-            if (approvedEl) approvedEl.textContent = approved;
-            if (paidEl) paidEl.textContent = paid;
+    const selectedDate = adminSubmissionsView.selectedDate;
 
-            // Group filtered submissions by Date and App
-            const getSubmissionDateStr = (submittedAt) => {
-                if (!submittedAt) return 'Unknown Date';
-                const d = new Date(timestampToMillis(submittedAt));
-                return `${String(d.getDate()).padStart(2, '0')}-${String(d.getMonth() + 1).padStart(2, '0')}-${d.getFullYear()}`;
+    // Filter submissions by ownership
+    let subs = [...adminSubmissionsCache];
+    const isOwner = currentUser?.uid === ADMIN_UID || currentUser?.email === 'reviewsworld51@gmail.com' || currentUser?.email === 'reviewsworld01@gmail.com' || currentUserData?.role === 'owner';
+    if (isOwner) {
+        subs = subs.filter(sub => {
+            const task = allTasksCache.find(t => t.id === (sub.task_id || sub.taskId));
+            const isOwnerTask = !task || !task.createdBy || task.createdBy === ADMIN_UID || task.createdBy === 'owner';
+            return isOwnerTask;
+        });
+    } else {
+        subs = subs.filter(sub => {
+            const task = allTasksCache.find(t => t.id === (sub.task_id || sub.taskId));
+            return task && task.createdBy === currentUser.uid;
+        });
+    }
+
+    // Filter by selected date
+    const dateSubs = subs.filter(s => getSubmissionLocalDateStr(s.submitted_at || s.submittedAt) === selectedDate);
+
+    let html = '';
+
+    if (adminSubmissionsView.view === 'overview') {
+        // Compute overview stats for the date
+        const totalSubmissions = dateSubs.length;
+        const ocrPassed = dateSubs.filter(s => s.ocr_status === 'completed').length;
+        const pendingVerify = dateSubs.filter(s => s.manual_status === 'pending').length;
+        const approvedCount = dateSubs.filter(s => s.manual_status === 'approved').length;
+        const rejectedCount = dateSubs.filter(s => s.manual_status === 'rejected').length;
+        
+        const activeTaskIds = new Set(dateSubs.map(s => s.task_id || s.taskId).filter(Boolean));
+        const totalTasksCount = activeTaskIds.size;
+
+        // Group rows by active tasks on this date
+        const taskRows = allTasksCache.map(task => {
+            const taskSubs = dateSubs.filter(s => s.task_id === task.id || s.taskId === task.id);
+            return {
+                id: task.id,
+                name: task.appName || task.title || 'Task',
+                total: taskSubs.length,
+                ocrPassed: taskSubs.filter(s => s.ocr_status === 'completed').length,
+                pending: taskSubs.filter(s => s.manual_status === 'pending').length,
+                approved: taskSubs.filter(s => s.manual_status === 'approved').length,
+                rejected: taskSubs.filter(s => s.manual_status === 'rejected').length
             };
+        }).filter(r => r.total > 0 || r.approved > 0 || r.pending > 0);
 
-            const grouped = {};
-            subs.forEach(s => {
-                const dateKey = getSubmissionDateStr(s.submitted_at || s.submittedAt);
-                const appKey = s.app_name || s.appName || s.task_id || 'unknown';
-                if (!grouped[dateKey]) grouped[dateKey] = {};
-                if (!grouped[dateKey][appKey]) {
-                    grouped[dateKey][appKey] = {
-                        taskName: s.app_name || s.appName || appKey,
-                        taskLink: s.task_link || s.taskLink || '',
-                        reward: s.reward || 0,
-                        appLogoUrl: s.app_logo_url || '',
-                        items: []
-                    };
-                }
-                if (s.app_logo_url && !grouped[dateKey][appKey].appLogoUrl) {
-                    grouped[dateKey][appKey].appLogoUrl = s.app_logo_url;
-                }
-                grouped[dateKey][appKey].items.push(s);
-            });
-
-            const sortedDates = Object.keys(grouped).sort((a, b) => {
-                if (a === 'Unknown Date') return 1;
-                if (b === 'Unknown Date') return -1;
-                const [da, ma, ya] = a.split('-').map(Number);
-                const [db, mb, yb] = b.split('-').map(Number);
-                return new Date(yb, mb - 1, db) - new Date(ya, ma - 1, da);
-            });
-
-            let html = '';
-
-            if (adminSubmissionsView.view === 'dates') {
-                let foldersHtml = sortedDates.map(dateStr => {
-                    const dateGroup = grouped[dateStr];
-                    const totalCount = Object.values(dateGroup).reduce((sum, app) => sum + app.items.length, 0);
-                    const pendingCount = Object.values(dateGroup).reduce((sum, app) => sum + app.items.filter(s => s.manual_status === 'pending').length, 0);
-                    
-                    return `
-                        <div class="flex items-center gap-3 rounded-2xl border border-gray-150 dark:border-gray-800 bg-white dark:bg-gray-800 p-4 hover:border-orange-500 hover:shadow-md cursor-pointer transition select-none" data-action="select-date" data-date="${escapeHtml(dateStr)}">
-                            <div class="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-orange-100 dark:bg-orange-900/35 text-2xl">
-                                📁
-                            </div>
-                            <div class="min-w-0 flex-1">
-                                <p class="text-sm font-extrabold text-gray-850 dark:text-white">${escapeHtml(dateStr)}</p>
-                                <p class="text-[10px] text-gray-450">${totalCount} submissions ${pendingCount > 0 ? `· <span class="text-amber-500 font-bold">${pendingCount} pending</span>` : ''}</p>
-                            </div>
-                            <svg class="h-4 w-4 text-gray-450 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M9 5l7 7-7 7"></path></svg>
-                        </div>`;
-                }).join('');
-
-                html = `
-                <div class="flex items-center gap-2 text-xs font-black text-gray-500 mb-4 bg-gray-50 dark:bg-gray-900/50 p-3 rounded-2xl border border-gray-150 dark:border-gray-800 flex-wrap">
-                    <span class="text-orange-500 font-black">📂 Root</span>
+        html = `
+            <!-- Date Picker Header -->
+            <div class="flex items-center justify-between gap-4 px-5 py-4 bg-white dark:bg-slate-900 border-b border-slate-100 dark:border-slate-800/80 shadow-sm">
+                <h1 class="text-base md:text-lg font-black uppercase text-slate-950 dark:text-white tracking-wider">Submissions</h1>
+                <div class="flex items-center gap-2">
+                    <button id="admin-sub-refresh-btn" class="p-2 rounded-xl bg-slate-50 hover:bg-slate-100 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 transition active:scale-95 border border-slate-200/30 shadow-sm" title="Refresh">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M4 4v5h.582m15.356 2A8.001 8.001 0 1121.21 7.89M9 11l3-3 3 3m-3-3v12"></path></svg>
+                    </button>
+                    <div class="relative flex items-center">
+                        <input type="date" id="admin-sub-date-input" value="${selectedDate}" class="absolute inset-0 opacity-0 cursor-pointer z-10">
+                        <button type="button" class="flex items-center gap-2 rounded-xl bg-slate-50 dark:bg-slate-800 px-3.5 py-2 text-xs font-black text-slate-800 dark:text-slate-200 border border-slate-200/40 shadow-sm">
+                            <span>${formatDatePickerDate(selectedDate)}</span>
+                            <svg class="w-3.5 h-3.5 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M19 9l-7 7-7-7"></path></svg>
+                        </button>
+                    </div>
                 </div>
-                <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    ${foldersHtml || '<p class="text-center text-sm text-gray-400 py-8 col-span-2">No submission dates found.</p>'}
-                </div>`;
+            </div>
 
-            } else if (adminSubmissionsView.view === 'apps') {
-                const dateStr = adminSubmissionsView.selectedDate;
-                const dateGroup = grouped[dateStr] || {};
-                const sortedApps = Object.keys(dateGroup).sort((a, b) => a.localeCompare(b));
-
-                let foldersHtml = sortedApps.map(appKey => {
-                    const appGroup = dateGroup[appKey];
-                    const totalCount = appGroup.items.length;
-                    const pendingCount = appGroup.items.filter(s => s.manual_status === 'pending').length;
-                    const logoUrl = appGroup.appLogoUrl || 'https://cdn-icons-png.flaticon.com/512/3176/3176366.png';
-                    return `
-                        <div class="flex items-center gap-3 rounded-2xl border border-gray-150 dark:border-gray-800 bg-white dark:bg-gray-800 p-4 hover:border-orange-500 hover:shadow-md cursor-pointer transition select-none" data-action="select-app" data-app="${escapeHtml(appKey)}">
-                            <img src="${escapeHtml(logoUrl)}" class="h-12 w-12 rounded-2xl object-cover border border-gray-200 dark:border-gray-700 shrink-0" alt="${escapeHtml(appGroup.taskName)}" onerror="this.src='https://cdn-icons-png.flaticon.com/512/3176/3176366.png';">
-                            <div class="min-w-0 flex-1">
-                                <p class="truncate text-sm font-extrabold text-gray-855 dark:text-white">${escapeHtml(appGroup.taskName)}</p>
-                                <p class="text-[10px] text-gray-450">${totalCount} items ${pendingCount > 0 ? `· <span class="text-amber-500 font-bold">${pendingCount} pending</span>` : ''}</p>
-                            </div>
-                            <svg class="h-4 w-4 text-gray-450 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M9 5l7 7-7 7"></path></svg>
-                        </div>`;
-                }).join('');
-
-                html = `
-                <div class="flex items-center gap-2 text-xs font-black text-gray-500 mb-4 bg-gray-50 dark:bg-gray-900/50 p-3 rounded-2xl border border-gray-150 dark:border-gray-800 flex-wrap">
-                    <span class="text-orange-500 cursor-pointer hover:underline" data-action="explore-root">📂 Root</span>
-                    <span class="text-gray-300">/</span>
-                    <span class="text-gray-700 dark:text-gray-300 font-black">${escapeHtml(dateStr)}</span>
+            <!-- Stats Grid -->
+            <div class="px-5 py-4">
+                <h2 class="text-xs font-black uppercase text-slate-400 tracking-wider mb-3 text-left">Today's Overview</h2>
+                <div class="grid grid-cols-2 md:grid-cols-6 gap-3">
+                    <div class="bg-white dark:bg-slate-900 border border-purple-100 dark:border-purple-900/40 rounded-2xl p-4 text-left shadow-sm">
+                        <p class="text-2xl font-black text-purple-600 dark:text-purple-400">${totalTasksCount}</p>
+                        <p class="text-[9px] font-black text-slate-400 uppercase tracking-wider mt-1.5 leading-none">Total Tasks</p>
+                    </div>
+                    <div class="bg-white dark:bg-slate-900 border border-blue-100 dark:border-blue-900/40 rounded-2xl p-4 text-left shadow-sm">
+                        <p class="text-2xl font-black text-blue-600 dark:text-blue-400">${totalSubmissions}</p>
+                        <p class="text-[9px] font-black text-slate-400 uppercase tracking-wider mt-1.5 leading-none">Total Submissions</p>
+                    </div>
+                    <div class="bg-white dark:bg-slate-900 border border-emerald-100 dark:border-emerald-900/40 rounded-2xl p-4 text-left shadow-sm">
+                        <p class="text-2xl font-black text-emerald-600 dark:text-emerald-400">${ocrPassed}</p>
+                        <p class="text-[9px] font-black text-slate-400 uppercase tracking-wider mt-1.5 leading-none">OCR Passed</p>
+                    </div>
+                    <div class="bg-white dark:bg-slate-900 border border-amber-100 dark:border-amber-900/40 rounded-2xl p-4 text-left shadow-sm">
+                        <p class="text-2xl font-black text-amber-600 dark:text-amber-400">${pendingVerify}</p>
+                        <p class="text-[9px] font-black text-slate-400 uppercase tracking-wider mt-1.5 leading-none">Pending Verify</p>
+                    </div>
+                    <div class="bg-white dark:bg-slate-900 border border-green-100 dark:border-green-900/40 rounded-2xl p-4 text-left shadow-sm">
+                        <p class="text-2xl font-black text-green-600 dark:text-green-400">${approvedCount}</p>
+                        <p class="text-[9px] font-black text-slate-400 uppercase tracking-wider mt-1.5 leading-none">Approved</p>
+                    </div>
+                    <div class="bg-white dark:bg-slate-900 border border-red-100 dark:border-red-900/40 rounded-2xl p-4 text-left shadow-sm">
+                        <p class="text-2xl font-black text-red-600 dark:text-red-400">${rejectedCount}</p>
+                        <p class="text-[9px] font-black text-slate-400 uppercase tracking-wider mt-1.5 leading-none">Rejected</p>
+                    </div>
                 </div>
-                <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    ${foldersHtml || '<p class="text-center text-sm text-gray-400 py-8 col-span-2">No app folders found.</p>'}
-                </div>`;
+            </div>
 
-            } else if (adminSubmissionsView.view === 'submissions') {
-                const dateStr = adminSubmissionsView.selectedDate;
-                const appKey = adminSubmissionsView.selectedApp;
-                const finalSubs = (grouped[dateStr]?.[appKey]?.items || []);
-                window.currentActiveSubmissions = finalSubs; // Cache list for detail modal
-
-                // Group finalSubs by user_id
-                const userGroups = {};
-                finalSubs.forEach((s, globalIdx) => {
-                    const uId = s.user_id || 'unknown_user';
-                    if (!userGroups[uId]) {
-                        userGroups[uId] = {
-                            userId: uId,
-                            userName: s.user_name || 'Unknown User',
-                            userEmail: s.user_email || 'No email',
-                            items: []
-                        };
-                    }
-                    userGroups[uId].items.push({ ...s, globalIdx });
-                });
-
-                let cardsHtml = `<div class="space-y-5 relative pl-4 border-l-2 border-gray-150 dark:border-gray-800 ml-4 py-2">`;
-                Object.values(userGroups).forEach(group => {
-                    const initials = group.userName ? group.userName.charAt(0).toUpperCase() : '?';
-                    cardsHtml += `
-                    <!-- User Submission Group -->
-                    <div class="relative group text-left">
-                        <!-- Dot Indicator on Timeline -->
-                        <div class="absolute -left-[25px] top-2 h-3.5 w-3.5 rounded-full bg-orange-500 border-4 border-white dark:border-gray-900 group-hover:scale-110 transition shadow-sm z-10"></div>
-                        
-                        <!-- User Identification Tag -->
-                        <div class="flex flex-wrap items-center justify-between gap-2 mb-2 bg-gray-50 dark:bg-gray-850/60 p-2 rounded-xl border border-gray-100 dark:border-gray-800 shadow-sm text-left">
-                            <div class="flex items-center gap-2">
-                                <div class="h-6 w-6 rounded-full bg-orange-100 dark:bg-orange-950 flex items-center justify-center font-black text-orange-600 text-xs shrink-0">
-                                    ${initials}
-                                </div>
-                                <div class="min-w-0">
-                                    <p class="text-xs font-black text-gray-850 dark:text-white truncate">${escapeHtml(group.userName)}</p>
-                                    <p class="text-[9px] text-gray-450 font-semibold truncate mt-0.5">${escapeHtml(group.userEmail)}</p>
-                                </div>
-                            </div>
-                            <span class="text-[9px] font-black px-2 py-0.5 rounded-full bg-orange-100 text-orange-700 dark:bg-orange-950 dark:text-orange-300">
-                                ${group.items.length} file${group.items.length > 1 ? 's' : ''}
-                            </span>
+            <!-- Table Section -->
+            <div class="px-5 py-2">
+                <div class="bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800/80 rounded-[1.75rem] overflow-hidden shadow-sm">
+                    <div class="px-5 py-4 border-b border-slate-100 dark:border-slate-800/80 text-left">
+                        <h2 class="text-xs font-black uppercase text-slate-400 tracking-wider">Task Wise Overview</h2>
+                    </div>
+                    ${taskRows.length === 0 ? `
+                        <div class="py-12 text-center text-sm text-gray-400">No submissions found on this date.</div>
+                    ` : `
+                        <div class="overflow-x-auto">
+                            <table class="w-full text-left border-collapse text-xs md:text-sm">
+                                <thead>
+                                    <tr class="border-b border-slate-100 dark:border-slate-800/80 text-[10px] font-black uppercase text-slate-400 tracking-wider bg-slate-50/50 dark:bg-slate-950/20">
+                                        <th class="py-3.5 px-5">Task Name</th>
+                                        <th class="py-3.5 px-5 text-center">Total Submissions</th>
+                                        <th class="py-3.5 px-5 text-center">OCR Passed</th>
+                                        <th class="py-3.5 px-5 text-center">Pending Verify</th>
+                                        <th class="py-3.5 px-5 text-center">Approved</th>
+                                        <th class="py-3.5 px-5 text-center">Rejected</th>
+                                        <th class="py-3.5 px-5 text-center">Action</th>
+                                    </tr>
+                                </thead>
+                                <tbody class="divide-y divide-slate-100 dark:divide-slate-800/80 font-bold text-slate-700 dark:text-slate-200">
+                                    ${taskRows.map(r => `
+                                        <tr class="hover:bg-slate-50/50 dark:hover:bg-slate-800/30 transition-colors">
+                                            <td class="py-4 px-5 text-left font-extrabold text-slate-900 dark:text-white">${escapeHtml(r.name)}</td>
+                                            <td class="py-4 px-5 text-center">${r.total}</td>
+                                            <td class="py-4 px-5 text-center text-emerald-600 dark:text-emerald-400">${r.ocrPassed}</td>
+                                            <td class="py-4 px-5 text-center text-amber-600 dark:text-amber-400">${r.pending}</td>
+                                            <td class="py-4 px-5 text-center text-green-600 dark:text-green-400">${r.approved}</td>
+                                            <td class="py-4 px-5 text-center text-red-600 dark:text-red-400">${r.rejected}</td>
+                                            <td class="py-4 px-5 text-center">
+                                                <button type="button" data-action="view-task-detail" data-taskid="${r.id}" class="rounded-xl bg-blue-50 hover:bg-blue-100 dark:bg-blue-950/40 dark:hover:bg-blue-900/60 text-blue-600 dark:text-blue-400 px-4 py-2 text-xs font-black tracking-wider uppercase transition shadow-sm active:scale-95">View</button>
+                                            </td>
+                                        </tr>
+                                    `).join('')}
+                                </tbody>
+                            </table>
                         </div>
-                        
-                        <!-- Horizontal Scroll of Tiny Thumbnails -->
-                        <div class="flex flex-wrap gap-2.5 pl-1.5">
-                            ${group.items.map(s => {
-                                const statusTextColor = s.manual_status === 'approved' ? 'emerald' : s.manual_status === 'rejected' ? 'rose' : 'amber';
+                    `}
+                </div>
+            </div>
+        `;
+    } else if (adminSubmissionsView.view === 'task_detail') {
+        const taskId = adminSubmissionsView.selectedTaskId;
+        const task = allTasksCache.find(t => t.id === taskId);
+        const taskName = task ? (task.appName || task.title) : 'Task';
+
+        const taskSubs = dateSubs.filter(s => s.task_id === taskId || s.taskId === taskId);
+
+        // Filter chips counts
+        const countAll = taskSubs.length;
+        const countOcr = taskSubs.filter(s => s.ocr_status === 'completed').length;
+        const countPending = taskSubs.filter(s => s.manual_status === 'pending').length;
+        const countRejected = taskSubs.filter(s => s.manual_status === 'rejected').length;
+
+        // Apply filter tab selection
+        let filteredSubs = [...taskSubs];
+        if (adminSubmissionsView.selectedSubFilter === 'ocr_passed') {
+            filteredSubs = filteredSubs.filter(s => s.ocr_status === 'completed');
+        } else if (adminSubmissionsView.selectedSubFilter === 'pending') {
+            filteredSubs = filteredSubs.filter(s => s.manual_status === 'pending');
+        } else if (adminSubmissionsView.selectedSubFilter === 'rejected') {
+            filteredSubs = filteredSubs.filter(s => s.manual_status === 'rejected');
+        }
+
+        window.currentActiveSubmissions = filteredSubs; // Cache list for detail modal
+
+        html = `
+            <!-- Task Detail Header -->
+            <div class="flex items-center justify-between gap-4 px-5 py-4 bg-white dark:bg-slate-900 border-b border-slate-100 dark:border-slate-800/80 shadow-sm">
+                <div class="flex items-center gap-3">
+                    <button type="button" id="admin-sub-back-btn" class="rounded-full p-2 text-slate-900 dark:text-white hover:bg-slate-100 dark:hover:bg-slate-800 transition">
+                        <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M10 19l-7-7m0 0l7-7m-7 7h18"></path></svg>
+                    </button>
+                    <h2 class="text-base font-black text-slate-950 dark:text-white">Task Detail - ${escapeHtml(taskName)}</h2>
+                </div>
+                <span class="rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-200 px-3.5 py-1.5 text-xs font-black uppercase tracking-wider shadow-sm select-all">Task ID: ${escapeHtml(taskId)}</span>
+            </div>
+
+            <div class="px-5 py-4">
+                <!-- Navigation Tabs -->
+                <div class="flex items-center gap-6 border-b border-slate-100 dark:border-slate-800/80 px-4 py-1 mb-4 overflow-x-auto scrollbar-none text-xs md:text-sm">
+                    ${['overview', 'submissions', 'failed', 'play_store_verify', 'payments'].map(tab => {
+                        const isActive = adminSubmissionsView.selectedDetailTab === tab;
+                        const labels = {
+                            overview: 'Overview',
+                            submissions: 'Submissions',
+                            failed: 'Failed',
+                            play_store_verify: 'Play Store Verify',
+                            payments: 'Payments'
+                        };
+                        return `
+                            <button type="button" data-action="select-detail-tab" data-tab="${tab}" class="py-2.5 font-bold uppercase tracking-wider relative shrink-0 transition-colors ${isActive ? 'text-indigo-600 dark:text-indigo-400 font-extrabold' : 'text-slate-400 hover:text-slate-650 dark:hover:text-slate-350'}" style="outline: none;">
+                                ${labels[tab]}
+                                ${isActive ? '<span class="absolute bottom-0 left-0 right-0 h-0.5 bg-indigo-600 dark:bg-indigo-400 rounded-full"></span>' : ''}
+                            </button>
+                        `;
+                    }).join('')}
+                </div>
+
+                <!-- Submissions Tab View -->
+                ${adminSubmissionsView.selectedDetailTab !== 'submissions' ? `
+                    <div class="py-12 text-center text-sm text-gray-400">
+                        <p class="font-extrabold uppercase tracking-wide text-slate-400 dark:text-slate-500">${escapeHtml(adminSubmissionsView.selectedDetailTab)} Panel</p>
+                        <p class="text-xs text-gray-500 mt-1">This section is configured to run automatically.</p>
+                    </div>
+                ` : `
+                    <!-- Submissions Filter Chips -->
+                    <div class="flex flex-wrap items-center gap-2 mb-5">
+                        ${[
+                            { value: 'all', label: `All (${countAll})` },
+                            { value: 'ocr_passed', label: `OCR Passed (${countOcr})` },
+                            { value: 'pending', label: `Pending (${countPending})` },
+                            { value: 'rejected', label: `Rejected (${countRejected})` }
+                        ].map(chip => {
+                            const isActive = adminSubmissionsView.selectedSubFilter === chip.value;
+                            return `
+                                <button type="button" data-action="select-sub-filter" data-filter="${chip.value}" class="rounded-xl px-4 py-2.5 text-xs font-black uppercase tracking-wider transition-all duration-200 border ${isActive ? 'bg-indigo-600 border-indigo-600 text-white shadow-md shadow-indigo-600/10' : 'bg-white dark:bg-slate-900 border-slate-200/60 dark:border-slate-800 text-slate-650 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-850/80 shadow-sm'}">
+                                    ${chip.label}
+                                </button>
+                            `;
+                        }).join('')}
+                    </div>
+
+                    <!-- Screenshot Grid -->
+                    ${filteredSubs.length === 0 ? `
+                        <div class="py-12 text-center text-sm text-gray-400">No screenshots found matching this filter.</div>
+                    ` : `
+                        <div class="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                            ${filteredSubs.map((s, idx) => {
+                                let badgeClass = 'bg-amber-500/10 text-amber-600 border-amber-500/20';
+                                let label = 'Pending Verify';
+                                if (s.manual_status === 'approved') {
+                                    badgeClass = 'bg-emerald-500/10 text-emerald-600 border-emerald-500/20';
+                                    label = 'OCR Passed';
+                                } else if (s.manual_status === 'rejected') {
+                                    badgeClass = 'bg-red-500/10 text-red-600 border-red-500/20';
+                                    label = 'Rejected';
+                                }
+                                
                                 return `
-                                <div class="relative w-14 h-24 rounded-lg overflow-hidden border border-gray-200 dark:border-gray-800 bg-gray-100 dark:bg-gray-950 cursor-pointer hover:border-orange-500 hover:shadow-md active:scale-95 transition shrink-0" data-action="open-modal" data-index="${s.globalIdx}">
-                                    <img src="${escapeHtml(s.screenshot_url)}" alt="Thumbnail" class="h-full w-full object-cover" loading="lazy">
-                                    <div class="absolute inset-0 bg-black/5 hover:bg-transparent transition"></div>
-                                    <!-- Tiny Status Indicator Badge -->
-                                    <div class="absolute top-1 right-1 h-2.5 w-2.5 rounded-full bg-${statusTextColor}-500 border border-white dark:border-gray-900 shadow-sm" title="Status: ${s.manual_status}"></div>
-                                </div>`;
+                                    <div class="flex flex-col gap-2">
+                                        <div class="relative aspect-[9/16] rounded-2xl overflow-hidden border border-slate-155 dark:border-slate-800 bg-slate-900 shadow-sm cursor-pointer hover:scale-[1.02] active:scale-[0.98] transition-all duration-200 flex items-center justify-center" data-action="open-detail-modal" data-index="${idx}">
+                                            <img src="${escapeHtml(s.screenshot_url)}" alt="Screenshot" class="h-full w-full object-cover" loading="lazy">
+                                        </div>
+                                        <span class="rounded-lg py-1 border text-[9px] font-black uppercase tracking-wider text-center ${badgeClass} shadow-sm select-none">
+                                            ${label}
+                                        </span>
+                                    </div>
+                                `;
                             }).join('')}
                         </div>
-                    </div>`;
-                });
-                cardsHtml += `</div>`;
+                    `}
+                `}
+            </div>
+        `;
+    }
 
-                const appName = grouped[dateStr]?.[appKey]?.taskName || appKey;
-                html = `
-                <div class="flex items-center justify-between gap-2 mb-4 bg-gray-50 dark:bg-gray-900/50 p-3 rounded-2xl border border-gray-150 dark:border-gray-800 flex-wrap">
-                    <div class="flex items-center gap-2 text-xs font-black text-gray-500 flex-wrap">
-                        <span class="text-orange-500 cursor-pointer hover:underline" data-action="explore-root">📂 Root</span>
-                        <span class="text-gray-300">/</span>
-                        <span class="text-orange-500 cursor-pointer hover:underline" data-action="explore-date" data-date="${escapeHtml(dateStr)}">${escapeHtml(dateStr)}</span>
-                        <span class="text-gray-300">/</span>
-                        <span class="text-gray-700 dark:text-gray-300 font-black truncate max-w-[150px]">${escapeHtml(appName)}</span>
-                    </div>
-                    ${finalSubs.length > 0 ? `
-                        <button id="admin-download-pdf-btn" class="rounded-xl bg-orange-500 hover:bg-orange-600 text-white font-extrabold px-3 py-1.5 text-xs shadow-sm hover:scale-105 active:scale-95 transition flex items-center gap-1.5 select-none">
-                            📥 Save All as PDF
-                        </button>
-                    ` : ''}
-                </div>
-                ${finalSubs.length === 0 ? '<p class="text-center text-sm text-gray-400 py-8">No submissions found in this folder.</p>' : cardsHtml}`;
-            }
+    shellEl.innerHTML = html;
 
-            listEl.innerHTML = html;
-
-            // Bind Navigation Click Listeners
-            listEl.querySelectorAll('[data-action="explore-root"]').forEach(el => {
-                el.onclick = () => {
-                    adminSubmissionsView.view = 'dates';
-                    adminSubmissionsView.selectedDate = null;
-                    adminSubmissionsView.selectedApp = null;
-                    renderAdminSubmissions();
-                };
-            });
-            listEl.querySelectorAll('[data-action="explore-date"]').forEach(el => {
-                el.onclick = (e) => {
-                    adminSubmissionsView.view = 'apps';
-                    adminSubmissionsView.selectedDate = e.currentTarget.dataset.date;
-                    adminSubmissionsView.selectedApp = null;
-                    renderAdminSubmissions();
-                };
-            });
-            listEl.querySelectorAll('[data-action="select-date"]').forEach(el => {
-                el.onclick = (e) => {
-                    adminSubmissionsView.view = 'apps';
-                    adminSubmissionsView.selectedDate = e.currentTarget.dataset.date;
-                    adminSubmissionsView.selectedApp = null;
-                    renderAdminSubmissions();
-                };
-            });
-            listEl.querySelectorAll('[data-action="select-app"]').forEach(el => {
-                el.onclick = (e) => {
-                    adminSubmissionsView.view = 'submissions';
-                    adminSubmissionsView.selectedApp = e.currentTarget.dataset.app;
-                    renderAdminSubmissions();
-                };
-            });
-            listEl.querySelectorAll('[data-action="open-modal"]').forEach(el => {
-                el.onclick = (e) => {
-                    const idx = Number(e.currentTarget.dataset.index);
-                    window.showAdminSubmissionDetailModal(idx);
-                };
-            });
-
-            // Bind Save All as PDF event
-            const pdfBtn = document.getElementById('admin-download-pdf-btn');
-            if (pdfBtn) {
-                pdfBtn.onclick = () => {
-                    const dateStr = adminSubmissionsView.selectedDate;
-                    const appKey = adminSubmissionsView.selectedApp;
-                    const appName = grouped[dateStr]?.[appKey]?.taskName || appKey;
-                    const finalSubs = (grouped[dateStr]?.[appKey]?.items || []);
-                    window.downloadSubmissionsAsPdf(finalSubs, appName, dateStr);
-                };
-            }
-
-            // Bind action buttons click handlers
-            listEl.querySelectorAll('button[data-action]').forEach(btn => {
-                btn.onclick = async (e) => {
-                    const action = e.currentTarget.dataset.action;
-                    const subId = e.currentTarget.dataset.subid;
-                    if (!subId) return;
-                    try {
-                        const token = await getBackendAuthToken();
-                        if (action === 'approve-submission') {
-                            await fetchWithTimeout(`${BACKEND_BASE_URL}/api/admin/task-submissions/${encodeURIComponent(subId)}`, {
-                                method: 'PATCH',
-                                headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-                                body: JSON.stringify({ manualStatus: 'approved', verifiedAt: Date.now() })
-                            }, 8000);
-                            showNotification('Submission approved.');
-
-                            const submission = adminSubmissionsCache.find(s => s.id === subId);
-                            if (submission) {
-                                const user = allUsersCache.find(u => u.id === submission.user_id || u.uid === submission.user_id);
-                                const subAdminId = user?.parentAdmin || user?.parent_admin;
-                                if (subAdminId && subAdminId !== ADMIN_UID) {
-                                    const task = allTasksCache.find(t => t.id === submission.task_id);
-                                    const isOwnerTask = !task || !task.createdBy || task.createdBy === ADMIN_UID || task.createdBy === 'owner';
-                                    if (isOwnerTask) {
-                                        if (typeof trackSubAdminActivity === 'function') {
-                                            trackSubAdminActivity('owner_task_completed', Number(submission.reward || 0), subAdminId);
-                                        }
-                                    }
-                                }
-                            }
-                        } else if (action === 'reject-submission') {
-                            await fetchWithTimeout(`${BACKEND_BASE_URL}/api/admin/task-submissions/${encodeURIComponent(subId)}`, {
-                                method: 'PATCH',
-                                headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-                                body: JSON.stringify({ manualStatus: 'rejected' })
-                            }, 8000);
-                            showNotification('Submission rejected.');
-                        } else if (action === 'pay-submission') {
-                            await fetchWithTimeout(`${BACKEND_BASE_URL}/api/admin/task-submissions/${encodeURIComponent(subId)}`, {
-                                method: 'PATCH',
-                                headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-                                body: JSON.stringify({ payoutStatus: 'paid', paidAt: Date.now() })
-                            }, 8000);
-                            showNotification('Payment credited.');
-                        } else if (action === 'ocr-submission') {
-                            showNotification('Running OCR...');
-                            const resp = await fetchWithTimeout(`${BACKEND_BASE_URL}/api/admin/ocr-process/${encodeURIComponent(subId)}`, {
-                                method: 'POST',
-                                headers: { Authorization: `Bearer ${token}` }
-                            }, 20000);
-                            const ocrData = await resp.json().catch(() => ({}));
-                            showNotification(ocrData.ok ? `OCR complete: ${(ocrData.ocr?.text || '').slice(0, 80)}` : 'OCR failed');
-                        } else if (action === 'scraper-submission') {
-                            showNotification('Checking Live list...');
-                            const taskLink = e.currentTarget.dataset.tasklink || '';
-                            const assignedComment = e.currentTarget.dataset.comment || '';
-                            const appName = e.currentTarget.dataset.appname || '';
-                            const resp = await fetchWithTimeout(`${BACKEND_BASE_URL}/api/admin/scraper/check-review`, {
-                                method: 'POST',
-                                headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-                                body: JSON.stringify({ submissionId: subId, taskLink, assignedComment, appName })
-                            }, 10000);
-                            const resData = await resp.json().catch(() => ({}));
-                            if (resData.ok && resData.result) {
-                                if (resData.result.found) {
-                                    showNotification('Review verified in Live List!');
-                                } else {
-                                    showNotification('Not found in Live List.', true);
-                                }
-                            } else {
-                                showNotification('Live check failed.', true);
-                            }
-                        }
-                        await loadAdminSubmissions();
-                    } catch (err) {
-                        console.error('Submission action failed:', err);
-                        showNotification('Action failed. Please try again.', true);
-                    }
-                };
-            });
+    // Bind Overview Click Listeners
+    const dateInput = document.getElementById('admin-sub-date-input');
+    if (dateInput) {
+        dateInput.onchange = (e) => {
+            adminSubmissionsView.selectedDate = e.target.value;
+            renderAdminSubmissions();
         };
+    }
 
-// Expose functions to window for global access
+    const refreshBtn = document.getElementById('admin-sub-refresh-btn');
+    if (refreshBtn) {
+        refreshBtn.onclick = () => {
+            loadAdminSubmissions();
+        };
+    }
+
+    shellEl.querySelectorAll('[data-action="view-task-detail"]').forEach(btn => {
+        btn.onclick = (e) => {
+            adminSubmissionsView.view = 'task_detail';
+            adminSubmissionsView.selectedTaskId = e.currentTarget.dataset.taskid;
+            adminSubmissionsView.selectedDetailTab = 'submissions';
+            adminSubmissionsView.selectedSubFilter = 'all';
+            renderAdminSubmissions();
+        };
+    });
+
+    // Bind Detail Click Listeners
+    const backBtn = document.getElementById('admin-sub-back-btn');
+    if (backBtn) {
+        backBtn.onclick = () => {
+            adminSubmissionsView.view = 'overview';
+            renderAdminSubmissions();
+        };
+    }
+
+    shellEl.querySelectorAll('[data-action="select-detail-tab"]').forEach(btn => {
+        btn.onclick = (e) => {
+            adminSubmissionsView.selectedDetailTab = e.currentTarget.dataset.tab;
+            renderAdminSubmissions();
+        };
+    });
+
+    shellEl.querySelectorAll('[data-action="select-sub-filter"]').forEach(btn => {
+        btn.onclick = (e) => {
+            adminSubmissionsView.selectedSubFilter = e.currentTarget.dataset.filter;
+            renderAdminSubmissions();
+        };
+    });
+
+    shellEl.querySelectorAll('[data-action="open-detail-modal"]').forEach(card => {
+        card.onclick = (e) => {
+            const idx = Number(e.currentTarget.dataset.index);
+            window.showAdminSubmissionDetailModal(idx);
+        };
+    });
+};
+
 window.loadAdminSubmissions = loadAdminSubmissions;
 window.renderAdminSubmissions = renderAdminSubmissions;

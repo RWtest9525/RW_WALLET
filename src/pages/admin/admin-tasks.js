@@ -1218,37 +1218,27 @@ const showAdminTaskCommentsPage = async (taskId) => {
 const showAdminTaskSubmissionsPage = async () => {
             if (!currentUser || currentUser.uid !== ADMIN_UID) return showNotification('Admin access only.', true);
             currentMainSection = 'admin';
+            
+            const d = new Date();
             adminSubmissionsView = {
-                view: 'dates',
-                selectedDate: null,
-                selectedApp: null
+                view: 'overview',
+                selectedDate: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`,
+                selectedTaskId: '',
+                selectedDetailTab: 'submissions',
+                selectedSubFilter: 'all'
             };
+
             const content = `
                 ${getPageHeader('Task Submissions')}
                 <div class="max-w-5xl mx-auto space-y-4 pb-24">
-                    <section class="rounded-2xl border border-gray-150 dark:border-gray-800 bg-white dark:bg-gray-800 p-4 shadow-sm space-y-3">
-                        <div class="flex flex-wrap items-center gap-2">
-                            <input id="admin-sub-search" type="text" placeholder="Search user or task..." class="flex-1 min-w-[140px] rounded-xl bg-gray-100 dark:bg-gray-700 px-3 py-2 text-sm font-semibold outline-none focus:ring-2 focus:ring-orange-500">
-                            <select id="admin-sub-filter" class="rounded-xl bg-gray-100 dark:bg-gray-700 px-3 py-2 text-sm font-semibold">
-                                <option value="all">All</option>
-                                <option value="pending" selected>Pending</option>
-                                <option value="approved">Approved</option>
-                                <option value="rejected">Rejected</option>
-                                <option value="paid">Paid</option>
-                            </select>
-                            <button id="admin-sub-refresh-btn" class="rounded-xl bg-orange-600 px-4 py-2 text-sm font-bold text-white hover:bg-orange-700 transition">Refresh</button>
-                        </div>
-                        <div id="admin-sub-list" class="space-y-3">
-                            <div class="py-8 text-center text-sm text-gray-400">Loading submissions...</div>
-                        </div>
-                    </section>
+                    <div id="admin-submissions-page-shell" class="min-h-screen bg-slate-50 dark:bg-slate-950 pb-28">
+                        <div class="py-8 text-center text-sm text-gray-400">Loading submissions...</div>
+                    </div>
                 </div>`;
+
             showPage(content, { returnTo: 'admin', keepBottomNav: true });
             setBottomNavActive('bottom-admin-btn');
             loadAdminSubmissions();
-            document.getElementById('admin-sub-refresh-btn')?.addEventListener('click', loadAdminSubmissions);
-            document.getElementById('admin-sub-search')?.addEventListener('input', renderAdminSubmissions);
-            document.getElementById('admin-sub-filter')?.addEventListener('change', renderAdminSubmissions);
         };
 
 // Expose functions to window for global access
