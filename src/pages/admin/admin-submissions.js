@@ -53,7 +53,7 @@ window.showAdminSubmissionDetailModal = function(index) {
                     <div class="w-full p-5 flex flex-col justify-between border-t border-gray-150 dark:border-gray-800 bg-gray-50 dark:bg-gray-900/50">
                         <div class="space-y-4">
                             <!-- Header Info: Status, Gmail Name, Mobile No, Submitted Time -->
-                            <div class="text-left bg-white dark:bg-gray-850 p-4 rounded-2xl border border-gray-150 dark:border-gray-800 shadow-sm">
+                            <div class="text-left bg-white dark:bg-gray-855 p-4 rounded-2xl border border-gray-155 dark:border-gray-800 shadow-sm">
                                 <div class="flex items-center justify-between">
                                     <span class="rounded-xl bg-${statusColor}-500 text-white font-extrabold px-3 py-1 text-[10px] tracking-wider uppercase shadow-sm">${statusLabel}</span>
                                     ${payoutBadge}
@@ -72,12 +72,12 @@ window.showAdminSubmissionDetailModal = function(index) {
                             </div>
 
                             <!-- Comment -->
-                            <div class="rounded-2xl bg-white dark:bg-gray-850 p-4 border border-gray-150 dark:border-gray-800 shadow-sm text-left">
+                            <div class="rounded-2xl bg-white dark:bg-gray-855 p-4 border border-gray-150 dark:border-gray-800 shadow-sm text-left">
                                 <p class="text-[9px] font-black uppercase text-gray-400 tracking-wider">Assigned Comment</p>
                                 <p class="mt-1.5 text-xs font-bold text-gray-800 dark:text-gray-250 italic">"${escapeHtml(s.assigned_comment || '')}"</p>
                             </div>
                             <!-- Screenshot Review Text -->
-                            <div class="rounded-2xl bg-white dark:bg-gray-850 p-4 border border-gray-150 dark:border-gray-800 shadow-sm text-left">
+                            <div class="rounded-2xl bg-white dark:bg-gray-855 p-4 border border-gray-150 dark:border-gray-800 shadow-sm text-left">
                                 <p class="text-[9px] font-black uppercase text-purple-600 dark:text-purple-400 tracking-wider">Screenshot Review Text</p>
                                 <p class="mt-1.5 text-xs font-extrabold text-gray-900 dark:text-white leading-relaxed bg-purple-50/50 dark:bg-purple-950/10 p-3 rounded-xl border border-purple-100/80 dark:border-purple-900/50">
                                     ${escapeHtml(extractedReviewText || 'Not found in screenshot')}
@@ -85,7 +85,7 @@ window.showAdminSubmissionDetailModal = function(index) {
                             </div>
 
                             <!-- Check badges -->
-                            <div class="flex items-center justify-between text-[10px] text-gray-450 border-t border-gray-150 dark:border-gray-850 pt-3">
+                            <div class="flex items-center justify-between text-[10px] text-gray-455 border-t border-gray-150 dark:border-gray-850 pt-3">
                                 <div class="flex items-center gap-1"><span>Live check:</span> ${liveBadge}</div>
                                 <div class="flex items-center gap-1"><span>OCR:</span> ${ocrBadge}</div>
                             </div>
@@ -462,12 +462,21 @@ const renderAdminSubmissions = () => {
     const activeTaskIds = new Set(dateSubs.map(s => s.task_id || s.taskId).filter(Boolean));
     const totalTasksCount = activeTaskIds.size;
 
+    const getCleanAppName = (fullName = '') => {
+        const clean = fullName.split(':')[0].trim();
+        return clean || fullName;
+    };
+
     // Group rows by EVERY task in our cache so that OFF tasks also show up!
     const taskRows = allTasksCache.map(task => {
         const taskSubs = dateSubs.filter(s => s.task_id === task.id || s.taskId === task.id);
+        const family = window.getAdminTaskFamily ? window.getAdminTaskFamily(task) : 'review';
+        const subtype = window.getAdminTaskSubtype ? window.getAdminTaskSubtype(task) : 'app_review';
+        const logo = task.logoUrl || task.imageUrl || task.iconUrl || (window.getTaskLogoFromLink ? window.getTaskLogoFromLink(family, subtype, task.taskLink) : '');
         return {
             id: task.id,
             name: task.appName || task.title || 'Task',
+            logo: logo,
             isLive: task.status === 'active',
             total: taskSubs.length,
             ocrPassed: taskSubs.filter(s => s.ocr_status === 'completed').length,
@@ -509,27 +518,25 @@ const renderAdminSubmissions = () => {
         window.currentActiveSubmissions = filteredSubs; // Cache list for detail modal
 
         html = `
-            <!-- Top Detail Toolbar Header -->
-            <div class="flex items-center justify-between gap-4 px-5 py-4 bg-white dark:bg-slate-900 border-b border-slate-100 dark:border-slate-800/80 shadow-sm rounded-t-3xl text-left">
-                <div class="flex items-center gap-3">
-                    <button id="admin-sub-back-btn" class="p-2 rounded-xl bg-slate-50 hover:bg-slate-100 dark:bg-slate-805 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 transition active:scale-95 border border-slate-200/30 shadow-sm" title="Back" style="outline: none;">
-                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M10 19l-7-7m0 0l7-7m-7 7h18"></path></svg>
-                    </button>
-                    <div class="min-w-0">
-                        <h1 class="text-base md:text-lg font-black text-slate-950 dark:text-white truncate">${escapeHtml(selectedTaskName)}</h1>
-                        <p class="text-[9px] text-indigo-500 font-extrabold uppercase tracking-wider mt-0.5">Task ID: ${escapeHtml(selectedTaskId)}</p>
+            <div class="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 p-4 sm:p-5 space-y-6 text-left">
+                <!-- Top Detail Toolbar Header -->
+                <div class="flex items-center justify-between gap-4 pb-4 border-b border-gray-100 dark:border-gray-700">
+                    <div class="flex items-center gap-3">
+                        <button id="admin-sub-back-btn" class="p-2 rounded-xl bg-gray-100 hover:bg-gray-200 dark:bg-gray-700 dark:hover:bg-gray-650 text-gray-700 dark:text-gray-200 transition active:scale-95 shadow-sm border border-gray-200/20" title="Back" style="outline: none;">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M10 19l-7-7m0 0l7-7m-7 7h18"></path></svg>
+                        </button>
+                        <div class="min-w-0">
+                            <h3 class="text-lg font-black text-gray-900 dark:text-white truncate">${escapeHtml(getCleanAppName(selectedTaskName))}</h3>
+                            <p class="text-[9px] text-indigo-500 font-extrabold uppercase tracking-wider mt-0.5">Task ID: ${escapeHtml(selectedTaskId)}</p>
+                        </div>
                     </div>
-                </div>
-                <div class="flex items-center gap-2">
-                    <span class="rounded-full bg-slate-100 dark:bg-slate-850 px-3 py-1.5 text-xs font-black text-slate-650 dark:text-slate-300 border border-slate-250/20">
+                    <span class="rounded-full bg-gray-100 dark:bg-gray-700 px-3 py-1.5 text-xs font-black text-gray-700 dark:text-gray-350 border border-gray-200/20 shadow-sm">
                         Date: ${formatDatePickerDate(selectedDate)}
                     </span>
                 </div>
-            </div>
 
-            <div class="p-4 sm:p-6 space-y-6 bg-white dark:bg-slate-900 rounded-b-3xl min-h-[500px]">
                 <!-- Detail Tabs -->
-                <div class="flex items-center gap-6 border-b border-slate-100 dark:border-slate-800/80 px-2 py-1 overflow-x-auto scrollbar-none text-xs">
+                <div class="flex items-center gap-6 border-b border-gray-100 dark:border-gray-700 pb-2 overflow-x-auto scrollbar-none text-xs">
                     ${['overview', 'submissions', 'failed', 'play_store_verify', 'payments'].map(tab => {
                         const isActive = window.adminSubmissionsView.selectedDetailTab === tab;
                         const labels = {
@@ -540,7 +547,7 @@ const renderAdminSubmissions = () => {
                             payments: 'Payments'
                         };
                         return `
-                            <button type="button" data-action="select-detail-tab" data-tab="${tab}" class="py-2 font-bold uppercase tracking-wider relative shrink-0 transition-colors ${isActive ? 'text-indigo-600 dark:text-indigo-400 font-extrabold' : 'text-slate-400 hover:text-slate-650 dark:hover:text-slate-350'}" style="outline: none;">
+                            <button type="button" data-action="select-detail-tab" data-tab="${tab}" class="py-2 font-bold uppercase tracking-wider relative shrink-0 transition-colors ${isActive ? 'text-indigo-600 dark:text-indigo-400 font-extrabold' : 'text-gray-400 hover:text-gray-650 dark:hover:text-gray-300'}" style="outline: none;">
                                 ${labels[tab]}
                                 ${isActive ? '<span class="absolute bottom-0 left-0 right-0 h-0.5 bg-indigo-600 dark:bg-indigo-400 rounded-full"></span>' : ''}
                             </button>
@@ -550,8 +557,8 @@ const renderAdminSubmissions = () => {
 
                 <!-- Tab Contents -->
                 ${window.adminSubmissionsView.selectedDetailTab !== 'submissions' ? `
-                    <div class="py-12 text-center text-sm text-gray-400">
-                        <p class="font-extrabold uppercase tracking-wide text-slate-400 dark:text-slate-500">${escapeHtml(window.adminSubmissionsView.selectedDetailTab)} Panel</p>
+                    <div class="py-12 text-center text-sm text-gray-455">
+                        <p class="font-extrabold uppercase tracking-wide text-gray-400 dark:text-gray-500">${escapeHtml(window.adminSubmissionsView.selectedDetailTab)} Panel</p>
                         <p class="text-xs text-gray-500 mt-1">This section is configured to run automatically.</p>
                     </div>
                 ` : `
@@ -574,7 +581,7 @@ const renderAdminSubmissions = () => {
 
                     <!-- Screenshot Grid -->
                     ${filteredSubs.length === 0 ? `
-                        <div class="py-12 text-center text-sm text-gray-450 border border-dashed border-slate-200 dark:border-slate-800 rounded-2xl">
+                        <div class="py-12 text-center text-sm text-gray-450 border border-dashed border-gray-200 dark:border-gray-700 rounded-2xl">
                             No screenshots found matching this filter.
                         </div>
                     ` : `
@@ -592,7 +599,7 @@ const renderAdminSubmissions = () => {
                                 
                                 return `
                                     <div class="flex flex-col gap-2">
-                                        <div class="relative aspect-[9/16] rounded-2xl overflow-hidden border border-slate-150 dark:border-slate-800 bg-slate-900 shadow-sm cursor-pointer hover:scale-[1.02] active:scale-[0.98] transition-all duration-200 flex items-center justify-center" data-action="open-detail-modal" data-index="${idx}">
+                                        <div class="relative aspect-[9/16] rounded-2xl overflow-hidden border border-gray-150 dark:border-gray-755 bg-gray-900 shadow-sm cursor-pointer hover:scale-[1.02] active:scale-[0.98] transition-all duration-200 flex items-center justify-center" data-action="open-detail-modal" data-index="${idx}">
                                             <img src="${escapeHtml(s.screenshot_url)}" alt="Screenshot" class="h-full w-full object-cover" loading="lazy">
                                         </div>
                                         <span class="rounded-lg py-1 border text-[9px] font-black uppercase tracking-wider text-center ${badgeClass} shadow-sm select-none">
@@ -609,100 +616,107 @@ const renderAdminSubmissions = () => {
     } else {
         // --- LIST VIEW PANEL (Mockup layout design) ---
         html = `
-            <!-- Top Toolbar Header -->
-            <div class="flex items-center justify-between gap-4 px-5 py-4 bg-white dark:bg-slate-900 border-b border-slate-100 dark:border-slate-800/80 shadow-sm rounded-t-3xl text-left">
-                <div class="min-w-0"></div>
-                <div class="flex items-center gap-2">
+            <div class="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 p-4 sm:p-5 space-y-6 text-left">
+                <!-- Top Toolbar Header -->
+                <div class="flex items-center justify-between gap-4 pb-4 border-b border-gray-100 dark:border-gray-700">
+                    <div>
+                        <h3 class="text-lg font-black text-gray-900 dark:text-white">Submissions Overview</h3>
+                        <p class="text-xs text-gray-500 dark:text-gray-400">Track and manage task submissions by date.</p>
+                    </div>
                     <div class="relative flex items-center">
                         <input type="date" id="admin-sub-date-input" value="${selectedDate}" class="absolute inset-0 opacity-0 cursor-pointer z-10">
-                        <button type="button" class="flex items-center gap-2 rounded-xl bg-slate-50 dark:bg-slate-800 px-3.5 py-2 text-xs font-black text-slate-800 dark:text-slate-200 border border-slate-200/40 shadow-sm">
+                        <button type="button" class="flex items-center gap-2 rounded-xl bg-gray-100 dark:bg-gray-750 px-3.5 py-2 text-xs font-black text-gray-800 dark:text-gray-200 border border-gray-200/40 shadow-sm">
                             <span>${formatDatePickerDate(selectedDate)}</span>
                             <span class="text-slate-500 font-extrabold font-mono text-[10px]">🔁</span>
                         </button>
                     </div>
                 </div>
-            </div>
 
-            <div class="p-4 sm:p-6 space-y-6 bg-white dark:bg-slate-900 rounded-b-3xl">
                 <!-- Today's Overview Section -->
-                <section class="text-left">
-                    <h3 class="text-base font-black text-slate-900 dark:text-white mb-4">Today's Overview</h3>
+                <section class="space-y-4">
+                    <h3 class="text-base font-black text-gray-900 dark:text-white">Today's Overview</h3>
                     <div class="grid grid-cols-2 sm:grid-cols-6 gap-3">
-                        
                         <!-- Total Tasks Card -->
-                        <div class="bg-white dark:bg-slate-850 rounded-2xl p-4 border border-indigo-100 dark:border-indigo-950/60 shadow-sm transition">
+                        <div class="bg-indigo-50/40 dark:bg-indigo-950/10 rounded-2xl p-4 border border-indigo-100/80 dark:border-indigo-900/40 shadow-sm">
                             <p class="text-2xl font-black text-indigo-600 dark:text-indigo-400">${totalTasksCount}</p>
                             <p class="text-[10px] font-extrabold text-indigo-500/70 uppercase tracking-wide mt-1">Total Tasks</p>
                         </div>
                         
                         <!-- Total Submissions Card -->
-                        <div class="bg-white dark:bg-slate-850 rounded-2xl p-4 border border-blue-100 dark:border-blue-950/60 shadow-sm transition">
+                        <div class="bg-blue-50/40 dark:bg-blue-950/10 rounded-2xl p-4 border border-blue-100/80 dark:border-blue-900/40 shadow-sm">
                             <p class="text-2xl font-black text-blue-600 dark:text-blue-400">${totalSubmissions}</p>
                             <p class="text-[10px] font-extrabold text-blue-500/70 uppercase tracking-wide mt-1">Total Submissions</p>
                         </div>
                         
                         <!-- OCR Passed Card -->
-                        <div class="bg-white dark:bg-slate-850 rounded-2xl p-4 border border-emerald-100 dark:border-emerald-950/60 shadow-sm transition">
+                        <div class="bg-emerald-50/40 dark:bg-emerald-950/10 rounded-2xl p-4 border border-emerald-100/80 dark:border-emerald-900/40 shadow-sm">
                             <p class="text-2xl font-black text-emerald-600 dark:text-emerald-400">${ocrPassed}</p>
                             <p class="text-[10px] font-extrabold text-emerald-500/70 uppercase tracking-wide mt-1">OCR Passed</p>
                         </div>
                         
                         <!-- Pending Verify Card -->
-                        <div class="bg-white dark:bg-slate-850 rounded-2xl p-4 border border-amber-100 dark:border-amber-950/60 shadow-sm transition">
+                        <div class="bg-amber-50/40 dark:bg-amber-950/10 rounded-2xl p-4 border border-amber-100/80 dark:border-amber-900/40 shadow-sm">
                             <p class="text-2xl font-black text-amber-500 dark:text-amber-400">${pendingVerify}</p>
                             <p class="text-[10px] font-extrabold text-amber-500/70 uppercase tracking-wide mt-1">Pending Verify</p>
                         </div>
                         
                         <!-- Approved Card -->
-                        <div class="bg-white dark:bg-slate-850 rounded-2xl p-4 border border-green-100 dark:border-green-950/60 shadow-sm transition">
+                        <div class="bg-green-50/40 dark:bg-green-950/10 rounded-2xl p-4 border border-green-100/80 dark:border-green-900/40 shadow-sm">
                             <p class="text-2xl font-black text-green-600 dark:text-green-400">${approvedCount}</p>
                             <p class="text-[10px] font-extrabold text-green-500/70 uppercase tracking-wide mt-1">Approved</p>
                         </div>
                         
                         <!-- Rejected Card -->
-                        <div class="bg-white dark:bg-slate-850 rounded-2xl p-4 border border-red-100 dark:border-red-950/60 shadow-sm transition">
-                            <p class="text-2xl font-black text-red-650 dark:text-red-400">${rejectedCount}</p>
+                        <div class="bg-red-50/40 dark:bg-red-950/10 rounded-2xl p-4 border border-red-100/80 dark:border-red-900/40 shadow-sm">
+                            <p class="text-2xl font-black text-red-500 dark:text-red-400">${rejectedCount}</p>
                             <p class="text-[10px] font-extrabold text-red-500/70 uppercase tracking-wide mt-1">Rejected</p>
                         </div>
-                        
                     </div>
                 </section>
 
                 <!-- Task Wise Overview Table -->
-                <section class="text-left">
-                    <h3 class="text-base font-black text-slate-900 dark:text-white mb-4">Task Wise Overview</h3>
-                    <div class="overflow-x-auto">
+                <section class="space-y-4 pt-2">
+                    <h3 class="text-base font-black text-gray-900 dark:text-white">Task Wise Overview</h3>
+                    <div class="overflow-x-auto border border-gray-100 dark:border-gray-700 rounded-2xl">
                         <table class="w-full text-left text-xs border-collapse">
                             <thead>
-                                <tr class="border-b border-slate-100 dark:border-slate-800 text-slate-450 uppercase font-black text-[9px] tracking-wider">
-                                    <th class="py-3 px-2">Task Name</th>
-                                    <th class="py-3 px-2 text-center">Total Submissions</th>
-                                    <th class="py-3 px-2 text-center">OCR Passed</th>
-                                    <th class="py-3 px-2 text-center">Pending Verify</th>
-                                    <th class="py-3 px-2 text-center">Approved</th>
-                                    <th class="py-3 px-2 text-center">Rejected</th>
-                                    <th class="py-3 px-2 text-right">Action</th>
+                                <tr class="bg-gray-50/55 dark:bg-gray-800/40 border-b border-gray-100 dark:border-gray-700 text-gray-400 dark:text-gray-500 uppercase font-black text-[9px] tracking-wider">
+                                    <th class="py-3.5 px-4">Task Name</th>
+                                    <th class="py-3.5 px-3 text-center">Total Submissions</th>
+                                    <th class="py-3.5 px-3 text-center">OCR Passed</th>
+                                    <th class="py-3.5 px-3 text-center">Pending Verify</th>
+                                    <th class="py-3.5 px-3 text-center">Approved</th>
+                                    <th class="py-3.5 px-3 text-center">Rejected</th>
+                                    <th class="py-3.5 px-4 text-right">Action</th>
                                 </tr>
                             </thead>
-                            <tbody class="divide-y divide-slate-100 dark:divide-slate-800">
+                            <tbody class="divide-y divide-gray-100 dark:divide-gray-700">
                                 ${taskRows.length === 0 ? `
                                     <tr>
-                                        <td colspan="7" class="py-8 text-center text-slate-400 font-bold">No tasks available.</td>
+                                        <td colspan="7" class="py-8 text-center text-gray-400 font-bold">No tasks available.</td>
                                     </tr>
                                 ` : taskRows.map(r => {
                                     return `
-                                        <tr class="hover:bg-slate-50/50 dark:hover:bg-slate-850/20 transition">
-                                            <td class="py-3.5 px-2">
-                                                <p class="font-extrabold text-slate-800 dark:text-slate-200 text-sm">${escapeHtml(r.name)}</p>
-                                                <p class="text-[9px] text-slate-400 font-semibold mt-0.5">ID: ${escapeHtml(r.id)}</p>
+                                        <tr class="hover:bg-gray-50/30 dark:hover:bg-gray-800/20 transition">
+                                            <td class="py-3.5 px-4">
+                                                <div class="flex items-center gap-3">
+                                                    <!-- App Logo -->
+                                                    <span class="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-gray-150 bg-white p-1.5 dark:border-gray-700 dark:bg-gray-900 shadow-sm">
+                                                        <img src="${escapeHtml(r.logo || 'https://cdn-icons-png.flaticon.com/512/2659/2659360.png')}" alt="App logo" class="h-full w-full object-contain">
+                                                    </span>
+                                                    <div class="min-w-0">
+                                                        <p class="font-extrabold text-gray-900 dark:text-white text-sm truncate max-w-[180px]">${escapeHtml(getCleanAppName(r.name))}</p>
+                                                        <p class="text-[9px] text-gray-400 font-semibold mt-0.5">ID: ${escapeHtml(r.id)}</p>
+                                                    </div>
+                                                </div>
                                             </td>
-                                            <td class="py-3.5 px-2 text-center font-semibold text-slate-800 dark:text-slate-200">${r.total}</td>
-                                            <td class="py-3.5 px-2 text-center font-semibold text-slate-800 dark:text-slate-200">${r.ocrPassed}</td>
-                                            <td class="py-3.5 px-2 text-center font-semibold text-slate-800 dark:text-slate-200">${r.pending}</td>
-                                            <td class="py-3.5 px-2 text-center font-semibold text-slate-800 dark:text-slate-200">${r.approved}</td>
-                                            <td class="py-3.5 px-2 text-center font-semibold text-slate-800 dark:text-slate-200">${r.rejected}</td>
-                                            <td class="py-3.5 px-2 text-right">
-                                                <button type="button" data-action="view-task-submissions" data-taskid="${r.id}" class="rounded-lg bg-blue-50 hover:bg-blue-100 dark:bg-blue-950/20 dark:text-blue-400 text-blue-600 font-extrabold px-4 py-1.5 text-xs transition active:scale-95 border border-blue-100/50 dark:border-blue-900/35" style="outline: none;">
+                                            <td class="py-3.5 px-3 text-center font-bold text-gray-800 dark:text-gray-200">${r.total}</td>
+                                            <td class="py-3.5 px-3 text-center font-bold text-gray-800 dark:text-gray-200">${r.ocrPassed}</td>
+                                            <td class="py-3.5 px-3 text-center font-bold text-gray-800 dark:text-gray-200">${r.pending}</td>
+                                            <td class="py-3.5 px-3 text-center font-bold text-gray-800 dark:text-gray-200">${r.approved}</td>
+                                            <td class="py-3.5 px-3 text-center font-bold text-gray-800 dark:text-gray-200">${r.rejected}</td>
+                                            <td class="py-3.5 px-4 text-right">
+                                                <button type="button" data-action="view-task-submissions" data-taskid="${r.id}" class="rounded-xl bg-blue-50 hover:bg-blue-100 dark:bg-blue-900/20 dark:text-blue-400 text-blue-600 font-black px-4 py-2 text-xs transition active:scale-95 border border-blue-100/50 dark:border-blue-900/35" style="outline: none;">
                                                     View
                                                 </button>
                                             </td>
@@ -715,7 +729,7 @@ const renderAdminSubmissions = () => {
                 </section>
 
                 <!-- Centered Bottom View All Link -->
-                <div class="pt-4 flex justify-center">
+                <div class="pt-2 flex justify-center border-t border-gray-100 dark:border-gray-700">
                     <button type="button" class="text-xs font-black text-blue-600 hover:underline py-2" style="outline: none;">View All Tasks</button>
                 </div>
             </div>

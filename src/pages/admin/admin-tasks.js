@@ -484,7 +484,7 @@ const showAdminTaskPage = () => {
                     </section>
 
                     <section id="admin-submissions-section" class="hidden">
-                        <div id="admin-submissions-page-shell" class="min-h-screen bg-slate-50 dark:bg-slate-950 pb-28">
+                        <div id="admin-submissions-page-shell" class="space-y-4">
                             <div class="py-8 text-center text-sm text-gray-400">Loading submissions...</div>
                         </div>
                     </section>
