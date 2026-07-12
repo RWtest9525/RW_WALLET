@@ -2313,7 +2313,7 @@ const showUserTaskDetailsPage = async (taskId) => {
                             </div>
                             <div class="flex items-center gap-2">
                                 <input type="number" id="task-bulk-comments-count" min="1" max="100" value="5" class="w-16 rounded-xl border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-2 py-1.5 text-center text-xs font-bold focus:outline-none focus:ring-2 focus:ring-slate-900">
-                                <button type="button" id="task-bulk-generate-btn" class="rounded-xl bg-slate-950 text-white px-3 py-1.5 text-xs font-black hover:bg-slate-800 transition">Copy Comments</button>
+                                <button type="button" id="task-bulk-generate-btn" class="rounded-xl bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-500 hover:to-blue-500 text-white px-4 py-2 text-xs font-black transition-all active:scale-[0.97] shadow-sm">Copy Comments</button>
                             </div>
                         </div>
                         <div class="border-t border-gray-200 dark:border-gray-700 my-2"></div>
@@ -2325,9 +2325,9 @@ const showUserTaskDetailsPage = async (taskId) => {
                 `;
             } else {
                 step2Html = `
-                    <div class="rounded-2xl border border-slate-200 bg-slate-50 p-4 text-center dark:border-slate-700 dark:bg-slate-900 shadow-sm">
-                        <p id="task-assigned-review-text" class="mb-3 text-sm font-semibold italic text-slate-950 dark:text-white">"${escapeHtml(initialComment)}"</p>
-                        <button id="task-copy-review-btn" class="flex w-full items-center justify-center gap-2 rounded-xl bg-slate-950 px-4 py-3 text-xs font-black uppercase tracking-wide text-white hover:bg-slate-800 transition shadow-md">
+                    <div class="rounded-2xl border border-slate-200 bg-slate-50 p-5 text-center dark:border-slate-700 dark:bg-slate-900 shadow-sm">
+                        <p id="task-assigned-review-text" class="mb-4 text-sm font-semibold italic text-slate-950 dark:text-white leading-relaxed">"${escapeHtml(initialComment)}"</p>
+                        <button id="task-copy-review-btn" class="flex w-full items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-extrabold tracking-wide px-4 py-3.5 text-xs uppercase hover:shadow-lg hover:shadow-emerald-500/20 hover:scale-[1.01] active:scale-[0.99] transition-all duration-200 shadow-md">
                             <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16h8M8 12h8m-7 8h6a2 2 0 0 0 2-2V7l-5-5H9a2 2 0 0 0-2 2v16z"></path></svg>
                             Copy Assigned Review
                         </button>
@@ -2341,31 +2341,41 @@ const showUserTaskDetailsPage = async (taskId) => {
 
             const content = `
                 <style>
-                    @keyframes borderGlow {
-                        0%, 100% { border-color: rgba(99, 102, 241, 0.3); box-shadow: 0 0 4px rgba(99, 102, 241, 0.1); }
-                        50% { border-color: rgba(99, 102, 241, 0.8); box-shadow: 0 0 12px rgba(99, 102, 241, 0.4); }
+                    @keyframes timerPulse {
+                        0%, 100% {
+                            border-color: rgba(245, 158, 11, 0.4);
+                            box-shadow: 0 0 4px rgba(245, 158, 11, 0.2);
+                        }
+                        50% {
+                            border-color: rgba(245, 158, 11, 1);
+                            box-shadow: 0 0 16px rgba(245, 158, 11, 0.6);
+                            transform: scale(1.02);
+                        }
                     }
                     @keyframes blinkText {
                         0%, 100% { opacity: 0.6; }
                         50% { opacity: 1; }
                     }
-                    .timer-glowing-border {
-                        animation: borderGlow 2.5s infinite ease-in-out;
-                        border-width: 1.5px;
+                    .timer-pulse-glow {
+                        animation: timerPulse 2s infinite ease-in-out;
+                        border-width: 2px;
                         border-style: solid;
+                        transition: all 0.2s ease;
                     }
                     .blink-indicator {
                         animation: blinkText 1.5s infinite ease-in-out;
                     }
                     .premium-card {
-                        background: rgba(255, 255, 255, 0.8);
-                        backdrop-filter: blur(12px);
-                        -webkit-backdrop-filter: blur(12px);
+                        background: linear-gradient(135deg, rgba(255, 255, 255, 0.9) 0%, rgba(248, 250, 252, 0.8) 100%);
+                        backdrop-filter: blur(16px);
+                        -webkit-backdrop-filter: blur(16px);
                         border: 1px solid rgba(226, 232, 240, 0.8);
+                        box-shadow: 0 10px 30px -10px rgba(0, 0, 0, 0.05), 0 1px 3px rgba(0, 0, 0, 0.02);
                     }
                     .dark .premium-card {
-                        background: rgba(30, 41, 59, 0.7);
-                        border: 1px solid rgba(71, 85, 105, 0.4);
+                        background: linear-gradient(135deg, rgba(30, 41, 59, 0.8) 0%, rgba(15, 23, 42, 0.7) 100%);
+                        border: 1px solid rgba(71, 85, 105, 0.3);
+                        box-shadow: 0 10px 30px -10px rgba(0, 0, 0, 0.3), 0 1px 3px rgba(0, 0, 0, 0.1);
                     }
                 </style>
                 <header class="mb-4 flex items-center justify-between bg-white/80 dark:bg-gray-800/80 backdrop-blur px-4 py-3 shadow-sm page-header-fixed z-50">
@@ -2381,26 +2391,30 @@ const showUserTaskDetailsPage = async (taskId) => {
                 </header>
                 <div class="px-4 pb-28">
                     <div class="mx-auto max-w-xl space-y-4">
-                        <!-- Premium Redesigned Task Card -->
-                        <div class="premium-card rounded-3xl p-4 shadow-lg flex items-center justify-between gap-4">
-                            <div class="flex items-center gap-3 min-w-0">
-                                <div class="h-14 w-14 overflow-hidden rounded-2xl bg-slate-100 dark:bg-slate-700 shadow-md shrink-0">
+                        <!-- Premium Redesigned Task Card with ultra-visible Timer -->
+                        <div class="premium-card rounded-3xl p-5 flex flex-col md:flex-row md:items-center justify-between gap-4">
+                            <div class="flex items-center gap-4 min-w-0">
+                                <div class="h-16 w-16 overflow-hidden rounded-2xl bg-white dark:bg-slate-800 shadow-md shrink-0 border border-slate-100 dark:border-slate-700">
                                     <img src="${escapeHtml(image)}" alt="${escapeHtml(appName)}" class="h-full w-full object-cover" onerror="this.src='https://cdn-icons-png.flaticon.com/512/3176/3176366.png'">
                                 </div>
                                 <div class="min-w-0">
                                     <span class="inline-flex rounded-lg bg-indigo-50 dark:bg-indigo-900/30 px-2 py-0.5 text-[9px] font-black uppercase text-indigo-600 dark:text-indigo-400 tracking-wider mb-1">${escapeHtml(categoryLabel)}</span>
-                                    <h3 class="text-sm font-black text-slate-950 dark:text-white truncate pr-1">${escapeHtml(appName)}</h3>
+                                    <h3 class="text-base font-black text-slate-950 dark:text-white truncate pr-1">${escapeHtml(appName)}</h3>
+                                    
+                                    <!-- Reward Badge below the name -->
+                                    <div class="inline-flex items-center gap-1.5 mt-2 rounded-xl bg-emerald-500/10 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 px-3 py-1 border border-emerald-500/20 text-xs font-black shadow-sm">
+                                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                                        <span>Reward: ${formatCurrency(reward).replace('.00', '')}</span>
+                                    </div>
                                 </div>
                             </div>
-                            <div class="flex flex-col items-end shrink-0 gap-2">
-                                <div class="rounded-xl bg-slate-950 dark:bg-white text-white dark:text-slate-950 px-3.5 py-1.5 text-center shadow-md">
-                                    <p class="text-[7px] font-black uppercase tracking-widest opacity-60">Reward</p>
-                                    <p class="text-base font-black leading-none mt-0.5">${formatCurrency(reward).replace('.00', '')}</p>
-                                </div>
-                                <!-- Blinking Glowing Timer inside Card -->
-                                <div id="task-card-timer-container" class="timer-glowing-border bg-slate-50 dark:bg-slate-900/60 rounded-xl px-2.5 py-1 flex items-center gap-1.5 text-[10px] font-bold text-slate-700 dark:text-slate-300">
-                                    <span class="h-1.5 w-1.5 rounded-full bg-indigo-500 blink-indicator"></span>
-                                    <span id="task-card-timer" class="font-mono">--:--</span>
+                            
+                            <!-- Large glowing Timer badge -->
+                            <div class="flex flex-col items-start md:items-end shrink-0 gap-1.5">
+                                <span class="text-[9px] font-black uppercase text-slate-400 tracking-widest pl-1 md:pr-1">Remaining Time</span>
+                                <div id="task-card-timer-container" class="timer-pulse-glow bg-amber-500/10 dark:bg-amber-500/20 border-2 border-amber-500 rounded-2xl px-4 py-2 flex items-center gap-2 text-base md:text-lg font-black text-amber-600 dark:text-amber-400 shadow-[0_0_12px_rgba(245,158,11,0.4)] transition-all">
+                                    <span class="h-2.5 w-2.5 rounded-full bg-amber-500 blink-indicator shrink-0"></span>
+                                    <span id="task-card-timer" class="font-mono tracking-wider">--:--</span>
                                 </div>
                             </div>
                         </div>
@@ -2408,23 +2422,23 @@ const showUserTaskDetailsPage = async (taskId) => {
                         <!-- Main Sections -->
                         <div class="space-y-4">
                             <!-- Step 1: Get App -->
-                            <div class="bg-white dark:bg-gray-800 rounded-3xl p-4 border border-gray-100 dark:border-gray-700/80 shadow-md">
-                                <p class="mb-3 text-[10px] font-black uppercase tracking-wider text-gray-400 flex items-center gap-2"><span class="flex h-5 w-5 items-center justify-center rounded-full bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-white text-[9px] font-black">1</span> Get App</p>
-                                <button id="task-download-btn" class="flex w-full items-center justify-center gap-2 rounded-xl bg-slate-950 px-4 py-3.5 text-xs font-black uppercase tracking-wide text-white hover:bg-slate-800 transition shadow-md">
+                            <div class="bg-white dark:bg-gray-800 rounded-3xl p-5 border border-gray-150 dark:border-gray-700/80 shadow-md">
+                                <p class="mb-3.5 text-[10px] font-black uppercase tracking-wider text-gray-400 flex items-center gap-2"><span class="flex h-5 w-5 items-center justify-center rounded-full bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-white text-[9px] font-black">1</span> Get App</p>
+                                <button id="task-download-btn" class="flex w-full items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 text-white font-extrabold tracking-wide px-4 py-3.5 text-xs uppercase hover:shadow-lg hover:shadow-indigo-500/20 hover:scale-[1.01] active:scale-[0.99] transition-all duration-200 shadow-md">
                                     <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-4m-1-9h-6m6 0v6m0-6L10 12"></path></svg>
                                     ${ctaText}
                                 </button>
                             </div>
 
                             <!-- Step 2: Copy & Review -->
-                            <div class="bg-white dark:bg-gray-800 rounded-3xl p-4 border border-gray-100 dark:border-gray-700/80 shadow-md">
-                                <p class="mb-3 text-[10px] font-black uppercase tracking-wider text-gray-400 flex items-center gap-2"><span class="flex h-5 w-5 items-center justify-center rounded-full bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-white text-[9px] font-black">2</span> Copy & Review</p>
+                            <div class="bg-white dark:bg-gray-800 rounded-3xl p-5 border border-gray-150 dark:border-gray-700/80 shadow-md">
+                                <p class="mb-3.5 text-[10px] font-black uppercase tracking-wider text-gray-400 flex items-center gap-2"><span class="flex h-5 w-5 items-center justify-center rounded-full bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-white text-[9px] font-black">2</span> Copy & Review</p>
                                 ${step2Html}
                             </div>
 
                             <!-- Step 3: Upload Proof -->
-                            <div class="bg-white dark:bg-gray-800 rounded-3xl p-4 border border-gray-100 dark:border-gray-700/80 shadow-md">
-                                <p class="mb-3 text-[10px] font-black uppercase tracking-wider text-gray-400 flex items-center gap-2"><span class="flex h-5 w-5 items-center justify-center rounded-full bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-white text-[9px] font-black">3</span> Upload Proof</p>
+                            <div class="bg-white dark:bg-gray-800 rounded-3xl p-5 border border-gray-150 dark:border-gray-700/80 shadow-md">
+                                <p class="mb-3.5 text-[10px] font-black uppercase tracking-wider text-gray-400 flex items-center gap-2"><span class="flex h-5 w-5 items-center justify-center rounded-full bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-white text-[9px] font-black">3</span> Upload Proof</p>
                                 
                                 <label class="flex min-h-24 cursor-pointer flex-col items-center justify-center rounded-2xl border-2 border-dashed border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900/40 p-4 text-center hover:bg-slate-100/50 dark:hover:bg-slate-900/60 transition">
                                     <input id="task-proof-input" type="file" accept="image/*" class="hidden" ${isBulk ? 'multiple' : ''}>
@@ -2538,7 +2552,7 @@ const showUserTaskDetailsPage = async (taskId) => {
                         if (remaining <= 0) {
                             if (timerEl) timerEl.textContent = 'Expired';
                             if (timerContainerEl) {
-                                timerContainerEl.className = 'border border-red-500 bg-red-50 dark:bg-red-950/20 rounded-xl px-2.5 py-1 flex items-center gap-1.5 text-[10px] font-bold text-red-500';
+                                timerContainerEl.className = 'border-2 border-red-500 bg-red-50 dark:bg-red-950/20 rounded-2xl px-4 py-2 flex items-center gap-2 text-base md:text-lg font-black text-red-500 shadow-[0_0_12px_rgba(239,68,68,0.4)]';
                             }
                             clearInterval(activeTaskReservationTimer);
                             activeTaskReservationTimer = null;
@@ -2562,7 +2576,7 @@ const showUserTaskDetailsPage = async (taskId) => {
                 if (commentEl) commentEl.textContent = `"${reservation.comment}"`;
                 
                 if (timerContainerEl) {
-                    timerContainerEl.className = 'timer-glowing-border bg-slate-50 dark:bg-slate-900/60 rounded-xl px-2.5 py-1 flex items-center gap-1.5 text-[10px] font-bold text-slate-700 dark:text-slate-300';
+                    timerContainerEl.className = 'timer-pulse-glow bg-amber-500/10 dark:bg-amber-500/20 border-2 border-amber-500 rounded-2xl px-4 py-2 flex items-center gap-2 text-base md:text-lg font-black text-amber-600 dark:text-amber-400 shadow-[0_0_12px_rgba(245,158,11,0.4)] transition-all';
                 }
                 startLocalTimer();
             };
@@ -2589,14 +2603,14 @@ const showUserTaskDetailsPage = async (taskId) => {
                         const isSubmitted = submittedComments.includes(String(comment).trim());
                         
                         listHtml.push(`
-                            <div class="flex items-center justify-between gap-3 p-2 bg-slate-100/50 dark:bg-slate-800/40 rounded-xl border border-gray-200 dark:border-gray-700/80">
+                            <div class="flex items-center justify-between gap-3 p-2 bg-white dark:bg-slate-800 rounded-xl border border-gray-150 dark:border-gray-700/80 shadow-sm">
                                 <div class="min-w-0 flex-1 flex items-center gap-2">
-                                    <span class="text-[9px] font-black text-gray-400 bg-white dark:bg-gray-800 rounded px-1.5 shadow-sm">${i + 1}</span>
+                                    <span class="text-[9px] font-black text-gray-400 bg-slate-50 dark:bg-slate-900 rounded px-1.5 shadow-sm border border-gray-100 dark:border-gray-800">${i + 1}</span>
                                     <p class="text-xs font-semibold text-gray-900 dark:text-white truncate italic text-left">"${escapeHtml(comment)}"</p>
                                 </div>
                                 ${isSubmitted 
-                                    ? `<span class="text-[10px] font-black text-green-600 shrink-0">Done ✅</span>`
-                                    : `<button type="button" data-action="copy-comment" data-comment="${escapeHtml(comment)}" class="rounded-lg bg-slate-900 dark:bg-white text-white dark:text-slate-950 px-2.5 py-1 text-[9px] font-black tracking-wide uppercase hover:opacity-90 transition shrink-0 shadow-sm">Copy</button>`
+                                    ? `<span class="text-[10px] font-black text-green-600 shrink-0 bg-green-500/10 border border-green-500/20 px-2.5 py-0.5 rounded-lg shadow-sm">Done ✅</span>`
+                                    : `<button type="button" data-action="copy-comment" data-comment="${escapeHtml(comment)}" class="rounded-xl bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-950/40 dark:hover:bg-indigo-950/80 text-indigo-600 dark:text-indigo-400 border border-indigo-200/40 dark:border-indigo-800/30 px-3 py-1.5 text-[9px] font-black tracking-wide uppercase transition shrink-0 shadow-sm">Copy</button>`
                                 }
                             </div>
                         `);
