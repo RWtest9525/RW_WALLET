@@ -1350,13 +1350,13 @@ const showUserTaskPage = () => {
                     .filter(isTaskVisibleToUser)
                     .filter(task => getAdminTaskEffectiveStatus(task) === 'active')
                     .filter(task => {
-                        // Show task if user hasn't submitted it yet
-                        if (!userTaskSubmissionIds.has(task.id)) return true;
-                        // If they have submitted it: for bulkers, keep visible if submitted today (until 12 AM)
+                        // Show task if user hasn't submitted it today
+                        if (!userTaskTodaySubmissionIds.has(task.id)) return true;
+                        // If they have submitted it today: for bulkers, keep visible (to track upload status/queue)
                         const subtype = task.subtype || task.taskSubtype || '';
                         if (subtype === 'read_news') return false;
                         if (isBulker) {
-                            return userTaskTodaySubmissionIds.has(task.id);
+                            return true;
                         }
                         return false;
                     })
@@ -1411,7 +1411,8 @@ const showUserTaskPage = () => {
                 const payoutVal = getPayoutCleanVal(task);
                 const approvalVal = payoutVal === 'Instant' ? 'Instant' : `${payoutVal} Later`;
                 const limitVal = task.limit || 300;
-                const submissionsVal = `${task.timesUsed ?? task.submissionsCount ?? Math.floor(((task.id.charCodeAt(0) + task.id.charCodeAt(1)) % 10) * (limitVal / 20) + (limitVal / 4))}/${limitVal}`;
+                const submissionsCount = task.timesUsed ?? task.submissionsCount ?? 0;
+                const availableComments = Math.max(0, limitVal - submissionsCount);
 
                 if (isLive) {
                     return `
@@ -1469,14 +1470,14 @@ const showUserTaskPage = () => {
                                     </div>
                                 </div>
 
-                                <!-- Submissions Column -->
+                                <!-- Available Comments Column -->
                                 <div class="flex items-center gap-2 border-l border-slate-100 dark:border-slate-800/80 pl-2">
                                     <span class="p-1.5 rounded-lg bg-${acc.color}-500/10 ${acc.textClass} shrink-0">
-                                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2M9 5a2 2 0 0 0 2 2h2a2 2 0 0 0 2-2M9 5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01"></path></svg>
+                                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"></path></svg>
                                     </span>
                                     <div class="min-w-0">
-                                        <p class="text-[8px] font-black text-gray-400 uppercase tracking-wider leading-none">Submissions</p>
-                                        <p class="text-[11px] font-bold text-slate-800 dark:text-slate-200 mt-1 truncate">${escapeHtml(submissionsVal)}</p>
+                                        <p class="text-[8px] font-black text-gray-400 uppercase tracking-wider leading-none">Available</p>
+                                        <p class="text-[11px] font-bold text-slate-800 dark:text-slate-200 mt-1 truncate">${availableComments}</p>
                                     </div>
                                 </div>
                             </div>

@@ -1847,13 +1847,8 @@ const findReusableTaskReservation = async (taskId, userId) => {
 const reserveTaskReviewComment = async (task = {}) => {
             if (!currentUser?.uid) throw new Error('Please login again.');
             await preloadUserTaskParticipation(currentUser.uid);
-            if (userTaskSubmissionIds.has(task.id)) {
-                if (!isBulkTaskUser()) {
-                    throw new Error('You have already submitted this task.');
-                } else if (!userTaskTodaySubmissionIds.has(task.id)) {
-                    // Bulker submitted this on a previous day, so it has now disappeared/locked for them
-                    throw new Error('You have already submitted this task.');
-                }
+            if (userTaskTodaySubmissionIds.has(task.id)) {
+                throw new Error('You have already submitted this task today.');
             }
             if (!isBulkTaskUser() && userTaskTodaySubmissionIds.size >= NORMAL_USER_DAILY_TASK_LIMIT) {
                 throw new Error('Daily task limit reached. Please continue tomorrow.');
