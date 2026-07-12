@@ -482,98 +482,12 @@ const setBottomNavActive = (activeId) => {
             });
         };
 
-const renderAdminSidebarLayout = (contentHtml, options = {}) => {
-            const pageContainer = document.getElementById('page-container');
-            
-            // Detect active navigation link
-            if (typeof adminSubmissionsView === 'undefined') {
-                window.adminSubmissionsView = { activeView: 'dashboard' };
-            }
-            const activeView = adminSubmissionsView.activeView || 'dashboard';
-
-            const renderSidebarLink = (id, icon, label, onClickFnStr) => {
-                const isActive = activeView === id;
-                return `
-                    <button onclick="window.setAdminActiveView('${id}'); ${onClickFnStr}()" class="w-full flex items-center gap-3 px-4 py-3 text-xs font-black uppercase tracking-wider rounded-xl transition-all duration-200 ${isActive ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/10' : 'text-slate-400 hover:bg-slate-800 hover:text-slate-100'}" style="outline: none;">
-                        <span class="text-sm">${icon}</span>
-                        <span>${label}</span>
-                    </button>
-                `;
-            };
-
-            const isOwner = currentUser?.uid === ADMIN_UID || currentUser?.email === 'reviewsworld51@gmail.com' || currentUser?.email === 'reviewsworld01@gmail.com' || currentUserData?.role === 'owner';
-
-            pageContainer.innerHTML = `
-                <div class="flex min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-800 dark:text-slate-100">
-                    <!-- Left Sidebar (Laptop View Only) -->
-                    <div class="w-64 bg-slate-900 text-white shrink-0 flex flex-col border-r border-slate-850 sticky top-0 h-screen shadow-md">
-                        <!-- Sidebar Header -->
-                        <div class="p-5 border-b border-slate-800/80 flex items-center justify-between">
-                            <span class="text-base font-black tracking-wider uppercase text-indigo-400">Admin Panel</span>
-                            <button onclick="window.exitAdminPanel()" class="text-[10px] font-black uppercase tracking-wider px-2.5 py-1.5 rounded-lg bg-red-500/10 border border-red-500/20 text-red-500 hover:bg-red-500/20 transition active:scale-95">Exit</button>
-                        </div>
-                        <!-- Navigation Links -->
-                        <div class="flex-1 overflow-y-auto py-4 px-3 space-y-1.5 scrollbar-thin scrollbar-thumb-slate-800">
-                            ${renderSidebarLink('dashboard', '🏠', 'Dashboard', 'showAdminMainPage')}
-                            ${renderSidebarLink('tasks', '📋', 'Manage Tasks', 'showAdminTaskPage')}
-                            ${renderSidebarLink('submissions', '📥', 'Submissions', 'showAdminTaskSubmissionsPage')}
-                            ${renderSidebarLink('recharges', '📱', 'Recharges', 'showAdminRechargeRequestsPage')}
-                            ${renderSidebarLink('withdrawals', '💰', 'Withdrawals', 'showAdminWithdrawalsPage')}
-                            ${renderSidebarLink('users', '👥', 'Users', 'showAdminUsersPage')}
-                            ${renderSidebarLink('gift_codes', '💳', 'Gift Codes', 'showAdminGiftCodesPage')}
-                            ${isOwner ? renderSidebarLink('loans', '🏦', 'Manage Loans', 'showAdminLoanPage') : ''}
-                            ${isOwner ? renderSidebarLink('investments', '🤝', 'Manage Partner', 'showAdminInvestmentsPage') : ''}
-                            ${renderSidebarLink('chats', '💬', 'Manage Chat', 'showAdminChatsPage')}
-                            ${renderSidebarLink('settlements', '🤝', 'Settlements', 'showAdminSettlementPage')}
-                            ${renderSidebarLink('ads', '📢', 'Manage Ads', 'showAdminAdsPage')}
-                            ${renderSidebarLink('settings', '⚙️', 'Manage Settings', 'showAdminManageSettingsPage')}
-                            ${isOwner ? renderSidebarLink('train_ai', '🧠', 'Train AI', 'showAdminTrainAiPage') : ''}
-                        </div>
-                    </div>
-                    
-                    <!-- Right Main Content Area -->
-                    <div class="flex-1 overflow-y-auto h-screen relative flex flex-col min-w-0">
-                        <div class="flex-1">
-                            ${contentHtml}
-                        </div>
-                    </div>
-                </div>
-            `;
-
-            pageContainer.classList.remove('hidden');
-            document.getElementById('dashboard-content').classList.add('hidden');
-            setMainChrome(false); // Hide standard bottom nav
-            document.getElementById('app-footer')?.classList.add('app-footer-hidden');
-        };
-
-        window.setAdminActiveView = (viewName) => {
-            if (typeof adminSubmissionsView === 'undefined') {
-                window.adminSubmissionsView = {};
-            }
-            adminSubmissionsView.activeView = viewName;
-        };
-
-        window.exitAdminPanel = () => {
-            document.getElementById('dashboard-content').classList.remove('hidden');
-            document.getElementById('page-container').classList.add('hidden');
-            document.getElementById('page-container').innerHTML = '';
-            setMainChrome(true);
-            switchTab('user-panel');
-        };
-
 const showPage = (content, options = {}) => {
             if (adminMaintenanceInterval) {
                 clearInterval(adminMaintenanceInterval);
                 adminMaintenanceInterval = null;
             }
             lastManualPageOpenAt = Date.now();
-
-            const isCurrentlyAdmin = currentMainSection === 'admin' || options.returnTo === 'admin';
-            if (isCurrentlyAdmin) {
-                renderAdminSidebarLayout(content, options);
-                return;
-            }
-
             document.getElementById('dashboard-content').classList.add('hidden');
             const pageContainer = document.getElementById('page-container');
             const returnSection = options.returnTo || currentMainSection;

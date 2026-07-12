@@ -483,199 +483,32 @@ const loadAdminLiveLists = async () => {
             }
         };
 
-const getAdminDashboardMainContentHtml = () => {
-    return `
-        <div class="p-6 max-w-5xl mx-auto space-y-6">
-            <!-- Header Banner -->
-            <div class="relative overflow-hidden bg-gradient-to-br from-slate-955 via-indigo-900 to-blue-700 dark:from-slate-900 dark:via-indigo-950 dark:to-blue-950 p-6 rounded-3xl shadow-lg text-white text-left">
-                <div class="absolute -right-12 -top-12 h-40 w-40 rounded-full border border-white/15"></div>
-                <div class="absolute right-7 bottom-6 h-16 w-16 rounded-2xl bg-white/10 border border-white/15"></div>
-                <h3 class="relative text-xs font-black tracking-wider uppercase text-white/70">My Admin Wallet</h3>
-                <p id="admin-wallet-balance" class="relative text-3xl font-black mt-1 text-white">₹0.00</p>
-                <button id="manage-admin-wallet-btn" class="relative mt-4 px-5 py-2.5 bg-white/15 hover:bg-white/25 text-xs font-black tracking-wider uppercase rounded-xl transition border border-white/20 active:scale-95">Add/Remove My Funds</button>
-            </div>
-
-            <!-- Metrics Grid -->
-            <div>
-                <h2 class="text-xs font-black uppercase text-slate-400 tracking-wider mb-3 text-left">Overview Metrics</h2>
-                <div class="grid grid-cols-2 md:grid-cols-3 gap-4">
-                    <button id="analytics-total-users-card" class="text-left bg-white dark:bg-slate-900 p-5 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-800/80 hover:shadow-md transition active:scale-98">
-                        <h4 class="text-xs text-gray-500 dark:text-gray-400 font-bold">Total Users</h4>
-                        <p id="analytics-total-users" class="text-2xl font-black mt-1 text-slate-900 dark:text-white">0</p>
-                        <p class="mt-2 text-[10px] font-black uppercase text-indigo-500 tracking-wider">View all users</p>
-                    </button>
-                    <button id="analytics-new-members-card" class="text-left bg-white dark:bg-slate-900 p-5 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-800/80 hover:shadow-md transition active:scale-98">
-                        <h4 class="text-xs text-gray-500 dark:text-gray-400 font-bold">New Members</h4>
-                        <p id="analytics-new-members" class="text-2xl font-black mt-1 text-blue-500">0</p>
-                        <p class="mt-2 text-[10px] font-black uppercase text-blue-500 tracking-wider">Last 15 days</p>
-                    </button>
-                    <button id="analytics-pending-withdrawals-card" class="text-left bg-white dark:bg-slate-900 p-5 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-800/80 hover:shadow-md transition active:scale-98">
-                        <h4 class="text-xs text-gray-500 dark:text-gray-400 font-bold">Pending Withdrawals</h4>
-                        <p id="analytics-pending-reqs" class="text-2xl font-black mt-1 text-amber-500">0</p>
-                        <p id="analytics-pending-amount" class="mt-2 text-xs font-black text-gray-600 dark:text-gray-300">&#8377;0.00</p>
-                    </button>
-                    <button id="analytics-minus-balance-card" class="text-left bg-white dark:bg-slate-900 p-5 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-800/80 hover:shadow-md transition active:scale-98">
-                        <h4 class="text-xs text-gray-500 dark:text-gray-400 font-bold">Minus Balance Users</h4>
-                        <p id="analytics-minus-balance-users" class="text-2xl font-black mt-1 text-red-500">0</p>
-                        <p class="mt-2 text-[10px] font-black uppercase text-red-400 tracking-wider">&#8377;0.00</p>
-                    </button>
-                    <button id="analytics-total-funds-card" class="text-left bg-white dark:bg-slate-900 p-5 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-800/80 hover:shadow-md transition active:scale-98">
-                        <h4 class="text-xs text-gray-500 dark:text-gray-400 font-bold">Members Wallet Fund</h4>
-                        <p id="analytics-total-funds" class="text-2xl font-black mt-1 text-slate-900 dark:text-white">&#8377;0.00</p>
-                        <p class="mt-2 text-[10px] font-black uppercase text-emerald-500 tracking-wider">View list</p>
-                    </button>
-                    <button id="analytics-gift-cards-card" class="text-left bg-white dark:bg-slate-900 p-5 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-800/80 hover:shadow-md transition active:scale-98">
-                        <h4 class="text-xs text-gray-500 dark:text-gray-400 font-bold">Gift Cards Redeemed</h4>
-                        <p id="analytics-gift-cards" class="text-2xl font-black mt-1 text-purple-500">0</p>
-                        <p class="mt-2 text-[10px] font-black uppercase text-purple-400 tracking-wider">Open gift codes</p>
-                    </button>
-                </div>
-            </div>
-
-            <!-- Quick Actions Grid -->
-            <div>
-                <h2 class="text-xs font-black uppercase text-slate-400 tracking-wider mb-3 text-left">Quick Navigation Modules</h2>
-                <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
-                    <button id="quick-withdrawals-btn" class="flex flex-col items-center justify-center p-5 bg-white dark:bg-slate-900 rounded-2xl hover:shadow-md border border-slate-100 dark:border-slate-800/80 transition active:scale-95 shadow-sm text-center">
-                        <span class="flex h-12 w-12 items-center justify-center rounded-2xl bg-blue-50 dark:bg-blue-950/40 shadow-sm mb-3">
-                            <img src="https://cdn-icons-png.flaticon.com/512/7939/7939990.png" class="h-8 w-8 object-contain">
-                        </span>
-                        <span class="text-sm font-black text-slate-800 dark:text-slate-200">Withdrawals</span>
-                    </button>
-                    <button id="quick-users-btn" class="flex flex-col items-center justify-center p-5 bg-white dark:bg-slate-900 rounded-2xl hover:shadow-md border border-slate-100 dark:border-slate-800/80 transition active:scale-95 shadow-sm text-center">
-                        <span class="flex h-12 w-12 items-center justify-center rounded-2xl bg-green-50 dark:bg-green-950/40 shadow-sm mb-3">
-                            <img src="https://cdn-icons-png.flaticon.com/512/681/681494.png" class="h-8 w-8 object-contain">
-                        </span>
-                        <span class="text-sm font-black text-slate-800 dark:text-slate-200">Users</span>
-                    </button>
-                    <button id="quick-tasks-btn" class="flex flex-col items-center justify-center p-5 bg-white dark:bg-slate-900 rounded-2xl hover:shadow-md border border-slate-100 dark:border-slate-800/80 transition active:scale-95 shadow-sm text-center">
-                        <span class="flex h-12 w-12 items-center justify-center rounded-2xl bg-cyan-50 dark:bg-cyan-950/40 shadow-sm mb-3">
-                            <img src="https://cdn-icons-png.flaticon.com/512/3176/3176366.png" class="h-8 w-8 object-contain">
-                        </span>
-                        <span class="text-sm font-black text-slate-800 dark:text-slate-200">Manage Tasks</span>
-                    </button>
-                    <button id="quick-submissions-btn" class="flex flex-col items-center justify-center p-5 bg-white dark:bg-slate-900 rounded-2xl hover:shadow-md border border-slate-100 dark:border-slate-800/80 transition active:scale-95 shadow-sm text-center">
-                        <span class="flex h-12 w-12 items-center justify-center rounded-2xl bg-indigo-50 dark:bg-indigo-950/40 shadow-sm mb-3">
-                            <img src="https://cdn-icons-png.flaticon.com/512/2912/2912776.png" class="h-8 w-8 object-contain">
-                        </span>
-                        <span class="text-sm font-black text-slate-800 dark:text-slate-200">Submissions</span>
-                    </button>
-                </div>
-            </div>
-        </div>
-    `;
-};
-
 const showAdminMainPage = () => {
             if (!hasAdminSessionReadyOrCached()) return showNotification(currentUser ? 'Admin access only.' : 'Please login first.', true);
             if (activeChatUnsubscribe) {
                 activeChatUnsubscribe();
                 activeChatUnsubscribe = null;
             }
+            document.getElementById('dashboard-content').classList.remove('hidden');
+            document.getElementById('page-container').classList.add('hidden');
+            document.getElementById('page-container').innerHTML = '';
+            setMainChrome(true);
+            document.getElementById('app-footer')?.classList.add('app-footer-hidden');
             currentMainSection = 'admin';
-            if (typeof adminSubmissionsView !== 'undefined') {
-                adminSubmissionsView.activeView = 'dashboard';
-            }
+            switchTab('admin-panel');
+            setBottomNavActive('bottom-admin-btn');
+            updateAdminLoanRequestBadge();
 
-            const content = getAdminDashboardMainContentHtml();
-            showPage(content, { returnTo: 'admin' });
-
-            // Hook up quick navigation actions
-            document.getElementById('quick-withdrawals-btn')?.addEventListener('click', () => {
-                window.setAdminActiveView('withdrawals');
-                showAdminWithdrawalsPage();
-            });
-            document.getElementById('quick-users-btn')?.addEventListener('click', () => {
-                window.setAdminActiveView('users');
-                showAdminUsersPage();
-            });
-            document.getElementById('quick-tasks-btn')?.addEventListener('click', () => {
-                window.setAdminActiveView('tasks');
-                showAdminTaskPage();
-            });
-            document.getElementById('quick-submissions-btn')?.addEventListener('click', () => {
-                window.setAdminActiveView('submissions');
-                showAdminTaskSubmissionsPage();
-            });
-
-            // Bind wallet balance and cached analytics metrics
-            const currentMetrics = readAdminDashboardMetricsCache();
-            applyAdminDashboardMetrics(currentMetrics);
+            const isOwner = currentUser?.uid === ADMIN_UID || currentUser?.email === 'reviewsworld51@gmail.com' || currentUser?.email === 'reviewsworld01@gmail.com' || currentUserData?.role === 'owner';
+            document.getElementById('admin-manage-admins-btn')?.classList.toggle('hidden', !isOwner);
+            document.getElementById('admin-loans-btn')?.classList.toggle('hidden', !isOwner);
+            document.getElementById('admin-investments-btn')?.classList.toggle('hidden', !isOwner);
+            document.getElementById('admin-train-ai-btn')?.classList.toggle('hidden', !isOwner);
             
-            // Get Wallet balance
-            getDoc(doc(db, `artifacts/${appId}/public/data/admin_wallets`, ADMIN_UID)).then(snap => {
-                if (snap.exists()) {
-                    const balance = snap.data().balance || 0;
-                    const balanceEl = document.getElementById('admin-wallet-balance');
-                    if (balanceEl) balanceEl.textContent = formatIndianCurrency(balance);
-                }
-            }).catch(e => console.warn('Wallet balance fetch failed:', e));
-
-            // Bind manage admin wallet button
-            const manageWalletBtn = document.getElementById('manage-admin-wallet-btn');
-            if (manageWalletBtn) {
-                manageWalletBtn.onclick = () => {
-                    renderModal('Manage Admin Wallet',
-                        `<div>
-                            <label class="text-xs font-black uppercase text-gray-400">Action</label>
-                            <select id="wallet-action" class="w-full px-4 py-3 bg-gray-100 dark:bg-gray-700 rounded-xl mt-1">
-                                <option value="add">Add Funds</option>
-                                <option value="remove">Remove Funds</option>
-                            </select>
-                            <label class="text-xs font-black uppercase text-gray-400 mt-3 block">Amount</label>
-                            <input type="number" id="wallet-amount" placeholder="Enter amount" class="w-full px-4 py-3 bg-gray-100 dark:bg-gray-700 rounded-xl mt-1">
-                         </div>`,
-                        `<button onclick="window.closeModal()" class="px-4 py-2 text-sm bg-gray-200 dark:bg-gray-600 rounded-lg">Cancel</button>
-                         <button id="modal-submit-btn" class="px-4 py-2 text-sm bg-indigo-600 text-white rounded-lg">Submit</button>`);
-                    
-                    document.getElementById('modal-submit-btn').onclick = async () => {
-                        const action = document.getElementById('wallet-action').value;
-                        const amt = Number(document.getElementById('wallet-amount').value);
-                        if (isNaN(amt) || amt <= 0) return showNotification('Enter valid amount.', true);
-                        try {
-                            const token = await getBackendAuthToken();
-                            const resp = await fetchWithTimeout(`${BACKEND_BASE_URL}/api/admin/wallet/adjust`, {
-                                method: 'POST',
-                                headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-                                body: JSON.stringify({ action, amount: amt })
-                            }, 8000);
-                            const resData = await resp.json();
-                            if (!resData.ok) throw new Error(resData.message);
-                            showNotification('Wallet adjusted.');
-                            window.closeModal();
-                            showAdminMainPage();
-                        } catch (err) {
-                            showNotification(err.message, true);
-                        }
-                    };
-                };
+            const labelEl = document.getElementById('admin-settlement-btn-label');
+            if (labelEl) {
+                labelEl.textContent = isOwner ? 'Settlements' : 'Settlement Panel';
             }
-
-            // Analytics cards redirection
-            document.getElementById('analytics-total-users-card')?.addEventListener('click', () => {
-                window.setAdminActiveView('users');
-                showAdminUsersPage();
-            });
-            document.getElementById('analytics-new-members-card')?.addEventListener('click', () => {
-                window.setAdminActiveView('users');
-                showAdminUsersPageWithFilter('new_members');
-            });
-            document.getElementById('analytics-pending-withdrawals-card')?.addEventListener('click', () => {
-                window.setAdminActiveView('withdrawals');
-                showAdminWithdrawalsPage();
-            });
-            document.getElementById('analytics-minus-balance-card')?.addEventListener('click', () => {
-                window.setAdminActiveView('users');
-                showAdminUsersPageWithFilter('minus_balance');
-            });
-            document.getElementById('analytics-total-funds-card')?.addEventListener('click', () => {
-                window.setAdminActiveView('users');
-                showAdminUsersPage();
-            });
-            document.getElementById('analytics-gift-cards-card')?.addEventListener('click', () => {
-                window.setAdminActiveView('gift_codes');
-                showAdminGiftCodesPage();
-            });
         };
 
 const isAdminReviewTask = (task = {}) => getAdminTaskFamily(task) === 'review';
