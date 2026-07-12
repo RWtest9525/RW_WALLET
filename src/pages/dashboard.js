@@ -2475,11 +2475,11 @@ const showUserTaskDetailsPage = async (taskId) => {
                         <div class="relative rounded-2xl bg-indigo-50/30 dark:bg-indigo-950/20 border border-indigo-100 dark:border-indigo-900/50 p-4 pr-10 text-left mt-3">
                             <p id="task-assigned-review-text" class="text-sm font-semibold text-slate-800 dark:text-slate-200 italic leading-relaxed">"${escapeHtml(initialComment)}"</p>
                             <button type="button" id="task-copy-icon-btn" class="absolute right-3.5 top-1/2 -translate-y-1/2 text-indigo-600 dark:text-indigo-400 hover:opacity-85 transition">
-                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16h8M8 12h8m-7 8h6a2 2 0 0 0 2-2V7l-5-5H9a2 2 0 0 0-2 2v16z"></path></svg>
+                                <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"></path></svg>
                             </button>
                         </div>
                         <button type="button" id="task-copy-review-btn" class="mt-3 flex w-full items-center justify-center gap-2 rounded-2xl border-2 border-indigo-600 dark:border-indigo-400 bg-transparent text-indigo-600 dark:text-indigo-400 font-extrabold tracking-wide px-4 py-3.5 text-xs uppercase hover:bg-indigo-50/50 dark:hover:bg-indigo-950/20 transition-all active:scale-[0.98]">
-                            <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16h8M8 12h8m-7 8h6a2 2 0 0 0 2-2V7l-5-5H9a2 2 0 0 0-2 2v16z"></path></svg>
+                            <svg class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"></path></svg>
                             Copy Review
                         </button>
                     </div>
@@ -2521,11 +2521,11 @@ const showUserTaskDetailsPage = async (taskId) => {
                         <button class="page-back-btn rounded-full p-2 text-slate-900 dark:text-white hover:bg-slate-100 dark:hover:bg-gray-700 transition">
                             <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 12H5m7 7-7-7 7-7"></path></svg>
                         </button>
-                        <h2 class="text-base font-black uppercase text-slate-950 dark:text-white tracking-wider">Mission</h2>
+                        <div class="flex flex-col text-left">
+                            <h2 class="text-xs font-black uppercase text-slate-950 dark:text-white tracking-wider leading-none">Mission</h2>
+                            <span class="text-[9px] font-bold text-gray-400 dark:text-gray-500 mt-1 select-all">ID: ${escapeHtml(taskId)}</span>
+                        </div>
                     </div>
-                    <span class="h-9 w-9 overflow-hidden rounded-full bg-slate-100 dark:bg-slate-700 shadow-inner">
-                        <img src="${escapeHtml(image)}" alt="${escapeHtml(appName)}" class="h-full w-full object-cover" onerror="this.src='https://cdn-icons-png.flaticon.com/512/3176/3176366.png'">
-                    </span>
                 </header>
                 <div class="px-4 pb-28">
                     <div class="mx-auto max-w-xl space-y-4">
