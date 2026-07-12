@@ -18,6 +18,8 @@ window.showAdminSubmissionDetailModal = function(index) {
             const rawOcrText = s.ocr_extracted_text || s.ocrExtractedText || '';
             const extractedReviewText = window.extractActualReviewText(rawOcrText, gmailName);
 
+            const isReviewTask = !!(s.assigned_comment && String(s.assigned_comment).trim().length > 0);
+
             let liveBadge = '';
             if (s.scraper_status === 'live_confirmed') {
                 liveBadge = '<span class="rounded-full bg-emerald-100 dark:bg-emerald-900/30 px-2 py-0.5 text-[9px] font-black text-emerald-700 dark:text-emerald-300">🟢 LIVE</span>';
@@ -33,31 +35,33 @@ window.showAdminSubmissionDetailModal = function(index) {
 
             const modal = document.createElement('div');
             modal.id = 'admin-detail-modal';
-            modal.className = 'fixed inset-0 z-[9990] flex items-center justify-center bg-black/85 backdrop-blur-sm p-4 transition-all duration-300';
+            modal.className = 'fixed inset-0 z-[9990] flex items-center justify-center bg-black/85 backdrop-blur-sm p-3 transition-all duration-300';
             
             modal.innerHTML = `
                 <!-- Prev Button -->
-                ${index > 0 ? `<button id="modal-prev-btn" class="absolute left-2 md:left-6 top-1/2 -translate-y-1/2 h-12 w-12 flex items-center justify-center rounded-full bg-gray-800/60 hover:bg-gray-800 text-white hover:scale-105 active:scale-95 transition shrink-0 z-50 text-xl font-bold">‹</button>` : ''}
+                ${index > 0 ? `<button id="modal-prev-btn" class="absolute left-1 md:left-6 top-1/2 -translate-y-1/2 h-10 w-10 md:h-12 md:w-12 flex items-center justify-center rounded-full bg-gray-800/60 hover:bg-gray-800 text-white hover:scale-105 active:scale-95 transition shrink-0 z-50 text-xl font-bold">‹</button>` : ''}
 
                 <!-- Container -->
-                <div class="relative w-full max-w-2xl bg-white dark:bg-gray-900 rounded-3xl border border-gray-150 dark:border-gray-850 shadow-2xl overflow-y-auto max-h-[90vh]">
+                <div class="relative w-full max-w-2xl bg-white dark:bg-gray-900 rounded-3xl border border-gray-150 dark:border-gray-850 shadow-2xl overflow-y-auto max-h-[95vh] md:max-h-[90vh]">
                     <!-- Close Button -->
-                    <button id="modal-close-btn" class="absolute top-4 right-4 z-50 h-8 w-8 flex items-center justify-center rounded-full bg-black/40 hover:bg-black/60 text-white text-sm font-bold transition">✕</button>
+                    <button id="modal-close-btn" class="absolute top-3 right-3 z-50 h-7 w-7 flex items-center justify-center rounded-full bg-black/40 hover:bg-black/60 text-white text-xs font-bold transition">✕</button>
 
                     <!-- Left: Image -->
-                    <div class="w-full bg-gray-950 flex items-center justify-center p-4 relative select-none">
-                        <img id="admin-detail-screenshot-img" src="${escapeHtml(s.screenshot_url)}" alt="Screenshot" class="max-w-full max-h-[60vh] object-contain rounded-xl border border-gray-800 shadow-lg cursor-zoom-in">
+                    <div class="w-full bg-gray-950 flex items-center justify-center p-3 md:p-4 relative select-none">
+                        <img id="admin-detail-screenshot-img" src="${escapeHtml(s.screenshot_url)}" alt="Screenshot" class="max-w-full max-h-[30vh] md:max-h-[60vh] object-contain rounded-xl border border-gray-800 shadow-lg cursor-zoom-in">
                     </div>
 
                     <!-- Right: Info Panel -->
-                    <div class="w-full p-5 flex flex-col justify-between border-t border-gray-150 dark:border-gray-800 bg-gray-50 dark:bg-gray-900/50">
-                        <div class="space-y-4">
-                            <!-- Header Info: Status, Gmail Name, Mobile No, Submitted Time -->
-                            <div class="text-left bg-white dark:bg-gray-855 p-4 rounded-2xl border border-gray-155 dark:border-gray-800 shadow-sm">
+                    <div class="w-full p-4 md:p-5 flex flex-col justify-between border-t border-gray-150 dark:border-gray-800 bg-gray-50 dark:bg-gray-900/50">
+                        <div class="space-y-3.5">
+                            <!-- Header Info: Status, Gmail Name/Mobile, Submitted Time -->
+                            <div class="text-left bg-white dark:bg-gray-855 p-3 md:p-4 rounded-2xl border border-gray-155 dark:border-gray-800 shadow-sm">
                                 <div class="flex items-center justify-between">
                                     <span class="rounded-xl bg-${statusColor}-500 text-white font-extrabold px-3 py-1 text-[10px] tracking-wider uppercase shadow-sm">${statusLabel}</span>
                                     ${payoutBadge}
                                 </div>
+                                
+                                ${isReviewTask ? `
                                 <div class="mt-3 flex items-center gap-2">
                                     ${gmailLogoUrl ? `<img src="${escapeHtml(gmailLogoUrl)}" class="h-9 w-9 rounded-full object-cover border border-gray-200 dark:border-gray-700 shrink-0">` : `<span class="flex h-9 w-9 items-center justify-center rounded-full bg-orange-100 dark:bg-orange-950 text-xs font-bold text-orange-600 shrink-0">G</span>`}
                                     <div class="min-w-0 flex-1">
@@ -65,19 +69,27 @@ window.showAdminSubmissionDetailModal = function(index) {
                                         <h3 class="text-base font-extrabold text-gray-900 dark:text-white truncate">${escapeHtml(gmailName || 'Unknown User')}</h3>
                                     </div>
                                 </div>
-                                <div class="mt-3 pt-3 border-t border-gray-100 dark:border-gray-750 flex items-center justify-between text-[11px]">
+                                ` : `
+                                <div class="mt-3">
+                                    <p class="text-[9px] font-black uppercase text-gray-400 tracking-wider">Task Info</p>
+                                    <h3 class="text-sm font-extrabold text-gray-900 dark:text-white truncate">${escapeHtml(s.app_name || 'Screenshot Task')}</h3>
+                                </div>
+                                `}
+
+                                <div class="mt-3 pt-3 border-t border-gray-100 dark:border-gray-755 flex items-center justify-between text-[11px]">
                                     <span class="font-bold text-orange-500">📱 ${escapeHtml(s.user_mobile || 'No mobile registered')}</span>
                                     <span class="text-gray-450 font-semibold">${timeStr}</span>
                                 </div>
                             </div>
 
+                            ${isReviewTask ? `
                             <!-- Comment -->
-                            <div class="rounded-2xl bg-white dark:bg-gray-855 p-4 border border-gray-150 dark:border-gray-800 shadow-sm text-left">
+                            <div class="rounded-2xl bg-white dark:bg-gray-855 p-3 md:p-4 border border-gray-150 dark:border-gray-800 shadow-sm text-left">
                                 <p class="text-[9px] font-black uppercase text-gray-400 tracking-wider">Assigned Comment</p>
-                                <p class="mt-1.5 text-xs font-bold text-gray-800 dark:text-gray-250 italic">"${escapeHtml(s.assigned_comment || '')}"</p>
+                                <p class="mt-1.5 text-xs font-bold text-gray-800 dark:text-gray-255 italic">"${escapeHtml(s.assigned_comment || '')}"</p>
                             </div>
                             <!-- Screenshot Review Text -->
-                            <div class="rounded-2xl bg-white dark:bg-gray-855 p-4 border border-gray-150 dark:border-gray-800 shadow-sm text-left">
+                            <div class="rounded-2xl bg-white dark:bg-gray-855 p-3 md:p-4 border border-gray-150 dark:border-gray-800 shadow-sm text-left">
                                 <p class="text-[9px] font-black uppercase text-purple-600 dark:text-purple-400 tracking-wider">Screenshot Review Text</p>
                                 <p class="mt-1.5 text-xs font-extrabold text-gray-900 dark:text-white leading-relaxed bg-purple-50/50 dark:bg-purple-950/10 p-3 rounded-xl border border-purple-100/80 dark:border-purple-900/50">
                                     ${escapeHtml(extractedReviewText || 'Not found in screenshot')}
@@ -89,10 +101,11 @@ window.showAdminSubmissionDetailModal = function(index) {
                                 <div class="flex items-center gap-1"><span>Live check:</span> ${liveBadge}</div>
                                 <div class="flex items-center gap-1"><span>OCR:</span> ${ocrBadge}</div>
                             </div>
+                            ` : ''}
                         </div>
 
                         <!-- Action Buttons -->
-                        <div class="mt-6 border-t border-gray-150 dark:border-gray-800 pt-4 space-y-2">
+                        <div class="mt-5 border-t border-gray-150 dark:border-gray-800 pt-3.5 space-y-2">
                             <div class="grid grid-cols-2 gap-2">
                                 ${s.manual_status === 'pending' ? `
                                     <button id="modal-approve-btn" class="rounded-xl bg-green-600 py-2.5 text-xs font-black text-white hover:bg-green-700 active:scale-98 transition">✅ Approve</button>
@@ -102,17 +115,21 @@ window.showAdminSubmissionDetailModal = function(index) {
                                     <button id="modal-pay-btn" class="col-span-2 rounded-xl bg-cyan-600 py-2.5 text-xs font-black text-white hover:bg-cyan-700 active:scale-98 transition">💰 Pay Now</button>
                                 ` : ''}
                             </div>
+                            
+                            ${isReviewTask ? `
                             <div class="grid grid-cols-2 gap-2">
                                 <button id="modal-ocr-btn" class="rounded-xl bg-purple-600 py-2 text-xs font-black text-white hover:bg-purple-700 active:scale-98 transition">🤖 OCR</button>
                                 <button id="modal-check-btn" class="rounded-xl bg-indigo-600 py-2 text-xs font-black text-white hover:bg-indigo-700 active:scale-98 transition">🔎 Check</button>
                             </div>
+                            ` : ''}
+                            
                             <button id="modal-download-jpg-btn" class="w-full rounded-xl bg-blue-600 py-2.5 text-xs font-black text-white hover:bg-blue-700 active:scale-98 transition">📥 Download JPG</button>
                         </div>
                     </div>
                 </div>
 
                 <!-- Next Button -->
-                ${index < list.length - 1 ? `<button id="modal-next-btn" class="absolute right-2 md:right-6 top-1/2 -translate-y-1/2 h-12 w-12 flex items-center justify-center rounded-full bg-gray-800/60 hover:bg-gray-800 text-white hover:scale-105 active:scale-95 transition shrink-0 z-50 text-xl font-bold">›</button>` : ''}
+                ${index < list.length - 1 ? `<button id="modal-next-btn" class="absolute right-1 md:right-6 top-1/2 -translate-y-1/2 h-10 w-10 md:h-12 md:w-12 flex items-center justify-center rounded-full bg-gray-800/60 hover:bg-gray-800 text-white hover:scale-105 active:scale-95 transition shrink-0 z-50 text-xl font-bold">›</button>` : ''}
             `;
 
             document.body.appendChild(modal);
@@ -698,54 +715,105 @@ const renderAdminSubmissions = () => {
                 <!-- Task Wise Overview Table -->
                 <section class="space-y-4 pt-2">
                     <h3 class="text-base font-black text-gray-900 dark:text-white">Task Wise Overview</h3>
-                    <div class="overflow-x-auto border border-gray-100 dark:border-gray-700 rounded-2xl">
-                        <table class="w-full text-left text-xs border-collapse">
-                            <thead>
-                                <tr class="bg-gray-50/55 dark:bg-gray-800/40 border-b border-gray-100 dark:border-gray-700 text-gray-400 dark:text-gray-500 uppercase font-black text-[9px] tracking-wider">
-                                    <th class="py-3.5 px-4">Task Name</th>
-                                    <th class="py-3.5 px-3 text-center">Total Submissions</th>
-                                    <th class="py-3.5 px-3 text-center">OCR Passed</th>
-                                    <th class="py-3.5 px-3 text-center">Pending Verify</th>
-                                    <th class="py-3.5 px-3 text-center">Approved</th>
-                                    <th class="py-3.5 px-3 text-center">Rejected</th>
-                                    <th class="py-3.5 px-4 text-right">Action</th>
-                                </tr>
-                            </thead>
-                            <tbody class="divide-y divide-gray-100 dark:divide-gray-700">
-                                ${taskRows.length === 0 ? `
-                                    <tr>
-                                        <td colspan="7" class="py-8 text-center text-gray-400 font-bold">No tasks available.</td>
+                    <div class="border border-gray-100 dark:border-gray-700 rounded-2xl overflow-hidden bg-white dark:bg-gray-800 shadow-sm">
+                        <!-- Desktop Table View -->
+                        <div class="hidden md:block overflow-x-auto">
+                            <table class="w-full text-left text-xs border-collapse">
+                                <thead>
+                                    <tr class="bg-gray-50/55 dark:bg-gray-800/40 border-b border-gray-100 dark:border-gray-700 text-gray-400 dark:text-gray-500 uppercase font-black text-[9px] tracking-wider">
+                                        <th class="py-3.5 px-4">Task Name</th>
+                                        <th class="py-3.5 px-3 text-center">Total Submissions</th>
+                                        <th class="py-3.5 px-3 text-center">OCR Passed</th>
+                                        <th class="py-3.5 px-3 text-center">Pending Verify</th>
+                                        <th class="py-3.5 px-3 text-center">Approved</th>
+                                        <th class="py-3.5 px-3 text-center">Rejected</th>
+                                        <th class="py-3.5 px-4 text-right">Action</th>
                                     </tr>
-                                ` : taskRows.map(r => {
-                                    return `
-                                        <tr class="hover:bg-gray-50/30 dark:hover:bg-gray-800/20 transition">
-                                            <td class="py-3.5 px-4">
-                                                <div class="flex items-center gap-3">
-                                                    <!-- App Logo -->
-                                                    <span class="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-gray-150 bg-white p-1.5 dark:border-gray-700 dark:bg-gray-900 shadow-sm">
-                                                        <img src="${escapeHtml(r.logo || 'https://cdn-icons-png.flaticon.com/512/2659/2659360.png')}" alt="App logo" class="h-full w-full object-contain">
-                                                    </span>
-                                                    <div class="min-w-0">
-                                                        <p class="font-extrabold text-gray-900 dark:text-white text-sm truncate max-w-[180px]">${escapeHtml(getCleanAppName(r.name))}</p>
-                                                        <p class="text-[9px] text-gray-400 font-semibold mt-0.5">ID: ${escapeHtml(r.id)}</p>
-                                                    </div>
-                                                </div>
-                                            </td>
-                                            <td class="py-3.5 px-3 text-center font-bold text-gray-800 dark:text-gray-200">${r.total}</td>
-                                            <td class="py-3.5 px-3 text-center font-bold text-gray-800 dark:text-gray-200">${r.ocrPassed}</td>
-                                            <td class="py-3.5 px-3 text-center font-bold text-gray-800 dark:text-gray-200">${r.pending}</td>
-                                            <td class="py-3.5 px-3 text-center font-bold text-gray-800 dark:text-gray-200">${r.approved}</td>
-                                            <td class="py-3.5 px-3 text-center font-bold text-gray-800 dark:text-gray-200">${r.rejected}</td>
-                                            <td class="py-3.5 px-4 text-right">
-                                                <button type="button" data-action="view-task-submissions" data-taskid="${r.id}" class="rounded-xl bg-blue-50 hover:bg-blue-100 dark:bg-blue-900/20 dark:text-blue-400 text-blue-600 font-black px-4 py-2 text-xs transition active:scale-95 border border-blue-100/50 dark:border-blue-900/35" style="outline: none;">
-                                                    View
-                                                </button>
-                                            </td>
+                                </thead>
+                                <tbody class="divide-y divide-gray-100 dark:divide-gray-700">
+                                    ${taskRows.length === 0 ? `
+                                        <tr>
+                                            <td colspan="7" class="py-8 text-center text-gray-400 font-bold">No tasks available.</td>
                                         </tr>
-                                    `;
-                                }).join('')}
-                            </tbody>
-                        </table>
+                                    ` : taskRows.map(r => {
+                                        return `
+                                            <tr class="hover:bg-gray-50/30 dark:hover:bg-gray-800/20 transition">
+                                                <td class="py-3.5 px-4">
+                                                    <div class="flex items-center gap-3">
+                                                        <!-- App Logo -->
+                                                        <span class="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-gray-150 bg-white p-1.5 dark:border-gray-700 dark:bg-gray-900 shadow-sm">
+                                                            <img src="${escapeHtml(r.logo || 'https://cdn-icons-png.flaticon.com/512/2659/2659360.png')}" alt="App logo" class="h-full w-full object-contain">
+                                                        </span>
+                                                        <div class="min-w-0">
+                                                            <p class="font-extrabold text-gray-900 dark:text-white text-sm truncate max-w-[180px]">${escapeHtml(getCleanAppName(r.name))}</p>
+                                                            <p class="text-[9px] text-gray-400 font-semibold mt-0.5">ID: ${escapeHtml(r.id)}</p>
+                                                        </div>
+                                                    </div>
+                                                </td>
+                                                <td class="py-3.5 px-3 text-center font-bold text-gray-800 dark:text-gray-200">${r.total}</td>
+                                                <td class="py-3.5 px-3 text-center font-bold text-gray-800 dark:text-gray-200">${r.ocrPassed}</td>
+                                                <td class="py-3.5 px-3 text-center font-bold text-gray-800 dark:text-gray-200">${r.pending}</td>
+                                                <td class="py-3.5 px-3 text-center font-bold text-gray-800 dark:text-gray-200">${r.approved}</td>
+                                                <td class="py-3.5 px-3 text-center font-bold text-gray-800 dark:text-gray-200">${r.rejected}</td>
+                                                <td class="py-3.5 px-4 text-right">
+                                                    <button type="button" data-action="view-task-submissions" data-taskid="${r.id}" class="rounded-xl bg-blue-50 hover:bg-blue-100 dark:bg-blue-900/20 dark:text-blue-400 text-blue-600 font-black px-4 py-2 text-xs transition active:scale-95 border border-blue-100/50 dark:border-blue-900/35" style="outline: none;">
+                                                        View
+                                                    </button>
+                                                </td>
+                                            </tr>
+                                        `;
+                                    }).join('')}
+                                </tbody>
+                            </table>
+                        </div>
+
+                        <!-- Mobile Card View -->
+                        <div class="block md:hidden divide-y divide-gray-100 dark:divide-gray-700 bg-white dark:bg-gray-800">
+                            ${taskRows.length === 0 ? `
+                                <div class="py-8 text-center text-gray-400 font-bold">No tasks available.</div>
+                            ` : taskRows.map(r => {
+                                return `
+                                    <div class="p-4 space-y-3.5 text-left">
+                                        <div class="flex items-center justify-between gap-3">
+                                            <div class="flex items-center gap-3 min-w-0">
+                                                <span class="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-gray-150 bg-white p-1.5 dark:border-gray-700 dark:bg-gray-900 shadow-sm">
+                                                    <img src="${escapeHtml(r.logo || 'https://cdn-icons-png.flaticon.com/512/2659/2659360.png')}" alt="App logo" class="h-full w-full object-contain">
+                                                </span>
+                                                <div class="min-w-0">
+                                                    <p class="font-extrabold text-gray-900 dark:text-white text-sm truncate max-w-[150px]">${escapeHtml(getCleanAppName(r.name))}</p>
+                                                    <p class="text-[9px] text-gray-400 font-semibold mt-0.5">ID: ${escapeHtml(r.id)}</p>
+                                                </div>
+                                            </div>
+                                            <button type="button" data-action="view-task-submissions" data-taskid="${r.id}" class="rounded-xl bg-blue-50 hover:bg-blue-100 dark:bg-blue-900/20 dark:text-blue-400 text-blue-600 font-black px-4 py-2 text-xs transition active:scale-95 border border-blue-100/50 dark:border-blue-900/35" style="outline: none;">
+                                                View
+                                            </button>
+                                        </div>
+                                        <div class="grid grid-cols-5 gap-1.5 text-center text-[10px]">
+                                            <div class="bg-gray-50 dark:bg-gray-900/50 p-1.5 rounded-lg border border-gray-100 dark:border-gray-800">
+                                                <span class="block font-black text-gray-850 dark:text-gray-200 text-xs">${r.total}</span>
+                                                <span class="text-[8px] font-bold text-gray-400 uppercase tracking-wide">Total</span>
+                                            </div>
+                                            <div class="bg-emerald-50/50 dark:bg-emerald-950/20 p-1.5 rounded-lg border border-emerald-100/10 dark:border-emerald-900/10">
+                                                <span class="block font-black text-emerald-600 dark:text-emerald-400 text-xs">${r.ocrPassed}</span>
+                                                <span class="text-[8px] font-bold text-emerald-500/70 uppercase tracking-wide">OCR</span>
+                                            </div>
+                                            <div class="bg-amber-50/50 dark:bg-amber-950/20 p-1.5 rounded-lg border border-amber-100/10 dark:border-amber-900/10">
+                                                <span class="block font-black text-amber-600 dark:text-amber-400 text-xs">${r.pending}</span>
+                                                <span class="text-[8px] font-bold text-amber-500/70 uppercase tracking-wide">Pend</span>
+                                            </div>
+                                            <div class="bg-green-50/50 dark:bg-green-950/20 p-1.5 rounded-lg border border-green-100/10 dark:border-green-900/10">
+                                                <span class="block font-black text-green-600 dark:text-green-400 text-xs">${r.approved}</span>
+                                                <span class="text-[8px] font-bold text-green-500/70 uppercase tracking-wide">Appr</span>
+                                            </div>
+                                            <div class="bg-red-50/50 dark:bg-red-950/20 p-1.5 rounded-lg border border-red-100/10 dark:border-red-900/10">
+                                                <span class="block font-black text-red-600 dark:text-red-400 text-xs">${r.rejected}</span>
+                                                <span class="text-[8px] font-bold text-red-500/70 uppercase tracking-wide">Rej</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                `;
+                            }).join('')}
+                        </div>
                     </div>
                 </section>
 
