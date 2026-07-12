@@ -1470,14 +1470,14 @@ const showUserTaskPage = () => {
                                     </div>
                                 </div>
 
-                                <!-- Available Comments Column -->
+                                <!-- Used Comments Column -->
                                 <div class="flex items-center gap-2 border-l border-slate-100 dark:border-slate-800/80 pl-2">
                                     <span class="p-1.5 rounded-lg bg-${acc.color}-500/10 ${acc.textClass} shrink-0">
-                                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"></path></svg>
+                                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2M9 5a2 2 0 0 0 2 2h2a2 2 0 0 0 2-2M9 5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01"></path></svg>
                                     </span>
                                     <div class="min-w-0">
-                                        <p class="text-[8px] font-black text-gray-400 uppercase tracking-wider leading-none">Available</p>
-                                        <p class="text-[11px] font-bold text-slate-800 dark:text-slate-200 mt-1 truncate">${availableComments}</p>
+                                        <p class="text-[8px] font-black text-gray-400 uppercase tracking-wider leading-none">Used</p>
+                                        <p class="text-[11px] font-bold text-slate-800 dark:text-slate-200 mt-1 truncate">${submissionsCount}/${limitVal}</p>
                                     </div>
                                 </div>
                             </div>
