@@ -2438,36 +2438,31 @@ const showUserTaskDetailsPage = async (taskId) => {
                                 </div>
                             </div>
                             
-                            <!-- Large glowing Timer badge -->
-                            <div class="flex flex-col items-start md:items-end shrink-0 gap-1.5">
+                            <!-- Large glowing Timer badge + CTA Button -->
+                            <div class="flex flex-col items-start md:items-end shrink-0 gap-2 w-full md:w-auto">
                                 <span class="text-[9px] font-black uppercase text-slate-400 tracking-widest pl-1 md:pr-1">Remaining Time</span>
-                                <div id="task-card-timer-container" class="timer-pulse-glow bg-amber-500/10 dark:bg-amber-500/20 border-2 border-amber-500 rounded-2xl px-4 py-2 flex items-center gap-2 text-base md:text-lg font-black text-amber-600 dark:text-amber-400 shadow-[0_0_12px_rgba(245,158,11,0.4)] transition-all">
+                                <div id="task-card-timer-container" class="timer-pulse-glow bg-amber-500/10 dark:bg-amber-500/20 border-2 border-amber-500 rounded-2xl px-4 py-2 flex items-center gap-2 text-base md:text-lg font-black text-amber-600 dark:text-amber-400 shadow-[0_0_12px_rgba(245,158,11,0.4)] transition-all w-full md:w-auto justify-center md:justify-end">
                                     <span class="h-2.5 w-2.5 rounded-full bg-amber-500 blink-indicator shrink-0"></span>
                                     <span id="task-card-timer" class="font-mono tracking-wider">--:--</span>
                                 </div>
+                                <button id="task-download-btn" class="flex items-center justify-center gap-1.5 rounded-xl bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 text-white font-black tracking-wide px-4 py-2 text-[10px] uppercase shadow-sm transition-all active:scale-[0.98] w-full md:w-auto mt-1">
+                                    <svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-4m-1-9h-6m6 0v6m0-6L10 12"></path></svg>
+                                    ${ctaText}
+                                </button>
                             </div>
                         </div>
 
                         <!-- Main Sections -->
                         <div class="space-y-4">
-                            <!-- Step 1: Get App -->
+                            <!-- Step 1: Copy & Review -->
                             <div class="bg-white dark:bg-gray-800 rounded-3xl p-5 border border-gray-150 dark:border-gray-700/80 shadow-md">
-                                <p class="mb-3.5 text-[10px] font-black uppercase tracking-wider text-gray-400 flex items-center gap-2"><span class="flex h-5 w-5 items-center justify-center rounded-full bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-white text-[9px] font-black">1</span> Get App</p>
-                                <button id="task-download-btn" class="flex w-full items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 text-white font-extrabold tracking-wide px-4 py-3.5 text-xs uppercase hover:shadow-lg hover:shadow-indigo-500/20 hover:scale-[1.01] active:scale-[0.99] transition-all duration-200 shadow-md">
-                                    <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-4m-1-9h-6m6 0v6m0-6L10 12"></path></svg>
-                                    ${ctaText}
-                                </button>
-                            </div>
-
-                            <!-- Step 2: Copy & Review -->
-                            <div class="bg-white dark:bg-gray-800 rounded-3xl p-5 border border-gray-150 dark:border-gray-700/80 shadow-md">
-                                <p class="mb-3.5 text-[10px] font-black uppercase tracking-wider text-gray-400 flex items-center gap-2"><span class="flex h-5 w-5 items-center justify-center rounded-full bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-white text-[9px] font-black">2</span> Copy & Review</p>
+                                <p class="mb-3.5 text-[10px] font-black uppercase tracking-wider text-gray-400 flex items-center gap-2"><span class="flex h-5 w-5 items-center justify-center rounded-full bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-white text-[9px] font-black">1</span> Copy & Review</p>
                                 ${step2Html}
                             </div>
 
-                            <!-- Step 3: Upload Proof -->
+                            <!-- Step 2: Upload Proof -->
                             <div class="bg-white dark:bg-gray-800 rounded-3xl p-5 border border-gray-150 dark:border-gray-700/80 shadow-md">
-                                <p class="mb-3.5 text-[10px] font-black uppercase tracking-wider text-gray-400 flex items-center gap-2"><span class="flex h-5 w-5 items-center justify-center rounded-full bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-white text-[9px] font-black">3</span> Upload Proof</p>
+                                <p class="mb-3.5 text-[10px] font-black uppercase tracking-wider text-gray-400 flex items-center gap-2"><span class="flex h-5 w-5 items-center justify-center rounded-full bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-white text-[9px] font-black">2</span> Upload Proof</p>
                                 
                                 <label class="flex min-h-24 cursor-pointer flex-col items-center justify-center rounded-2xl border-2 border-dashed border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900/40 p-4 text-center hover:bg-slate-100/50 dark:hover:bg-slate-900/60 transition">
                                     <input id="task-proof-input" type="file" accept="image/*" class="hidden" ${isBulk ? 'multiple' : ''}>
