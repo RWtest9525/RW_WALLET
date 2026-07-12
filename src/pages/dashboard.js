@@ -2436,6 +2436,15 @@ const showUserTaskDetailsPage = async (taskId) => {
                 return `${numDays} Days Payout`;
             };
             const payoutDelayText = getPayoutDelayText(task);
+            const subtype = task.subtype || task.taskSubtype || '';
+            const acc = getTaskAccent(subtype);
+
+            const taskTypeLabel = (subtype === 'app_review' || subtype === 'app_download_task') ? 'Play Store Review' : (subtype === 'map_review' ? 'Map Review' : 'Screenshot Task');
+            const platformLabel = (subtype === 'app_review' || subtype === 'app_download_task') ? 'Play Store App Review' : (subtype === 'map_review' ? 'Google Maps Place Review' : 'Screenshot + Review');
+            const platformLogo = (subtype === 'app_review' || subtype === 'app_download_task') ? PLAY_STORE_LOGO_URL : (subtype === 'map_review' ? 'https://cdn-icons-png.flaticon.com/512/854/854878.png' : 'https://cdn-icons-png.flaticon.com/512/4187/4187336.png');
+
+            const payoutVal = payoutDelayText.replace(' Payout', '');
+            const approvalVal = payoutVal === 'Instant' ? 'Instant' : `${payoutVal} Later`;
 
             let step2Html = '';
             if (isBulk) {
@@ -2460,17 +2469,21 @@ const showUserTaskDetailsPage = async (taskId) => {
                 `;
             } else {
                 step2Html = `
-                    <div class="rounded-2xl border border-slate-200 bg-slate-50 p-5 text-center dark:border-slate-700 dark:bg-slate-900 shadow-sm">
-                        <p id="task-assigned-review-text" class="mb-4 text-sm font-semibold italic text-slate-950 dark:text-white leading-relaxed">"${escapeHtml(initialComment)}"</p>
-                        <button id="task-copy-review-btn" class="flex w-full items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-extrabold tracking-wide px-4 py-3.5 text-xs uppercase hover:shadow-lg hover:shadow-emerald-500/20 hover:scale-[1.01] active:scale-[0.99] transition-all duration-200 shadow-md">
+                    <div class="space-y-3.5">
+                        <div class="relative rounded-2xl bg-indigo-50/30 dark:bg-indigo-950/20 border border-indigo-100 dark:border-indigo-900/50 p-4 pr-10 text-left mt-3">
+                            <p id="task-assigned-review-text" class="text-sm font-semibold text-slate-800 dark:text-slate-200 italic leading-relaxed">"${escapeHtml(initialComment)}"</p>
+                            <button type="button" id="task-copy-icon-btn" class="absolute right-3.5 top-1/2 -translate-y-1/2 text-indigo-600 dark:text-indigo-400 hover:opacity-85 transition">
+                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16h8M8 12h8m-7 8h6a2 2 0 0 0 2-2V7l-5-5H9a2 2 0 0 0-2 2v16z"></path></svg>
+                            </button>
+                        </div>
+                        <button type="button" id="task-copy-review-btn" class="mt-3 flex w-full items-center justify-center gap-2 rounded-2xl border-2 border-indigo-600 dark:border-indigo-400 bg-transparent text-indigo-600 dark:text-indigo-400 font-extrabold tracking-wide px-4 py-3.5 text-xs uppercase hover:bg-indigo-50/50 dark:hover:bg-indigo-950/20 transition-all active:scale-[0.98]">
                             <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16h8M8 12h8m-7 8h6a2 2 0 0 0 2-2V7l-5-5H9a2 2 0 0 0-2 2v16z"></path></svg>
-                            Copy Assigned Review
+                            Copy Review
                         </button>
                     </div>
                 `;
             }
 
-            const subtype = task.subtype || task.taskSubtype || '';
             const ctaText = (subtype === 'app_review' || subtype === 'app_download_task') ? 'Install App' : 'Open Link';
             const categoryLabel = (subtype === 'app_review' || subtype === 'app_download_task') ? 'Play Store App Review' : (subtype === 'map_review' ? 'Google Maps Place Review' : 'Task Mission');
 
@@ -2478,12 +2491,12 @@ const showUserTaskDetailsPage = async (taskId) => {
                 <style>
                     @keyframes timerPulse {
                         0%, 100% {
-                            border-color: rgba(245, 158, 11, 0.4);
-                            box-shadow: 0 0 4px rgba(245, 158, 11, 0.2);
+                            border-color: rgba(255, 255, 255, 0.4);
+                            box-shadow: 0 0 4px rgba(255, 255, 255, 0.2);
                         }
                         50% {
-                            border-color: rgba(245, 158, 11, 1);
-                            box-shadow: 0 0 16px rgba(245, 158, 11, 0.6);
+                            border-color: rgba(255, 255, 255, 1);
+                            box-shadow: 0 0 16px rgba(255, 255, 255, 0.6);
                             transform: scale(1.02);
                         }
                     }
@@ -2493,24 +2506,12 @@ const showUserTaskDetailsPage = async (taskId) => {
                     }
                     .timer-pulse-glow {
                         animation: timerPulse 2s infinite ease-in-out;
-                        border-width: 2px;
+                        border-width: 1px;
                         border-style: solid;
                         transition: all 0.2s ease;
                     }
                     .blink-indicator {
                         animation: blinkText 1.5s infinite ease-in-out;
-                    }
-                    .premium-card {
-                        background: linear-gradient(135deg, rgba(255, 255, 255, 0.9) 0%, rgba(248, 250, 252, 0.8) 100%);
-                        backdrop-filter: blur(16px);
-                        -webkit-backdrop-filter: blur(16px);
-                        border: 1px solid rgba(226, 232, 240, 0.8);
-                        box-shadow: 0 10px 30px -10px rgba(0, 0, 0, 0.05), 0 1px 3px rgba(0, 0, 0, 0.02);
-                    }
-                    .dark .premium-card {
-                        background: linear-gradient(135deg, rgba(30, 41, 59, 0.8) 0%, rgba(15, 23, 42, 0.7) 100%);
-                        border: 1px solid rgba(71, 85, 105, 0.3);
-                        box-shadow: 0 10px 30px -10px rgba(0, 0, 0, 0.3), 0 1px 3px rgba(0, 0, 0, 0.1);
                     }
                 </style>
                 <header class="mb-4 flex items-center justify-between bg-white/80 dark:bg-gray-800/80 backdrop-blur px-4 py-3 shadow-sm page-header-fixed z-50">
@@ -2526,65 +2527,151 @@ const showUserTaskDetailsPage = async (taskId) => {
                 </header>
                 <div class="px-4 pb-28">
                     <div class="mx-auto max-w-xl space-y-4">
-                        <!-- Premium Redesigned Task Card with ultra-visible Timer -->
-                        <div class="premium-card rounded-3xl p-5 flex flex-col md:flex-row md:items-center justify-between gap-4">
-                            <div class="flex items-center gap-4 min-w-0">
-                                <div class="h-16 w-16 overflow-hidden rounded-2xl bg-white dark:bg-slate-800 shadow-md shrink-0 border border-slate-100 dark:border-slate-700">
-                                    <img src="${escapeHtml(image)}" alt="${escapeHtml(appName)}" class="h-full w-full object-cover" onerror="this.src='https://cdn-icons-png.flaticon.com/512/3176/3176366.png'">
+                        <!-- Premium Redesigned Task Header Card -->
+                        <div class="bg-white dark:bg-slate-900 border border-slate-150 dark:border-slate-800/85 rounded-[1.75rem] overflow-hidden shadow-md flex flex-col gap-4 pb-4">
+                            <!-- Gradient Banner Header -->
+                            <div class="bg-gradient-to-r ${acc.bannerGradient} p-5 text-white flex items-center justify-between gap-4">
+                                <div class="flex items-center gap-4 min-w-0">
+                                    <!-- Logo -->
+                                    <div class="h-16 w-16 overflow-hidden rounded-2xl bg-white/20 backdrop-blur-md flex items-center justify-center shrink-0 border border-white/20 shadow-sm">
+                                        <img src="${escapeHtml(image)}" alt="${escapeHtml(appName)}" class="h-full w-full object-cover" onerror="this.src='https://cdn-icons-png.flaticon.com/512/3176/3176366.png'">
+                                    </div>
+                                    <!-- Title & Platform info -->
+                                    <div class="min-w-0 flex flex-col text-left">
+                                        <span class="inline-flex rounded-lg bg-white/20 backdrop-blur-md px-2.5 py-0.5 text-[9px] font-black uppercase tracking-wider w-fit text-white">
+                                            ${escapeHtml(taskTypeLabel)}
+                                        </span>
+                                        <h3 class="text-base md:text-lg font-black text-white mt-1.5 truncate pr-1 leading-tight">${escapeHtml(appName)}</h3>
+                                    </div>
                                 </div>
-                                <div class="min-w-0">
-                                    <span class="inline-flex rounded-lg bg-indigo-50 dark:bg-indigo-900/30 px-2 py-0.5 text-[9px] font-black uppercase text-indigo-600 dark:text-indigo-400 tracking-wider mb-1">${escapeHtml(categoryLabel)}</span>
-                                    <h3 class="text-base font-black text-slate-950 dark:text-white truncate pr-1">${escapeHtml(appName)}</h3>
-                                    
-                                    <!-- Badges Section below the name -->
-                                    <div class="flex flex-wrap gap-2 mt-2">
-                                        <!-- Reward Capsule -->
-                                        <div class="inline-flex items-center gap-1.5 rounded-xl bg-emerald-500/10 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 px-3 py-1 border border-emerald-500/20 text-xs font-black shadow-sm">
-                                            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
-                                            <span>Reward: ${formatCurrency(reward).replace('.00', '')}</span>
-                                        </div>
-                                        
-                                        <!-- Payout Delay Capsule -->
-                                        <div class="inline-flex items-center gap-1.5 rounded-xl bg-indigo-500/10 dark:bg-indigo-500/20 text-indigo-600 dark:text-indigo-400 px-3 py-1 border border-indigo-500/20 text-xs font-black shadow-sm">
-                                            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 2m6-2A9 9 0 113 12a9 9 0 0118 0z"></path></svg>
-                                            <span>${escapeHtml(payoutDelayText)}</span>
-                                        </div>
+                                
+                                <!-- Reward / Timer Right-Aligned -->
+                                <div class="flex flex-col items-end shrink-0 gap-1.5">
+                                    <div class="flex flex-col items-end">
+                                        <span class="text-xl md:text-2xl font-black">${formatCurrency(reward).replace('.00', '')}</span>
+                                        <span class="text-[8px] font-bold text-white/70 uppercase tracking-wider mt-0.5 leading-none">Per Submit</span>
+                                    </div>
+                                    <!-- Glowing Ticking Timer -->
+                                    <div id="task-card-timer-container" class="timer-pulse-glow bg-white/20 backdrop-blur-md border border-white/30 rounded-xl px-2.5 py-1 flex items-center gap-1.5 text-[9px] font-black text-white tracking-wide shadow-sm">
+                                        <span class="h-2 w-2 rounded-full bg-white blink-indicator shrink-0"></span>
+                                        <span id="task-card-timer" class="font-mono">--:--</span>
                                     </div>
                                 </div>
                             </div>
-                            
-                            <!-- Large glowing Timer badge + CTA Button -->
-                            <div class="flex flex-col items-start md:items-end shrink-0 gap-2 w-full md:w-auto">
-                                <span class="text-[9px] font-black uppercase text-slate-400 tracking-widest pl-1 md:pr-1">Remaining Time</span>
-                                <div id="task-card-timer-container" class="timer-pulse-glow bg-amber-500/10 dark:bg-amber-500/20 border-2 border-amber-500 rounded-2xl px-4 py-2 flex items-center gap-2 text-base md:text-lg font-black text-amber-600 dark:text-amber-400 shadow-[0_0_12px_rgba(245,158,11,0.4)] transition-all w-full md:w-auto justify-center md:justify-end">
-                                    <span class="h-2.5 w-2.5 rounded-full bg-amber-500 blink-indicator shrink-0"></span>
-                                    <span id="task-card-timer" class="font-mono tracking-wider">--:--</span>
+
+                            <!-- Metrics Grid (3 Columns) -->
+                            <div class="grid grid-cols-3 gap-2 px-5 py-2 text-left">
+                                <!-- Payout Column -->
+                                <div class="flex items-center gap-2">
+                                    <span class="p-2 rounded-xl ${acc.iconBg} shrink-0">
+                                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>
+                                    </span>
+                                    <div class="min-w-0">
+                                        <p class="text-[8px] font-black text-gray-400 uppercase tracking-wider leading-none">Payout</p>
+                                        <p class="text-[11px] font-bold text-slate-800 dark:text-slate-200 mt-1 truncate">${escapeHtml(payoutVal)}</p>
+                                    </div>
                                 </div>
-                                <button id="task-download-btn" class="flex items-center justify-center gap-1.5 rounded-xl bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 text-white font-black tracking-wide px-4 py-2 text-[10px] uppercase shadow-sm transition-all active:scale-[0.98] w-full md:w-auto mt-1">
-                                    <svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-4m-1-9h-6m6 0v6m0-6L10 12"></path></svg>
-                                    ${ctaText}
+
+                                <!-- Approval Column -->
+                                <div class="flex items-center gap-2 border-l border-slate-100 dark:border-slate-800/80 pl-2">
+                                    <span class="p-2 rounded-xl ${acc.iconBg} shrink-0">
+                                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                                    </span>
+                                    <div class="min-w-0">
+                                        <p class="text-[8px] font-black text-gray-400 uppercase tracking-wider leading-none">Approval</p>
+                                        <p class="text-[11px] font-bold text-slate-800 dark:text-slate-200 mt-1 truncate">${escapeHtml(approvalVal)}</p>
+                                    </div>
+                                </div>
+
+                                <!-- Reward Column -->
+                                <div class="flex items-center gap-2 border-l border-slate-100 dark:border-slate-800/80 pl-2">
+                                    <span class="p-2 rounded-xl ${acc.iconBg} shrink-0">
+                                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z"></path></svg>
+                                    </span>
+                                    <div class="min-w-0">
+                                        <p class="text-[8px] font-black text-gray-400 uppercase tracking-wider leading-none">Reward</p>
+                                        <p class="text-[11px] font-bold text-slate-800 dark:text-slate-200 mt-1 truncate">${formatCurrency(reward).replace('.00', '')}</p>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Install App CTA Button inside Card -->
+                            <div class="px-5 mt-1">
+                                <button id="task-download-btn" class="flex items-center justify-center gap-2 w-full py-3.5 rounded-2xl font-black text-xs uppercase tracking-wider transition-all duration-200 active:scale-[0.99] shadow-sm ${acc.bgBtn}">
+                                    <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
+                                    <span>${ctaText}</span>
                                 </button>
                             </div>
                         </div>
 
                         <!-- Main Sections -->
                         <div class="space-y-4">
-                            <!-- Step 1: Copy & Review -->
+                            <!-- Step 1: Copy Review -->
                             <div class="bg-white dark:bg-gray-800 rounded-3xl p-5 border border-gray-150 dark:border-gray-700/80 shadow-md">
-                                <p class="mb-3.5 text-[10px] font-black uppercase tracking-wider text-gray-400 flex items-center gap-2"><span class="flex h-5 w-5 items-center justify-center rounded-full bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-white text-[9px] font-black">1</span> Copy & Review</p>
+                                <div class="flex items-center gap-2.5 text-left mb-2">
+                                    <span class="flex h-6 w-6 items-center justify-center rounded-full bg-indigo-600 text-white text-[11px] font-black shrink-0">1</span>
+                                    <p class="text-xs font-black uppercase tracking-wider text-slate-900 dark:text-white">Copy Review</p>
+                                </div>
                                 ${step2Html}
                             </div>
 
-                            <!-- Step 2: Upload Proof -->
+                            <!-- Step 2: Upload Screenshot -->
                             <div class="bg-white dark:bg-gray-800 rounded-3xl p-5 border border-gray-150 dark:border-gray-700/80 shadow-md">
-                                <p class="mb-3.5 text-[10px] font-black uppercase tracking-wider text-gray-400 flex items-center gap-2"><span class="flex h-5 w-5 items-center justify-center rounded-full bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-white text-[9px] font-black">2</span> Upload Proof</p>
+                                <div class="flex items-center gap-2.5 text-left mb-2">
+                                    <span class="flex h-6 w-6 items-center justify-center rounded-full bg-indigo-600 text-white text-[11px] font-black shrink-0">2</span>
+                                    <p class="text-xs font-black uppercase tracking-wider text-slate-900 dark:text-white">Upload Screenshot</p>
+                                </div>
                                 
-                                <label class="flex min-h-24 cursor-pointer flex-col items-center justify-center rounded-2xl border-2 border-dashed border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900/40 p-4 text-center hover:bg-slate-100/50 dark:hover:bg-slate-900/60 transition">
+                                <label class="flex min-h-32 cursor-pointer flex-col items-center justify-center rounded-[1.75rem] border-2 border-dashed border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900/40 p-5 text-center hover:bg-slate-100/50 dark:hover:bg-slate-900/60 transition mt-3">
                                     <input id="task-proof-input" type="file" accept="image/*" class="hidden" ${isBulk ? 'multiple' : ''}>
-                                    <svg class="h-6 w-6 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 16V4m0 0-4 4m4-4 4 4M4 16v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"></path></svg>
-                                    <span id="task-proof-label" class="mt-2 text-[10px] font-black uppercase text-slate-700 dark:text-slate-200">${isBulk ? 'Select Screenshot(s)' : 'Select Screenshot'}</span>
-                                    <span class="text-[9px] text-gray-400 mt-0.5">Supports instant multi-upload</span>
+                                    <span class="p-3 rounded-full bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 mb-2 shadow-sm border border-indigo-100/50 dark:border-indigo-900/30">
+                                        <svg class="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"></path></svg>
+                                    </span>
+                                    <span id="task-proof-label" class="text-xs font-black uppercase text-slate-700 dark:text-slate-200">${isBulk ? 'Select Screenshot(s)' : 'Tap to upload screenshot'}</span>
+                                    <span class="text-[9px] text-gray-400 mt-1">JPG, PNG • Max 5MB</span>
                                 </label>
+
+                                <!-- Trust Badge Icons Grid -->
+                                <div class="grid grid-cols-3 gap-2 mt-4 py-3 bg-slate-50/80 dark:bg-slate-900/60 rounded-2xl border border-slate-100 dark:border-slate-800/80 px-3 text-left">
+                                    <!-- Safe & Secure -->
+                                    <div class="flex items-center gap-2">
+                                        <span class="p-1.5 rounded-full bg-green-500/10 text-green-600 shrink-0">
+                                            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"></path></svg>
+                                        </span>
+                                        <div class="min-w-0">
+                                            <p class="text-[8px] font-black text-slate-800 dark:text-slate-200 uppercase tracking-wide leading-none">Safe & Secure</p>
+                                            <p class="text-[8px] font-bold text-gray-400 mt-0.5 truncate leading-none">Your data is protected</p>
+                                        </div>
+                                    </div>
+                                    <!-- Fast Approval -->
+                                    <div class="flex items-center gap-2 border-l border-slate-200/60 dark:border-slate-800/80 pl-2">
+                                        <span class="p-1.5 rounded-full bg-amber-500/10 text-amber-500 shrink-0">
+                                            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path></svg>
+                                        </span>
+                                        <div class="min-w-0">
+                                            <p class="text-[8px] font-black text-slate-800 dark:text-slate-200 uppercase tracking-wide leading-none">Fast Approval</p>
+                                            <p class="text-[8px] font-bold text-gray-400 mt-0.5 truncate leading-none">Verified automatically</p>
+                                        </div>
+                                    </div>
+                                    <!-- Quick Payout -->
+                                    <div class="flex items-center gap-2 border-l border-slate-200/60 dark:border-slate-800/80 pl-2">
+                                        <span class="p-1.5 rounded-full bg-emerald-500/10 text-emerald-600 shrink-0">
+                                            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                                        </span>
+                                        <div class="min-w-0">
+                                            <p class="text-[8px] font-black text-slate-800 dark:text-slate-200 uppercase tracking-wide leading-none">Quick Payout</p>
+                                            <p class="text-[8px] font-bold text-gray-400 mt-0.5 truncate leading-none">Get paid on time</p>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- Submit Button (For Single User flow) -->
+                                ${isBulk ? '' : `
+                                    <button id="task-submit-mission-btn" class="mt-4 flex w-full items-center justify-center gap-2 rounded-2xl bg-gradient-to-r ${acc.bannerGradient} text-white font-extrabold tracking-wider px-4 py-3.5 text-xs uppercase shadow-md transition-all active:scale-[0.99] disabled:opacity-50" disabled>
+                                        <svg class="w-4 h-4 transform rotate-45" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"></path></svg>
+                                        <span>Submit Screenshot</span>
+                                    </button>
+                                `}
 
                                 <!-- Persistent Queue Progress UI -->
                                 <div id="upload-queue-container" class="mt-4 space-y-3 hidden">
@@ -2691,7 +2778,7 @@ const showUserTaskDetailsPage = async (taskId) => {
                         if (remaining <= 0) {
                             if (timerEl) timerEl.textContent = 'Expired';
                             if (timerContainerEl) {
-                                timerContainerEl.className = 'border-2 border-red-500 bg-red-50 dark:bg-red-950/20 rounded-2xl px-4 py-2 flex items-center gap-2 text-base md:text-lg font-black text-red-500 shadow-[0_0_12px_rgba(239,68,68,0.4)]';
+                                timerContainerEl.className = 'bg-red-500/20 backdrop-blur-md border border-red-500/40 rounded-xl px-2.5 py-1 flex items-center gap-1.5 text-[9px] font-black text-red-200 tracking-wide shadow-[0_0_12px_rgba(239,68,68,0.4)]';
                             }
                             clearInterval(activeTaskReservationTimer);
                             activeTaskReservationTimer = null;
@@ -2715,7 +2802,7 @@ const showUserTaskDetailsPage = async (taskId) => {
                 if (commentEl) commentEl.textContent = `"${reservation.comment}"`;
                 
                 if (timerContainerEl) {
-                    timerContainerEl.className = 'timer-pulse-glow bg-amber-500/10 dark:bg-amber-500/20 border-2 border-amber-500 rounded-2xl px-4 py-2 flex items-center gap-2 text-base md:text-lg font-black text-amber-600 dark:text-amber-400 shadow-[0_0_12px_rgba(245,158,11,0.4)] transition-all';
+                    timerContainerEl.className = 'timer-pulse-glow bg-white/20 backdrop-blur-md border border-white/30 rounded-xl px-2.5 py-1 flex items-center gap-1.5 text-[9px] font-black text-white tracking-wide shadow-sm';
                 }
                 startLocalTimer();
             };
@@ -2810,24 +2897,25 @@ const showUserTaskDetailsPage = async (taskId) => {
                 initBackgroundReservation();
 
                 const copyBtn = document.getElementById('task-copy-review-btn');
-                if (copyBtn) {
-                    copyBtn.onclick = async () => {
-                        const targetComment = activeTaskReservation?.comment || initialComment;
-                        try {
-                            await navigator.clipboard.writeText(targetComment);
-                            showNotification('Assigned review comment copied!');
-                        } catch (err) {
-                            showNotification('Copy failed. Copy manually.', true);
-                        }
+                const copyIconBtn = document.getElementById('task-copy-icon-btn');
+                const triggerCopy = async () => {
+                    const targetComment = activeTaskReservation?.comment || initialComment;
+                    try {
+                        await navigator.clipboard.writeText(targetComment);
+                        showNotification('Assigned review comment copied!');
+                    } catch (err) {
+                        showNotification('Copy failed. Copy manually.', true);
+                    }
 
-                        try {
-                            const reservation = await reserveTaskReviewComment(task);
-                            updateReservationUi(reservation);
-                        } catch (error) {
-                            console.error('Review reserve failed:', error);
-                        }
-                    };
-                }
+                    try {
+                        const reservation = await reserveTaskReviewComment(task);
+                        updateReservationUi(reservation);
+                    } catch (error) {
+                        console.error('Review reserve failed:', error);
+                    }
+                };
+                if (copyBtn) copyBtn.onclick = triggerCopy;
+                if (copyIconBtn) copyIconBtn.onclick = triggerCopy;
             }
 
             const renderQueueUi = (queue) => {
