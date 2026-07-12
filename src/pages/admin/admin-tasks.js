@@ -193,31 +193,38 @@ window.updateAdminTaskSidebar = () => {
     const sidebar = document.getElementById('admin-task-sidebar');
     const toggleIcon = document.getElementById('admin-sidebar-toggle-icon');
     const toggleBtnLabel = document.querySelector('#admin-sidebar-toggle-btn .sidebar-label');
+    const toggleBtn = document.getElementById('admin-sidebar-toggle-btn');
     if (!sidebar) return;
 
     const collapsed = !!window.adminSidebarCollapsed;
 
     if (collapsed) {
-        sidebar.classList.remove('md:w-64');
-        sidebar.classList.add('md:w-20');
+        sidebar.classList.remove('w-64');
+        sidebar.classList.add('w-20');
         sidebar.querySelectorAll('.sidebar-label').forEach(el => el.classList.add('hidden'));
         if (toggleIcon) toggleIcon.textContent = '>';
         if (toggleBtnLabel) toggleBtnLabel.textContent = '';
+        if (toggleBtn) {
+            toggleBtn.classList.remove('w-full', 'py-3');
+            toggleBtn.classList.add('w-12', 'h-12', 'mx-auto');
+        }
         sidebar.querySelectorAll('[data-admin-task-panel]').forEach(btn => {
-            btn.classList.add('justify-center');
-            btn.classList.remove('px-4');
-            btn.classList.add('px-2');
+            btn.classList.remove('w-full', 'px-4', 'py-3.5', 'text-left');
+            btn.classList.add('w-12', 'h-12', 'justify-center', 'rounded-2xl', 'mx-auto');
         });
     } else {
-        sidebar.classList.remove('md:w-20');
-        sidebar.classList.add('md:w-64');
+        sidebar.classList.remove('w-20');
+        sidebar.classList.add('w-64');
         sidebar.querySelectorAll('.sidebar-label').forEach(el => el.classList.remove('hidden'));
         if (toggleIcon) toggleIcon.textContent = '<';
         if (toggleBtnLabel) toggleBtnLabel.textContent = 'Collapse';
+        if (toggleBtn) {
+            toggleBtn.classList.remove('w-12', 'h-12', 'mx-auto');
+            toggleBtn.classList.add('w-full', 'py-3');
+        }
         sidebar.querySelectorAll('[data-admin-task-panel]').forEach(btn => {
-            btn.classList.remove('justify-center');
-            btn.classList.remove('px-2');
-            btn.classList.add('px-4');
+            btn.classList.remove('w-12', 'h-12', 'justify-center', 'mx-auto');
+            btn.classList.add('w-full', 'px-4', 'py-3.5', 'text-left');
         });
     }
 };
@@ -230,11 +237,11 @@ const showAdminTaskPage = () => {
             const content = `
                 ${getPageHeader('Manage Task')}
                 <div class="pb-24 max-w-7xl mx-auto p-4 md:p-6">
-                    <!-- 2-Column Laptop View Split Layout -->
-                    <div class="flex flex-col md:flex-row gap-6 items-start">
+                    <!-- Always Laptop View Side-by-Side split Layout -->
+                    <div class="flex flex-row gap-6 items-start w-full">
                         
                         <!-- Left Sidebar Panel -->
-                        <div id="admin-task-sidebar" class="w-full md:w-64 shrink-0 transition-all duration-300 flex flex-col justify-between border border-slate-100 dark:border-slate-800 bg-white dark:bg-gray-900 rounded-3xl p-3 shadow-sm md:sticky md:top-6 min-h-[350px]">
+                        <div id="admin-task-sidebar" class="w-64 shrink-0 transition-all duration-300 flex flex-col justify-between border border-slate-100 dark:border-slate-800 bg-white dark:bg-gray-900 rounded-3xl p-3 shadow-sm sticky top-6 min-h-[350px]">
                             <!-- Top Navigation List -->
                             <div class="space-y-1.5 flex flex-col">
                                 <button type="button" data-admin-task-panel="manage" class="w-full flex items-center gap-3 rounded-2xl px-4 py-3.5 text-xs font-black uppercase tracking-wider text-left transition select-none" style="outline: none;">
