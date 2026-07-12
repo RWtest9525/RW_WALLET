@@ -136,7 +136,7 @@ const showAdminAuditPage = async () => {
                         <div id="audit-payout-pending" class="mt-3"></div>
                     </section>
                 </div>`;
-            showPage(content, { returnTo: 'admin', keepBottomNav: true });
+            showPage(content, { returnTo: 'admin', keepBottomNav: false });
             setBottomNavActive('bottom-admin-btn');
             loadAuditData();
             document.getElementById('audit-refresh-btn')?.addEventListener('click', loadAuditData);

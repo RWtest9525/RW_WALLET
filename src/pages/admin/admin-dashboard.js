@@ -413,7 +413,7 @@ const showAdminLiveListsPage = () => {
                 </div>
                 ${getPageFooter()}`;
 
-            showPage(content, { returnTo: 'settings', keepBottomNav: true });
+            showPage(content, { returnTo: 'settings', keepBottomNav: false });
             loadAdminLiveLists();
 
             document.getElementById('admin-list-submit-btn').onclick = handleSaveLiveList;

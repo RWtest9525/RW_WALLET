@@ -493,10 +493,10 @@ const showPage = (content, options = {}) => {
             const returnSection = options.returnTo || currentMainSection;
             pageContainer.innerHTML = content;
             pageContainer.classList.remove('hidden');
-            pageContainer.style.paddingBottom = options.fullHeight ? '0' : '1.5rem';
+            pageContainer.style.paddingBottom = options.fullHeight ? '0' : (options.keepBottomNav ? '6.5rem' : '1.5rem');
             pageContainer.style.overflowY = options.fullHeight ? 'hidden' : 'auto';
             pageContainer.style.scrollPaddingBottom = '7rem';
-            setMainChrome(false); // Always hide bottom menu on sub-pages
+            setMainChrome(!!options.keepBottomNav);
             document.getElementById('app-footer')?.classList.add('app-footer-hidden');
             const backButton = pageContainer.querySelector('.page-back-btn');
             if (backButton) {
@@ -748,7 +748,7 @@ const showUserTaskHistoryPage = () => {
                 </div>
                 ${getPageFooter()}`;
 
-            showPage(content, { returnTo: 'settings', keepBottomNav: true });
+            showPage(content, { returnTo: 'settings', keepBottomNav: false });
             if (userTaskHistoryCache && userTaskHistoryCache.length > 0) {
                 renderUserTaskHistory();
             }
@@ -1042,7 +1042,7 @@ window.showUserTaskHistoryDetail = (submissionId) => {
                 ${getPageFooter()}
             `;
 
-            showPage(detailContent, { returnTo: 'task-history', keepBottomNav: true, onBack: showUserTaskHistoryPage });
+            showPage(detailContent, { returnTo: 'task-history', keepBottomNav: false, onBack: showUserTaskHistoryPage });
             const userScreenshotImg = document.getElementById('user-detail-screenshot-img');
             if (userScreenshotImg) {
                 userScreenshotImg.onclick = () => {
@@ -1068,7 +1068,7 @@ const showUserLiveListsPage = () => {
                 </div>
                 ${getPageFooter()}`;
 
-            showPage(content, { returnTo: 'settings', keepBottomNav: true });
+            showPage(content, { returnTo: 'settings', keepBottomNav: false });
             
             loadUserLiveLists();
 
@@ -1596,7 +1596,7 @@ const showTaskFeatureComingSoonPage = (feature = 'ads') => {
                     </section>
                 </div>
                 ${getPageFooter()}`;
-            showPage(content, { returnTo: 'task', keepBottomNav: true, onBack: showUserTaskPage });
+            showPage(content, { returnTo: 'task', keepBottomNav: false, onBack: showUserTaskPage });
             setBottomNavActive('bottom-task-btn');
         };
 
@@ -1614,7 +1614,7 @@ const showUserReadNewsTaskPage = (task) => {
                         <button class="page-back-btn rounded-full p-2 text-slate-900 dark:text-white">
                             <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 12H5m7 7-7-7 7-7"></path></svg>
                         </button>
-                        <h2 class="text-base font-black uppercase text-slate-950 dark:text-white">News Mission</h2>
+                        <h2 class="text-base font-black uppercase text-slate-955 dark:text-white">News Mission</h2>
                     </div>
                     <span class="h-9 w-9 overflow-hidden rounded-full bg-slate-100 dark:bg-slate-700 flex items-center justify-center p-1.5 border border-gray-200">
                         <img src="https://cdn-icons-png.flaticon.com/512/2540/2540832.png" alt="News" class="h-full w-full object-contain">
@@ -1645,7 +1645,7 @@ const showUserReadNewsTaskPage = (task) => {
                                                 <div class="flex items-center gap-3">
                                                     <span class="news-num-badge flex h-8 w-8 items-center justify-center rounded-lg bg-slate-900 text-white font-black text-sm">${idx + 1}</span>
                                                     <div>
-                                                        <span class="block text-xs font-black text-slate-950 dark:text-white">News Article ${idx + 1}</span>
+                                                        <span class="block text-xs font-black text-slate-955 dark:text-white">News Article ${idx + 1}</span>
                                                         <span class="block text-[9px] text-gray-400">Read & wait 10s</span>
                                                     </div>
                                                 </div>
@@ -1677,7 +1677,7 @@ const showUserReadNewsTaskPage = (task) => {
                     </div>
                     <div class="flex-grow bg-white dark:bg-gray-900 relative">
                         <iframe id="web-opener-iframe" class="w-full h-full border-0" sandbox="allow-scripts allow-same-origin allow-popups allow-forms"></iframe>
-                        <div id="web-opener-loading" class="absolute inset-0 flex items-center justify-center bg-white dark:bg-gray-950 z-10">
+                        <div id="web-opener-loading" class="absolute inset-0 flex items-center justify-center bg-white dark:bg-gray-955 z-10">
                             <div class="flex flex-col items-center gap-2">
                                 <svg class="animate-spin h-8 w-8 text-blue-600" fill="none" viewBox="0 0 24 24">
                                     <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
@@ -1691,7 +1691,7 @@ const showUserReadNewsTaskPage = (task) => {
                 </div>
             `;
             
-            showPage(content, { returnTo: 'task', keepBottomNav: true, onBack: showUserTaskPage });
+            showPage(content, { returnTo: 'task', keepBottomNav: false, onBack: showUserTaskPage });
             setBottomNavActive('bottom-task-btn');
             
             // Bind back button
@@ -2724,7 +2724,7 @@ const showUserTaskDetailsPage = async (taskId) => {
 
             showPage(content, { 
                 returnTo: 'task', 
-                keepBottomNav: true, 
+                keepBottomNav: false, 
                 onBack: () => {
                     window.TaskUploadQueueManager.unregisterCallback(task.id);
                     showUserTaskPage();

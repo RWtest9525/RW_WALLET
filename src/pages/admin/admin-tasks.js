@@ -485,7 +485,7 @@ const showAdminTaskPage = () => {
                 </div>
                 </div>
                 ${getPageFooter()}`;
-            showPage(content, { returnTo: 'admin', keepBottomNav: true });
+            showPage(content, { returnTo: 'admin', keepBottomNav: false });
             setBottomNavActive('bottom-admin-btn');
             window._adsTabInitialized = false;
             window._subsTabInitialized = false;
@@ -1156,7 +1156,7 @@ const showAdminTaskCommentsPage = async (taskId) => {
                 </div>
                 ${getPageFooter()}`;
 
-            showPage(content, { onBack: showAdminTaskPage, returnTo: 'admin', keepBottomNav: true });
+            showPage(content, { onBack: showAdminTaskPage, returnTo: 'admin', keepBottomNav: false });
             
             let reservations = [];
             try {
@@ -1302,7 +1302,7 @@ const showAdminTaskSubmissionsPage = async () => {
                     </div>
                 </div>`;
 
-            showPage(content, { returnTo: 'admin', keepBottomNav: true });
+            showPage(content, { returnTo: 'admin', keepBottomNav: false });
             setBottomNavActive('bottom-admin-btn');
             loadAdminSubmissions();
         };

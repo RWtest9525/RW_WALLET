@@ -215,7 +215,7 @@ const showAdminNotificationsPage = async () => {
                     </section>
                 </div>
                 ${getPageFooter()}`;
-            showPage(content, { keepBottomNav: true, returnTo: 'admin' });
+            showPage(content, { keepBottomNav: false, returnTo: 'admin' });
             setBottomNavActive('bottom-admin-btn');
             document.getElementById('admin-notification-target').addEventListener('change', updateAdminNotificationTargetPreview);
             document.getElementById('admin-notification-user-search').addEventListener('input', () => {

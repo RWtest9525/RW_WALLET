@@ -260,7 +260,7 @@ const showNotificationsPage = async () => {
                     <div id="user-notifications-list" class="space-y-3"></div>
                 </div>
                 ${getPageFooter()}`;
-            showPage(content, { keepBottomNav: true, returnTo: currentMainSection });
+            showPage(content, { keepBottomNav: false, returnTo: currentMainSection });
             renderUserNotificationsList();
             preloadNotificationsForUser(currentUser.uid)
                 .then(() => {

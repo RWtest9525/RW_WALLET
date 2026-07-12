@@ -11,7 +11,7 @@ const showAdminSettlementPage = async () => {
         content = await getSubAdminSettlementHtml();
     }
 
-    showPage(content, { returnTo: 'admin', keepBottomNav: true });
+    showPage(content, { returnTo: 'admin', keepBottomNav: false });
     setBottomNavActive('bottom-admin-btn');
 
     if (isOwner) {

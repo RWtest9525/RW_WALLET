@@ -559,7 +559,7 @@ const showMaintenanceSettingsPage = () => {
                 </div>
                 ${getPageFooter()}`, {
                 returnTo: parentSection,
-                keepBottomNav: true,
+                keepBottomNav: false,
                 onBack: () => {
                     if (adminMaintenanceInterval) {
                         clearInterval(adminMaintenanceInterval);
@@ -737,7 +737,7 @@ const showWhatsNewSettingsPage = () => {
                         </div>
                     </div>
                 </div>
-                ${getPageFooter()}`, { returnTo: parentSection, keepBottomNav: true, onBack: handleBack });
+                ${getPageFooter()}`, { returnTo: parentSection, keepBottomNav: false, onBack: handleBack });
 
             // Load Seen Users Async
             const loadWhatsNewSeenUsers = async () => {
@@ -896,7 +896,7 @@ const showReferralSettingsPage = () => {
                     </section>
                     <button id="referral-price-save-btn" class="w-full rounded-2xl bg-emerald-600 px-4 py-4 font-black text-white shadow-lg shadow-emerald-200 transition active:scale-[0.99] dark:shadow-none">Save Referral Price</button>
                 </div>
-                ${getPageFooter()}`, { returnTo: parentSection, keepBottomNav: true, onBack: handleBack });
+                ${getPageFooter()}`, { returnTo: parentSection, keepBottomNav: false, onBack: handleBack });
 
             document.getElementById('referral-price-save-btn')?.addEventListener('click', handleSaveReferralSettings);
         };
