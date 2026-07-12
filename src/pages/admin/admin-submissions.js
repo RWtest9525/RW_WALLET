@@ -345,6 +345,10 @@ window.extractReviewerName = async (ocrText, targetComment) => {
         };
 
 const loadAdminSubmissions = async () => {
+            // Render cached data immediately for instant load
+            if (adminSubmissionsCache && adminSubmissionsCache.length > 0) {
+                renderAdminSubmissions();
+            }
             if (adminSubmissionsLoading) return;
             adminSubmissionsLoading = true;
             try {
@@ -506,7 +510,7 @@ const renderAdminSubmissions = () => {
 
         html = `
             <!-- Top Detail Toolbar Header -->
-            <div class="flex items-center justify-between gap-4 px-5 py-4 bg-white dark:bg-slate-900 border-b border-slate-100 dark:border-slate-800/80 shadow-sm rounded-t-3xl">
+            <div class="flex items-center justify-between gap-4 px-5 py-4 bg-white dark:bg-slate-900 border-b border-slate-100 dark:border-slate-800/80 shadow-sm rounded-t-3xl text-left">
                 <div class="flex items-center gap-3">
                     <button id="admin-sub-back-btn" class="p-2 rounded-xl bg-slate-50 hover:bg-slate-100 dark:bg-slate-805 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 transition active:scale-95 border border-slate-200/30 shadow-sm" title="Back" style="outline: none;">
                         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M10 19l-7-7m0 0l7-7m-7 7h18"></path></svg>
@@ -517,7 +521,7 @@ const renderAdminSubmissions = () => {
                     </div>
                 </div>
                 <div class="flex items-center gap-2">
-                    <span class="rounded-full bg-slate-100 dark:bg-slate-850 px-3 py-1.5 text-xs font-black text-slate-650 dark:text-slate-300 border border-slate-200/10">
+                    <span class="rounded-full bg-slate-100 dark:bg-slate-850 px-3 py-1.5 text-xs font-black text-slate-650 dark:text-slate-300 border border-slate-250/20">
                         Date: ${formatDatePickerDate(selectedDate)}
                     </span>
                 </div>
@@ -603,93 +607,102 @@ const renderAdminSubmissions = () => {
             </div>
         `;
     } else {
-        // --- LIST VIEW PANEL (All Tasks Date wise Overview) ---
+        // --- LIST VIEW PANEL (Mockup layout design) ---
         html = `
             <!-- Top Toolbar Header -->
-            <div class="flex items-center justify-between gap-4 px-5 py-4 bg-white dark:bg-slate-900 border-b border-slate-100 dark:border-slate-800/80 shadow-sm rounded-t-3xl">
-                <h1 class="text-base md:text-lg font-black uppercase text-slate-955 dark:text-white tracking-wider">Submissions</h1>
+            <div class="flex items-center justify-between gap-4 px-5 py-4 bg-white dark:bg-slate-900 border-b border-slate-100 dark:border-slate-800/80 shadow-sm rounded-t-3xl text-left">
+                <div class="min-w-0"></div>
                 <div class="flex items-center gap-2">
-                    <button id="admin-sub-refresh-btn" class="p-2 rounded-xl bg-slate-50 hover:bg-slate-100 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 transition active:scale-95 border border-slate-200/30 shadow-sm" title="Refresh" style="outline: none;">
-                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M4 4v5h.582m15.356 2A8.001 8.001 0 1121.21 7.89M9 11l3-3 3 3m-3-3v12"></path></svg>
-                    </button>
                     <div class="relative flex items-center">
                         <input type="date" id="admin-sub-date-input" value="${selectedDate}" class="absolute inset-0 opacity-0 cursor-pointer z-10">
-                        <button type="button" class="flex items-center gap-2 rounded-xl bg-slate-50 dark:bg-slate-805 px-3.5 py-2 text-xs font-black text-slate-850 dark:text-slate-200 border border-slate-200/40 shadow-sm">
+                        <button type="button" class="flex items-center gap-2 rounded-xl bg-slate-50 dark:bg-slate-800 px-3.5 py-2 text-xs font-black text-slate-800 dark:text-slate-200 border border-slate-200/40 shadow-sm">
                             <span>${formatDatePickerDate(selectedDate)}</span>
-                            <svg class="w-3.5 h-3.5 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M19 9l-7 7-7-7"></path></svg>
+                            <span class="text-slate-500 font-extrabold font-mono text-[10px]">🔁</span>
                         </button>
                     </div>
                 </div>
             </div>
 
-            <div class="p-4 sm:p-6 space-y-6 bg-white dark:bg-slate-900 rounded-b-3xl min-h-[500px]">
-                <!-- Overview Stats Section -->
-                <section class="bg-slate-50 dark:bg-slate-900/50 border border-slate-100 dark:border-slate-800/80 rounded-2xl p-5 shadow-sm">
-                    <h3 class="text-[10px] font-black uppercase text-slate-400 tracking-wider text-left mb-4">Today's Overview</h3>
-                    <div class="grid grid-cols-2 sm:grid-cols-5 gap-3">
-                        <div class="bg-white dark:bg-slate-850 rounded-xl p-3 border border-slate-100 dark:border-slate-800 shadow-sm text-left">
-                            <p class="text-xl font-black text-purple-650 dark:text-purple-400">${totalTasksCount}</p>
-                            <p class="text-[9px] font-bold text-slate-400 uppercase tracking-wider mt-1.5">Submitted Apps</p>
+            <div class="p-4 sm:p-6 space-y-6 bg-white dark:bg-slate-900 rounded-b-3xl">
+                <!-- Today's Overview Section -->
+                <section class="text-left">
+                    <h3 class="text-base font-black text-slate-900 dark:text-white mb-4">Today's Overview</h3>
+                    <div class="grid grid-cols-2 sm:grid-cols-6 gap-3">
+                        
+                        <!-- Total Tasks Card -->
+                        <div class="bg-white dark:bg-slate-850 rounded-2xl p-4 border border-indigo-100 dark:border-indigo-950/60 shadow-sm transition">
+                            <p class="text-2xl font-black text-indigo-600 dark:text-indigo-400">${totalTasksCount}</p>
+                            <p class="text-[10px] font-extrabold text-indigo-500/70 uppercase tracking-wide mt-1">Total Tasks</p>
                         </div>
-                        <div class="bg-white dark:bg-slate-850 rounded-xl p-3 border border-slate-100 dark:border-slate-800 shadow-sm text-left">
-                            <p class="text-xl font-black text-blue-650 dark:text-blue-400">${totalSubmissions}</p>
-                            <p class="text-[9px] font-bold text-slate-400 uppercase tracking-wider mt-1.5">Total Subs</p>
+                        
+                        <!-- Total Submissions Card -->
+                        <div class="bg-white dark:bg-slate-850 rounded-2xl p-4 border border-blue-100 dark:border-blue-950/60 shadow-sm transition">
+                            <p class="text-2xl font-black text-blue-600 dark:text-blue-400">${totalSubmissions}</p>
+                            <p class="text-[10px] font-extrabold text-blue-500/70 uppercase tracking-wide mt-1">Total Submissions</p>
                         </div>
-                        <div class="bg-white dark:bg-slate-850 rounded-xl p-3 border border-slate-100 dark:border-slate-800 shadow-sm text-left">
-                            <p class="text-xl font-black text-emerald-650 dark:text-emerald-400">${ocrPassed}</p>
-                            <p class="text-[9px] font-bold text-slate-400 uppercase tracking-wider mt-1.5">OCR Passed</p>
+                        
+                        <!-- OCR Passed Card -->
+                        <div class="bg-white dark:bg-slate-850 rounded-2xl p-4 border border-emerald-100 dark:border-emerald-950/60 shadow-sm transition">
+                            <p class="text-2xl font-black text-emerald-600 dark:text-emerald-400">${ocrPassed}</p>
+                            <p class="text-[10px] font-extrabold text-emerald-500/70 uppercase tracking-wide mt-1">OCR Passed</p>
                         </div>
-                        <div class="bg-white dark:bg-slate-850 rounded-xl p-3 border border-slate-100 dark:border-slate-800 shadow-sm text-left">
-                            <p class="text-xl font-black text-amber-650 dark:text-amber-400">${pendingVerify}</p>
-                            <p class="text-[9px] font-bold text-slate-400 uppercase tracking-wider mt-1.5">Pending Verify</p>
+                        
+                        <!-- Pending Verify Card -->
+                        <div class="bg-white dark:bg-slate-850 rounded-2xl p-4 border border-amber-100 dark:border-amber-950/60 shadow-sm transition">
+                            <p class="text-2xl font-black text-amber-500 dark:text-amber-400">${pendingVerify}</p>
+                            <p class="text-[10px] font-extrabold text-amber-500/70 uppercase tracking-wide mt-1">Pending Verify</p>
                         </div>
-                        <div class="bg-white dark:bg-slate-850 rounded-xl p-3 border border-slate-100 dark:border-slate-800 shadow-sm text-left">
-                            <p class="text-xl font-black text-green-650 dark:text-green-400">${approvedCount}</p>
-                            <p class="text-[9px] font-bold text-slate-400 uppercase tracking-wider mt-1.5">Approved</p>
+                        
+                        <!-- Approved Card -->
+                        <div class="bg-white dark:bg-slate-850 rounded-2xl p-4 border border-green-100 dark:border-green-950/60 shadow-sm transition">
+                            <p class="text-2xl font-black text-green-600 dark:text-green-400">${approvedCount}</p>
+                            <p class="text-[10px] font-extrabold text-green-500/70 uppercase tracking-wide mt-1">Approved</p>
                         </div>
+                        
+                        <!-- Rejected Card -->
+                        <div class="bg-white dark:bg-slate-850 rounded-2xl p-4 border border-red-100 dark:border-red-950/60 shadow-sm transition">
+                            <p class="text-2xl font-black text-red-650 dark:text-red-400">${rejectedCount}</p>
+                            <p class="text-[10px] font-extrabold text-red-500/70 uppercase tracking-wide mt-1">Rejected</p>
+                        </div>
+                        
                     </div>
                 </section>
 
-                <!-- Apps/Tasks List Table -->
-                <section class="bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800/80 rounded-2xl shadow-sm">
-                    <h3 class="text-sm font-black text-slate-800 dark:text-white mb-4 text-left">Manage Apps & Tasks</h3>
+                <!-- Task Wise Overview Table -->
+                <section class="text-left">
+                    <h3 class="text-base font-black text-slate-900 dark:text-white mb-4">Task Wise Overview</h3>
                     <div class="overflow-x-auto">
                         <table class="w-full text-left text-xs border-collapse">
                             <thead>
-                                <tr class="border-b border-slate-100 dark:border-slate-800 text-slate-400 uppercase font-black text-[9px] tracking-wider">
-                                    <th class="py-3 px-2">App / Task</th>
-                                    <th class="py-3 px-2">Status</th>
-                                    <th class="py-3 px-2 text-center">Total Subs</th>
-                                    <th class="py-3 px-2 text-center">OCR Pass</th>
-                                    <th class="py-3 px-2 text-center text-amber-500">Pending</th>
-                                    <th class="py-3 px-2 text-center text-green-500">Approved</th>
-                                    <th class="py-3 px-2 text-center text-red-500">Rejected</th>
+                                <tr class="border-b border-slate-100 dark:border-slate-800 text-slate-450 uppercase font-black text-[9px] tracking-wider">
+                                    <th class="py-3 px-2">Task Name</th>
+                                    <th class="py-3 px-2 text-center">Total Submissions</th>
+                                    <th class="py-3 px-2 text-center">OCR Passed</th>
+                                    <th class="py-3 px-2 text-center">Pending Verify</th>
+                                    <th class="py-3 px-2 text-center">Approved</th>
+                                    <th class="py-3 px-2 text-center">Rejected</th>
                                     <th class="py-3 px-2 text-right">Action</th>
                                 </tr>
                             </thead>
                             <tbody class="divide-y divide-slate-100 dark:divide-slate-800">
                                 ${taskRows.length === 0 ? `
                                     <tr>
-                                        <td colspan="8" class="py-8 text-center text-slate-400 font-bold">No tasks available.</td>
+                                        <td colspan="7" class="py-8 text-center text-slate-400 font-bold">No tasks available.</td>
                                     </tr>
                                 ` : taskRows.map(r => {
-                                    const statusBadge = r.isLive 
-                                        ? `<span class="rounded-full bg-emerald-100 dark:bg-emerald-950/40 text-emerald-600 px-2 py-0.5 text-[9px] font-black">LIVE</span>` 
-                                        : `<span class="rounded-full bg-slate-100 dark:bg-slate-850 text-slate-450 px-2 py-0.5 text-[9px] font-black">OFF</span>`;
                                     return `
                                         <tr class="hover:bg-slate-50/50 dark:hover:bg-slate-850/20 transition">
-                                            <td class="py-3 px-2 text-left">
+                                            <td class="py-3.5 px-2">
                                                 <p class="font-extrabold text-slate-800 dark:text-slate-200 text-sm">${escapeHtml(r.name)}</p>
                                                 <p class="text-[9px] text-slate-400 font-semibold mt-0.5">ID: ${escapeHtml(r.id)}</p>
                                             </td>
-                                            <td class="py-3 px-2 text-left">${statusBadge}</td>
-                                            <td class="py-3 px-2 text-center font-bold">${r.total}</td>
-                                            <td class="py-3 px-2 text-center font-bold text-emerald-600">${r.ocrPassed}</td>
-                                            <td class="py-3 px-2 text-center font-bold text-amber-500">${r.pending}</td>
-                                            <td class="py-3 px-2 text-center font-bold text-green-500">${r.approved}</td>
-                                            <td class="py-3 px-2 text-center font-bold text-red-500">${r.rejected}</td>
-                                            <td class="py-3 px-2 text-right">
-                                                <button type="button" data-action="view-task-submissions" data-taskid="${r.id}" class="rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold px-3.5 py-1.5 text-[11px] transition active:scale-95 shadow-sm" style="outline: none;">
+                                            <td class="py-3.5 px-2 text-center font-semibold text-slate-800 dark:text-slate-200">${r.total}</td>
+                                            <td class="py-3.5 px-2 text-center font-semibold text-slate-800 dark:text-slate-200">${r.ocrPassed}</td>
+                                            <td class="py-3.5 px-2 text-center font-semibold text-slate-800 dark:text-slate-200">${r.pending}</td>
+                                            <td class="py-3.5 px-2 text-center font-semibold text-slate-800 dark:text-slate-200">${r.approved}</td>
+                                            <td class="py-3.5 px-2 text-center font-semibold text-slate-800 dark:text-slate-200">${r.rejected}</td>
+                                            <td class="py-3.5 px-2 text-right">
+                                                <button type="button" data-action="view-task-submissions" data-taskid="${r.id}" class="rounded-lg bg-blue-50 hover:bg-blue-100 dark:bg-blue-950/20 dark:text-blue-400 text-blue-600 font-extrabold px-4 py-1.5 text-xs transition active:scale-95 border border-blue-100/50 dark:border-blue-900/35" style="outline: none;">
                                                     View
                                                 </button>
                                             </td>
@@ -700,6 +713,11 @@ const renderAdminSubmissions = () => {
                         </table>
                     </div>
                 </section>
+
+                <!-- Centered Bottom View All Link -->
+                <div class="pt-4 flex justify-center">
+                    <button type="button" class="text-xs font-black text-blue-600 hover:underline py-2" style="outline: none;">View All Tasks</button>
+                </div>
             </div>
         `;
     }
