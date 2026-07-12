@@ -493,10 +493,10 @@ const showPage = (content, options = {}) => {
             const returnSection = options.returnTo || currentMainSection;
             pageContainer.innerHTML = content;
             pageContainer.classList.remove('hidden');
-            pageContainer.style.paddingBottom = options.fullHeight ? '0' : (options.keepBottomNav ? '6.5rem' : '1.5rem');
+            pageContainer.style.paddingBottom = options.fullHeight ? '0' : '1.5rem';
             pageContainer.style.overflowY = options.fullHeight ? 'hidden' : 'auto';
             pageContainer.style.scrollPaddingBottom = '7rem';
-            setMainChrome(!!options.keepBottomNav);
+            setMainChrome(false); // Always hide bottom menu on sub-pages
             document.getElementById('app-footer')?.classList.add('app-footer-hidden');
             const backButton = pageContainer.querySelector('.page-back-btn');
             if (backButton) {

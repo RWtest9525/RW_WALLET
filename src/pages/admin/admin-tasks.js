@@ -132,17 +132,21 @@ const getAdminTaskIconButtonMini = (action, taskId, title, svgPath, tone = 'slat
         };
 
 const setAdminTaskPanel = (panel = 'manage') => {
-            const validPanels = ['manage', 'add', 'ads', 'submissions'];
+            const validPanels = ['manage', 'add', 'ads', 'submissions', 'board_control'];
             const normalized = validPanels.includes(panel) ? panel : 'manage';
             window.adminTaskPanel = normalized;
+            
             const addSection = document.getElementById('admin-task-add-section');
             const manageSection = document.getElementById('admin-task-manage-section');
             const adsSection = document.getElementById('admin-ads-section');
             const subsSection = document.getElementById('admin-submissions-section');
+            const boardControlSection = document.getElementById('admin-board-control-section');
+            
             if (addSection) addSection.classList.toggle('hidden', normalized !== 'add');
             if (manageSection) manageSection.classList.toggle('hidden', normalized !== 'manage');
             if (adsSection) adsSection.classList.toggle('hidden', normalized !== 'ads');
             if (subsSection) subsSection.classList.toggle('hidden', normalized !== 'submissions');
+            if (boardControlSection) boardControlSection.classList.toggle('hidden', normalized !== 'board_control');
 
             // Lazy-load ads when tab is first opened
             if (normalized === 'ads' && !window._adsTabInitialized) {
@@ -180,6 +184,44 @@ const setAdminTaskPanel = (panel = 'manage') => {
             });
         };
 
+window.toggleAdminTaskSidebar = () => {
+    window.adminSidebarCollapsed = !window.adminSidebarCollapsed;
+    updateAdminTaskSidebar();
+};
+
+window.updateAdminTaskSidebar = () => {
+    const sidebar = document.getElementById('admin-task-sidebar');
+    const toggleIcon = document.getElementById('admin-sidebar-toggle-icon');
+    const toggleBtnLabel = document.querySelector('#admin-sidebar-toggle-btn .sidebar-label');
+    if (!sidebar) return;
+
+    const collapsed = !!window.adminSidebarCollapsed;
+
+    if (collapsed) {
+        sidebar.classList.remove('md:w-64');
+        sidebar.classList.add('md:w-20');
+        sidebar.querySelectorAll('.sidebar-label').forEach(el => el.classList.add('hidden'));
+        if (toggleIcon) toggleIcon.textContent = '>';
+        if (toggleBtnLabel) toggleBtnLabel.textContent = '';
+        sidebar.querySelectorAll('[data-admin-task-panel]').forEach(btn => {
+            btn.classList.add('justify-center');
+            btn.classList.remove('px-4');
+            btn.classList.add('px-2');
+        });
+    } else {
+        sidebar.classList.remove('md:w-20');
+        sidebar.classList.add('md:w-64');
+        sidebar.querySelectorAll('.sidebar-label').forEach(el => el.classList.remove('hidden'));
+        if (toggleIcon) toggleIcon.textContent = '<';
+        if (toggleBtnLabel) toggleBtnLabel.textContent = 'Collapse';
+        sidebar.querySelectorAll('[data-admin-task-panel]').forEach(btn => {
+            btn.classList.remove('justify-center');
+            btn.classList.remove('px-2');
+            btn.classList.add('px-4');
+        });
+    }
+};
+
 const showAdminTaskPage = () => {
             const isCurrentAdmin = currentUser?.uid === ADMIN_UID || currentUser?.email === 'reviewsworld51@gmail.com' || currentUser?.email === 'reviewsworld01@gmail.com' || currentUserData?.role === 'admin' || currentUserData?.role === 'owner';
             if (!currentUser || !isCurrentAdmin) return showNotification('Admin access only.', true);
@@ -189,64 +231,85 @@ const showAdminTaskPage = () => {
                 ${getPageHeader('Manage Task')}
                 <div class="pb-24 max-w-7xl mx-auto p-4 md:p-6">
                     <!-- 2-Column Laptop View Split Layout -->
-                    <div class="flex flex-col lg:flex-row gap-6 items-start">
+                    <div class="flex flex-col md:flex-row gap-6 items-start">
                         
                         <!-- Left Sidebar Panel -->
-                        <div class="w-full lg:w-80 shrink-0 space-y-4">
-                            <!-- Stats & Toggle Card -->
-                            <section class="overflow-hidden rounded-3xl bg-gradient-to-br from-slate-950 via-cyan-900 to-emerald-700 p-5 text-white shadow-xl text-left">
-                                <p class="text-[9px] font-black uppercase text-white/60">Admin Control</p>
-                                <h3 class="text-lg font-black mt-1">Manage Task Board</h3>
-                                <p class="mt-1 text-xs font-semibold leading-normal text-white/70">Create review or social tasks here. New tasks stay OFF until you turn them ON.</p>
-                                
-                                <div class="grid grid-cols-3 gap-2 text-center text-xs mt-4">
-                                    <div class="rounded-xl bg-white/12 p-2">
-                                        <p class="font-black text-white" id="admin-task-total-count">0</p>
-                                        <p class="text-[8px] text-white/60 uppercase">Total</p>
-                                    </div>
-                                    <div class="rounded-xl bg-white/12 p-2">
-                                        <p class="font-black text-emerald-200" id="admin-task-active-count">0</p>
-                                        <p class="text-[8px] text-white/60 uppercase">Live</p>
-                                    </div>
-                                    <div class="rounded-xl bg-white/12 p-2">
-                                        <p class="font-black text-amber-200" id="admin-task-draft-count">0</p>
-                                        <p class="text-[8px] text-white/60 uppercase">Off</p>
-                                    </div>
-                                </div>
-                                <div class="mt-4 pt-3 border-t border-white/10 flex items-center justify-between">
-                                    <span class="text-xs font-bold text-white/95">Task Page (Users)</span>
-                                    <button type="button" id="admin-toggle-task-page-status" class="inline-flex items-center gap-1.5 text-xs font-black ${isTaskPageEnabled ? 'text-emerald-300' : 'text-white/70'}">
-                                        <span class="relative inline-flex h-4 w-7 rounded-full ${isTaskPageEnabled ? 'bg-emerald-500' : 'bg-white/20'} transition">
-                                            <span class="absolute top-0.5 left-0.5 h-3 w-3 rounded-full bg-white shadow transition transform ${isTaskPageEnabled ? 'translate-x-3' : 'translate-x-0'}"></span>
-                                        </span>
-                                        ${isTaskPageEnabled ? 'ON' : 'OFF'}
-                                    </button>
-                                </div>
-                            </section>
-
-                            <!-- Vertical Tab Menu -->
-                            <div class="flex flex-col gap-1.5 rounded-2xl border border-gray-100 bg-white p-2 shadow-sm dark:border-gray-850 dark:bg-gray-900">
-                                <button type="button" data-admin-task-panel="manage" class="w-full flex items-center gap-3 rounded-xl px-4 py-3 text-xs font-black uppercase tracking-wider text-left transition" style="outline: none;">
+                        <div id="admin-task-sidebar" class="w-full md:w-64 shrink-0 transition-all duration-300 flex flex-col justify-between border border-slate-100 dark:border-slate-800 bg-white dark:bg-gray-900 rounded-3xl p-3 shadow-sm md:sticky md:top-6 min-h-[350px]">
+                            <!-- Top Navigation List -->
+                            <div class="space-y-1.5 flex flex-col">
+                                <button type="button" data-admin-task-panel="manage" class="w-full flex items-center gap-3 rounded-2xl px-4 py-3.5 text-xs font-black uppercase tracking-wider text-left transition select-none" style="outline: none;">
                                     <span class="text-sm">📋</span>
-                                    <span>Tasks List</span>
+                                    <span class="sidebar-label">Tasks List</span>
                                 </button>
-                                <button type="button" data-admin-task-panel="add" class="w-full flex items-center gap-3 rounded-xl px-4 py-3 text-xs font-black uppercase tracking-wider text-left transition" style="outline: none;">
+                                <button type="button" data-admin-task-panel="add" class="w-full flex items-center gap-3 rounded-2xl px-4 py-3.5 text-xs font-black uppercase tracking-wider text-left transition select-none" style="outline: none;">
                                     <span class="text-sm">➕</span>
-                                    <span>Add Task</span>
+                                    <span class="sidebar-label">Add Task</span>
                                 </button>
-                                <button type="button" data-admin-task-panel="ads" class="w-full flex items-center gap-3 rounded-xl px-4 py-3 text-xs font-black uppercase tracking-wider text-left transition" style="outline: none;">
+                                <button type="button" data-admin-task-panel="ads" class="w-full flex items-center gap-3 rounded-2xl px-4 py-3.5 text-xs font-black uppercase tracking-wider text-left transition select-none" style="outline: none;">
                                     <span class="text-sm">📢</span>
-                                    <span>Manage Ads</span>
+                                    <span class="sidebar-label">Manage Ads</span>
                                 </button>
-                                <button type="button" data-admin-task-panel="submissions" class="w-full flex items-center gap-3 rounded-xl px-4 py-3 text-xs font-black uppercase tracking-wider text-left transition" style="outline: none;">
+                                <button type="button" data-admin-task-panel="submissions" class="w-full flex items-center gap-3 rounded-2xl px-4 py-3.5 text-xs font-black uppercase tracking-wider text-left transition select-none" style="outline: none;">
                                     <span class="text-sm">📥</span>
-                                    <span>Submissions</span>
+                                    <span class="sidebar-label">Submissions</span>
+                                </button>
+                                <button type="button" data-admin-task-panel="board_control" class="w-full flex items-center gap-3 rounded-2xl px-4 py-3.5 text-xs font-black uppercase tracking-wider text-left transition select-none" style="outline: none;">
+                                    <span class="text-sm">⚙️</span>
+                                    <span class="sidebar-label">Board Control</span>
+                                </button>
+                            </div>
+
+                            <!-- Bottom Collapse / Expand Button -->
+                            <div class="pt-3 border-t border-slate-100 dark:border-slate-800/80">
+                                <button type="button" id="admin-sidebar-toggle-btn" onclick="window.toggleAdminTaskSidebar()" class="w-full flex items-center justify-center gap-2 rounded-2xl bg-slate-50 dark:bg-slate-850 hover:bg-slate-100 dark:hover:bg-slate-800 py-3 text-xs font-black uppercase tracking-wider transition" style="outline: none;">
+                                    <span id="admin-sidebar-toggle-icon" class="text-sm font-extrabold">&lt;</span>
+                                    <span class="sidebar-label text-[10px]">Collapse</span>
                                 </button>
                             </div>
                         </div>
 
                         <!-- Right Panel Area -->
-                        <div class="flex-1 w-full min-w-0">
+                        <div class="flex-1 w-full min-w-0 space-y-4">
+                            <!-- Board Control Panel -->
+                            <section id="admin-board-control-section" class="hidden bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 p-4 sm:p-5">
+                                <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
+                                    <div>
+                                        <h3 class="text-lg font-black text-gray-900 dark:text-white">Board Control</h3>
+                                        <p class="text-xs text-gray-500 dark:text-gray-400">View overall statistics and control the task page visibility for users.</p>
+                                    </div>
+                                </div>
+
+                                <!-- Stats & Toggle Card -->
+                                <section class="overflow-hidden rounded-3xl bg-gradient-to-br from-slate-950 via-cyan-900 to-emerald-700 p-6 text-white shadow-xl text-left max-w-2xl">
+                                    <p class="text-[10px] font-black uppercase text-white/60">Admin Control</p>
+                                    <h3 class="text-2xl font-black mt-1">Manage Task Board</h3>
+                                    <p class="mt-2 text-sm font-semibold leading-normal text-white/70">Create review or social tasks here. New tasks stay OFF until you turn them ON.</p>
+                                    
+                                    <div class="grid grid-cols-3 gap-3 text-center text-sm mt-6">
+                                        <div class="rounded-2xl bg-white/12 px-4 py-4">
+                                            <p class="text-2xl font-black text-white" id="admin-task-total-count">0</p>
+                                            <p class="text-xs text-white/60 uppercase font-black mt-1">Total</p>
+                                        </div>
+                                        <div class="rounded-2xl bg-white/12 px-4 py-4">
+                                            <p class="text-2xl font-black text-emerald-200" id="admin-task-active-count">0</p>
+                                            <p class="text-xs text-white/60 uppercase font-black mt-1">Live</p>
+                                        </div>
+                                        <div class="rounded-2xl bg-white/12 px-4 py-4">
+                                            <p class="text-2xl font-black text-amber-200" id="admin-task-draft-count">0</p>
+                                            <p class="text-xs text-white/60 uppercase font-black mt-1">Off</p>
+                                        </div>
+                                    </div>
+                                    <div class="mt-6 pt-4 border-t border-white/10 flex items-center justify-between">
+                                        <span class="text-base font-black text-white/95">Task Page Status (for Users)</span>
+                                        <button type="button" id="admin-toggle-task-page-status" class="inline-flex items-center gap-2 text-sm font-black ${isTaskPageEnabled ? 'text-emerald-300' : 'text-white/70'}">
+                                            <span class="relative inline-flex h-5 w-9 rounded-full ${isTaskPageEnabled ? 'bg-emerald-500' : 'bg-white/20'} transition">
+                                                <span class="absolute top-0.5 left-0.5 h-5 w-5 rounded-full bg-white shadow transition transform ${isTaskPageEnabled ? 'translate-x-4' : 'translate-x-0'}"></span>
+                                            </span>
+                                            ${isTaskPageEnabled ? 'ON' : 'OFF'}
+                                        </button>
+                                    </div>
+                                </section>
+                            </section>
                     <section id="admin-task-add-section" class="hidden bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 p-4 sm:p-5">
                         <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
                             <div>
@@ -430,6 +493,7 @@ const showAdminTaskPage = () => {
                 button.addEventListener('click', () => setAdminTaskPanel(button.dataset.adminTaskPanel));
             });
             setAdminTaskPanel(window.adminTaskPanel || 'manage');
+            updateAdminTaskSidebar();
             const toggleBtn = document.getElementById('admin-toggle-task-page-status');
             if (toggleBtn) {
                 toggleBtn.addEventListener('click', async () => {
