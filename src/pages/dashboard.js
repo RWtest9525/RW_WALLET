@@ -727,24 +727,88 @@ const getPageHeader = (title, options = {}) => `
             <div class="p-4 pt-0">`;
 const getPageFooter = () => `</div>`;
 
+const clientTaskLogoCache = {};
+
 const getSubmissionAppLogo = (s) => {
-    if (s.appLogoUrl || s.app_logo_url || s.logoUrl) {
-        return s.appLogoUrl || s.app_logo_url || s.logoUrl;
+    const taskId = s.task_id || s.taskId;
+    if (!taskId) return 'https://cdn-icons-png.flaticon.com/512/3176/3176366.png';
+
+    // 1. Check in-memory logo cache
+    if (clientTaskLogoCache[taskId]) {
+        return clientTaskLogoCache[taskId];
     }
+
+    // 2. Try direct logo fields on submission
+    if (s.appLogoUrl || s.app_logo_url || s.logoUrl) {
+        clientTaskLogoCache[taskId] = s.appLogoUrl || s.app_logo_url || s.logoUrl;
+        return clientTaskLogoCache[taskId];
+    }
+
+    // 3. Try to get logo from the link directly on the submission
+    const isReview = !!(s.assigned_comment && String(s.assigned_comment).trim().length > 0);
+    const link = s.task_link || s.taskLink || '';
+    if (link && typeof window.getTaskLogoFromLink === 'function') {
+        const family = isReview ? 'review' : 'social';
+        const subtype = isReview ? 'app_review' : 'screenshot_verification';
+        const logoFromLink = window.getTaskLogoFromLink(family, subtype, link);
+        if (logoFromLink && !logoFromLink.includes('flaticon.com')) {
+            clientTaskLogoCache[taskId] = logoFromLink;
+            return logoFromLink;
+        }
+    }
+
+    // 4. Try looking up in global allTasksCache
     if (typeof allTasksCache !== 'undefined' && Array.isArray(allTasksCache)) {
-        const task = allTasksCache.find(t => t.id === (s.task_id || s.taskId));
+        const task = allTasksCache.find(t => t.id === taskId);
         if (task) {
             const logo = task.logoUrl || task.imageUrl || task.iconUrl || task.image;
-            if (logo) return logo;
-            const family = typeof window.getAdminTaskFamily === 'function' ? window.getAdminTaskFamily(task) : 'review';
-            const subtype = typeof window.getAdminTaskSubtype === 'function' ? window.getAdminTaskSubtype(task) : 'app_review';
-            if (typeof window.getTaskLogoFromLink === 'function') {
-                const logoFromLink = window.getTaskLogoFromLink(family, subtype, task.taskLink);
-                if (logoFromLink) return logoFromLink;
+            if (logo) {
+                clientTaskLogoCache[taskId] = logo;
+                return logo;
             }
         }
     }
+
+    // 5. Fetch from Firestore asynchronously and update DOM elements matching data-task-logo-id
+    if (typeof db !== 'undefined' && typeof appId !== 'undefined') {
+        const taskDocRef = doc(db, `artifacts/${appId}/public/data/tasks`, taskId);
+        getDoc(taskDocRef).then(docSnap => {
+            if (docSnap.exists()) {
+                const data = docSnap.data();
+                const logo = data.imageUrl || data.logoUrl || data.iconUrl || data.image || '';
+                if (logo) {
+                    clientTaskLogoCache[taskId] = logo;
+                    // Update all img tags with data-task-logo-id="taskId"
+                    const imgs = document.querySelectorAll(`img[data-task-logo-id="${taskId}"]`);
+                    imgs.forEach(img => {
+                        img.src = logo;
+                    });
+                }
+            }
+        }).catch(err => console.warn('Failed to fetch task logo from Firestore:', err));
+    }
+
+    // Fallback logo while loading
     return 'https://cdn-icons-png.flaticon.com/512/3176/3176366.png';
+};
+
+const getSubmissionDateText = (submittedAt) => {
+    if (!submittedAt) return 'Unknown';
+    let ms = 0;
+    if (typeof submittedAt === 'object') {
+        if (typeof submittedAt.toDate === 'function') {
+            return submittedAt.toDate().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+        }
+        if (submittedAt.seconds) {
+            ms = submittedAt.seconds * 1000;
+        } else if (submittedAt._seconds) {
+            ms = submittedAt._seconds * 1000;
+        }
+    } else {
+        ms = Number(submittedAt);
+    }
+    if (!ms || isNaN(ms)) return 'Unknown';
+    return new Date(ms).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
 };
 
 const getUserTaskHistoryListHtml = () => {
@@ -816,7 +880,7 @@ const getUserTaskHistoryListHtml = () => {
             return `
             <div class="bg-white dark:bg-gray-800 p-5 rounded-2xl border border-gray-100 dark:border-gray-800 hover:shadow-[0_4px_16px_rgba(0,0,0,0.04)] cursor-pointer transition select-none text-left space-y-4 shadow-[0_2px_8px_rgba(0,0,0,0.03)]" onclick="window.showBulkerTaskOverview('${g.taskId}')">
                 <div class="flex items-center gap-3">
-                    <img src="${escapeHtml(g.logoUrl)}" class="h-10 w-10 rounded-xl object-cover shrink-0" onerror="this.src='https://cdn-icons-png.flaticon.com/512/3176/3176366.png';">
+                    <img src="${escapeHtml(g.logoUrl)}" data-task-logo-id="${g.taskId}" class="h-10 w-10 rounded-xl object-cover shrink-0" onerror="this.src='https://cdn-icons-png.flaticon.com/512/3176/3176366.png';">
                     <div class="min-w-0 flex-1">
                         <h4 class="text-sm font-extrabold text-gray-900 dark:text-white truncate">${escapeHtml(g.taskName)}</h4>
                         <div class="flex items-center gap-2 text-[10px] text-gray-400 font-semibold mt-0.5">
@@ -849,10 +913,12 @@ const getUserTaskHistoryListHtml = () => {
         // Single User Flow Cards (Design based on Screenshot 1)
         return subs.map(s => {
             const isReview = !!(s.assigned_comment && String(s.assigned_comment).trim().length > 0);
+            const delayDays = Number(s.payout_delay_days || s.payoutDelayDays || 7);
             
-            let statusColor = 'amber';
-            let statusText = 'Pending';
-            let statusIcon = `<svg class="h-4 w-4 text-amber-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z"></path></svg>`;
+            // STATUS MEANING MAPPING
+            let statusColor = 'indigo';
+            let statusText = 'Under Review';
+            let statusIcon = `<svg class="h-4 w-4 text-indigo-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0 3.181 3.183a8.25 8.25 0 0 0 13.803-3.7M4.031 9.865a8.25 8.25 0 0 1 13.803-3.7l3.181 3.182m0-4.991v4.99"></path></svg>`;
 
             if (s.manual_status === 'approved') {
                 statusColor = 'emerald';
@@ -864,25 +930,46 @@ const getUserTaskHistoryListHtml = () => {
                 statusIcon = `<svg class="h-4 w-4 text-rose-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="m9.75 9.75 4.5 4.5m0-4.5-4.5 4.5M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z"></path></svg>`;
             } else if (s.manual_status === 'pending') {
                 if (s.ocr_status === 'completed') {
-                    statusColor = 'blue';
-                    statusText = 'Under Review';
-                    statusIcon = `<svg class="h-4 w-4 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0 3.181 3.183a8.25 8.25 0 0 0 13.803-3.7M4.031 9.865a8.25 8.25 0 0 1 13.803-3.7l3.181 3.182m0-4.991v4.99"></path></svg>`;
-                } else {
                     statusColor = 'amber';
-                    statusText = 'Pending';
+                    statusText = 'Pending / Under Review';
                     statusIcon = `<svg class="h-4 w-4 text-amber-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z"></path></svg>`;
+                } else {
+                    statusColor = 'indigo';
+                    statusText = 'Under Review';
+                    statusIcon = `<svg class="h-4 w-4 text-indigo-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0 3.181 3.183a8.25 8.25 0 0 0 13.803-3.7M4.031 9.865a8.25 8.25 0 0 1 13.803-3.7l3.181 3.182m0-4.991v4.99"></path></svg>`;
                 }
             }
 
-            const timeStr = s.submitted_at 
-                ? new Date(s.submitted_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) 
-                : 'Unknown';
+            // Robust Date Parsing
+            const timeStr = getSubmissionDateText(s.submitted_at || s.submittedAt);
 
-            // Auto-fetch logo logic
+            // Auto-fetch logo logic (asynchronously loads if missing)
             const appLogo = getSubmissionAppLogo(s);
 
-            const typeBadgeText = isReview ? 'Play Store Review' : 'Screenshot Task';
-            const workTypeText = isReview ? 'Play Store Review' : 'Screenshot + Review';
+            // Upper badge showing payout delay
+            const payoutTimeBadgeText = delayDays === 0 ? 'Instant Payout' : `${delayDays} Days Payout`;
+            const badgeBgColor = delayDays === 0 ? 'bg-emerald-50 dark:bg-emerald-950/20 text-emerald-600 dark:text-emerald-455 border-emerald-100/50' : 'bg-indigo-50 dark:bg-indigo-955/20 text-indigo-600 dark:text-indigo-400 border-indigo-100/50';
+
+            // Lower subtitle: days left to verify
+            const submittedMs = s.submitted_at || s.submittedAt || Date.now();
+            const submittedTimeMs = typeof submittedMs === 'object' && submittedMs.seconds ? submittedMs.seconds * 1000 : Number(submittedMs);
+            const verifyDelayDays = 3; 
+            const targetVerifyMs = submittedTimeMs + (verifyDelayDays * 24 * 60 * 60 * 1000);
+            const msLeftVerify = targetVerifyMs - Date.now();
+            const daysLeftVerify = Math.ceil(msLeftVerify / (24 * 60 * 60 * 1000));
+            
+            let verificationSubtext = '';
+            if (s.manual_status === 'approved') {
+                verificationSubtext = 'Verified';
+            } else if (s.manual_status === 'rejected') {
+                verificationSubtext = 'Verification Failed';
+            } else {
+                if (s.ocr_status === 'completed') {
+                    verificationSubtext = daysLeftVerify > 0 ? `${daysLeftVerify} Days left to verify` : 'Verifying...';
+                } else {
+                    verificationSubtext = 'Screenshot received, verification in progress';
+                }
+            }
             
             // Subtitle type icon (Google Play Store logo or document/file icon)
             const typeIcon = isReview ? `
@@ -898,10 +985,9 @@ const getUserTaskHistoryListHtml = () => {
                 </svg>
             `;
 
-            // Calculate remaining days
+            // Calculate remaining days for payment status
             let daysLeftDisplay = '';
             if (s.manual_status !== 'rejected') {
-                const delayDays = Number(s.payout_delay_days || s.payoutDelayDays || 7);
                 if (delayDays === 0) {
                     daysLeftDisplay = `
                         <span class="flex items-center gap-1 text-[11px] font-semibold text-gray-500 dark:text-gray-400">
@@ -911,14 +997,12 @@ const getUserTaskHistoryListHtml = () => {
                     `;
                 } else if (s.payout_status === 'paid') {
                     daysLeftDisplay = `
-                        <span class="flex items-center gap-1 text-[11px] font-semibold text-emerald-600 dark:text-emerald-450">
+                        <span class="flex items-center gap-1 text-[11px] font-semibold text-emerald-600 dark:text-emerald-455">
                             <svg class="h-3.5 w-3.5 text-emerald-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75 11.25 15 15 9.75M21 12c0 1.268-.63 2.39-1.593 3.068a3.745 3.745 0 0 1-1.043 3.296 3.745 3.745 0 0 1-3.296 1.043A3.745 3.745 0 0 1 12 21c-1.268 0-2.39-.63-3.068-1.593a3.746 3.746 0 0 1-3.296-1.043 3.745 3.745 0 0 1-1.043-3.296A3.745 3.745 0 0 1 3 12c0-1.268.63-2.39 1.593-3.068a3.745 3.745 0 0 1 1.043-3.296 3.746 3.746 0 0 1 3.296-1.043A3.746 3.746 0 0 1 12 3c1.268 0 2.39.63 3.068 1.593a3.746 3.746 0 0 1 3.296 1.043 3.746 3.746 0 0 1 1.043 3.296A3.745 3.745 0 0 1 21 12Z"/></svg>
                             Paid
                         </span>
                     `;
                 } else {
-                    const submittedMs = s.submitted_at || s.submittedAt || Date.now();
-                    const submittedTimeMs = typeof submittedMs === 'object' && submittedMs.seconds ? submittedMs.seconds * 1000 : Number(submittedMs);
                     const targetMs = submittedTimeMs + (delayDays * 24 * 60 * 60 * 1000);
                     const msLeft = targetMs - Date.now();
                     const daysLeft = Math.ceil(msLeft / (24 * 60 * 60 * 1000));
@@ -934,18 +1018,18 @@ const getUserTaskHistoryListHtml = () => {
             }
 
             return `
-            <div class="bg-white dark:bg-gray-800 p-4 rounded-3xl border border-gray-100 dark:border-gray-850 hover:shadow-[0_4px_20px_rgba(0,0,0,0.03)] cursor-pointer transition-all duration-200 select-none text-left flex flex-col gap-3 shadow-[0_2px_12px_rgba(0,0,0,0.015)]" onclick="window.showUserTaskHistoryDetail('${s.id}')">
+            <div class="bg-white dark:bg-gray-800 p-4 rounded-3xl border border-gray-100 dark:border-gray-855 hover:shadow-[0_4px_20px_rgba(0,0,0,0.03)] cursor-pointer transition-all duration-200 select-none text-left flex flex-col gap-3 shadow-[0_2px_12px_rgba(0,0,0,0.015)]" onclick="window.showUserTaskHistoryDetail('${s.id}')">
                 <!-- Top Section -->
                 <div class="flex items-start gap-3">
-                    <img src="${escapeHtml(appLogo)}" class="h-12 w-12 rounded-2xl object-cover shrink-0 border border-gray-50 dark:border-gray-700 shadow-sm" onerror="this.src='https://cdn-icons-png.flaticon.com/512/3176/3176366.png';">
+                    <img src="${escapeHtml(appLogo)}" data-task-logo-id="${s.task_id || s.taskId}" class="h-12 w-12 rounded-2xl object-cover shrink-0 border border-gray-50 dark:border-gray-700 shadow-sm" onerror="this.src='https://cdn-icons-png.flaticon.com/512/3176/3176366.png';">
                     <div class="min-w-0 flex-1">
-                        <span class="rounded-lg bg-indigo-50 dark:bg-indigo-955/20 text-indigo-600 dark:text-indigo-400 px-2 py-0.5 text-[9px] font-black uppercase tracking-wider">
-                            ${typeBadgeText}
+                        <span class="rounded-lg ${badgeBgColor} px-2 py-0.5 text-[9px] font-black uppercase tracking-wider">
+                            ${payoutTimeBadgeText}
                         </span>
                         <h4 class="text-sm font-extrabold text-gray-900 dark:text-white truncate mt-1">${escapeHtml(s.app_name || 'Task Submission')}</h4>
                         <div class="flex items-center gap-1 text-[11px] text-gray-400 dark:text-gray-500 font-semibold mt-0.5">
                             ${typeIcon}
-                            <span class="truncate">${workTypeText}</span>
+                            <span class="truncate">${verificationSubtext}</span>
                         </div>
                     </div>
                     <div class="text-right shrink-0">
