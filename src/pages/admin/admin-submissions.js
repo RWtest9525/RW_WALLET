@@ -511,26 +511,54 @@ const renderAdminSubmissions = () => {
 
     // Group rows by EVERY task in our cache so that OFF tasks also show up!
     let filteredTasks = [...allTasksCache];
-    if (!isOwner) {
+    if (!isOwner && filteredTasks.length > 0) {
         filteredTasks = filteredTasks.filter(task => task.createdBy === currentUser.uid);
     }
-    const taskRows = filteredTasks.map(task => {
-        const taskSubs = dateSubs.filter(s => s.task_id === task.id || s.taskId === task.id);
-        const family = window.getAdminTaskFamily ? window.getAdminTaskFamily(task) : 'review';
-        const subtype = window.getAdminTaskSubtype ? window.getAdminTaskSubtype(task) : 'app_review';
-        const logo = task.logoUrl || task.imageUrl || task.iconUrl || (window.getTaskLogoFromLink ? window.getTaskLogoFromLink(family, subtype, task.taskLink) : '');
-        return {
-            id: task.id,
-            name: task.appName || task.title || 'Task',
-            logo: logo,
-            isLive: task.status === 'active',
-            total: taskSubs.length,
-            ocrPassed: taskSubs.filter(s => s.ocr_status === 'completed').length,
-            pending: taskSubs.filter(s => s.manual_status === 'pending').length,
-            approved: taskSubs.filter(s => s.manual_status === 'approved').length,
-            rejected: taskSubs.filter(s => s.manual_status === 'rejected').length
-        };
-    });
+
+    let taskRows = [];
+    if (filteredTasks.length > 0) {
+        // Build from cache — includes tasks with 0 submissions
+        taskRows = filteredTasks.map(task => {
+            const taskSubs = dateSubs.filter(s => s.task_id === task.id || s.taskId === task.id);
+            const family = window.getAdminTaskFamily ? window.getAdminTaskFamily(task) : 'review';
+            const subtype = window.getAdminTaskSubtype ? window.getAdminTaskSubtype(task) : 'app_review';
+            const logo = task.logoUrl || task.imageUrl || task.iconUrl || (window.getTaskLogoFromLink ? window.getTaskLogoFromLink(family, subtype, task.taskLink) : '');
+            return {
+                id: task.id,
+                name: task.appName || task.title || 'Task',
+                logo: logo,
+                isLive: task.status === 'active',
+                total: taskSubs.length,
+                ocrPassed: taskSubs.filter(s => s.ocr_status === 'completed').length,
+                pending: taskSubs.filter(s => s.manual_status === 'pending').length,
+                approved: taskSubs.filter(s => s.manual_status === 'approved').length,
+                rejected: taskSubs.filter(s => s.manual_status === 'rejected').length
+            };
+        });
+    } else {
+        // Fallback: Build task rows from submissions data when allTasksCache is empty
+        const taskIdMap = {};
+        dateSubs.forEach(s => {
+            const tid = s.task_id || s.taskId;
+            if (!tid) return;
+            if (!taskIdMap[tid]) {
+                taskIdMap[tid] = {
+                    id: tid,
+                    name: s.app_name || s.appName || s.task_name || 'Task',
+                    logo: '',
+                    isLive: true,
+                    total: 0, ocrPassed: 0, pending: 0, approved: 0, rejected: 0
+                };
+            }
+            const row = taskIdMap[tid];
+            row.total++;
+            if (s.ocr_status === 'completed') row.ocrPassed++;
+            if (s.manual_status === 'pending') row.pending++;
+            if (s.manual_status === 'approved') row.approved++;
+            if (s.manual_status === 'rejected') row.rejected++;
+        });
+        taskRows = Object.values(taskIdMap);
+    }
 
     const isDetailView = window.adminSubmissionsView.viewState === 'detail';
     const selectedTaskId = window.adminSubmissionsView.selectedTaskId;
