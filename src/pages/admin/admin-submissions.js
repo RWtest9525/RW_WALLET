@@ -368,6 +368,18 @@ const loadAdminSubmissions = async () => {
             }
             if (adminSubmissionsLoading) return;
             adminSubmissionsLoading = true;
+
+            // Pre-fetch tasks if not loaded in cache
+            if (!window.allTasksCache || window.allTasksCache.length === 0) {
+                try {
+                    const tasksQuery = query(collection(db, `artifacts/${appId}/public/data/tasks`), orderBy("createdAt", "desc"));
+                    const tasksSnap = await getDocs(tasksQuery);
+                    window.allTasksCache = tasksSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                } catch (e) {
+                    console.warn('Failed to pre-fetch tasks inside loadAdminSubmissions:', e);
+                }
+            }
+
             try {
                 const token = await getBackendAuthToken();
                 const response = await fetchWithTimeout(`${BACKEND_BASE_URL}/api/admin/task-submissions?limit=500`, {
@@ -503,7 +515,11 @@ const renderAdminSubmissions = () => {
     };
 
     // Group rows by EVERY task in our cache so that OFF tasks also show up!
-    const taskRows = allTasksCache.map(task => {
+    let filteredTasks = [...allTasksCache];
+    if (!isOwner) {
+        filteredTasks = filteredTasks.filter(task => task.createdBy === currentUser.uid);
+    }
+    const taskRows = filteredTasks.map(task => {
         const taskSubs = dateSubs.filter(s => s.task_id === task.id || s.taskId === task.id);
         const family = window.getAdminTaskFamily ? window.getAdminTaskFamily(task) : 'review';
         const subtype = window.getAdminTaskSubtype ? window.getAdminTaskSubtype(task) : 'app_review';
