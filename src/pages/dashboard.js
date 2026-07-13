@@ -1387,7 +1387,7 @@ window.showUserTaskHistoryDetail = (submissionId) => {
                             <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5" />
                         </svg>
                     </button>
-                    <h2 class="absolute left-1/2 -translate-x-1/2 text-lg font-bold text-gray-900 dark:text-white">Task Details</h2>
+                    <h2 class="absolute left-1/2 -translate-x-1/2 text-lg font-bold text-gray-900 dark:text-white">Task Status</h2>
                     <!-- Question help button inside top header -->
                     <button type="button" class="p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700" onclick="window.showSubmissionStatusPage('${s.id}')" style="outline: none;">
                         <svg class="h-6 w-6 text-gray-600 dark:text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.8">
