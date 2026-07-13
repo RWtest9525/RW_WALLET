@@ -1399,9 +1399,9 @@ window.showUserTaskHistoryDetail = (submissionId) => {
             const stage3 = getStageStyle(3);
             const stage4 = getStageStyle(4);
 
-            const displaySubmissionId = (s.comment_index !== undefined && s.comment_index !== null)
-                ? `#${s.comment_index}`
-                : `#${s.id ? s.id.substring(s.id.length - 4) : '1'}`;
+            const taskIndexVal = s.task_index || s.taskIndex || 1;
+            const commentIndexVal = s.comment_index !== undefined ? s.comment_index : (s.commentIndex ?? s.assignedCommentIndex ?? 0);
+            const displaySubmissionId = `#${String(taskIndexVal).padStart(2, '0')}_${String(commentIndexVal + 1).padStart(2, '0')}`;
 
             const detailContent = `
                 <header class="relative flex items-center justify-between p-4 bg-white dark:bg-gray-800 shadow-[0_2px_8px_rgba(0,0,0,0.015)] border-b border-gray-100 dark:border-gray-750 page-header-fixed">
@@ -2058,11 +2058,15 @@ window.showBulkerAllSubmissions = (taskId, filterStatus = 'all') => {
                             if (s.manual_status === 'approved') badgeColor = 'emerald';
                             if (s.manual_status === 'rejected') badgeColor = 'rose';
 
+                            const taskIndexVal = s.task_index || s.taskIndex || 1;
+                            const commentIndexVal = s.comment_index !== undefined ? s.comment_index : (s.commentIndex ?? s.assignedCommentIndex ?? 0);
+                            const displaySubmissionId = `#${String(taskIndexVal).padStart(2, '0')}_${String(commentIndexVal + 1).padStart(2, '0')}`;
+
                             return `
                             <div class="flex items-center justify-between p-3.5 hover:bg-gray-55/50 dark:hover:bg-gray-750/30 transition cursor-pointer select-none" onclick="window.showBulkerSubmissionDetail('${s.id}')">
                                 <div class="flex items-center gap-3.5 min-w-0">
                                     <!-- Left Index -->
-                                    <span class="text-xs font-black text-gray-400 dark:text-gray-500 w-8 shrink-0">#${displayNum}</span>
+                                    <span class="text-[10px] font-black text-gray-400 dark:text-gray-500 w-14 shrink-0 font-mono">${displaySubmissionId}</span>
                                     
                                     <!-- Thumbnail -->
                                     <img src="${escapeHtml(s.screenshot_url)}" class="h-11 w-11 rounded-xl object-cover shrink-0 border border-gray-100 dark:border-gray-700 shadow-sm" onclick="event.stopPropagation(); window.showScreenshotLightbox('${escapeHtml(s.screenshot_url)}', '${escapeHtml(s.screenshot_view_url || '')}')" onerror="this.src='https://placehold.co/100x100?text=No+Img';">
@@ -2132,6 +2136,10 @@ window.showBulkerSubmissionDetail = (submissionId) => {
             try { details = s.details_json ? JSON.parse(s.details_json) : {}; } catch {}
             const gmailName = s.ocr_extracted_name || '';
 
+            const taskIndexVal = s.task_index || s.taskIndex || 1;
+            const commentIndexVal = s.comment_index !== undefined ? s.comment_index : (s.commentIndex ?? s.assignedCommentIndex ?? 0);
+            const displaySubmissionId = `#${String(taskIndexVal).padStart(2, '0')}_${String(commentIndexVal + 1).padStart(2, '0')}`;
+
             const content = `
                 <header class="flex items-center justify-between p-4 bg-white dark:bg-gray-800 shadow-[0_2px_8px_rgba(0,0,0,0.02)] border-b border-gray-100 dark:border-gray-755 page-header-fixed">
                     <div class="flex items-center gap-3">
@@ -2141,7 +2149,7 @@ window.showBulkerSubmissionDetail = (submissionId) => {
                         <h2 class="text-lg font-black text-gray-900 dark:text-white">Submission Detail</h2>
                     </div>
                 </header>
-
+ 
                 <div class="max-w-xl mx-auto space-y-5 pb-24 px-4 pt-4 text-left">
                     <!-- Details Card -->
                     <div class="bg-white dark:bg-gray-800 p-5 rounded-2xl border border-gray-100 dark:border-gray-800 shadow-[0_2px_8px_rgba(0,0,0,0.03)] space-y-4">
@@ -2150,7 +2158,7 @@ window.showBulkerSubmissionDetail = (submissionId) => {
                         <div class="space-y-3.5 text-xs font-semibold text-gray-655 dark:text-gray-300">
                             <div class="flex justify-between">
                                 <span class="text-gray-400">Submission ID</span>
-                                <span class="font-extrabold text-gray-855 dark:text-white font-mono select-all">#${s.id}</span>
+                                <span class="font-extrabold text-gray-855 dark:text-white font-mono select-all">${displaySubmissionId}</span>
                             </div>
                             <div class="flex justify-between">
                                 <span class="text-gray-400">Status</span>
@@ -2507,13 +2515,29 @@ const getTaskAccent = (subtype) => {
     }
 };
 
-const showUserTaskPage = () => {
+const showUserTaskPage = async () => {
             if (!ensureUserSessionReady()) return;
             currentMainSection = 'task';
             const isTaskPageEnabled = !!appConfigCache?.task_page_enabled;
             let taskCategories = [];
 
             if (isTaskPageEnabled) {
+                showLoading();
+                let takenCommentsMap = {};
+                try {
+                    const token = await getBackendAuthToken();
+                    const resp = await fetchWithTimeout(`${BACKEND_BASE_URL}/api/tasks/availability`, {
+                        headers: { Authorization: `Bearer ${token}` }
+                    }, 5000);
+                    const d = await resp.json();
+                    if (d.ok && d.takenComments) {
+                        takenCommentsMap = d.takenComments;
+                    }
+                } catch (e) {
+                    console.warn('Failed to load task availability from backend:', e);
+                }
+                hideLoading();
+
                 const appReviewItems = [];
                 const mapReviewItems = [];
                 const socialTaskItems = [];
@@ -2535,6 +2559,22 @@ const showUserTaskPage = () => {
                 allTasksCache
                     .filter(isTaskVisibleToUser)
                     .filter(task => getAdminTaskEffectiveStatus(task) === 'active')
+                    .filter(task => {
+                        const subtype = task.subtype || task.taskSubtype || '';
+                        const isReview = subtype === 'app_review' || subtype === 'map_review' || subtype === 'trustpilot_review' || subtype === 'website_review';
+                        if (isReview) {
+                            const comments = getTaskCommentPool(task);
+                            if (comments.length === 0) return false;
+
+                            const taken = takenCommentsMap[task.id] || [];
+                            const takenSet = new Set(taken.map(c => String(c).trim()));
+                            const available = comments.filter(c => !takenSet.has(String(c).trim()));
+                            if (available.length === 0) {
+                                return false; // Hide task if no comments are left!
+                            }
+                        }
+                        return true;
+                    })
                     .filter(task => {
                         // Show task if user hasn't submitted it today
                         if (!userTaskTodaySubmissionIds.has(task.id)) return true;
@@ -3434,6 +3474,13 @@ class TaskUploadQueueManager {
             item.progress = 70;
             this.notify(taskId);
 
+            const commentsPool = getTaskCommentPool(item.task);
+            const commentIdx = commentsPool.indexOf(finalComment);
+            const finalCommentIndex = activeReservation 
+                ? (activeReservation.commentIndex ?? activeReservation.comment_index ?? 0) 
+                : (commentIdx >= 0 ? commentIdx : 0);
+            const taskIndexVal = item.task.taskIndex || item.task.task_index || 1;
+
             const reservationId = item.isBulk
                 ? `res_bulk_${item.task.id.slice(0, 12)}_${currentUser.uid.slice(0, 12)}_${Date.now()}`
                 : (activeReservation?.id || getTaskReservationDocId(item.task.id, currentUser.uid));
@@ -3462,7 +3509,15 @@ class TaskUploadQueueManager {
                     ocrExtractedName: verification.gmailName,
                     ocrExtractedText: verification.ocrText || ocrText,
                     ocrConfidence: verification.ocrConfidence || 1.0,
-                    details: { gmailLogoUrl: verification.gmailLogoUrl, avatarHash: verification.avatarHash || '', avatarCrop: verification.avatarCrop || null }
+                    details: { 
+                        gmailLogoUrl: verification.gmailLogoUrl, 
+                        avatarHash: verification.avatarHash || '', 
+                        avatarCrop: verification.avatarCrop || null,
+                        taskIndex: taskIndexVal,
+                        task_index: taskIndexVal,
+                        commentIndex: finalCommentIndex,
+                        comment_index: finalCommentIndex
+                    }
                 })
             }, 15000);
 
@@ -3493,7 +3548,11 @@ class TaskUploadQueueManager {
                 userMobile: currentUserData?.mobile || '',
                 reward: Number(item.reward || 0),
                 assignedComment: finalComment,
-                assignedCommentIndex: activeReservation?.commentIndex ?? 0,
+                assignedCommentIndex: finalCommentIndex,
+                commentIndex: finalCommentIndex,
+                comment_index: finalCommentIndex,
+                taskIndex: taskIndexVal,
+                task_index: taskIndexVal,
                 reservationId,
                 reservationExpiresAt: activeReservation?.expiresAt || (Date.now() + 24 * 60 * 60 * 1000),
                 screenshotUrl,
@@ -3657,11 +3716,16 @@ const showUserTaskDetailsPage = async (taskId) => {
                     </div>
                 `;
             } else {
+                const commentIdxInit = preSelected.index;
+                const commentIdStr = `Comment #${String(commentIdxInit + 1).padStart(2, '0')}`;
                 step2Html = `
                     <div class="space-y-3.5">
                         <div class="relative rounded-2xl bg-indigo-50/30 dark:bg-indigo-950/20 border border-indigo-100 dark:border-indigo-900/50 p-4 pr-10 text-left mt-3">
+                            <div class="flex items-center justify-between mb-1.5 select-none">
+                                <span id="task-assigned-review-id" class="text-[9px] font-black uppercase tracking-wider text-indigo-600 dark:text-indigo-400">${commentIdStr}</span>
+                            </div>
                             <p id="task-assigned-review-text" class="text-sm font-semibold text-slate-800 dark:text-slate-200 italic leading-relaxed">"${escapeHtml(initialComment)}"</p>
-                            <button type="button" id="task-copy-icon-btn" class="absolute right-3.5 top-1/2 -translate-y-1/2 text-indigo-600 dark:text-indigo-400 hover:opacity-85 transition">
+                            <button type="button" id="task-copy-icon-btn" class="absolute right-3.5 top-6 text-indigo-600 dark:text-indigo-400 hover:opacity-85 transition">
                                 <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"></path></svg>
                             </button>
                         </div>
@@ -3990,6 +4054,11 @@ const showUserTaskDetailsPage = async (taskId) => {
                 window.activeTaskReservation = reservation;
                 const commentEl = document.getElementById('task-assigned-review-text');
                 if (commentEl) commentEl.textContent = `"${reservation.comment}"`;
+                const reviewIdEl = document.getElementById('task-assigned-review-id');
+                if (reviewIdEl) {
+                    const cIdx = reservation.commentIndex !== undefined ? reservation.commentIndex : (reservation.comment_index ?? 0);
+                    reviewIdEl.textContent = `Comment #${String(cIdx + 1).padStart(2, '0')}`;
+                }
                 
                 if (timerContainerEl) {
                     timerContainerEl.className = 'timer-pulse-glow bg-amber-500/10 dark:bg-amber-500/20 border border-amber-500/30 rounded-xl px-2 py-1 flex items-center gap-1.5 text-[10px] font-black text-amber-600 dark:text-amber-400 shadow-sm shrink-0';
@@ -4083,6 +4152,10 @@ const showUserTaskDetailsPage = async (taskId) => {
                         console.warn('Background reservation failed:', error);
                         const timerEl = document.getElementById('task-card-timer');
                         if (timerEl) timerEl.textContent = 'Expired';
+                        if (error.message && error.message.includes('No comments available')) {
+                            showNotification(error.message, true);
+                            showUserTaskPage();
+                        }
                     }
                 };
                 initBackgroundReservation();

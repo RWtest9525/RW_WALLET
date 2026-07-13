@@ -20,6 +20,39 @@ const isAdminReviewTask = (task = {}) => getAdminTaskFamily(task) === 'review';
 
 const applyAdminTasksSnapshot = (docs = []) => {
             allTasksCache = docs.map(doc => ({ id: doc.id, ...doc.data() }));
+
+            // Auto-assign sequential taskIndex for tasks that are missing it
+            (async () => {
+                let hasChanges = false;
+                const sorted = [...allTasksCache].sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0));
+                for (let i = 0; i < sorted.length; i++) {
+                    const t = sorted[i];
+                    if (!t.taskIndex && !t.task_index) {
+                        const newIdx = i + 1;
+                        t.taskIndex = newIdx;
+                        t.task_index = newIdx;
+                        hasChanges = true;
+                        try {
+                            const ref = doc(db, `artifacts/${appId}/public/data/tasks`, t.id);
+                            await updateDoc(ref, { taskIndex: newIdx, task_index: newIdx });
+                        } catch (e) {
+                            console.warn('Failed to update task index in Firestore:', e);
+                        }
+                    } else if (t.task_index && !t.taskIndex) {
+                        t.taskIndex = t.task_index;
+                    } else if (t.taskIndex && !t.task_index) {
+                        t.task_index = t.taskIndex;
+                    }
+                }
+                if (hasChanges) {
+                    allTasksCache = sorted;
+                    if (document.getElementById('admin-task-list')) {
+                        renderAdminTaskList();
+                    }
+                    renderHomeTaskCategories();
+                }
+            })();
+
             if (document.getElementById('admin-task-list')) {
                 renderAdminTaskList();
             }
@@ -854,11 +887,20 @@ const getAdminTaskFormData = (existingTask = null) => {
             const listTime = document.getElementById('admin-task-list-time')?.value || '20:00';
             const status = existingTask ? (existingTask.status || 'draft') : 'draft';
             const preservedReviewComment = family === 'review' && existingTask ? (existingTask.reviewComment || existingTask.commentToCopy || '') : '';
+            
+            let taskIndex = existingTask ? (existingTask.taskIndex || existingTask.task_index) : null;
+            if (!taskIndex) {
+                const indices = allTasksCache.map(t => Number(t.taskIndex || t.task_index || 0)).filter(Boolean);
+                taskIndex = indices.length > 0 ? Math.max(...indices) + 1 : 1;
+            }
+
             return {
                 title,
                 taskFamily: family,
                 taskType: family,
                 taskSubtype: subtype,
+                taskIndex,
+                task_index: taskIndex,
                 taskSubtypeLabel: subtypeMeta.label,
                 category: subtypeMeta.label,
                 taskGroup: getAdminTaskFamilyLabel(family),

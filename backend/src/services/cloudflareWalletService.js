@@ -1282,12 +1282,29 @@ async function reserveTaskComment(d1, { taskId, userId, userName, userEmail, com
   const usedComments = new Set(activeReservations.map(r => r.comment));
 
   // Pick first available comment
-  const commentsList = Array.isArray(comments) ? comments : ['good app'];
-  const comment = commentsList.find(c => !usedComments.has(c)) || commentsList[0];
-  const commentIndex = Math.max(0, commentsList.indexOf(comment));
+  const commentsList = (Array.isArray(comments) ? comments : []).map(c => String(c || '').trim()).filter(Boolean);
+  if (commentsList.length === 0) {
+    throw new Error('NO_COMMENTS_AVAILABLE');
+  }
+
+  const comment = commentsList.find(c => !usedComments.has(c));
+  if (!comment) {
+    throw new Error('NO_COMMENTS_AVAILABLE');
+  }
+  const commentIndex = commentsList.indexOf(comment);
 
   const now = nowMs();
-  const expiresAt = now + reservationMs;
+  let expiresAt = now + reservationMs;
+  if (isBulker) {
+    // Expire at midnight IST today (12:00 AM of tomorrow IST)
+    const d = new Date();
+    const istOffset = 5.5 * 60 * 60 * 1000;
+    const istTime = d.getTime() + istOffset;
+    const istDate = new Date(istTime);
+    const endOfTodayIST = Date.UTC(istDate.getUTCFullYear(), istDate.getUTCMonth(), istDate.getUTCDate() + 1, 0, 0, 0, 0) - istOffset;
+    expiresAt = endOfTodayIST;
+  }
+
   const id = `res_${taskId.slice(0,12)}_${userId.slice(0,12)}_${now}`;
 
   const detailsObj = { userName: userName || '', userEmail: userEmail || '' };
@@ -1350,7 +1367,7 @@ async function listTaskSubmissions(d1, { taskId = null, userId = null, manualSta
   if (payoutStatus) { conditions.push('ts.payout_status = ?'); params.push(payoutStatus); }
   if (parentAdmin) { conditions.push('u.parent_admin = ?'); params.push(parentAdmin); }
   params.push(limit);
-  return d1.all(
+  const rows = await d1.all(
     `SELECT ts.*, u.mobile as user_mobile 
      FROM task_submissions ts
      LEFT JOIN users u ON ts.user_id = u.id OR ts.user_id = u.firebase_uid
@@ -1358,6 +1375,17 @@ async function listTaskSubmissions(d1, { taskId = null, userId = null, manualSta
      ORDER BY ts.submitted_at DESC LIMIT ?`,
     params
   );
+  return (rows || []).map(r => {
+    let details = {};
+    try {
+      details = r.details_json ? JSON.parse(r.details_json) : {};
+    } catch {}
+    return {
+      ...r,
+      ...details,
+      details_json: undefined
+    };
+  });
 }
 
 async function updateTaskSubmission(d1, submissionId, updates = {}) {
@@ -3053,14 +3081,47 @@ ${memoriesContext}`
         userId: req.auth.sub,
         userName: req.body.userName || '',
         userEmail: req.auth.email || '',
-        comments: Array.isArray(comments) ? comments : ['good app'],
+        comments: Array.isArray(comments) ? comments : [],
         reservationMs: Math.min(Number(reservationMs || TASK_RESERVATION_MS), 10 * 60 * 1000)
       });
       res.json({ ok: true, reservation });
     } catch (error) {
       if (error.message === 'TASK_ALREADY_SUBMITTED') return res.status(409).json({ ok: false, error: error.message });
+      if (error.message === 'NO_COMMENTS_AVAILABLE') return res.status(410).json({ ok: false, error: error.message });
       console.error('Task reservation failed:', error);
       res.status(500).json({ ok: false, error: 'RESERVATION_FAILED' });
+    }
+  });
+
+  app.get('/api/tasks/availability', requireHttpAuth, async (req, res) => {
+    try {
+      await cleanupExpiredReservations(d1);
+      const userId = req.auth.sub;
+
+      const takenComments = await d1.all(
+        `SELECT task_id, comment FROM task_comment_reservations 
+         WHERE status IN ('reserved', 'submitted') 
+           AND (expires_at > ? OR status = 'submitted')
+           AND NOT (user_id = ? AND status = 'reserved')`,
+        [nowMs(), userId]
+      );
+
+      const takenMap = {};
+      for (const row of takenComments) {
+        if (!row.task_id) continue;
+        if (!takenMap[row.task_id]) {
+          takenMap[row.task_id] = [];
+        }
+        const cleanVal = String(row.comment || '').trim();
+        if (cleanVal && !takenMap[row.task_id].includes(cleanVal)) {
+          takenMap[row.task_id].push(cleanVal);
+        }
+      }
+
+      res.json({ ok: true, takenComments: takenMap });
+    } catch (err) {
+      console.error('Failed to get task comment availability:', err);
+      res.status(500).json({ ok: false, error: 'GET_AVAILABILITY_FAILED' });
     }
   });
 
@@ -3146,7 +3207,7 @@ ${memoriesContext}`
       const getTaskCommentPool = (t = {}) => {
         const src = Array.isArray(t.reviewComments) && t.reviewComments.length
             ? t.reviewComments
-            : String(t.reviewComment || t.commentToCopy || t.reviewText || t.copyText || 'good app').split(/\r?\n/);
+            : String(t.reviewComment || t.commentToCopy || t.reviewText || t.copyText || '').split(/\r?\n/);
         return src.map(v => String(v || '').trim()).filter(Boolean);
       };
       const commentPool = getTaskCommentPool(taskData);

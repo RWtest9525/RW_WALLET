@@ -1776,14 +1776,16 @@ const getNextTaskMidnightMillis = () => {
         };
 
 const getTaskCommentPool = (task = {}) => {
+            const family = getAdminTaskFamily(task);
+            if (family !== 'review') return [];
             const source = Array.isArray(task.reviewComments) && task.reviewComments.length
                 ? task.reviewComments
-                : String(task.reviewComment || task.commentToCopy || task.reviewText || task.copyText || 'good app').split(/\r?\n/);
+                : String(task.reviewComment || task.commentToCopy || task.reviewText || task.copyText || '').split(/\r?\n/);
             const unique = [];
             source.map(value => String(value || '').trim()).filter(Boolean).forEach(comment => {
                 if (!unique.includes(comment)) unique.push(comment);
             });
-            return unique.length ? unique : ['good app'];
+            return unique;
         };
 
 const getTaskTier = (u) => {
@@ -1905,8 +1907,10 @@ const reserveTaskReviewComment = async (task = {}) => {
                     return reservation;
                 }
                 if (data.error === 'TASK_ALREADY_SUBMITTED') throw new Error('You have already submitted this task.');
+                if (data.error === 'NO_COMMENTS_AVAILABLE') throw new Error('No comments available. Please try later.');
             } catch (backendError) {
                 if (backendError.message === 'You have already submitted this task.') throw backendError;
+                if (backendError.message === 'No comments available. Please try later.') throw backendError;
                 console.warn('Backend reservation failed, falling back to Firebase:', backendError);
             }
 
@@ -1915,6 +1919,9 @@ const reserveTaskReviewComment = async (task = {}) => {
             if (existing) return existing;
 
             const comments = getTaskCommentPool(task);
+            if (comments.length === 0) {
+                throw new Error('No comments available. Please try later.');
+            }
             const reservationsSnap = await getDocs(query(
                 collection(db, `artifacts/${appId}/public/data/task_comment_reservations`),
                 where('taskId', '==', task.id),
@@ -1928,10 +1935,21 @@ const reserveTaskReviewComment = async (task = {}) => {
                     usedByOthers.add(String(data.comment || '').trim());
                 }
             });
-            const comment = comments.find(item => !usedByOthers.has(item)) || comments[0];
-            const commentIndex = Math.max(0, comments.indexOf(comment));
+            const comment = comments.find(item => !usedByOthers.has(item));
+            if (!comment) {
+                throw new Error('No comments available. Please try later.');
+            }
+            const commentIndex = comments.indexOf(comment);
             const now = Date.now();
-            const expiresAt = now + TASK_COMMENT_RESERVATION_MS;
+            let expiresAt = now + TASK_COMMENT_RESERVATION_MS;
+            if (isBulkTaskUser()) {
+                const d = new Date();
+                const istOffset = 5.5 * 60 * 60 * 1000;
+                const istTime = d.getTime() + istOffset;
+                const istDate = new Date(istTime);
+                const endOfTodayIST = Date.UTC(istDate.getUTCFullYear(), istDate.getUTCMonth(), istDate.getUTCDate() + 1, 0, 0, 0, 0) - istOffset;
+                expiresAt = endOfTodayIST;
+            }
             const reservation = {
                 taskId: task.id,
                 taskTitle: task.title || 'Task Mission',
