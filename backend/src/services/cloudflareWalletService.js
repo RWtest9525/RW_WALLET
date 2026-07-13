@@ -1225,7 +1225,8 @@ async function checkIsBulker(d1, userId) {
     const userDoc = await db.doc(`artifacts/digital-wallet-prod/public/data/users/${userId}`).get();
     if (userDoc.exists) {
       const data = userDoc.data();
-      return !!(data.bulkTaskMode || data.taskBulkMode || data.isBulkTaskUser);
+      const tier = data.taskTier || '';
+      return !!(tier === 'bulker' || tier === 'super_bulker' || data.bulkTaskMode || data.taskBulkMode || data.isBulkTaskUser);
     }
   } catch (err) {
     console.error('Error checking isBulker in Firestore:', err);
