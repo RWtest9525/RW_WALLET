@@ -811,6 +811,48 @@ const getSubmissionDateText = (submittedAt) => {
     return new Date(ms).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
 };
 
+const getTaskTypeLabel = (s) => {
+    const isReview = !!(s.assigned_comment && String(s.assigned_comment).trim().length > 0);
+    const link = s.task_link || s.taskLink || '';
+    
+    // 1. Try to find the task in allTasksCache to get the actual sub-type/name
+    if (typeof allTasksCache !== 'undefined' && Array.isArray(allTasksCache)) {
+        const task = allTasksCache.find(t => t.id === (s.task_id || s.taskId));
+        if (task) {
+            const type = task.taskType || task.type || task.subtype || '';
+            if (type) {
+                const lowerType = type.toLowerCase();
+                if (lowerType.includes('google') || lowerType.includes('map')) return 'Google Maps Review';
+                if (lowerType.includes('play') || lowerType.includes('review')) return 'Play Store Review';
+                if (lowerType.includes('screenshot')) return 'Screenshot Task';
+                if (lowerType.includes('custom')) return 'Custom Task';
+                return type.split(/[_-]+/).map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+            }
+        }
+    }
+    
+    // 2. Fallbacks based on link and assigned_comment
+    if (link.includes('play.google.com') || isReview) {
+        return 'Play Store Review';
+    }
+    if (link.includes('maps.google.com') || link.includes('google.com/maps')) {
+        return 'Google Maps Review';
+    }
+    if (link.includes('custom')) {
+        return 'Custom Task';
+    }
+    return isReview ? 'Play Store Review' : 'Screenshot Task';
+};
+
+const getPayoutBadgeLabel = (s) => {
+    const delayDays = Number(s.payout_delay_days || s.payoutDelayDays || 0);
+    if (delayDays === 0) return 'Instant';
+    if (delayDays === 3) return '3 Days';
+    if (delayDays === 5) return '5 Days';
+    if (delayDays === 7) return '7 Days';
+    return `${delayDays} Days`;
+};
+
 const getUserTaskHistoryListHtml = () => {
     const categoryTab = window.userTaskHistoryActiveTab || 'all';
     const statusFilter = window.userTaskHistoryStatusFilter || 'all';
@@ -910,33 +952,32 @@ const getUserTaskHistoryListHtml = () => {
             </div>`;
         }).join('');
     } else {
-        // Single User Flow Cards (Design based on Screenshot 1)
+        // Single User Flow Cards
         return subs.map(s => {
-            const isReview = !!(s.assigned_comment && String(s.assigned_comment).trim().length > 0);
             const delayDays = Number(s.payout_delay_days || s.payoutDelayDays || 7);
             
             // STATUS MEANING MAPPING
-            let statusColor = 'indigo';
+            let statusColor = 'blue';
             let statusText = 'Under Review';
-            let statusIcon = `<svg class="h-4 w-4 text-indigo-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0 3.181 3.183a8.25 8.25 0 0 0 13.803-3.7M4.031 9.865a8.25 8.25 0 0 1 13.803-3.7l3.181 3.182m0-4.991v4.99"></path></svg>`;
+            let statusIcon = `<svg class="h-3.5 w-3.5 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0 3.181 3.183a8.25 8.25 0 0 0 13.803-3.7M4.031 9.865a8.25 8.25 0 0 1 13.803-3.7l3.181 3.182m0-4.991v4.99"></path></svg>`;
 
             if (s.manual_status === 'approved') {
                 statusColor = 'emerald';
                 statusText = 'Approved';
-                statusIcon = `<svg class="h-4 w-4 text-emerald-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="3"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"></path></svg>`;
+                statusIcon = `<svg class="h-3.5 w-3.5 text-emerald-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="3"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"></path></svg>`;
             } else if (s.manual_status === 'rejected') {
                 statusColor = 'rose';
                 statusText = 'Rejected';
-                statusIcon = `<svg class="h-4 w-4 text-rose-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="m9.75 9.75 4.5 4.5m0-4.5-4.5 4.5M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z"></path></svg>`;
+                statusIcon = `<svg class="h-3.5 w-3.5 text-rose-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="m9.75 9.75 4.5 4.5m0-4.5-4.5 4.5M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z"></path></svg>`;
             } else if (s.manual_status === 'pending') {
                 if (s.ocr_status === 'completed') {
-                    statusColor = 'amber';
-                    statusText = 'Pending / Under Review';
-                    statusIcon = `<svg class="h-4 w-4 text-amber-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z"></path></svg>`;
+                    statusColor = 'orange';
+                    statusText = 'Pending';
+                    statusIcon = `<svg class="h-3.5 w-3.5 text-orange-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z"></path></svg>`;
                 } else {
-                    statusColor = 'indigo';
+                    statusColor = 'blue';
                     statusText = 'Under Review';
-                    statusIcon = `<svg class="h-4 w-4 text-indigo-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0 3.181 3.183a8.25 8.25 0 0 0 13.803-3.7M4.031 9.865a8.25 8.25 0 0 1 13.803-3.7l3.181 3.182m0-4.991v4.99"></path></svg>`;
+                    statusIcon = `<svg class="h-3.5 w-3.5 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0 3.181 3.183a8.25 8.25 0 0 0 13.803-3.7M4.031 9.865a8.25 8.25 0 0 1 13.803-3.7l3.181 3.182m0-4.991v4.99"></path></svg>`;
                 }
             }
 
@@ -946,94 +987,60 @@ const getUserTaskHistoryListHtml = () => {
             // Auto-fetch logo logic (asynchronously loads if missing)
             const appLogo = getSubmissionAppLogo(s);
 
-            // Upper badge showing payout delay
-            const payoutTimeBadgeText = delayDays === 0 ? 'Instant Payout' : `${delayDays} Days Payout`;
-            const badgeBgColor = delayDays === 0 ? 'bg-emerald-50 dark:bg-emerald-950/20 text-emerald-600 dark:text-emerald-455 border-emerald-100/50' : 'bg-indigo-50 dark:bg-indigo-955/20 text-indigo-600 dark:text-indigo-400 border-indigo-100/50';
+            // Task Type and Payout Badges (Fetched and structured)
+            const typeBadgeText = getTaskTypeLabel(s);
+            const payoutBadgeText = getPayoutBadgeLabel(s);
 
-            // Lower subtitle: days left to verify
-            const submittedMs = s.submitted_at || s.submittedAt || Date.now();
-            const submittedTimeMs = typeof submittedMs === 'object' && submittedMs.seconds ? submittedMs.seconds * 1000 : Number(submittedMs);
-            const verifyDelayDays = 3; 
-            const targetVerifyMs = submittedTimeMs + (verifyDelayDays * 24 * 60 * 60 * 1000);
-            const msLeftVerify = targetVerifyMs - Date.now();
-            const daysLeftVerify = Math.ceil(msLeftVerify / (24 * 60 * 60 * 1000));
-            
-            let verificationSubtext = '';
-            if (s.manual_status === 'approved') {
-                verificationSubtext = 'Verified';
-            } else if (s.manual_status === 'rejected') {
-                verificationSubtext = 'Verification Failed';
-            } else {
-                if (s.ocr_status === 'completed') {
-                    verificationSubtext = daysLeftVerify > 0 ? `${daysLeftVerify} Days left to verify` : 'Verifying...';
-                } else {
-                    verificationSubtext = 'Screenshot received, verification in progress';
-                }
+            let typeBadgeBg = 'bg-indigo-50 dark:bg-indigo-950/20 text-indigo-600 dark:text-indigo-400 border-indigo-150/50';
+            if (typeBadgeText.includes('Maps')) {
+                typeBadgeBg = 'bg-blue-50 dark:bg-blue-950/20 text-blue-600 dark:text-blue-400 border-blue-150/50';
+            } else if (typeBadgeText.includes('Screenshot')) {
+                typeBadgeBg = 'bg-orange-50 dark:bg-orange-950/20 text-orange-600 dark:text-orange-400 border-orange-150/50';
+            } else if (typeBadgeText.includes('Custom')) {
+                typeBadgeBg = 'bg-gray-50 dark:bg-gray-800 text-gray-600 dark:text-gray-400 border-gray-150/50';
             }
             
-            // Subtitle type icon (Google Play Store logo or document/file icon)
-            const typeIcon = isReview ? `
-                <svg class="h-3.5 w-3.5 text-blue-500 shrink-0" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                    <path d="M3.25 2.75V21.25L13.75 12L3.25 2.75Z" fill="#00E676"/>
-                    <path d="M13.75 12L3.25 21.25H4.25L15.75 13.5L13.75 12Z" fill="#FFD600"/>
-                    <path d="M15.75 13.5L18.75 12L15.75 10.5L13.75 12L15.75 13.5Z" fill="#FF1744"/>
-                    <path d="M3.25 2.75L13.75 12L15.75 10.5L4.25 2.75H3.25Z" fill="#00B0FF"/>
-                </svg>
-            ` : `
-                <svg class="h-3.5 w-3.5 text-gray-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5">
-                    <path stroke-linecap="round" stroke-linejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
-                </svg>
-            `;
+            const payoutBadgeBg = payoutBadgeText === 'Instant' 
+                ? 'bg-emerald-50 dark:bg-emerald-950/20 text-emerald-600 dark:text-emerald-400 border-emerald-150/50'
+                : 'bg-purple-50 dark:bg-purple-950/20 text-purple-600 dark:text-purple-400 border-purple-150/50';
 
-            // Calculate remaining days for payment status
+            // Calculate Days Left automatically
+            const submittedMs = s.submitted_at || s.submittedAt || Date.now();
+            const submittedTimeMs = typeof submittedMs === 'object' && submittedMs.seconds ? submittedMs.seconds * 1000 : Number(submittedMs);
+            
             let daysLeftDisplay = '';
-            if (s.manual_status !== 'rejected') {
-                if (delayDays === 0) {
-                    daysLeftDisplay = `
-                        <span class="flex items-center gap-1 text-[11px] font-semibold text-gray-500 dark:text-gray-400">
-                            <svg class="h-3.5 w-3.5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z"></path></svg>
-                            Instant
-                        </span>
-                    `;
-                } else if (s.payout_status === 'paid') {
-                    daysLeftDisplay = `
-                        <span class="flex items-center gap-1 text-[11px] font-semibold text-emerald-600 dark:text-emerald-455">
-                            <svg class="h-3.5 w-3.5 text-emerald-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75 11.25 15 15 9.75M21 12c0 1.268-.63 2.39-1.593 3.068a3.745 3.745 0 0 1-1.043 3.296 3.745 3.745 0 0 1-3.296 1.043A3.745 3.745 0 0 1 12 21c-1.268 0-2.39-.63-3.068-1.593a3.746 3.746 0 0 1-3.296-1.043 3.745 3.745 0 0 1-1.043-3.296A3.745 3.745 0 0 1 3 12c0-1.268.63-2.39 1.593-3.068a3.745 3.745 0 0 1 1.043-3.296 3.746 3.746 0 0 1 3.296-1.043A3.746 3.746 0 0 1 12 3c1.268 0 2.39.63 3.068 1.593a3.746 3.746 0 0 1 3.296 1.043 3.746 3.746 0 0 1 1.043 3.296A3.745 3.745 0 0 1 21 12Z"/></svg>
-                            Paid
-                        </span>
-                    `;
-                } else {
-                    const targetMs = submittedTimeMs + (delayDays * 24 * 60 * 60 * 1000);
-                    const msLeft = targetMs - Date.now();
-                    const daysLeft = Math.ceil(msLeft / (24 * 60 * 60 * 1000));
-                    
-                    const daysText = daysLeft > 0 ? `${daysLeft} Days Left` : 'Instant';
-                    daysLeftDisplay = `
-                        <span class="flex items-center gap-1 text-[11px] font-semibold text-gray-500 dark:text-gray-400">
-                            <svg class="h-3.5 w-3.5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z"></path></svg>
-                            ${daysText}
-                        </span>
-                    `;
-                }
+            if (s.manual_status !== 'rejected' && s.payout_status !== 'paid') {
+                const targetMs = submittedTimeMs + (delayDays * 24 * 60 * 60 * 1000);
+                const msLeft = targetMs - Date.now();
+                const daysLeft = Math.ceil(msLeft / (24 * 60 * 60 * 1000));
+                
+                const daysText = daysLeft > 0 ? `${daysLeft} Days Left` : 'Instant';
+                daysLeftDisplay = `
+                    <span class="flex items-center gap-1 text-[10px] font-semibold text-gray-500 dark:text-gray-400">
+                        <svg class="h-3.5 w-3.5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z"></path></svg>
+                        ${daysText}
+                    </span>
+                `;
             }
 
             return `
-            <div class="bg-white dark:bg-gray-800 p-3.5 rounded-2xl hover:shadow-[0_4px_16px_rgba(0,0,0,0.02)] cursor-pointer transition select-none text-left flex flex-col gap-2.5 shadow-[0_2px_8px_rgba(0,0,0,0.015)]" onclick="window.showUserTaskHistoryDetail('${s.id}')">
-                <!-- Top Section -->
-                <div class="flex items-start gap-3">
-                    <img src="${escapeHtml(appLogo)}" data-task-logo-id="${s.task_id || s.taskId}" class="h-12 w-12 rounded-2xl object-cover shrink-0 border border-gray-50 dark:border-gray-700 shadow-sm" onerror="this.src='https://cdn-icons-png.flaticon.com/512/3176/3176366.png';">
+            <div class="bg-white dark:bg-gray-800 p-3 rounded-2xl hover:shadow-[0_4px_16px_rgba(0,0,0,0.02)] cursor-pointer transition select-none text-left flex flex-col gap-2.5 shadow-[0_2px_8px_rgba(0,0,0,0.015)]" onclick="window.showUserTaskHistoryDetail('${s.id}')">
+                <!-- Top Section (Logo, Name, Badges, Reward) -->
+                <div class="flex items-center gap-3">
+                    <img src="${escapeHtml(appLogo)}" data-task-logo-id="${s.task_id || s.taskId}" class="h-10 w-10 rounded-xl object-cover shrink-0 border border-gray-50 dark:border-gray-700 shadow-sm" onerror="this.src='https://cdn-icons-png.flaticon.com/512/3176/3176366.png';">
                     <div class="min-w-0 flex-1">
-                        <span class="rounded-lg ${badgeBgColor} px-2 py-0.5 text-[9px] font-black uppercase tracking-wider">
-                            ${payoutTimeBadgeText}
-                        </span>
-                        <h4 class="text-sm font-extrabold text-gray-900 dark:text-white truncate mt-1">${escapeHtml(s.app_name || 'Task Submission')}</h4>
-                        <div class="flex items-center gap-1 text-[11px] text-gray-400 dark:text-gray-500 font-semibold mt-0.5">
-                            ${typeIcon}
-                            <span class="truncate">${isReview ? 'Play Store Review' : 'Screenshot + Review'}</span>
+                        <div class="flex items-center gap-1.5 flex-wrap">
+                            <span class="rounded-lg ${typeBadgeBg} px-2 py-0.5 text-[9px] font-black uppercase tracking-wider border">
+                                ${typeBadgeText}
+                            </span>
+                            <span class="rounded-lg ${payoutBadgeBg} px-2 py-0.5 text-[9px] font-black uppercase tracking-wider border">
+                                ${payoutBadgeText}
+                            </span>
                         </div>
+                        <h4 class="text-xs font-extrabold text-gray-900 dark:text-white truncate mt-1.5">${escapeHtml(s.app_name || 'Task Submission')}</h4>
                     </div>
                     <div class="text-right shrink-0">
-                        <p class="text-base font-extrabold text-indigo-600 dark:text-indigo-400">₹${s.reward}</p>
+                        <p class="text-xs font-black text-indigo-600 dark:text-indigo-400">₹${s.reward}</p>
                     </div>
                 </div>
                 
@@ -1043,13 +1050,13 @@ const getUserTaskHistoryListHtml = () => {
                 <!-- Bottom Status Row -->
                 <div class="flex items-center justify-between">
                     <div class="flex items-center gap-4">
-                        <span class="flex items-center gap-1 text-[11px] font-black text-${statusColor}-600 dark:text-${statusColor}-400">
+                        <span class="flex items-center gap-1 text-[10px] font-black text-${statusColor}-600 dark:text-${statusColor}-400">
                             ${statusIcon}
                             ${statusText}
                         </span>
                         ${daysLeftDisplay}
                     </div>
-                    <div class="flex items-center gap-1.5 text-[11px] font-bold text-gray-400">
+                    <div class="flex items-center gap-1.5 text-[10px] font-bold text-gray-400">
                         <span>${timeStr}</span>
                         <svg class="h-3.5 w-3.5 text-gray-300 dark:text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"></path></svg>
                     </div>
