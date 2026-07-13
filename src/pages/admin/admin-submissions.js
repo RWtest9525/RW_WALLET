@@ -61,20 +61,28 @@ window.showAdminSubmissionDetailModal = function(index) {
                                     ${payoutBadge}
                                 </div>
                                 
-                                ${isReviewTask ? `
-                                <div class="mt-3 flex items-center gap-2">
-                                    ${gmailLogoUrl ? `<img src="${escapeHtml(gmailLogoUrl)}" class="h-9 w-9 rounded-full object-cover border border-gray-200 dark:border-gray-700 shrink-0">` : `<span class="flex h-9 w-9 items-center justify-center rounded-full bg-orange-100 dark:bg-orange-950 text-xs font-bold text-orange-600 shrink-0">G</span>`}
-                                    <div class="min-w-0 flex-1">
-                                        <p class="text-[9px] font-black uppercase text-gray-400 tracking-wider">Gmail Reviewer</p>
-                                        <h3 class="text-base font-extrabold text-gray-900 dark:text-white truncate">${escapeHtml(gmailName || 'Unknown User')}</h3>
+                                <div class="mt-3 flex items-center justify-between gap-2 border-t border-gray-100 dark:border-gray-800 pt-3">
+                                    <div class="flex items-center gap-2.5 min-w-0">
+                                        ${gmailLogoUrl ? `<img src="${escapeHtml(gmailLogoUrl)}" class="h-9 w-9 rounded-full object-cover border border-gray-200 dark:border-gray-700 shrink-0">` : `<span class="flex h-9 w-9 items-center justify-center rounded-full bg-indigo-50 dark:bg-indigo-950/30 text-xs font-black text-indigo-600 dark:text-indigo-400 shrink-0 font-mono">U</span>`}
+                                        <div class="min-w-0">
+                                            <p class="text-[9px] font-black uppercase text-gray-400 tracking-wider">Submitted By</p>
+                                            <h3 class="text-sm font-extrabold text-gray-900 dark:text-white truncate max-w-[180px]">${escapeHtml(s.user_name || gmailName || 'Unknown User')}</h3>
+                                        </div>
+                                    </div>
+                                    
+                                    <!-- Three Dot User Options Dropdown -->
+                                    <div class="relative inline-block text-left">
+                                        <details class="user-tier-dropdown relative shrink-0">
+                                            <summary class="list-none h-8 w-8 rounded-full bg-gray-50 hover:bg-gray-100 dark:bg-gray-800 dark:hover:bg-gray-700 border border-gray-200/50 dark:border-gray-700 shadow-sm flex items-center justify-center cursor-pointer text-gray-600 dark:text-gray-200">
+                                                <span class="text-lg leading-none -mt-1 font-bold">...</span>
+                                            </summary>
+                                            <div class="absolute right-0 mt-1.5 z-[10005] w-40 rounded-xl border border-gray-250 dark:border-gray-700 bg-white dark:bg-gray-850 shadow-xl p-1.5 text-xs font-bold">
+                                                <div class="px-2.5 py-1 text-[10px] text-gray-400 uppercase tracking-wider font-extrabold border-b border-gray-100 dark:border-gray-700 mb-1">User Options</div>
+                                                <button type="button" data-action="promote-user-tier-modal" data-userid="${s.user_id || s.userId}" class="w-full text-left px-2.5 py-2 rounded-lg hover:bg-purple-50 dark:hover:bg-purple-950/30 text-purple-750 dark:text-purple-300">Set User Tier</button>
+                                            </div>
+                                        </details>
                                     </div>
                                 </div>
-                                ` : `
-                                <div class="mt-3">
-                                    <p class="text-[9px] font-black uppercase text-gray-400 tracking-wider">Task Info</p>
-                                    <h3 class="text-sm font-extrabold text-gray-900 dark:text-white truncate">${escapeHtml(s.app_name || 'Screenshot Task')}</h3>
-                                </div>
-                                `}
 
                                 <div class="mt-3 pt-3 border-t border-gray-100 dark:border-gray-755 flex items-center justify-between text-[11px]">
                                     <span class="font-bold text-orange-500">📱 ${escapeHtml(s.user_mobile || 'No mobile registered')}</span>
@@ -178,6 +186,25 @@ window.showAdminSubmissionDetailModal = function(index) {
                 }
             };
             document.addEventListener('keydown', keyHandler);
+
+            // Bind User Promote action inside Modal
+            const promoteBtn = modal.querySelector('[data-action="promote-user-tier-modal"]');
+            if (promoteBtn) {
+                promoteBtn.onclick = (e) => {
+                    const userId = e.currentTarget.dataset.userid;
+                    if (!userId) return showNotification('User ID not found.', true);
+                    closeModal(); // Close submissions detail modal first
+                    
+                    // Fetch user's current tier and trigger promote dialog
+                    const userObj = window.allUsersCache ? window.allUsersCache.find(u => u.id === userId || u.uid === userId) : null;
+                    const currentTier = userObj ? (userObj.taskTier || 'single') : 'single';
+                    if (window.handlePromoteUserTaskTier) {
+                        window.handlePromoteUserTaskTier(userId, currentTier);
+                    } else {
+                        showNotification('User management system not loaded.', true);
+                    }
+                };
+            }
 
             document.getElementById('modal-download-jpg-btn')?.addEventListener('click', () => {
                 const appName = s.app_name || 'App';
@@ -694,6 +721,14 @@ const renderAdminSubmissions = () => {
     } else {
         // --- LIST VIEW PANEL (Mockup layout design) ---
         html = `
+            <style>
+                .admin-desktop-view { display: block !important; }
+                .admin-mobile-view { display: none !important; }
+                @media (max-width: 767px) {
+                    .admin-desktop-view { display: none !important; }
+                    .admin-mobile-view { display: block !important; }
+                }
+            </style>
             <div class="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 p-4 sm:p-5 space-y-6 text-left">
                 <!-- Top Toolbar Header -->
                 <div class="flex items-center justify-between gap-4 pb-4 border-b border-gray-100 dark:border-gray-700">
@@ -760,7 +795,7 @@ const renderAdminSubmissions = () => {
                     <h3 class="text-base font-black text-gray-900 dark:text-white">Task Wise Overview</h3>
                     <div class="border border-gray-100 dark:border-gray-700 rounded-2xl overflow-hidden bg-white dark:bg-gray-800 shadow-sm">
                         <!-- Desktop Table View -->
-                        <div class="hidden md:block overflow-x-auto">
+                        <div class="admin-desktop-view overflow-x-auto">
                             <table class="w-full text-left text-xs border-collapse">
                                 <thead>
                                     <tr class="bg-gray-50/55 dark:bg-gray-800/40 border-b border-gray-100 dark:border-gray-700 text-gray-400 dark:text-gray-500 uppercase font-black text-[9px] tracking-wider">
@@ -783,7 +818,7 @@ const renderAdminSubmissions = () => {
                                             <tr class="hover:bg-gray-50/30 dark:hover:bg-gray-800/20 transition">
                                                 <td class="py-3.5 px-4">
                                                     <div class="flex items-center gap-3">
-                                                        <!-- App Logo -->
+                                                         <!-- App Logo -->
                                                         <span class="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-gray-150 bg-white p-1.5 dark:border-gray-700 dark:bg-gray-900 shadow-sm">
                                                             <img src="${escapeHtml(r.logo || 'https://cdn-icons-png.flaticon.com/512/2659/2659360.png')}" alt="App logo" class="h-full w-full object-contain">
                                                         </span>
@@ -811,7 +846,7 @@ const renderAdminSubmissions = () => {
                         </div>
 
                         <!-- Mobile Card View -->
-                        <div class="block md:hidden divide-y divide-gray-100 dark:divide-gray-700 bg-white dark:bg-gray-800">
+                        <div class="admin-mobile-view divide-y divide-gray-100 dark:divide-gray-700 bg-white dark:bg-gray-800">
                             ${taskRows.length === 0 ? `
                                 <div class="py-8 text-center text-gray-400 font-bold">No tasks available.</div>
                             ` : taskRows.map(r => {
