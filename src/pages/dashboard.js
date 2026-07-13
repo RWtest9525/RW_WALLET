@@ -1018,7 +1018,7 @@ const getUserTaskHistoryListHtml = () => {
             }
 
             return `
-            <div class="bg-white dark:bg-gray-800 p-4 rounded-3xl border border-gray-100 dark:border-gray-855 hover:shadow-[0_4px_20px_rgba(0,0,0,0.03)] cursor-pointer transition-all duration-200 select-none text-left flex flex-col gap-3 shadow-[0_2px_12px_rgba(0,0,0,0.015)]" onclick="window.showUserTaskHistoryDetail('${s.id}')">
+            <div class="bg-white dark:bg-gray-800 p-3.5 rounded-2xl hover:shadow-[0_4px_16px_rgba(0,0,0,0.02)] cursor-pointer transition select-none text-left flex flex-col gap-2.5 shadow-[0_2px_8px_rgba(0,0,0,0.015)]" onclick="window.showUserTaskHistoryDetail('${s.id}')">
                 <!-- Top Section -->
                 <div class="flex items-start gap-3">
                     <img src="${escapeHtml(appLogo)}" data-task-logo-id="${s.task_id || s.taskId}" class="h-12 w-12 rounded-2xl object-cover shrink-0 border border-gray-50 dark:border-gray-700 shadow-sm" onerror="this.src='https://cdn-icons-png.flaticon.com/512/3176/3176366.png';">
@@ -1029,7 +1029,7 @@ const getUserTaskHistoryListHtml = () => {
                         <h4 class="text-sm font-extrabold text-gray-900 dark:text-white truncate mt-1">${escapeHtml(s.app_name || 'Task Submission')}</h4>
                         <div class="flex items-center gap-1 text-[11px] text-gray-400 dark:text-gray-500 font-semibold mt-0.5">
                             ${typeIcon}
-                            <span class="truncate">${verificationSubtext}</span>
+                            <span class="truncate">${isReview ? 'Play Store Review' : 'Screenshot + Review'}</span>
                         </div>
                     </div>
                     <div class="text-right shrink-0">
@@ -1085,27 +1085,27 @@ const showUserTaskHistoryPage = () => {
                 <header class="flex items-center justify-between p-4 bg-white dark:bg-gray-800 shadow-[0_2px_8px_rgba(0,0,0,0.015)] border-b border-gray-100 dark:border-gray-750 page-header-fixed">
                     <div class="flex items-center gap-3">
                         <button class="page-back-btn p-2 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700 mr-1 shrink-0 text-gray-700 dark:text-white" style="outline: none;">
-                            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="12" x2="21" y2="12"></line><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="18" x2="21" y2="18"></line></svg>
+                            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"></line><polyline points="12 19 5 12 12 5"></polyline></svg>
                         </button>
                         <h2 class="text-lg font-black text-gray-900 dark:text-white">${title}</h2>
                     </div>
                     <div class="flex items-center gap-2">
                         ${!isBulker ? `
-                        <button id="user-task-history-filter-toggle" class="p-2 rounded-full hover:bg-gray-250 dark:hover:bg-gray-700 shrink-0 ${window.userTaskHistoryFilterDrawerOpen ? 'bg-purple-100 dark:bg-purple-950/30 text-purple-600 dark:text-purple-400' : 'text-gray-700 dark:text-white'}" style="outline: none;">
+                        <button id="user-task-history-filter-toggle" class="p-2 rounded-full hover:bg-gray-255 dark:hover:bg-gray-700 shrink-0 ${window.userTaskHistoryFilterDrawerOpen ? 'bg-purple-100 dark:bg-purple-950/30 text-purple-600 dark:text-purple-400' : 'text-gray-700 dark:text-white'}" style="outline: none;">
                             <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon></svg>
                         </button>
                         ` : ''}
                     </div>
                 </header>
                 
-                <div class="max-w-xl mx-auto space-y-4 pb-24 px-4 pt-4 text-left">
+                <div class="max-w-xl mx-auto space-y-3 pb-24 px-3 pt-3 text-left">
                     <!-- Category Tabs (Styled Pill Tabs based on Screenshot 1) -->
-                    <div class="flex items-center gap-2 mb-2 select-none overflow-x-auto scrollbar-none">
+                    <div class="grid grid-cols-3 gap-2 mb-1.5 select-none">
                         ${['all', 'play_store', 'others'].map(tab => {
                             const isActive = window.userTaskHistoryActiveTab === tab;
                             const label = tab === 'all' ? 'All' : tab === 'play_store' ? 'Play Store' : 'Others';
                             return `
-                                <button type="button" data-action="select-history-tab" data-tab="${tab}" class="rounded-full px-5 py-2 text-xs font-black uppercase tracking-wider transition-all duration-200 border ${isActive ? 'bg-indigo-600 border-indigo-600 text-white shadow-md' : 'bg-gray-100 dark:bg-gray-800 border-transparent text-gray-500 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700'}" style="outline: none;">
+                                <button type="button" data-action="select-history-tab" data-tab="${tab}" class="rounded-full px-5 py-2.5 text-xs font-black uppercase tracking-wider transition-all duration-200 border ${isActive ? 'bg-indigo-600 border-indigo-600 text-white shadow-md' : 'bg-gray-100 dark:bg-gray-800 border-transparent text-gray-500 dark:text-gray-400 hover:bg-gray-205 dark:hover:bg-gray-700'}" style="outline: none;">
                                     ${label}
                                 </button>
                             `;
@@ -1119,7 +1119,7 @@ const showUserTaskHistoryPage = () => {
                             const isActive = window.userTaskHistoryStatusFilter === status;
                             const label = status === 'all' ? 'All Status' : status.charAt(0).toUpperCase() + status.slice(1);
                             return `
-                                <button type="button" data-action="select-status-filter" data-status="${status}" class="flex-1 text-center py-1.5 text-[10px] font-black rounded-xl transition-all ${isActive ? 'bg-indigo-600 text-white shadow-sm' : 'text-gray-500 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200'}" style="outline: none;">
+                                <button type="button" data-action="select-status-filter" data-status="${status}" class="flex-1 text-center py-1.5 text-[10px] font-black rounded-xl transition-all ${isActive ? 'bg-indigo-600 text-white shadow-sm' : 'text-gray-500 dark:text-gray-400 hover:text-gray-805 dark:hover:text-gray-200'}" style="outline: none;">
                                     ${label}
                                 </button>
                             `;
@@ -1128,13 +1128,13 @@ const showUserTaskHistoryPage = () => {
                     ` : ''}
 
                     <!-- List Container (Loaded Instantly) -->
-                    <div id="user-task-history-list" class="space-y-3.5">
+                    <div id="user-task-history-list" class="space-y-3">
                         ${initialListHtml}
                     </div>
                 </div>
                 ${getPageFooter()}`;
 
-            showPage(content, { returnTo: 'settings', keepBottomNav: false });
+            showPage(content, { returnTo: 'settings', keepBottomNav: true });
             
             // Bind Tab Click Handlers
             const pageEl = document.getElementById('page-container');
