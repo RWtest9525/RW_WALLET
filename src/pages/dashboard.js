@@ -1465,7 +1465,7 @@ window.showUserTaskHistoryDetail = (submissionId) => {
                     <div class="bg-white dark:bg-gray-800 p-4 rounded-2xl border border-gray-150 dark:border-gray-750 shadow-sm">
                         <div class="relative py-2 select-none">
                             <!-- Horizontal line in background connecting the step circles -->
-                            <div class="absolute left-[12%] right-[12%] top-[24px] h-[2px] bg-gray-150 dark:bg-gray-700"></div>
+                            <div class="absolute left-[12.5%] right-[12.5%] top-[24px] h-[2px] bg-gray-200 dark:bg-gray-700"></div>
                             
                             <div class="flex items-start justify-between relative z-10">
                                 <!-- Step 1: Submitted -->
