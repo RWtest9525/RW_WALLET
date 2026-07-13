@@ -727,69 +727,60 @@ const getPageHeader = (title, options = {}) => `
             <div class="p-4 pt-0">`;
 const getPageFooter = () => `</div>`;
 
-const clientTaskLogoCache = {};
+const clientAppLogoCache = {};
 
 const getSubmissionAppLogo = (s) => {
     const taskId = s.task_id || s.taskId;
     if (!taskId) return 'https://cdn-icons-png.flaticon.com/512/3176/3176366.png';
 
-    // 1. Check in-memory logo cache
-    if (clientTaskLogoCache[taskId]) {
-        return clientTaskLogoCache[taskId];
-    }
-
-    // 2. Try direct logo fields on submission
-    if (s.appLogoUrl || s.app_logo_url || s.logoUrl) {
-        clientTaskLogoCache[taskId] = s.appLogoUrl || s.app_logo_url || s.logoUrl;
-        return clientTaskLogoCache[taskId];
-    }
-
-    // 3. Try to get logo from the link directly on the submission
-    const isReview = !!(s.assigned_comment && String(s.assigned_comment).trim().length > 0);
-    const link = s.task_link || s.taskLink || '';
-    if (link && typeof window.getTaskLogoFromLink === 'function') {
-        const family = isReview ? 'review' : 'social';
-        const subtype = isReview ? 'app_review' : 'screenshot_verification';
-        const logoFromLink = window.getTaskLogoFromLink(family, subtype, link);
-        if (logoFromLink && !logoFromLink.includes('flaticon.com')) {
-            clientTaskLogoCache[taskId] = logoFromLink;
-            return logoFromLink;
-        }
-    }
-
-    // 4. Try looking up in global allTasksCache
+    // 1. Get taskAppId from submission or cached task
+    let taskAppId = s.appId || s.app_id || '';
+    
     if (typeof allTasksCache !== 'undefined' && Array.isArray(allTasksCache)) {
         const task = allTasksCache.find(t => t.id === taskId);
         if (task) {
-            const logo = task.logoUrl || task.imageUrl || task.iconUrl || task.image;
-            if (logo) {
-                clientTaskLogoCache[taskId] = logo;
-                return logo;
-            }
+            taskAppId = task.appId || task.app_id || taskAppId;
         }
     }
+    
+    const defaultPlaceholder = 'https://cdn-icons-png.flaticon.com/512/3176/3176366.png';
+    
+    // If we have no taskAppId, try to check if task document itself has a logoUrl as fallback (if not play store url)
+    if (!taskAppId) {
+        if (typeof allTasksCache !== 'undefined' && Array.isArray(allTasksCache)) {
+            const task = allTasksCache.find(t => t.id === taskId);
+            if (task?.logoUrl && !task.logoUrl.includes('play.google.com') && !task.logoUrl.includes('play-store')) {
+                return task.logoUrl;
+            }
+        }
+        return defaultPlaceholder;
+    }
 
-    // 5. Fetch from Firestore asynchronously and update DOM elements matching data-task-logo-id
+    // 2. Check in-memory logo cache
+    if (clientAppLogoCache[taskAppId]) {
+        return clientAppLogoCache[taskAppId];
+    }
+
+    // 3. Fetch from Firestore (apps collection) asynchronously and update DOM elements matching data-app-id
     if (typeof db !== 'undefined' && typeof appId !== 'undefined') {
-        const taskDocRef = doc(db, `artifacts/${appId}/public/data/tasks`, taskId);
-        getDoc(taskDocRef).then(docSnap => {
+        const appDocRef = doc(db, `artifacts/${appId}/public/data/apps`, taskAppId);
+        getDoc(appDocRef).then(docSnap => {
             if (docSnap.exists()) {
-                const data = docSnap.data();
-                const logo = data.imageUrl || data.logoUrl || data.iconUrl || data.image || '';
+                const appData = docSnap.data();
+                const logo = appData.logoUrl || appData.logo || appData.imageUrl || '';
                 if (logo) {
-                    clientTaskLogoCache[taskId] = logo;
-                    // Update all img tags with data-task-logo-id="taskId"
-                    const imgs = document.querySelectorAll(`img[data-task-logo-id="${taskId}"]`);
+                    clientAppLogoCache[taskAppId] = logo;
+                    // Update all img tags with data-app-id="taskAppId"
+                    const imgs = document.querySelectorAll(`img[data-app-id="${taskAppId}"]`);
                     imgs.forEach(img => {
                         img.src = logo;
                     });
                 }
             }
-        }).catch(err => console.warn('Failed to fetch task logo from Firestore:', err));
+        }).catch(err => console.warn('Failed to fetch app logo from Firestore:', err));
     }
 
-    // Fallback logo while loading
-    return 'https://cdn-icons-png.flaticon.com/512/3176/3176366.png';
+    return defaultPlaceholder;
 };
 
 const getSubmissionDateText = (submittedAt) => {
@@ -986,6 +977,16 @@ const getUserTaskHistoryListHtml = () => {
 
             // Auto-fetch logo logic (asynchronously loads if missing)
             const appLogo = getSubmissionAppLogo(s);
+            
+            // Get taskAppId for the data-app-id attribute
+            const taskId = s.task_id || s.taskId;
+            let taskAppId = s.appId || s.app_id || '';
+            if (typeof allTasksCache !== 'undefined' && Array.isArray(allTasksCache)) {
+                const task = allTasksCache.find(t => t.id === taskId);
+                if (task) {
+                    taskAppId = task.appId || task.app_id || taskAppId;
+                }
+            }
 
             // Task Type and Payout Badges (Fetched and structured)
             const typeBadgeText = getTaskTypeLabel(s);
@@ -1004,22 +1005,35 @@ const getUserTaskHistoryListHtml = () => {
                 ? 'bg-emerald-50 dark:bg-emerald-950/20 text-emerald-600 dark:text-emerald-400 border-emerald-150/50'
                 : 'bg-purple-50 dark:bg-purple-950/20 text-purple-600 dark:text-purple-400 border-purple-150/50';
 
-            // Calculate Days Left automatically
-            const submittedMs = s.submitted_at || s.submittedAt || Date.now();
-            const submittedTimeMs = typeof submittedMs === 'object' && submittedMs.seconds ? submittedMs.seconds * 1000 : Number(submittedMs);
-            
-            let daysLeftDisplay = '';
-            if (s.manual_status !== 'rejected' && s.payout_status !== 'paid') {
-                const targetMs = submittedTimeMs + (delayDays * 24 * 60 * 60 * 1000);
-                const msLeft = targetMs - Date.now();
-                const daysLeft = Math.ceil(msLeft / (24 * 60 * 60 * 1000));
+            // Calculate Group 2: Payout / Days Left automatically
+            let payoutHtml = '';
+            if (s.payout_status !== 'paid' && s.manual_status !== 'rejected') {
+                const delayDays = Number(s.payout_delay_days || s.payoutDelayDays || 0);
+                const submittedMs = s.submitted_at || s.submittedAt || Date.now();
+                const submittedTimeMs = typeof submittedMs === 'object' && submittedMs.seconds ? submittedMs.seconds * 1000 : Number(submittedMs);
                 
-                const daysText = daysLeft > 0 ? `${daysLeft} Days Left` : 'Instant';
-                daysLeftDisplay = `
-                    <span class="flex items-center gap-1 text-[10px] font-semibold text-gray-500 dark:text-gray-400">
-                        <svg class="h-3.5 w-3.5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z"></path></svg>
-                        ${daysText}
-                    </span>
+                let payoutText = payoutBadgeText;
+                let payoutEmoji = payoutBadgeText === 'Instant' ? '⚡' : '🕒';
+                
+                if (delayDays > 0) {
+                    const targetMs = submittedTimeMs + (delayDays * 24 * 60 * 60 * 1000);
+                    const msLeft = targetMs - Date.now();
+                    const daysLeft = Math.ceil(msLeft / (24 * 60 * 60 * 1000));
+                    
+                    if (daysLeft > 0) {
+                        payoutText = `${daysLeft} Days Left`;
+                    } else {
+                        payoutText = 'Instant';
+                        payoutEmoji = '⚡';
+                    }
+                }
+                
+                payoutHtml = `
+                    <!-- Group 2: Payout -->
+                    <div class="flex items-center gap-1 text-gray-500 dark:text-gray-400 shrink-0">
+                        <span>${payoutEmoji}</span>
+                        <span>${payoutText}</span>
+                    </div>
                 `;
             }
 
@@ -1027,7 +1041,7 @@ const getUserTaskHistoryListHtml = () => {
             <div class="bg-white dark:bg-gray-800 p-3 rounded-2xl hover:shadow-[0_4px_16px_rgba(0,0,0,0.02)] cursor-pointer transition select-none text-left flex flex-col gap-2.5 shadow-[0_2px_8px_rgba(0,0,0,0.015)]" onclick="window.showUserTaskHistoryDetail('${s.id}')">
                 <!-- Top Section (Logo, Name, Badges, Reward) -->
                 <div class="flex items-center gap-3">
-                    <img src="${escapeHtml(appLogo)}" data-task-logo-id="${s.task_id || s.taskId}" class="h-10 w-10 rounded-xl object-cover shrink-0 border border-gray-50 dark:border-gray-700 shadow-sm" onerror="this.src='https://cdn-icons-png.flaticon.com/512/3176/3176366.png';">
+                    <img src="${escapeHtml(appLogo)}" data-app-id="${taskAppId}" class="h-10 w-10 rounded-xl object-cover shrink-0 border border-gray-50 dark:border-gray-700 shadow-sm" onerror="this.src='https://cdn-icons-png.flaticon.com/512/3176/3176366.png';">
                     <div class="min-w-0 flex-1">
                         <div class="flex items-center gap-1.5 flex-wrap">
                             <span class="rounded-lg ${typeBadgeBg} px-2 py-0.5 text-[9px] font-black uppercase tracking-wider border">
@@ -1047,18 +1061,20 @@ const getUserTaskHistoryListHtml = () => {
                 <!-- Divider -->
                 <div class="border-t border-gray-100 dark:border-gray-750/50"></div>
                 
-                <!-- Bottom Status Row -->
-                <div class="flex items-center justify-between">
-                    <div class="flex items-center gap-4">
-                        <span class="flex items-center gap-1 text-[10px] font-black text-${statusColor}-600 dark:text-${statusColor}-400">
-                            ${statusIcon}
-                            ${statusText}
-                        </span>
-                        ${daysLeftDisplay}
+                <!-- Bottom Status Row (Google Pay style flex-gap layout) -->
+                <div class="flex items-center gap-5 text-[10px] sm:text-[11px] font-bold w-full select-none mt-1 pb-0.5">
+                    <!-- Group 1: Status -->
+                    <div class="flex items-center gap-1 text-${statusColor}-600 dark:text-${statusColor}-400 shrink-0">
+                        <span>${statusEmoji}</span>
+                        <span>${statusText}</span>
                     </div>
-                    <div class="flex items-center gap-1.5 text-[10px] font-bold text-gray-400">
+                    
+                    ${payoutHtml}
+                    
+                    <!-- Group 3: Submission Date & Arrow -->
+                    <div class="ml-auto flex items-center gap-1.5 text-gray-400 dark:text-gray-500 shrink-0">
                         <span>${timeStr}</span>
-                        <svg class="h-3.5 w-3.5 text-gray-300 dark:text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"></path></svg>
+                        <svg class="h-3.5 w-3.5 text-gray-350 dark:text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"></path></svg>
                     </div>
                 </div>
             </div>`;
