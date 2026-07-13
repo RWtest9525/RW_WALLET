@@ -1403,8 +1403,8 @@ window.showUserTaskHistoryDetail = (submissionId) => {
                             <div class="flex items-center gap-2 min-w-0">
                                 <img src="${escapeHtml(appLogo)}" class="h-11 w-11 rounded-xl object-cover shrink-0 border border-gray-100 dark:border-gray-700 shadow-sm" onerror="this.src='https://cdn-icons-png.flaticon.com/512/3176/3176366.png';">
                                 <div class="min-w-0">
-                                    <h3 class="text-sm font-black text-gray-900 dark:text-white truncate leading-tight">${escapeHtml(s.app_name || 'Task Submission')}</h3>
-                                    <div class="flex items-center gap-1 mt-0.5 text-[11px] text-gray-400 font-semibold leading-tight">
+                                    <h3 class="text-sm font-black text-gray-900 dark:text-white truncate" style="margin: 0 !important; padding: 0 !important; line-height: 1.1 !important;">${escapeHtml(s.app_name || 'Task Submission')}</h3>
+                                    <div class="flex items-center gap-1 text-[11px] text-gray-400 font-semibold" style="margin: 0 !important; padding: 0 !important; margin-top: 2px !important; line-height: 1.1 !important;">
                                         <img src="https://upload.wikimedia.org/wikipedia/commons/d/d0/Google_Play_Arrow_logo.svg" class="h-3 w-3 object-contain shrink-0" alt="Play Store">
                                         <span>Play Store Review</span>
                                     </div>
