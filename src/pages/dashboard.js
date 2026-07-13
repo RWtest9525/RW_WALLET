@@ -1470,7 +1470,7 @@ window.showUserTaskHistoryDetail = (submissionId) => {
                             <div class="flex items-start justify-between relative z-10">
                                 <!-- Step 1: Submitted -->
                                 <div class="flex flex-col items-center text-center w-1/4">
-                                    <div class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-emerald-500 text-white shadow-sm border border-emerald-600">
+                                    <div class="flex shrink-0 items-center justify-center rounded-full bg-emerald-500 text-white shadow-sm border border-emerald-600" style="width: 32px; height: 32px; min-width: 32px; min-height: 32px; max-width: 32px; max-height: 32px; border-radius: 50%;">
                                         <svg class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="3" viewBox="0 0 24 24">
                                             <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"></path>
                                         </svg>
@@ -1482,7 +1482,7 @@ window.showUserTaskHistoryDetail = (submissionId) => {
 
                                 <!-- Step 2: Under Review -->
                                 <div class="flex flex-col items-center text-center w-1/4">
-                                    <div class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full ${stage2.circleBg} shadow-sm border ${s.manual_status === 'approved' || s.manual_status === 'rejected' ? 'border-emerald-600' : 'border-indigo-600'}">
+                                    <div class="flex shrink-0 items-center justify-center rounded-full ${stage2.circleBg} shadow-sm border ${s.manual_status === 'approved' || s.manual_status === 'rejected' ? 'border-emerald-600' : 'border-indigo-600'}" style="width: 32px; height: 32px; min-width: 32px; min-height: 32px; max-width: 32px; max-height: 32px; border-radius: 50%;">
                                         ${s.manual_status === 'approved' || s.manual_status === 'rejected' 
                                             ? `<svg class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="3" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"></path></svg>`
                                             : `<svg class="h-4.5 w-4.5 text-white" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M15.75 6a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0ZM4.501 20.118a7.5 7.5 0 0 1 14.998 0A17.933 17.933 0 0 1 12 21.75c-2.676 0-5.216-.584-7.499-1.632Z"></path></svg>`}
@@ -1493,7 +1493,7 @@ window.showUserTaskHistoryDetail = (submissionId) => {
 
                                 <!-- Step 3: Approval -->
                                 <div class="flex flex-col items-center text-center w-1/4">
-                                    <div class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full ${stage3.circleBg} shadow-sm border ${s.manual_status === 'approved' ? 'border-emerald-600' : s.manual_status === 'rejected' ? 'border-rose-600' : 'border-gray-300 dark:border-gray-650'}">
+                                    <div class="flex shrink-0 items-center justify-center rounded-full ${stage3.circleBg} shadow-sm border ${s.manual_status === 'approved' ? 'border-emerald-600' : s.manual_status === 'rejected' ? 'border-rose-600' : 'border-gray-300 dark:border-gray-650'}" style="width: 32px; height: 32px; min-width: 32px; min-height: 32px; max-width: 32px; max-height: 32px; border-radius: 50%;">
                                         ${s.manual_status === 'approved'
                                             ? `<svg class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="3" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"></path></svg>`
                                             : s.manual_status === 'rejected'
@@ -1506,7 +1506,7 @@ window.showUserTaskHistoryDetail = (submissionId) => {
 
                                 <!-- Step 4: Payout -->
                                 <div class="flex flex-col items-center text-center w-1/4">
-                                    <div class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full ${stage4.circleBg} shadow-sm border ${s.payout_status === 'paid' ? 'border-emerald-600' : 'border-gray-300 dark:border-gray-650'}">
+                                    <div class="flex shrink-0 items-center justify-center rounded-full ${stage4.circleBg} shadow-sm border ${s.payout_status === 'paid' ? 'border-emerald-600' : 'border-gray-300 dark:border-gray-650'}" style="width: 32px; height: 32px; min-width: 32px; min-height: 32px; max-width: 32px; max-height: 32px; border-radius: 50%;">
                                         ${s.payout_status === 'paid'
                                             ? `<svg class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="3" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"></path></svg>`
                                             : `<svg class="h-4 w-4 text-gray-400 dark:text-gray-500" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M6.75 12a.75.75 0 1 1-1.5 0 .75.75 0 0 1 1.5 0ZM12.75 12a.75.75 0 1 1-1.5 0 .75.75 0 0 1 1.5 0ZM18.75 12a.75.75 0 1 1-1.5 0 .75.75 0 0 1 1.5 0Z"></path></svg>`}
