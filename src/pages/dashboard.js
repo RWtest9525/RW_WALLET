@@ -2515,110 +2515,161 @@ const getTaskAccent = (subtype) => {
     }
 };
 
-const showUserTaskPage = async () => {
+const showUserTaskPage = () => {
             if (!ensureUserSessionReady()) return;
             currentMainSection = 'task';
             const isTaskPageEnabled = !!appConfigCache?.task_page_enabled;
-            let taskCategories = [];
 
-            if (isTaskPageEnabled) {
-                showLoading();
-                let takenCommentsMap = {};
-                try {
-                    const token = await getBackendAuthToken();
-                    const resp = await fetchWithTimeout(`${BACKEND_BASE_URL}/api/tasks/availability`, {
-                        headers: { Authorization: `Bearer ${token}` }
-                    }, 5000);
-                    const d = await resp.json();
-                    if (d.ok && d.takenComments) {
-                        takenCommentsMap = d.takenComments;
-                    }
-                } catch (e) {
-                    console.warn('Failed to load task availability from backend:', e);
-                }
-                hideLoading();
+            const renderUI = (takenCommentsMap = {}) => {
+                if (currentMainSection !== 'task') return;
+                
+                let taskCategories = [];
+                if (isTaskPageEnabled) {
+                    const appReviewItems = [];
+                    const mapReviewItems = [];
+                    const socialTaskItems = [];
 
-                const appReviewItems = [];
-                const mapReviewItems = [];
-                const socialTaskItems = [];
-
-                const isTaskVisibleToUser = (task) => {
-                    const parentAdminId = currentUserData?.parentAdmin || currentUserData?.parent_admin || ADMIN_UID;
-                    const isOwnerTask = !task.createdBy || task.createdBy === ADMIN_UID || task.createdBy === 'owner';
-                    if (parentAdminId === ADMIN_UID) {
-                        return isOwnerTask;
-                    }
-                    if (task.createdBy === parentAdminId) return true;
-                    if (isOwnerTask && (task.assignedToSubAdmins?.includes(parentAdminId) || task.assignedToSubAdmins?.includes('all'))) return true;
-                    return false;
-                };
-
-                const isBulker = isBulkTaskUser();
-                const hideNewTasksForDailyLimit = !isBulker && userTaskTodaySubmissionIds.size >= NORMAL_USER_DAILY_TASK_LIMIT;
-
-                allTasksCache
-                    .filter(isTaskVisibleToUser)
-                    .filter(task => getAdminTaskEffectiveStatus(task) === 'active')
-                    .filter(task => {
-                        const subtype = task.subtype || task.taskSubtype || '';
-                        const isReview = subtype === 'app_review' || subtype === 'map_review' || subtype === 'trustpilot_review' || subtype === 'website_review';
-                        if (isReview) {
-                            const comments = getTaskCommentPool(task);
-                            if (comments.length === 0) return false;
-
-                            const taken = takenCommentsMap[task.id] || [];
-                            const takenSet = new Set(taken.map(c => String(c).trim()));
-                            const available = comments.filter(c => !takenSet.has(String(c).trim()));
-                            if (available.length === 0) {
-                                return false; // Hide task if no comments are left!
-                            }
+                    const isTaskVisibleToUser = (task) => {
+                        const parentAdminId = currentUserData?.parentAdmin || currentUserData?.parent_admin || ADMIN_UID;
+                        const isOwnerTask = !task.createdBy || task.createdBy === ADMIN_UID || task.createdBy === 'owner';
+                        if (parentAdminId === ADMIN_UID) {
+                            return isOwnerTask;
                         }
-                        return true;
-                    })
-                    .filter(task => {
-                        // Show task if user hasn't submitted it today
-                        if (!userTaskTodaySubmissionIds.has(task.id)) return true;
-                        // If they have submitted it today: for bulkers, keep visible (to track upload status/queue)
-                        const subtype = task.subtype || task.taskSubtype || '';
-                        if (subtype === 'read_news') return false;
-                        if (isBulker) {
-                            return true;
-                        }
+                        if (task.createdBy === parentAdminId) return true;
+                        if (isOwnerTask && (task.assignedToSubAdmins?.includes(parentAdminId) || task.assignedToSubAdmins?.includes('all'))) return true;
                         return false;
-                    })
-                    .filter(() => !hideNewTasksForDailyLimit)
-                    .forEach(task => {
-                        const subtype = task.subtype || task.taskSubtype || '';
-                        if (subtype === 'app_review' || subtype === 'app_download_task') {
-                            appReviewItems.push(task);
-                        } else if (subtype === 'map_review' || subtype === 'trustpilot_review' || subtype === 'website_review') {
-                            mapReviewItems.push(task);
-                        } else {
-                            socialTaskItems.push(task);
-                        }
-                    });
+                    };
 
-                taskCategories = [
-                    {
-                        label: 'App Review',
-                        accent: 'task-accent-blue',
-                        logo: PLAY_STORE_LOGO_URL,
-                        items: appReviewItems
-                    },
-                    {
-                        label: 'Map Review',
-                        accent: 'task-accent-emerald',
-                        logo: 'https://cdn-icons-png.flaticon.com/512/854/854878.png',
-                        items: mapReviewItems
-                    },
-                    {
-                        label: 'Social Media Task',
-                        accent: 'task-accent-rose',
-                        logo: 'https://cdn-icons-png.flaticon.com/512/4187/4187336.png',
-                        items: socialTaskItems
-                    }
-                ].filter(cat => cat.items.length > 0);
-            }
+                    const isBulker = isBulkTaskUser();
+                    const hideNewTasksForDailyLimit = !isBulker && userTaskTodaySubmissionIds.size >= NORMAL_USER_DAILY_TASK_LIMIT;
+
+                    allTasksCache
+                        .filter(isTaskVisibleToUser)
+                        .filter(task => getAdminTaskEffectiveStatus(task) === 'active')
+                        .filter(task => {
+                            const subtype = task.subtype || task.taskSubtype || '';
+                            const isReview = subtype === 'app_review' || subtype === 'map_review' || subtype === 'trustpilot_review' || subtype === 'website_review';
+                            if (isReview) {
+                                const comments = getTaskCommentPool(task);
+                                if (comments.length === 0) return false;
+
+                                const taken = takenCommentsMap[task.id] || [];
+                                const takenSet = new Set(taken.map(c => String(c).trim()));
+                                const available = comments.filter(c => !takenSet.has(String(c).trim()));
+                                if (available.length === 0) {
+                                    return false; // Hide task if no comments are left!
+                                }
+                            }
+                            return true;
+                        })
+                        .filter(task => {
+                            // Show task if user hasn't submitted it today
+                            if (!userTaskTodaySubmissionIds.has(task.id)) return true;
+                            // If they have submitted it today: for bulkers, keep visible (to track upload status/queue)
+                            const subtype = task.subtype || task.taskSubtype || '';
+                            if (subtype === 'read_news') return false;
+                            if (isBulker) {
+                                return true;
+                            }
+                            return false;
+                        })
+                        .filter(() => !hideNewTasksForDailyLimit)
+                        .forEach(task => {
+                            const subtype = task.subtype || task.taskSubtype || '';
+                            if (subtype === 'app_review' || subtype === 'app_download_task') {
+                                appReviewItems.push(task);
+                            } else if (subtype === 'map_review' || subtype === 'trustpilot_review' || subtype === 'website_review') {
+                                mapReviewItems.push(task);
+                            } else {
+                                socialTaskItems.push(task);
+                            }
+                        });
+
+                    taskCategories = [
+                        {
+                            label: 'App Review',
+                            accent: 'task-accent-blue',
+                            logo: PLAY_STORE_LOGO_URL,
+                            items: appReviewItems
+                        },
+                        {
+                            label: 'Map Review',
+                            accent: 'task-accent-emerald',
+                            logo: 'https://cdn-icons-png.flaticon.com/512/854/854878.png',
+                            items: mapReviewItems
+                        },
+                        {
+                            label: 'Social Media Task',
+                            accent: 'task-accent-rose',
+                            logo: 'https://cdn-icons-png.flaticon.com/512/4187/4187336.png',
+                            items: socialTaskItems
+                        }
+                    ].filter(cat => cat.items.length > 0);
+                }
+
+                let bodyContent = '';
+                if (!isTaskPageEnabled) {
+                    bodyContent = `
+                        <div class="rounded-3xl border border-dashed border-gray-200 dark:border-gray-700 p-8 text-center bg-white dark:bg-gray-800 shadow-sm">
+                            <div class="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-indigo-50 dark:bg-indigo-900/20 mb-4">
+                                <img src="https://cdn-icons-png.flaticon.com/512/3176/3176366.png" alt="Coming soon" class="h-8 w-8 object-contain">
+                            </div>
+                            <h3 class="text-lg font-black text-gray-900 dark:text-white">Missions Coming Soon</h3>
+                            <p class="mt-2 text-sm text-gray-500 dark:text-gray-400">New activities and updates are coming soon. Keep the app updated for future releases.</p>
+                        </div>`;
+                } else if (taskCategories.length === 0) {
+                    bodyContent = `
+                        <div class="rounded-3xl border border-dashed border-gray-200 dark:border-gray-700 p-8 text-center bg-white dark:bg-gray-800 shadow-sm">
+                            <div class="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-cyan-50 dark:bg-cyan-900/20 mb-4">
+                                <img src="https://cdn-icons-png.flaticon.com/512/3176/3176366.png" alt="No tasks" class="h-8 w-8 object-contain">
+                            </div>
+                            <h3 class="text-lg font-black text-gray-900 dark:text-white">No Live Missions</h3>
+                            <p class="mt-2 text-sm text-gray-500 dark:text-gray-400">Real tasks are currently not available. Please check back later.</p>
+                        </div>`;
+                } else {
+                    bodyContent = taskCategories.map(renderCategory).join('');
+                }
+
+                const content = `
+                    <header class="mb-4 bg-white/95 px-4 py-3 shadow-sm backdrop-blur page-header-fixed dark:bg-gray-900/95">
+                        <div class="flex items-center justify-between gap-3">
+                            <div class="min-w-0">
+                                <p class="text-lg font-black uppercase text-slate-950 dark:text-white">RW TASK</p>
+                            </div>
+                            <div class="task-header-actions">
+                                <button type="button" data-action="open-task-ads-page" class="task-mini-action">
+                                    <img src="https://cdn-icons-png.flaticon.com/512/2659/2659360.png" alt="Ads" loading="eager" decoding="async">
+                                    <span>Ads</span>
+                                </button>
+                                <button type="button" data-action="open-task-bonus-page" class="task-mini-action">
+                                    <img src="https://cdn-icons-png.flaticon.com/512/2611/2611152.png" alt="Bonus" loading="eager" decoding="async">
+                                    <span>Bonus</span>
+                                </button>
+                            </div>
+                        </div>
+                    </header>
+                    <div class="task-page-shell px-4 pt-1 pb-28">
+                        <div class="mx-auto max-w-xl space-y-4">
+                            ${bodyContent}
+                        </div>
+                    </div>
+                    ${getPageFooter()}`;
+                
+                showPage(content, { returnTo: currentUser?.uid === ADMIN_UID ? 'admin' : 'home', keepBottomNav: true });
+                setBottomNavActive('bottom-task-btn');
+            };
+
+            const renderCategory = (category) => `
+                <section class="task-category-block ${category.accent} mb-6">
+                    <div class="task-category-title flex items-center gap-2 mb-3">
+                        <span class="task-category-mark h-4 w-1 bg-indigo-600 dark:bg-indigo-400 rounded-full"></span>
+                        <h3 class="text-sm font-black uppercase tracking-wider text-slate-900 dark:text-white">${escapeHtml(category.label)}</h3>
+                    </div>
+                    <div class="flex flex-col gap-4">
+                        ${category.items.map((task, index) => renderTaskCard(category, task, index)).join('')}
+                    </div>
+                </section>`;
+
             const renderTaskCard = (category, task, index) => {
                 const isReal = isTaskPageEnabled;
                 const status = isReal ? getAdminTaskEffectiveStatus(task) : 'draft';
@@ -2638,7 +2689,6 @@ const showUserTaskPage = async () => {
                 const approvalVal = payoutVal === 'Instant' ? 'Instant' : `${payoutVal} Later`;
                 const limitVal = task.limit || 300;
                 const submissionsCount = task.timesUsed ?? task.submissionsCount ?? 0;
-                const availableComments = Math.max(0, limitVal - submissionsCount);
 
                 if (isLive) {
                     return `
@@ -2736,66 +2786,29 @@ const showUserTaskPage = async () => {
                 }
             };
 
-            const renderCategory = (category) => `
-                <section class="task-category-block ${category.accent} mb-6">
-                    <div class="task-category-title flex items-center gap-2 mb-3">
-                        <span class="task-category-mark h-4 w-1 bg-indigo-600 dark:bg-indigo-400 rounded-full"></span>
-                        <h3 class="text-sm font-black uppercase tracking-wider text-slate-900 dark:text-white">${escapeHtml(category.label)}</h3>
-                    </div>
-                    <div class="flex flex-col gap-4">
-                        ${category.items.map((task, index) => renderTaskCard(category, task, index)).join('')}
-                    </div>
-                </section>`;
+            // Render UI immediately
+            renderUI(window.lastTakenCommentsMap || {});
 
-            let bodyContent = '';
-            if (!isTaskPageEnabled) {
-                bodyContent = `
-                    <div class="rounded-3xl border border-dashed border-gray-200 dark:border-gray-700 p-8 text-center bg-white dark:bg-gray-800 shadow-sm">
-                        <div class="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-indigo-50 dark:bg-indigo-900/20 mb-4">
-                            <img src="https://cdn-icons-png.flaticon.com/512/3176/3176366.png" alt="Coming soon" class="h-8 w-8 object-contain">
-                        </div>
-                        <h3 class="text-lg font-black text-gray-900 dark:text-white">Missions Coming Soon</h3>
-                        <p class="mt-2 text-sm text-gray-500 dark:text-gray-400">New activities and updates are coming soon. Keep the app updated for future releases.</p>
-                    </div>`;
-            } else if (taskCategories.length === 0) {
-                bodyContent = `
-                    <div class="rounded-3xl border border-dashed border-gray-200 dark:border-gray-700 p-8 text-center bg-white dark:bg-gray-800 shadow-sm">
-                        <div class="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-cyan-50 dark:bg-cyan-900/20 mb-4">
-                            <img src="https://cdn-icons-png.flaticon.com/512/3176/3176366.png" alt="No tasks" class="h-8 w-8 object-contain">
-                        </div>
-                        <h3 class="text-lg font-black text-gray-900 dark:text-white">No Live Missions</h3>
-                        <p class="mt-2 text-sm text-gray-500 dark:text-gray-400">Real tasks are currently not available. Please check back later.</p>
-                    </div>`;
-            } else {
-                bodyContent = taskCategories.map(renderCategory).join('');
+            // Fetch live data silently in the background
+            if (isTaskPageEnabled) {
+                (async () => {
+                    try {
+                        const token = await getBackendAuthToken();
+                        const resp = await fetchWithTimeout(`${BACKEND_BASE_URL}/api/tasks/availability`, {
+                            headers: { Authorization: `Bearer ${token}` }
+                        }, 5000);
+                        const d = await resp.json();
+                        if (d.ok && d.takenComments) {
+                            window.lastTakenCommentsMap = d.takenComments;
+                            if (currentMainSection === 'task') {
+                                renderUI(d.takenComments);
+                            }
+                        }
+                    } catch (e) {
+                        console.warn('Failed to load task availability silently:', e);
+                    }
+                })();
             }
-
-            const content = `
-                <header class="mb-4 bg-white/95 px-4 py-3 shadow-sm backdrop-blur page-header-fixed dark:bg-gray-900/95">
-                    <div class="flex items-center justify-between gap-3">
-                        <div class="min-w-0">
-                            <p class="text-lg font-black uppercase text-slate-950 dark:text-white">RW TASK</p>
-                        </div>
-                        <div class="task-header-actions">
-                            <button type="button" data-action="open-task-ads-page" class="task-mini-action">
-                                <img src="https://cdn-icons-png.flaticon.com/512/2659/2659360.png" alt="Ads" loading="eager" decoding="async">
-                                <span>Ads</span>
-                            </button>
-                            <button type="button" data-action="open-task-bonus-page" class="task-mini-action">
-                                <img src="https://cdn-icons-png.flaticon.com/512/2611/2611152.png" alt="Bonus" loading="eager" decoding="async">
-                                <span>Bonus</span>
-                            </button>
-                        </div>
-                    </div>
-                </header>
-                <div class="task-page-shell px-4 pt-1 pb-28">
-                    <div class="mx-auto max-w-xl space-y-4">
-                        ${bodyContent}
-                    </div>
-                </div>
-                ${getPageFooter()}`;
-            showPage(content, { returnTo: currentUser?.uid === ADMIN_UID ? 'admin' : 'home', keepBottomNav: true });
-            setBottomNavActive('bottom-task-btn');
         };
 
 const showTaskFeatureComingSoonPage = (feature = 'ads') => {
