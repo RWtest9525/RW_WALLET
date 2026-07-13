@@ -1518,42 +1518,91 @@ window.showUserTaskHistoryDetail = (submissionId) => {
                         </div>
                     </div>
 
-                    <!-- Your Submission Section -->
+                    <!-- Your Submission Section (2-column side-by-side) -->
                     <div class="bg-white dark:bg-gray-800 p-4 rounded-2xl border border-gray-150 dark:border-gray-750 shadow-sm space-y-4">
                         <h4 class="text-sm font-black text-gray-900 dark:text-white">Your Submission</h4>
                         
-                        <div class="space-y-2">
-                            <span class="text-xs font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wide">Screenshot</span>
+                        <div class="grid grid-cols-2 gap-3.5">
+                            <!-- Left: Screenshot Preview Box -->
+                            <div class="space-y-2">
+                                <span class="text-xs font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wide">Screenshot</span>
+                                <div class="relative bg-gray-50 dark:bg-gray-900/60 p-2.5 rounded-2xl border border-gray-150 dark:border-gray-800 flex flex-col items-center justify-center shadow-sm hover:border-indigo-200 dark:hover:border-indigo-900 transition duration-200 cursor-pointer overflow-hidden h-[180px]" onclick="window.showScreenshotLightbox('${escapeHtml(s.screenshot_url)}', '${escapeHtml(s.screenshot_view_url || '')}')">
+                                    <button type="button" class="absolute top-2.5 right-2.5 p-1.5 rounded-lg text-gray-500 bg-white/90 dark:bg-gray-800/90 hover:text-gray-700 dark:hover:text-white shadow-sm transition" style="outline: none;">
+                                        <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5">
+                                            <path stroke-linecap="round" stroke-linejoin="round" d="M3.75 3.75v4.5m0-4.5h4.5m-4.5 0L9 9M20.25 3.75h-4.5m4.5 0v4.5m0-4.5L15 9m-11.25 11.25h4.5m-4.5 0v-4.5m0 4.5L9 15m11.25 0v4.5m0-4.5h-4.5m4.5 0L15 15" />
+                                        </svg>
+                                    </button>
+                                    <img id="user-detail-screenshot-img" src="${escapeHtml(s.screenshot_url)}" class="max-h-[160px] w-auto object-contain rounded-xl shadow-sm" onerror="this.src='https://placehold.co/300x500?text=No+Screenshot+Available';">
+                                </div>
+                            </div>
                             
-                            <!-- Real Submitted Screenshot box (Downsized) -->
-                            <div class="relative bg-gray-50 dark:bg-gray-900/60 p-2.5 rounded-2xl border border-gray-150 dark:border-gray-800 flex flex-col items-center justify-center shadow-sm hover:border-indigo-200 dark:hover:border-indigo-900 transition duration-200 cursor-pointer overflow-hidden max-h-[220px]" onclick="window.showScreenshotLightbox('${escapeHtml(s.screenshot_url)}', '${escapeHtml(s.screenshot_view_url || '')}')">
-                                <!-- Top Right Fullscreen Icon -->
-                                <button type="button" class="absolute top-2.5 right-2.5 p-1.5 rounded-lg text-gray-500 bg-white/90 dark:bg-gray-800/90 hover:text-gray-700 dark:hover:text-white shadow-sm transition" style="outline: none;">
-                                    <svg class="h-4.5 w-4.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5">
-                                        <path stroke-linecap="round" stroke-linejoin="round" d="M3.75 3.75v4.5m0-4.5h4.5m-4.5 0L9 9M20.25 3.75h-4.5m4.5 0v4.5m0-4.5L15 9m-11.25 11.25h4.5m-4.5 0v-4.5m0 4.5L9 15m11.25 0v4.5m0-4.5h-4.5m4.5 0L15 15" />
-                                    </svg>
-                                </button>
+                            <!-- Right: Submission Details -->
+                            <div class="flex flex-col justify-start min-w-0">
+                                <span class="text-xs font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wide">Submission Details</span>
                                 
-                                <img id="user-detail-screenshot-img" src="${escapeHtml(s.screenshot_url)}" class="max-h-[200px] w-auto object-contain rounded-xl shadow-sm" onerror="this.src='https://placehold.co/300x500?text=No+Screenshot+Available';">
+                                ${s.manual_status === 'rejected' ? `
+                                <div class="mt-2 space-y-2 text-xs font-semibold text-gray-655 dark:text-gray-300">
+                                    <div class="flex justify-between items-center">
+                                        <span class="text-gray-400 dark:text-gray-500">Status</span>
+                                        <span class="text-[10px] font-black uppercase bg-rose-50 dark:bg-rose-950/20 text-rose-600 dark:text-rose-455 px-2 py-0.5 rounded border border-rose-100 dark:border-rose-900/30">Rejected</span>
+                                    </div>
+                                    <div class="flex justify-between">
+                                        <span class="text-gray-400 dark:text-gray-500">Submission ID</span>
+                                        <span class="font-extrabold text-gray-855 dark:text-white font-mono">#${s.id}</span>
+                                    </div>
+                                    <div class="flex justify-between">
+                                        <span class="text-gray-400 dark:text-gray-500">Submitted On</span>
+                                        <span class="font-extrabold text-gray-855 dark:text-white">${timeStr}</span>
+                                    </div>
+                                    <div class="flex justify-between border-t border-rose-100/50 pt-2.5">
+                                        <span class="text-gray-400 dark:text-gray-500">Reason</span>
+                                        <span class="font-extrabold text-rose-600 dark:text-rose-450 text-right max-w-[90px] truncate" title="${escapeHtml(s.reject_reason || (s.ocr_status === 'failed' ? 'OCR Verification failed' : 'Review comment not found on Play Store.'))}">${escapeHtml(s.reject_reason || (s.ocr_status === 'failed' ? 'OCR Verification failed' : 'Review comment not found on Play Store.'))}</span>
+                                    </div>
+                                    <div class="flex flex-col gap-1 border-t border-rose-100/50 pt-2.5">
+                                        <span class="text-gray-400 dark:text-gray-500">Details</span>
+                                        <span class="font-semibold text-gray-600 dark:text-gray-400 text-left text-[11px] leading-relaxed italic max-h-[50px] overflow-y-auto">
+                                            ${escapeHtml(s.reject_reason || (s.ocr_status === 'failed' ? 'OCR Verification failed.' : "We couldn't find your review on Play Store."))}
+                                        </span>
+                                    </div>
+                                </div>
+                                ` : `
+                                <div class="mt-2 space-y-2 text-xs font-semibold text-gray-655 dark:text-gray-300">
+                                    <div class="flex justify-between items-center">
+                                        <span class="text-gray-400 dark:text-gray-500">Status</span>
+                                        <span class="text-[10px] font-black uppercase bg-${s.manual_status === 'approved' ? 'emerald' : 'amber'}-50 dark:bg-${s.manual_status === 'approved' ? 'emerald' : 'amber'}-950/20 text-${s.manual_status === 'approved' ? 'emerald' : 'amber'}-600 dark:text-${s.manual_status === 'approved' ? 'emerald' : 'amber'}-400 px-2 py-0.5 rounded border border-${s.manual_status === 'approved' ? 'emerald' : 'amber'}-100 dark:border-${s.manual_status === 'approved' ? 'emerald' : 'amber'}-900/30">
+                                            ${s.manual_status === 'approved' ? 'Approved' : 'Pending'}
+                                        </span>
+                                    </div>
+                                    <div class="flex justify-between">
+                                        <span class="text-gray-400 dark:text-gray-500">Submission ID</span>
+                                        <span class="font-extrabold text-gray-855 dark:text-white font-mono">#${s.id}</span>
+                                    </div>
+                                    <div class="flex justify-between">
+                                        <span class="text-gray-400 dark:text-gray-500">Submitted On</span>
+                                        <span class="font-extrabold text-gray-855 dark:text-white">${timeStr}</span>
+                                    </div>
+                                    <div class="flex justify-between gap-3">
+                                        <span class="text-gray-400 dark:text-gray-500 shrink-0">Task Name</span>
+                                        <span class="font-extrabold text-gray-855 dark:text-white text-right truncate max-w-[85px]" title="${escapeHtml(s.app_name || '')}">${escapeHtml(s.app_name || 'Play Store Task')}</span>
+                                    </div>
+                                    ${isReviewTask ? `
+                                    <div class="flex items-center justify-between gap-2 border-t border-gray-100 dark:border-gray-755 pt-2.5">
+                                        <span class="text-gray-400 dark:text-gray-500 shrink-0">Review Used</span>
+                                        <div class="flex items-center gap-1 min-w-0">
+                                            <span class="font-extrabold text-gray-855 dark:text-white truncate max-w-[70px]" title="${escapeHtml(s.assigned_comment)}">${escapeHtml(s.assigned_comment)}</span>
+                                            <button class="text-purple-600 hover:text-purple-700 p-0.5 rounded hover:bg-purple-50 dark:hover:bg-purple-950/20 shrink-0" onclick="window.copyReviewText('${escapeHtml(s.assigned_comment)}')">
+                                                <svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24">
+                                                    <path stroke-linecap="round" stroke-linejoin="round" d="M8.25 7.5V6.108c0-1.135.845-2.098 1.976-2.192.373-.03.748-.057 1.123-.08M15.75 18H18a2.25 2.25 0 002.25-2.25V6.108c0-1.135-.845-2.098-1.976-2.192a48.424 48.424 0 00-1.123-.08M15.75 18.75v-1.875a3.375 3.375 0 00-3.375-3.375h-1.5a1.125 1.125 0 01-1.125-1.125v-1.5A3.375 3.375 0 006.375 7.5H5.25m11.9-3.664A2.251 2.251 0 0015 2.25h-1.5a2.251 2.251 0 00-2.15 1.586m5.8 0c.065.21.1.433.1.664v.75h-6V4.5c0-.231.035-.454.1-.664M6.75 7.5H4.875c-.621 0-1.125.504-1.125 1.125v12c0 .621.504 1.125 1.125 1.125h9.75c.621 0 1.125-.504 1.125-1.125V16.5a9 9 0 00-9-9z" />
+                                                </svg>
+                                            </button>
+                                        </div>
+                                    </div>
+                                    ` : ''}
+                                </div>
+                                `}
                             </div>
                         </div>
-
-                        ${isReviewTask ? `
-                        <div class="space-y-1.5 pt-3 border-t border-gray-100 dark:border-gray-750">
-                            <p class="text-xs font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wide">Comment Used</p>
-                            <p class="mt-1.5 text-sm font-semibold text-gray-900 dark:text-gray-100 bg-transparent leading-relaxed italic">
-                                ${escapeHtml(s.assigned_comment)}
-                            </p>
-                        </div>
-                        ` : ''}
                     </div>
-
-                    ${s.manual_status === 'rejected' ? `
-                    <div class="bg-rose-50/40 dark:bg-rose-950/10 p-4.5 rounded-3xl border border-rose-100 dark:border-rose-900/30 text-rose-700 dark:text-rose-400 text-xs font-bold leading-normal">
-                        <span class="font-black uppercase tracking-wider block mb-1">Rejection Reason</span>
-                        <p class="italic">${escapeHtml(s.reject_reason || (s.ocr_status === 'failed' ? 'OCR Verification failed' : 'Review comment not found on Play Store.'))}</p>
-                    </div>
-                    ` : ''}
                 </div>
                 ${getPageFooter()}
             `;
