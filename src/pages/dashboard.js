@@ -1555,10 +1555,6 @@ window.showUserTaskHistoryDetail = (submissionId) => {
                                         <span class="text-gray-400 dark:text-gray-500">Submission ID</span>
                                         <span class="font-extrabold text-gray-855 dark:text-white font-mono">${displaySubmissionId}</span>
                                     </div>
-                                    <div class="flex justify-between">
-                                        <span class="text-gray-400 dark:text-gray-500">Submitted On</span>
-                                        <span class="font-extrabold text-gray-855 dark:text-white">${timeStr}</span>
-                                    </div>
                                     <div class="flex justify-between border-t border-rose-100/50 pt-2 text-rose-600">
                                         <span class="text-gray-400 dark:text-gray-500">Reason</span>
                                         <span class="font-extrabold text-rose-750 dark:text-rose-400 text-right truncate max-w-[120px]" title="${escapeHtml(s.reject_reason || '')}">${escapeHtml(s.reject_reason || 'Review not found')}</span>
@@ -1581,10 +1577,6 @@ window.showUserTaskHistoryDetail = (submissionId) => {
                                     <div class="flex justify-between">
                                         <span class="text-gray-400 dark:text-gray-500">Submission ID</span>
                                         <span class="font-extrabold text-gray-855 dark:text-white font-mono">${displaySubmissionId}</span>
-                                    </div>
-                                    <div class="flex justify-between">
-                                        <span class="text-gray-400 dark:text-gray-500">Submitted On</span>
-                                        <span class="font-extrabold text-gray-855 dark:text-white">${timeStr}</span>
                                     </div>
                                     ${isReviewTask ? `
                                     <div class="flex items-center justify-between gap-2 border-t border-gray-100 dark:border-gray-755 pt-2">
