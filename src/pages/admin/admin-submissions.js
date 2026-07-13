@@ -466,13 +466,8 @@ const renderAdminSubmissions = () => {
     // Filter submissions by ownership
     let subs = [...adminSubmissionsCache];
     const isOwner = currentUser?.uid === ADMIN_UID || currentUser?.email === 'reviewsworld51@gmail.com' || currentUser?.email === 'reviewsworld01@gmail.com' || currentUserData?.role === 'owner';
-    if (isOwner) {
-        subs = subs.filter(sub => {
-            const task = allTasksCache.find(t => t.id === (sub.task_id || sub.taskId));
-            const isOwnerTask = !task || !task.createdBy || task.createdBy === ADMIN_UID || task.createdBy === 'owner';
-            return isOwnerTask;
-        });
-    } else {
+    if (!isOwner) {
+        // Sub-admins only see submissions for tasks they created
         subs = subs.filter(sub => {
             const task = allTasksCache.find(t => t.id === (sub.task_id || sub.taskId));
             return task && task.createdBy === currentUser.uid;
