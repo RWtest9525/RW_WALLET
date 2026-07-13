@@ -362,22 +362,17 @@ window.extractReviewerName = async (ocrText, targetComment) => {
         };
 
 const loadAdminSubmissions = async () => {
-            // Render cached data immediately for instant load
-            if (adminSubmissionsCache && adminSubmissionsCache.length > 0) {
-                renderAdminSubmissions();
-            }
-            if (adminSubmissionsLoading) return;
-            adminSubmissionsLoading = true;
-
-            // Pre-fetch tasks if not loaded in cache
-            if (!window.allTasksCache || window.allTasksCache.length === 0) {
-                try {
-                    const tasksQuery = query(collection(db, `artifacts/${appId}/public/data/tasks`), orderBy("createdAt", "desc"));
-                    const tasksSnap = await getDocs(tasksQuery);
-                    window.allTasksCache = tasksSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-                } catch (e) {
-                    console.warn('Failed to pre-fetch tasks inside loadAdminSubmissions:', e);
+            // Always force-load tasks from Firestore to ensure allTasksCache is populated
+            try {
+                const tasksQuery = query(collection(db, `artifacts/${appId}/public/data/tasks`), orderBy("createdAt", "desc"));
+                const tasksSnap = await getDocs(tasksQuery);
+                const taskDocs = tasksSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                if (taskDocs.length > 0) {
+                    window.allTasksCache = taskDocs;
                 }
+                console.log('[AdminSubs] Tasks loaded:', window.allTasksCache.length);
+            } catch (e) {
+                console.warn('[AdminSubs] Tasks pre-fetch failed:', e);
             }
 
             try {
@@ -388,9 +383,15 @@ const loadAdminSubmissions = async () => {
                 const data = await response.json().catch(() => ({}));
                 if (data.ok && Array.isArray(data.submissions)) {
                     adminSubmissionsCache = data.submissions;
+                    console.log('[AdminSubs] Backend submissions loaded:', adminSubmissionsCache.length);
+                    if (adminSubmissionsCache.length > 0) {
+                        console.log('[AdminSubs] Sample submission keys:', Object.keys(adminSubmissionsCache[0]));
+                        console.log('[AdminSubs] Sample task_id:', adminSubmissionsCache[0].task_id);
+                        console.log('[AdminSubs] Sample app_name:', adminSubmissionsCache[0].app_name);
+                    }
                 }
             } catch (err) {
-                console.warn('Backend submissions load failed, falling back to Firebase:', err);
+                console.warn('[AdminSubs] Backend load failed, trying Firebase:', err);
                 try {
                     const snap = await getDocs(query(
                         collection(db, `artifacts/${appId}/public/data/task_submissions`),
@@ -421,11 +422,12 @@ const loadAdminSubmissions = async () => {
                             _source: 'firebase'
                         };
                     });
+                    console.log('[AdminSubs] Firebase fallback loaded:', adminSubmissionsCache.length);
                 } catch (fbErr) {
-                    console.error('Firebase submissions also failed:', fbErr);
+                    console.error('[AdminSubs] Firebase also failed:', fbErr);
                 }
             }
-            adminSubmissionsLoading = false;
+            console.log('[AdminSubs] Calling renderAdminSubmissions. allTasksCache:', window.allTasksCache.length, 'submissions:', adminSubmissionsCache.length);
             renderAdminSubmissions();
         };
 
@@ -559,6 +561,8 @@ const renderAdminSubmissions = () => {
         });
         taskRows = Object.values(taskIdMap);
     }
+
+    console.log('[AdminSubs-Render] isOwner:', isOwner, 'allTasksCache.length:', allTasksCache.length, 'filteredTasks.length:', filteredTasks.length, 'dateSubs.length:', dateSubs.length, 'taskRows.length:', taskRows.length, 'subs.length:', subs.length, 'selectedDate:', selectedDate);
 
     const isDetailView = window.adminSubmissionsView.viewState === 'detail';
     const selectedTaskId = window.adminSubmissionsView.selectedTaskId;
