@@ -135,6 +135,36 @@ const setAdminTaskPanel = (panel = 'manage') => {
             const validPanels = ['manage', 'add', 'ads', 'submissions', 'board_control'];
             const normalized = validPanels.includes(panel) ? panel : 'manage';
             window.adminTaskPanel = normalized;
+
+            // On mobile click, hide the menu so the chosen panel goes full screen
+            window.adminMobileShowMenu = false;
+            if (typeof window.updateAdminTaskResponsiveLayout === 'function') {
+                window.updateAdminTaskResponsiveLayout();
+            }
+
+            // Also update the mobile active tab title and icon
+            const mobileTitleEl = document.getElementById('admin-mobile-active-tab-title');
+            const mobileIconEl = document.getElementById('admin-mobile-active-tab-icon');
+            if (mobileTitleEl) {
+                const titles = {
+                    manage: 'Tasks List',
+                    add: 'Add Task',
+                    ads: 'Manage Ads',
+                    submissions: 'Submissions',
+                    board_control: 'Board Control'
+                };
+                mobileTitleEl.textContent = titles[normalized] || 'Manage Task';
+            }
+            if (mobileIconEl) {
+                const icons = {
+                    manage: '📋',
+                    add: '➕',
+                    ads: '📢',
+                    submissions: '📥',
+                    board_control: '⚙️'
+                };
+                mobileIconEl.textContent = icons[normalized] || '📋';
+            }
             
             const addSection = document.getElementById('admin-task-add-section');
             const manageSection = document.getElementById('admin-task-manage-section');
@@ -189,6 +219,61 @@ window.toggleAdminTaskSidebar = () => {
     updateAdminTaskSidebar();
 };
 
+window.showAdminTaskMobileMenu = () => {
+    window.adminMobileShowMenu = true;
+    window.updateAdminTaskResponsiveLayout();
+};
+
+window.updateAdminTaskResponsiveLayout = () => {
+    const sidebar = document.getElementById('admin-task-sidebar');
+    const contentArea = document.getElementById('admin-task-content-area');
+    if (!sidebar || !contentArea) return;
+
+    const isMobile = window.innerWidth < 768; // md breakpoint is 768px
+    if (isMobile) {
+        if (typeof window.adminMobileShowMenu === 'undefined') {
+            window.adminMobileShowMenu = false;
+        }
+
+        const showMenu = !!window.adminMobileShowMenu;
+        if (showMenu) {
+            sidebar.classList.remove('hidden');
+            sidebar.classList.add('w-full');
+            contentArea.classList.add('hidden');
+        } else {
+            sidebar.classList.add('hidden');
+            sidebar.classList.remove('w-full');
+            contentArea.classList.remove('hidden');
+        }
+
+        // Always show labels on mobile menu list
+        sidebar.querySelectorAll('.sidebar-label').forEach(el => el.classList.remove('hidden'));
+        
+        // Hide standard collapse button container on mobile
+        const toggleBtnContainer = document.getElementById('admin-sidebar-toggle-btn')?.parentElement;
+        if (toggleBtnContainer) {
+            toggleBtnContainer.classList.add('hidden');
+        }
+        
+        // Reset button classes to look full width on mobile
+        sidebar.querySelectorAll('[data-admin-task-panel]').forEach(btn => {
+            btn.classList.remove('w-12', 'h-12', 'justify-center', 'mx-auto');
+            btn.classList.add('w-full', 'px-4', 'py-3.5', 'text-left');
+        });
+    } else {
+        // Desktop view - restore normal behavior
+        sidebar.classList.remove('hidden', 'w-full');
+        contentArea.classList.remove('hidden');
+        
+        const toggleBtnContainer = document.getElementById('admin-sidebar-toggle-btn')?.parentElement;
+        if (toggleBtnContainer) {
+            toggleBtnContainer.classList.remove('hidden');
+        }
+        
+        window.updateAdminTaskSidebar();
+    }
+};
+
 window.updateAdminTaskSidebar = () => {
     const sidebar = document.getElementById('admin-task-sidebar');
     const toggleIcon = document.getElementById('admin-sidebar-toggle-icon');
@@ -237,8 +322,8 @@ const showAdminTaskPage = () => {
             const content = `
                 ${getPageHeader('Manage Task')}
                 <div class="pb-24 max-w-7xl mx-auto p-4 md:p-6">
-                    <!-- Always Laptop View Side-by-Side split Layout -->
-                    <div class="flex flex-row gap-6 items-start w-full">
+                    <!-- Responsive Side-by-Side / Full-screen Layout -->
+                    <div class="flex flex-col md:flex-row gap-6 items-start w-full">
                         
                         <!-- Left Sidebar Panel -->
                         <div id="admin-task-sidebar" class="w-64 shrink-0 transition-all duration-300 flex flex-col justify-between border border-slate-100 dark:border-slate-800 bg-white dark:bg-gray-900 rounded-3xl p-3 shadow-sm sticky top-6 min-h-[350px]">
@@ -276,7 +361,17 @@ const showAdminTaskPage = () => {
                         </div>
 
                         <!-- Right Panel Area -->
-                        <div class="flex-1 w-full min-w-0 space-y-4">
+                        <div id="admin-task-content-area" class="flex-1 w-full min-w-0 space-y-4">
+                            <!-- Mobile Navigation Header Bar -->
+                            <div class="md:hidden flex items-center justify-between p-3.5 bg-slate-50 dark:bg-slate-900/50 rounded-3xl border border-slate-100 dark:border-slate-800/80 mb-2">
+                                <div class="flex items-center gap-2">
+                                    <span id="admin-mobile-active-tab-icon" class="text-sm">📋</span>
+                                    <span id="admin-mobile-active-tab-title" class="text-xs font-black uppercase tracking-wider text-slate-700 dark:text-slate-200">Tasks List</span>
+                                </div>
+                                <button type="button" onclick="window.showAdminTaskMobileMenu()" class="rounded-xl bg-cyan-600 px-4 py-2 text-xs font-black text-white hover:bg-cyan-700 transition active:scale-95 shadow-sm" style="outline: none;">
+                                    ☰ Menu
+                                </button>
+                            </div>
                             <!-- Board Control Panel -->
                             <section id="admin-board-control-section" class="hidden bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 p-4 sm:p-5">
                                 <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
@@ -499,8 +594,27 @@ const showAdminTaskPage = () => {
             document.querySelectorAll('[data-admin-task-panel]').forEach(button => {
                 button.addEventListener('click', () => setAdminTaskPanel(button.dataset.adminTaskPanel));
             });
+            
+            // Set panel first
             setAdminTaskPanel(window.adminTaskPanel || 'manage');
+            
+            // Call standard update
             updateAdminTaskSidebar();
+            
+            // Initialize responsive layout on load
+            if (typeof window.updateAdminTaskResponsiveLayout === 'function') {
+                window.updateAdminTaskResponsiveLayout();
+            }
+            
+            // Bind resize event only once
+            if (!window._adminResizeListenerBound) {
+                window.addEventListener('resize', () => {
+                    if (document.getElementById('admin-task-sidebar')) {
+                        window.updateAdminTaskResponsiveLayout();
+                    }
+                });
+                window._adminResizeListenerBound = true;
+            }
             const toggleBtn = document.getElementById('admin-toggle-task-page-status');
             if (toggleBtn) {
                 toggleBtn.addEventListener('click', async () => {

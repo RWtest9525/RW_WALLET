@@ -727,6 +727,254 @@ const getPageHeader = (title, options = {}) => `
             <div class="p-4 pt-0">`;
 const getPageFooter = () => `</div>`;
 
+const getSubmissionAppLogo = (s) => {
+    if (s.appLogoUrl || s.app_logo_url || s.logoUrl) {
+        return s.appLogoUrl || s.app_logo_url || s.logoUrl;
+    }
+    if (typeof allTasksCache !== 'undefined' && Array.isArray(allTasksCache)) {
+        const task = allTasksCache.find(t => t.id === (s.task_id || s.taskId));
+        if (task) {
+            const logo = task.logoUrl || task.imageUrl || task.iconUrl || task.image;
+            if (logo) return logo;
+            const family = typeof window.getAdminTaskFamily === 'function' ? window.getAdminTaskFamily(task) : 'review';
+            const subtype = typeof window.getAdminTaskSubtype === 'function' ? window.getAdminTaskSubtype(task) : 'app_review';
+            if (typeof window.getTaskLogoFromLink === 'function') {
+                const logoFromLink = window.getTaskLogoFromLink(family, subtype, task.taskLink);
+                if (logoFromLink) return logoFromLink;
+            }
+        }
+    }
+    return 'https://cdn-icons-png.flaticon.com/512/3176/3176366.png';
+};
+
+const getUserTaskHistoryListHtml = () => {
+    const categoryTab = window.userTaskHistoryActiveTab || 'all';
+    const statusFilter = window.userTaskHistoryStatusFilter || 'all';
+    const isBulker = isBulkTaskUser();
+
+    let subs = [...(userTaskHistoryCache || [])];
+
+    // Filter by category
+    if (categoryTab !== 'all') {
+        subs = subs.filter(s => {
+            const isReview = !!(s.assigned_comment && String(s.assigned_comment).trim().length > 0);
+            return categoryTab === 'play_store' ? isReview : !isReview;
+        });
+    }
+
+    // Filter by status (only for Single Users)
+    if (!isBulker && statusFilter !== 'all') {
+        if (statusFilter === 'paid') {
+            subs = subs.filter(s => s.payout_status === 'paid');
+        } else if (statusFilter === 'approved') {
+            subs = subs.filter(s => s.manual_status === 'approved' && s.payout_status !== 'paid');
+        } else {
+            subs = subs.filter(s => s.manual_status === statusFilter);
+        }
+    }
+
+    if (subs.length === 0) {
+        return `<div class="rounded-3xl py-12 text-center text-xs font-bold text-gray-400 dark:text-gray-500 bg-white dark:bg-gray-800 border border-dashed border-gray-150 dark:border-gray-800">No submissions found.</div>`;
+    }
+
+    if (isBulker) {
+        // Group submissions by task_id
+        const taskGroups = {};
+        subs.forEach(s => {
+            const tId = s.task_id || s.taskId;
+            if (!tId) return;
+            if (!taskGroups[tId]) {
+                taskGroups[tId] = {
+                    taskId: tId,
+                    taskName: s.app_name || s.taskTitle || 'Task',
+                    logoUrl: getSubmissionAppLogo(s),
+                    reward: s.reward || 0,
+                    submissions: [],
+                    lastUpdated: s.submitted_at || 0
+                };
+            }
+            taskGroups[tId].submissions.push(s);
+            if (s.submitted_at > taskGroups[tId].lastUpdated) {
+                taskGroups[tId].lastUpdated = s.submitted_at;
+            }
+        });
+
+        const groupsArray = Object.values(taskGroups);
+        if (groupsArray.length === 0) {
+            return `<div class="rounded-3xl py-12 text-center text-xs font-bold text-gray-400 dark:text-gray-500 bg-white dark:bg-gray-800 border border-dashed border-gray-150 dark:border-gray-800">No submissions found.</div>`;
+        }
+
+        return groupsArray.map(g => {
+            const total = g.submissions.length;
+            const approvedCount = g.submissions.filter(s => s.manual_status === 'approved').length;
+            const pendingCount = g.submissions.filter(s => s.manual_status === 'pending').length;
+            const rejectedCount = g.submissions.filter(s => s.manual_status === 'rejected').length;
+            
+            const completionPercent = total > 0 ? Math.round((approvedCount / total) * 100) : 0;
+            const dateStr = g.lastUpdated ? new Date(g.lastUpdated).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }) : 'Unknown';
+
+            return `
+            <div class="bg-white dark:bg-gray-800 p-5 rounded-2xl border border-gray-100 dark:border-gray-800 hover:shadow-[0_4px_16px_rgba(0,0,0,0.04)] cursor-pointer transition select-none text-left space-y-4 shadow-[0_2px_8px_rgba(0,0,0,0.03)]" onclick="window.showBulkerTaskOverview('${g.taskId}')">
+                <div class="flex items-center gap-3">
+                    <img src="${escapeHtml(g.logoUrl)}" class="h-10 w-10 rounded-xl object-cover shrink-0" onerror="this.src='https://cdn-icons-png.flaticon.com/512/3176/3176366.png';">
+                    <div class="min-w-0 flex-1">
+                        <h4 class="text-sm font-extrabold text-gray-900 dark:text-white truncate">${escapeHtml(g.taskName)}</h4>
+                        <div class="flex items-center gap-2 text-[10px] text-gray-400 font-semibold mt-0.5">
+                            <span>Submitted: ${total}</span>
+                            <span>•</span>
+                            <span class="text-emerald-600 dark:text-emerald-400 font-bold">Approved: ${approvedCount}</span>
+                            <span>•</span>
+                            <span class="text-amber-500 font-bold">Pending: ${pendingCount}</span>
+                            <span>•</span>
+                            <span class="text-rose-600 dark:text-rose-455 font-bold">Rejected: ${rejectedCount}</span>
+                        </div>
+                    </div>
+                    <svg class="h-4 w-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M9 5l7 7-7 7"></path></svg>
+                </div>
+                
+                <div class="space-y-1">
+                    <div class="flex items-center justify-between text-[10px] font-bold text-purple-600 dark:text-purple-400">
+                        <span>Completion</span>
+                        <span>${completionPercent}%</span>
+                    </div>
+                    <div class="w-full bg-gray-100 dark:bg-gray-700 h-1.5 rounded-full overflow-hidden">
+                        <div class="bg-purple-600 h-full rounded-full" style="width: ${completionPercent}%"></div>
+                    </div>
+                </div>
+                
+                <p class="text-[9px] text-gray-400 dark:text-gray-500 font-semibold">Last Updated: ${dateStr}</p>
+            </div>`;
+        }).join('');
+    } else {
+        // Single User Flow Cards (Design based on Screenshot 1)
+        return subs.map(s => {
+            const isReview = !!(s.assigned_comment && String(s.assigned_comment).trim().length > 0);
+            
+            let statusColor = 'amber';
+            let statusText = 'Pending';
+            let statusIcon = `<svg class="h-4 w-4 text-amber-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z"></path></svg>`;
+
+            if (s.manual_status === 'approved') {
+                statusColor = 'emerald';
+                statusText = 'Approved';
+                statusIcon = `<svg class="h-4 w-4 text-emerald-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="3"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"></path></svg>`;
+            } else if (s.manual_status === 'rejected') {
+                statusColor = 'rose';
+                statusText = 'Rejected';
+                statusIcon = `<svg class="h-4 w-4 text-rose-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="m9.75 9.75 4.5 4.5m0-4.5-4.5 4.5M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z"></path></svg>`;
+            } else if (s.manual_status === 'pending') {
+                if (s.ocr_status === 'completed') {
+                    statusColor = 'blue';
+                    statusText = 'Under Review';
+                    statusIcon = `<svg class="h-4 w-4 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0 3.181 3.183a8.25 8.25 0 0 0 13.803-3.7M4.031 9.865a8.25 8.25 0 0 1 13.803-3.7l3.181 3.182m0-4.991v4.99"></path></svg>`;
+                } else {
+                    statusColor = 'amber';
+                    statusText = 'Pending';
+                    statusIcon = `<svg class="h-4 w-4 text-amber-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z"></path></svg>`;
+                }
+            }
+
+            const timeStr = s.submitted_at 
+                ? new Date(s.submitted_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) 
+                : 'Unknown';
+
+            // Auto-fetch logo logic
+            const appLogo = getSubmissionAppLogo(s);
+
+            const typeBadgeText = isReview ? 'Play Store Review' : 'Screenshot Task';
+            const workTypeText = isReview ? 'Play Store Review' : 'Screenshot + Review';
+            
+            // Subtitle type icon (Google Play Store logo or document/file icon)
+            const typeIcon = isReview ? `
+                <svg class="h-3.5 w-3.5 text-blue-500 shrink-0" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M3.25 2.75V21.25L13.75 12L3.25 2.75Z" fill="#00E676"/>
+                    <path d="M13.75 12L3.25 21.25H4.25L15.75 13.5L13.75 12Z" fill="#FFD600"/>
+                    <path d="M15.75 13.5L18.75 12L15.75 10.5L13.75 12L15.75 13.5Z" fill="#FF1744"/>
+                    <path d="M3.25 2.75L13.75 12L15.75 10.5L4.25 2.75H3.25Z" fill="#00B0FF"/>
+                </svg>
+            ` : `
+                <svg class="h-3.5 w-3.5 text-gray-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
+                </svg>
+            `;
+
+            // Calculate remaining days
+            let daysLeftDisplay = '';
+            if (s.manual_status !== 'rejected') {
+                const delayDays = Number(s.payout_delay_days || s.payoutDelayDays || 7);
+                if (delayDays === 0) {
+                    daysLeftDisplay = `
+                        <span class="flex items-center gap-1 text-[11px] font-semibold text-gray-500 dark:text-gray-400">
+                            <svg class="h-3.5 w-3.5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z"></path></svg>
+                            Instant
+                        </span>
+                    `;
+                } else if (s.payout_status === 'paid') {
+                    daysLeftDisplay = `
+                        <span class="flex items-center gap-1 text-[11px] font-semibold text-emerald-600 dark:text-emerald-450">
+                            <svg class="h-3.5 w-3.5 text-emerald-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75 11.25 15 15 9.75M21 12c0 1.268-.63 2.39-1.593 3.068a3.745 3.745 0 0 1-1.043 3.296 3.745 3.745 0 0 1-3.296 1.043A3.745 3.745 0 0 1 12 21c-1.268 0-2.39-.63-3.068-1.593a3.746 3.746 0 0 1-3.296-1.043 3.745 3.745 0 0 1-1.043-3.296A3.745 3.745 0 0 1 3 12c0-1.268.63-2.39 1.593-3.068a3.745 3.745 0 0 1 1.043-3.296 3.746 3.746 0 0 1 3.296-1.043A3.746 3.746 0 0 1 12 3c1.268 0 2.39.63 3.068 1.593a3.746 3.746 0 0 1 3.296 1.043 3.746 3.746 0 0 1 1.043 3.296A3.745 3.745 0 0 1 21 12Z"/></svg>
+                            Paid
+                        </span>
+                    `;
+                } else {
+                    const submittedMs = s.submitted_at || s.submittedAt || Date.now();
+                    const submittedTimeMs = typeof submittedMs === 'object' && submittedMs.seconds ? submittedMs.seconds * 1000 : Number(submittedMs);
+                    const targetMs = submittedTimeMs + (delayDays * 24 * 60 * 60 * 1000);
+                    const msLeft = targetMs - Date.now();
+                    const daysLeft = Math.ceil(msLeft / (24 * 60 * 60 * 1000));
+                    
+                    const daysText = daysLeft > 0 ? `${daysLeft} Days Left` : 'Instant';
+                    daysLeftDisplay = `
+                        <span class="flex items-center gap-1 text-[11px] font-semibold text-gray-500 dark:text-gray-400">
+                            <svg class="h-3.5 w-3.5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z"></path></svg>
+                            ${daysText}
+                        </span>
+                    `;
+                }
+            }
+
+            return `
+            <div class="bg-white dark:bg-gray-800 p-4 rounded-3xl border border-gray-100 dark:border-gray-850 hover:shadow-[0_4px_20px_rgba(0,0,0,0.03)] cursor-pointer transition-all duration-200 select-none text-left flex flex-col gap-3 shadow-[0_2px_12px_rgba(0,0,0,0.015)]" onclick="window.showUserTaskHistoryDetail('${s.id}')">
+                <!-- Top Section -->
+                <div class="flex items-start gap-3">
+                    <img src="${escapeHtml(appLogo)}" class="h-12 w-12 rounded-2xl object-cover shrink-0 border border-gray-50 dark:border-gray-700 shadow-sm" onerror="this.src='https://cdn-icons-png.flaticon.com/512/3176/3176366.png';">
+                    <div class="min-w-0 flex-1">
+                        <span class="rounded-lg bg-indigo-50 dark:bg-indigo-955/20 text-indigo-600 dark:text-indigo-400 px-2 py-0.5 text-[9px] font-black uppercase tracking-wider">
+                            ${typeBadgeText}
+                        </span>
+                        <h4 class="text-sm font-extrabold text-gray-900 dark:text-white truncate mt-1">${escapeHtml(s.app_name || 'Task Submission')}</h4>
+                        <div class="flex items-center gap-1 text-[11px] text-gray-400 dark:text-gray-500 font-semibold mt-0.5">
+                            ${typeIcon}
+                            <span class="truncate">${workTypeText}</span>
+                        </div>
+                    </div>
+                    <div class="text-right shrink-0">
+                        <p class="text-base font-extrabold text-indigo-600 dark:text-indigo-400">₹${s.reward}</p>
+                    </div>
+                </div>
+                
+                <!-- Divider -->
+                <div class="border-t border-gray-100 dark:border-gray-750/50"></div>
+                
+                <!-- Bottom Status Row -->
+                <div class="flex items-center justify-between">
+                    <div class="flex items-center gap-4">
+                        <span class="flex items-center gap-1 text-[11px] font-black text-${statusColor}-600 dark:text-${statusColor}-400">
+                            ${statusIcon}
+                            ${statusText}
+                        </span>
+                        ${daysLeftDisplay}
+                    </div>
+                    <div class="flex items-center gap-1.5 text-[11px] font-bold text-gray-400">
+                        <span>${timeStr}</span>
+                        <svg class="h-3.5 w-3.5 text-gray-300 dark:text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"></path></svg>
+                    </div>
+                </div>
+            </div>`;
+        }).join('');
+    }
+};
+
 const showUserTaskHistoryPage = () => {
             if (!ensureUserSessionReady()) return;
             
@@ -744,8 +992,13 @@ const showUserTaskHistoryPage = () => {
             const isBulker = isBulkTaskUser();
             const title = isBulker ? 'Task History (Bulker)' : 'Task History';
 
+            // INSTANT LOAD: render list content immediately if cached data is present!
+            const initialListHtml = (userTaskHistoryCache && userTaskHistoryCache.length > 0)
+                ? getUserTaskHistoryListHtml()
+                : `<div class="py-8 text-center text-sm text-gray-450 dark:text-gray-500">Loading history...</div>`;
+
             const content = `
-                <header class="flex items-center justify-between p-4 bg-white dark:bg-gray-800 shadow-sm border-b border-gray-100 dark:border-gray-750 page-header-fixed">
+                <header class="flex items-center justify-between p-4 bg-white dark:bg-gray-800 shadow-[0_2px_8px_rgba(0,0,0,0.015)] border-b border-gray-100 dark:border-gray-750 page-header-fixed">
                     <div class="flex items-center gap-3">
                         <button class="page-back-btn p-2 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700 mr-1 shrink-0 text-gray-700 dark:text-white" style="outline: none;">
                             <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="12" x2="21" y2="12"></line><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="18" x2="21" y2="18"></line></svg>
@@ -754,7 +1007,7 @@ const showUserTaskHistoryPage = () => {
                     </div>
                     <div class="flex items-center gap-2">
                         ${!isBulker ? `
-                        <button id="user-task-history-filter-toggle" class="p-2 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700 shrink-0 ${window.userTaskHistoryFilterDrawerOpen ? 'bg-purple-100 dark:bg-purple-950/30 text-purple-600 dark:text-purple-400' : 'text-gray-700 dark:text-white'}" style="outline: none;">
+                        <button id="user-task-history-filter-toggle" class="p-2 rounded-full hover:bg-gray-250 dark:hover:bg-gray-700 shrink-0 ${window.userTaskHistoryFilterDrawerOpen ? 'bg-purple-100 dark:bg-purple-950/30 text-purple-600 dark:text-purple-400' : 'text-gray-700 dark:text-white'}" style="outline: none;">
                             <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon></svg>
                         </button>
                         ` : ''}
@@ -762,13 +1015,13 @@ const showUserTaskHistoryPage = () => {
                 </header>
                 
                 <div class="max-w-xl mx-auto space-y-4 pb-24 px-4 pt-4 text-left">
-                    <!-- Category Tabs -->
-                    <div class="flex items-center bg-gray-100 dark:bg-gray-900 p-1 rounded-xl">
+                    <!-- Category Tabs (Styled Pill Tabs based on Screenshot 1) -->
+                    <div class="flex items-center gap-2 mb-2 select-none overflow-x-auto scrollbar-none">
                         ${['all', 'play_store', 'others'].map(tab => {
                             const isActive = window.userTaskHistoryActiveTab === tab;
                             const label = tab === 'all' ? 'All' : tab === 'play_store' ? 'Play Store' : 'Others';
                             return `
-                                <button type="button" data-action="select-history-tab" data-tab="${tab}" class="flex-1 text-center py-2 text-xs font-black rounded-lg transition-all ${isActive ? 'bg-purple-600 text-white shadow-sm' : 'text-gray-550 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200'}" style="outline: none;">
+                                <button type="button" data-action="select-history-tab" data-tab="${tab}" class="rounded-full px-5 py-2 text-xs font-black uppercase tracking-wider transition-all duration-200 border ${isActive ? 'bg-indigo-600 border-indigo-600 text-white shadow-md' : 'bg-gray-100 dark:bg-gray-800 border-transparent text-gray-500 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700'}" style="outline: none;">
                                     ${label}
                                 </button>
                             `;
@@ -782,7 +1035,7 @@ const showUserTaskHistoryPage = () => {
                             const isActive = window.userTaskHistoryStatusFilter === status;
                             const label = status === 'all' ? 'All Status' : status.charAt(0).toUpperCase() + status.slice(1);
                             return `
-                                <button type="button" data-action="select-status-filter" data-status="${status}" class="flex-1 text-center py-1.5 text-[10px] font-black rounded-xl transition-all ${isActive ? 'bg-purple-600 text-white shadow-sm' : 'text-gray-500 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200'}" style="outline: none;">
+                                <button type="button" data-action="select-status-filter" data-status="${status}" class="flex-1 text-center py-1.5 text-[10px] font-black rounded-xl transition-all ${isActive ? 'bg-indigo-600 text-white shadow-sm' : 'text-gray-500 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200'}" style="outline: none;">
                                     ${label}
                                 </button>
                             `;
@@ -790,9 +1043,9 @@ const showUserTaskHistoryPage = () => {
                     </div>
                     ` : ''}
 
-                    <!-- List Container -->
+                    <!-- List Container (Loaded Instantly) -->
                     <div id="user-task-history-list" class="space-y-3.5">
-                        <div class="py-8 text-center text-sm text-gray-400">Loading history...</div>
+                        ${initialListHtml}
                     </div>
                 </div>
                 ${getPageFooter()}`;
@@ -827,9 +1080,7 @@ const showUserTaskHistoryPage = () => {
                 }
             }
 
-            if (userTaskHistoryCache && userTaskHistoryCache.length > 0) {
-                renderUserTaskHistory();
-            }
+            // Fetch latest data silently in the background
             loadUserTaskHistory();
         };
 
@@ -852,169 +1103,18 @@ const loadUserTaskHistory = async () => {
                 userTaskHistoryCache = [];
             }
             userTaskHistoryLoading = false;
-            renderUserTaskHistory();
+            
+            // Update UI list container silently without resetting scroll or flashing
+            const listEl = document.getElementById('user-task-history-list');
+            if (listEl) {
+                listEl.innerHTML = getUserTaskHistoryListHtml();
+            }
         };
 
 const renderUserTaskHistory = () => {
             const listEl = document.getElementById('user-task-history-list');
-            if (!listEl) return;
-
-            const categoryTab = window.userTaskHistoryActiveTab || 'all';
-            const statusFilter = window.userTaskHistoryStatusFilter || 'all';
-            const isBulker = isBulkTaskUser();
-
-            let subs = [...userTaskHistoryCache];
-
-            // Filter by category
-            if (categoryTab !== 'all') {
-                subs = subs.filter(s => {
-                    const isReview = !!(s.assigned_comment && String(s.assigned_comment).trim().length > 0);
-                    return categoryTab === 'play_store' ? isReview : !isReview;
-                });
-            }
-
-            // Filter by status (only for Single Users)
-            if (!isBulker && statusFilter !== 'all') {
-                if (statusFilter === 'paid') {
-                    subs = subs.filter(s => s.payout_status === 'paid');
-                } else if (statusFilter === 'approved') {
-                    subs = subs.filter(s => s.manual_status === 'approved' && s.payout_status !== 'paid');
-                } else {
-                    subs = subs.filter(s => s.manual_status === statusFilter);
-                }
-            }
-
-            if (subs.length === 0) {
-                listEl.innerHTML = `<div class="rounded-2xl py-12 text-center text-xs font-semibold text-gray-400 dark:text-gray-500 bg-white dark:bg-gray-800 shadow-[0_2px_8px_rgba(0,0,0,0.02)] border border-gray-100 dark:border-gray-800">No submissions found.</div>`;
-                return;
-            }
-
-            if (isBulker) {
-                // Group submissions by task_id
-                const taskGroups = {};
-                subs.forEach(s => {
-                    const tId = s.task_id || s.taskId;
-                    if (!tId) return;
-                    if (!taskGroups[tId]) {
-                        taskGroups[tId] = {
-                            taskId: tId,
-                            taskName: s.app_name || s.taskTitle || 'Task',
-                            logoUrl: s.app_logo_url || 'https://cdn-icons-png.flaticon.com/512/3176/3176366.png',
-                            reward: s.reward || 0,
-                            submissions: [],
-                            lastUpdated: s.submitted_at || 0
-                        };
-                    }
-                    taskGroups[tId].submissions.push(s);
-                    if (s.submitted_at > taskGroups[tId].lastUpdated) {
-                        taskGroups[tId].lastUpdated = s.submitted_at;
-                    }
-                });
-
-                const groupsArray = Object.values(taskGroups);
-                if (groupsArray.length === 0) {
-                    listEl.innerHTML = `<div class="rounded-2xl py-12 text-center text-xs font-semibold text-gray-400 dark:text-gray-500 bg-white dark:bg-gray-800 shadow-[0_2px_8px_rgba(0,0,0,0.02)] border border-gray-100 dark:border-gray-800">No submissions found.</div>`;
-                    return;
-                }
-
-                listEl.innerHTML = groupsArray.map(g => {
-                    const total = g.submissions.length;
-                    const approvedCount = g.submissions.filter(s => s.manual_status === 'approved').length;
-                    const pendingCount = g.submissions.filter(s => s.manual_status === 'pending').length;
-                    const rejectedCount = g.submissions.filter(s => s.manual_status === 'rejected').length;
-                    
-                    const completionPercent = total > 0 ? Math.round((approvedCount / total) * 100) : 0;
-                    const dateStr = g.lastUpdated ? new Date(g.lastUpdated).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }) : 'Unknown';
-
-                    return `
-                    <div class="bg-white dark:bg-gray-800 p-5 rounded-2xl border border-gray-100 dark:border-gray-800 hover:shadow-[0_4px_16px_rgba(0,0,0,0.04)] cursor-pointer transition select-none text-left space-y-4 shadow-[0_2px_8px_rgba(0,0,0,0.03)]" onclick="window.showBulkerTaskOverview('${g.taskId}')">
-                        <div class="flex items-center gap-3">
-                            <img src="${escapeHtml(g.logoUrl)}" class="h-10 w-10 rounded-xl object-cover shrink-0" onerror="this.src='https://cdn-icons-png.flaticon.com/512/3176/3176366.png';">
-                            <div class="min-w-0 flex-1">
-                                <h4 class="text-sm font-extrabold text-gray-900 dark:text-white truncate">${escapeHtml(g.taskName)}</h4>
-                                <div class="flex items-center gap-2 text-[10px] text-gray-400 font-semibold mt-0.5">
-                                    <span>Submitted: ${total}</span>
-                                    <span>•</span>
-                                    <span class="text-emerald-600 dark:text-emerald-400 font-bold">Approved: ${approvedCount}</span>
-                                    <span>•</span>
-                                    <span class="text-amber-500 font-bold">Pending: ${pendingCount}</span>
-                                    <span>•</span>
-                                    <span class="text-rose-600 dark:text-rose-455 font-bold">Rejected: ${rejectedCount}</span>
-                                </div>
-                            </div>
-                            <svg class="h-4 w-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M9 5l7 7-7 7"></path></svg>
-                        </div>
-                        
-                        <div class="space-y-1">
-                            <div class="flex items-center justify-between text-[10px] font-bold text-purple-600 dark:text-purple-400">
-                                <span>Completion</span>
-                                <span>${completionPercent}%</span>
-                            </div>
-                            <div class="w-full bg-gray-100 dark:bg-gray-700 h-1.5 rounded-full overflow-hidden">
-                                <div class="bg-purple-600 h-full rounded-full" style="width: ${completionPercent}%"></div>
-                            </div>
-                        </div>
-                        
-                        <p class="text-[9px] text-gray-400 dark:text-gray-500 font-semibold">Last Updated: ${dateStr}</p>
-                    </div>`;
-                }).join('');
-
-            } else {
-                // Render Single User flow cards
-                listEl.innerHTML = subs.map(s => {
-                    const isReview = !!(s.assigned_comment && String(s.assigned_comment).trim().length > 0);
-                    
-                    let statusColor = 'amber';
-                    let statusText = 'Pending Verification';
-
-                    if (s.manual_status === 'approved') {
-                        statusColor = 'emerald';
-                        statusText = 'Approved';
-                    } else if (s.manual_status === 'rejected') {
-                        statusColor = 'rose';
-                        statusText = 'Rejected';
-                    } else if (s.manual_status === 'pending') {
-                        if (s.ocr_status === 'completed') {
-                            statusColor = 'blue';
-                            statusText = 'Under Review';
-                        } else {
-                            statusColor = 'amber';
-                            statusText = 'Pending Verification';
-                        }
-                    }
-
-                    const timeStr = s.submitted_at 
-                        ? new Date(s.submitted_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) 
-                        : 'Unknown';
-
-                    const appLogo = s.app_logo_url || 'https://cdn-icons-png.flaticon.com/512/3176/3176366.png';
-                    const typeTag = isReview ? 'Play Store Review' : 'Screenshot Task';
-                    const approvalTimeText = s.manual_status === 'approved' ? 'Instant' : '7 Days';
-
-                    return `
-                    <div class="flex items-center gap-3 bg-white dark:bg-gray-800 p-4 rounded-2xl border border-gray-100 dark:border-gray-800 hover:shadow-[0_4px_16px_rgba(0,0,0,0.04)] cursor-pointer transition select-none text-left shadow-[0_2px_8px_rgba(0,0,0,0.03)]" onclick="window.showUserTaskHistoryDetail('${s.id}')">
-                        <img src="${escapeHtml(appLogo)}" class="h-10 w-10 rounded-xl object-cover shrink-0" onerror="this.src='https://cdn-icons-png.flaticon.com/512/3176/3176366.png';">
-                        <div class="min-w-0 flex-1">
-                            <div class="flex items-center gap-2 flex-wrap">
-                                <span class="text-[9px] font-black uppercase text-purple-600 dark:text-purple-400 tracking-wider">${typeTag}</span>
-                                <span class="text-[9px] font-bold text-gray-400">•</span>
-                                <span class="text-[9px] font-bold text-gray-400">${timeStr}</span>
-                            </div>
-                            <h4 class="text-sm font-extrabold text-gray-900 dark:text-white truncate mt-0.5">${escapeHtml(s.app_name || 'Task Submission')}</h4>
-                            <div class="flex items-center gap-1.5 mt-1.5">
-                                <span class="rounded-full bg-${statusColor}-50 dark:bg-${statusColor}-950/20 px-2.5 py-0.5 text-[9px] font-black text-${statusColor}-700 dark:text-${statusColor}-400 border border-${statusColor}-100 dark:border-${statusColor}-900/30 uppercase tracking-wide">
-                                    ${statusText}
-                                </span>
-                                <span class="rounded-full bg-gray-50 dark:bg-gray-900 px-2 py-0.5 text-[9px] font-bold text-gray-400 dark:text-gray-500 border border-gray-100 dark:border-gray-800 uppercase tracking-wide">
-                                    ${approvalTimeText}
-                                </span>
-                            </div>
-                        </div>
-                        <div class="text-right shrink-0">
-                            <p class="text-sm font-black text-purple-600 dark:text-purple-400">₹${s.reward}</p>
-                        </div>
-                    </div>`;
-                }).join('');
+            if (listEl) {
+                listEl.innerHTML = getUserTaskHistoryListHtml();
             }
         };
 
@@ -1030,206 +1130,329 @@ window.showUserTaskHistoryDetail = (submissionId) => {
             const s = userTaskHistoryCache[idx];
 
             const timeStr = s.submitted_at 
-                ? new Date(s.submitted_at).toLocaleString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) 
+                ? new Date(s.submitted_at).toLocaleString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: true }) 
                 : 'Unknown';
 
-            const approvalDateStr = s.manual_status === 'approved' && s.updated_at
-                ? new Date(s.updated_at).toLocaleString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })
-                : '';
-
-            let details = {};
-            try { details = s.details_json ? JSON.parse(s.details_json) : {}; } catch {}
-            const gmailName = s.ocr_extracted_name || '';
-            const appLogo = s.app_logo_url || 'https://cdn-icons-png.flaticon.com/512/3176/3176366.png';
+            const appLogo = getSubmissionAppLogo(s);
             const isReviewTask = !!(s.assigned_comment && String(s.assigned_comment).trim().length > 0);
+            const delayDays = Number(s.payout_delay_days || s.payoutDelayDays || 7);
 
-            // Timeline setup (4 stages: Submitted -> OCR Verified -> Play Store Verification -> Approved / Rejected)
-            const stage1Active = true;
-            const stage1Time = timeStr;
+            // Compute remaining days
+            const submittedMs = s.submitted_at || s.submittedAt;
+            const submittedTimeMs = typeof submittedMs === 'object' && submittedMs.seconds ? submittedMs.seconds * 1000 : Number(submittedMs);
+            const targetMs = submittedTimeMs + (delayDays * 24 * 60 * 60 * 1000);
+            const msLeft = targetMs - Date.now();
+            const daysLeft = Math.ceil(msLeft / (24 * 60 * 60 * 1000));
+            const daysLeftText = daysLeft > 0 ? `In ${daysLeft} Days` : 'Instant';
 
-            let stage2Status = 'Pending';
-            let stage2Color = 'gray';
-            if (s.manual_status === 'approved' || s.manual_status === 'rejected' || s.ocr_status === 'completed') {
-                stage2Status = 'Verified';
-                stage2Color = 'emerald';
-            } else if (s.ocr_status === 'failed') {
-                stage2Status = 'OCR Failed';
-                stage2Color = 'rose';
-            } else {
-                stage2Status = 'In Progress';
-                stage2Color = 'blue';
-            }
+            // Generate clean dynamic developer name
+            const cleanAppName = s.app_name || 'App';
+            const firstWord = cleanAppName.split(' ')[0] || 'App';
+            const devName = `${firstWord.replace(/[^a-zA-Z0-9]/g, '')} LLC`;
 
-            let stage3Status = 'Pending';
-            let stage3Color = 'gray';
+            // Timeline calculations
+            let stage2Sub = 'Checking on Play Store';
             if (s.manual_status === 'approved' || s.manual_status === 'rejected') {
-                stage3Status = 'Completed';
-                stage3Color = 'emerald';
-            } else {
-                stage3Status = 'In Progress';
-                stage3Color = 'blue';
+                stage2Sub = 'Verified';
             }
 
-            let stage4Status = 'Pending';
-            let stage4Color = 'gray';
+            let stage3Sub = delayDays === 0 ? 'Instant' : `In ${delayDays} Days`;
             if (s.manual_status === 'approved') {
-                stage4Status = 'Approved';
-                stage4Color = 'emerald';
+                stage3Sub = 'Approved';
             } else if (s.manual_status === 'rejected') {
-                stage4Status = 'Rejected';
-                stage4Color = 'rose';
+                stage3Sub = 'Rejected';
             }
 
-            const getStageCircleClass = (color) => {
-                if (color === 'emerald') return 'bg-emerald-500 ring-4 ring-emerald-50 text-white';
-                if (color === 'rose') return 'bg-rose-500 ring-4 ring-rose-50 text-white';
-                if (color === 'blue') return 'bg-blue-500 ring-4 ring-blue-50 text-white animate-pulse';
-                return 'bg-gray-100 ring-4 ring-gray-50 text-gray-400';
+            let stage4Sub = 'After Approval';
+            if (s.payout_status === 'paid') {
+                stage4Sub = 'Paid';
+            } else if (s.manual_status === 'approved') {
+                stage4Sub = daysLeftText;
+            }
+
+            const getStageStyle = (stage) => {
+                if (stage === 1) {
+                    return {
+                        circleBg: 'bg-emerald-500 ring-4 ring-emerald-50 dark:ring-emerald-950/20 text-white',
+                        icon: `<svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" stroke-width="3" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"></path></svg>`
+                    };
+                }
+                if (stage === 2) {
+                    if (s.manual_status === 'approved' || s.manual_status === 'rejected') {
+                        return {
+                            circleBg: 'bg-emerald-500 ring-4 ring-emerald-50 dark:ring-emerald-950/20 text-white',
+                            icon: `<svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" stroke-width="3" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"></path></svg>`
+                        };
+                    }
+                    return {
+                        circleBg: 'bg-indigo-600 ring-4 ring-indigo-50 dark:ring-indigo-950/20 text-white animate-pulse',
+                        icon: `<svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.637 10.637Z"/></svg>`
+                    };
+                }
+                if (stage === 3) {
+                    if (s.manual_status === 'approved') {
+                        return {
+                            circleBg: 'bg-emerald-500 ring-4 ring-emerald-50 dark:ring-emerald-950/20 text-white',
+                            icon: `<svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" stroke-width="3" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"></path></svg>`
+                        };
+                    }
+                    if (s.manual_status === 'rejected') {
+                        return {
+                            circleBg: 'bg-rose-500 ring-4 ring-rose-50 dark:ring-rose-950/20 text-white',
+                            icon: `<svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" stroke-width="3" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"></path></svg>`
+                        };
+                    }
+                    return {
+                        circleBg: 'bg-gray-200 dark:bg-gray-700 ring-4 ring-gray-100 dark:ring-gray-800 text-gray-400',
+                        icon: `<svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z"></path></svg>`
+                    };
+                }
+                if (stage === 4) {
+                    if (s.payout_status === 'paid') {
+                        return {
+                            circleBg: 'bg-emerald-500 ring-4 ring-emerald-50 dark:ring-emerald-950/20 text-white',
+                            icon: `<svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" stroke-width="3" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"></path></svg>`
+                        };
+                    }
+                    return {
+                        circleBg: 'bg-gray-200 dark:bg-gray-700 ring-4 ring-gray-100 dark:ring-gray-800 text-gray-400',
+                        icon: `<svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M6.75 12a.75.75 0 1 1-1.5 0 .75.75 0 0 1 1.5 0ZM12.75 12a.75.75 0 1 1-1.5 0 .75.75 0 0 1 1.5 0ZM18.75 12a.75.75 0 1 1-1.5 0 .75.75 0 0 1 1.5 0Z"/></svg>`
+                    };
+                }
             };
 
-            const getStageIcon = (color) => {
-                if (color === 'emerald') return `<svg class="h-3 w-3" fill="none" stroke="currentColor" stroke-width="3" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"></path></svg>`;
-                if (color === 'rose') return `<svg class="h-3 w-3" fill="none" stroke="currentColor" stroke-width="3" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"></path></svg>`;
-                if (color === 'blue') return `<svg class="h-3 w-3" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 8v4l3 3"></path></svg>`;
-                return `<circle cx="12" cy="12" r="3" fill="currentColor"></circle>`;
-            };
+            const stage1 = getStageStyle(1);
+            const stage2 = getStageStyle(2);
+            const stage3 = getStageStyle(3);
+            const stage4 = getStageStyle(4);
 
             const detailContent = `
-                <header class="flex items-center justify-between p-4 bg-white dark:bg-gray-800 shadow-[0_2px_8px_rgba(0,0,0,0.02)] border-b border-gray-100 dark:border-gray-750 page-header-fixed">
+                <header class="flex items-center justify-between p-4 bg-white dark:bg-gray-800 shadow-[0_2px_8px_rgba(0,0,0,0.015)] border-b border-gray-100 dark:border-gray-750 page-header-fixed">
                     <div class="flex items-center gap-3">
                         <button class="page-back-btn p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700 mr-1 shrink-0 text-gray-700 dark:text-white" style="outline: none;">
                             <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"></line><line x1="12" y1="19" x2="5" y2="12"></line><line x1="12" y1="5" x2="5" y2="12"></line></svg>
                         </button>
                         <h2 class="text-lg font-black text-gray-900 dark:text-white">Task Details</h2>
                     </div>
+                    <!-- Question help button inside top header -->
+                    <button type="button" class="p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700" onclick="window.showSubmissionStatusPage('${s.id}')" style="outline: none;">
+                        <svg class="h-5.5 w-5.5 text-gray-500 dark:text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M9.879 7.519c1.171-1.025 3.071-1.025 4.242 0 1.172 1.025 1.172 2.687 0 3.712-.203.179-.43.326-.67.442-.745.361-1.45.999-1.45 1.827v.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Zm-9 5.25h.008v.008H12v-.008Z"/>
+                        </svg>
+                    </button>
                 </header>
 
                 <div class="max-w-xl mx-auto space-y-5 pb-24 px-4 pt-4 text-left">
-                    <!-- App Card -->
-                    <div class="bg-white dark:bg-gray-800 p-5 rounded-2xl shadow-[0_2px_8px_rgba(0,0,0,0.03)] border border-gray-100 dark:border-gray-800 space-y-4">
-                        <div class="flex items-center gap-4">
-                            <img src="${escapeHtml(appLogo)}" class="h-12 w-12 rounded-xl object-cover shrink-0" onerror="this.src='https://cdn-icons-png.flaticon.com/512/3176/3176366.png';">
-                            <div class="min-w-0 flex-1">
-                                <span class="text-[9px] font-black uppercase tracking-wider text-purple-600 dark:text-purple-400 bg-purple-50 dark:bg-purple-950/20 px-2.5 py-0.5 rounded-full border border-purple-100/50 dark:border-purple-900/30">
+                    <!-- App Card Header (Styled based on Screenshot 2) -->
+                    <div class="bg-white dark:bg-gray-800 p-4.5 rounded-3xl border border-gray-100 dark:border-gray-850 shadow-sm">
+                        <div class="flex items-start gap-4">
+                            <img src="${escapeHtml(appLogo)}" class="h-12 w-12 rounded-2xl object-cover shrink-0 border border-gray-50 dark:border-gray-700 shadow-sm" onerror="this.src='https://cdn-icons-png.flaticon.com/512/3176/3176366.png';">
+                            <div class="min-w-0 flex-1 pr-2">
+                                <span class="text-[9px] font-black uppercase tracking-wider text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/20 px-2.5 py-0.5 rounded-lg border border-indigo-100/50 dark:border-indigo-900/30">
                                     ${isReviewTask ? 'Play Store Review' : 'Screenshot Task'}
                                 </span>
-                                <h3 class="text-base font-extrabold text-gray-900 dark:text-white truncate mt-1">${escapeHtml(s.app_name || 'Task Submission')}</h3>
+                                <h3 class="text-base font-extrabold text-gray-900 dark:text-white truncate mt-2.5">${escapeHtml(s.app_name || 'Task Submission')}</h3>
+                                <div class="flex items-center gap-1 mt-1 text-[11px] text-gray-400 font-semibold">
+                                    ${isReviewTask ? `
+                                        <svg class="h-3 w-3 text-blue-500 shrink-0" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                            <path d="M3.25 2.75V21.25L13.75 12L3.25 2.75Z" fill="#00E676"/>
+                                            <path d="M13.75 12L3.25 21.25H4.25L15.75 13.5L13.75 12Z" fill="#FFD600"/>
+                                            <path d="M15.75 13.5L18.75 12L15.75 10.5L13.75 12L15.75 13.5Z" fill="#FF1744"/>
+                                            <path d="M3.25 2.75L13.75 12L15.75 10.5L4.25 2.75H3.25Z" fill="#00B0FF"/>
+                                        </svg>
+                                    ` : `
+                                        <svg class="h-3 w-3 text-gray-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
+                                    `}
+                                    <span>${isReviewTask ? 'Play Store Review' : 'Screenshot + Review'}</span>
+                                </div>
                             </div>
-                            <div class="text-right shrink-0">
-                                <span class="text-lg font-black text-purple-600 dark:text-purple-400">₹${s.reward}</span>
+                            <div class="text-right shrink-0 mt-0.5">
+                                <span class="text-lg font-black text-indigo-600 dark:text-indigo-400">₹${s.reward}</span>
                             </div>
                         </div>
                     </div>
 
-                    <!-- Stepper Timeline -->
-                    <div class="bg-white dark:bg-gray-800 p-5 rounded-2xl shadow-[0_2px_8px_rgba(0,0,0,0.03)] border border-gray-150 dark:border-gray-700 space-y-4">
+                    <!-- Row of 3 stats cards -->
+                    <div class="grid grid-cols-3 gap-3 select-none">
+                        <!-- Payout Card -->
+                        <div class="bg-emerald-50/20 dark:bg-emerald-950/10 p-3.5 rounded-2xl border border-emerald-100/50 dark:border-emerald-900/20 flex flex-col items-center text-center shadow-sm">
+                            <div class="h-8 w-8 rounded-full bg-emerald-100 dark:bg-emerald-900/40 text-emerald-600 dark:text-emerald-400 flex items-center justify-center mb-1.5">
+                                <svg class="h-4.5 w-4.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5">
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="M2.25 18.75a60.07 60.07 0 0 1 15.797 2.101c.727.198 1.453-.342 1.453-1.096V18.75M3.75 4.5h16.5M3.75 20.25h16.5M3.75 16.5h16.5M3.75 12h16.5m-13.5-9L12 3m0 0 4.5 4.5M12 3v13.5" />
+                                </svg>
+                            </div>
+                            <span class="text-[9px] text-gray-400 font-bold uppercase tracking-wider">Payout</span>
+                            <span class="text-sm font-black text-gray-800 dark:text-white mt-1">₹${s.reward}</span>
+                        </div>
+                        
+                        <!-- Approval Time Card -->
+                        <div class="bg-blue-50/20 dark:bg-blue-950/10 p-3.5 rounded-2xl border border-blue-100/50 dark:border-blue-900/20 flex flex-col items-center text-center shadow-sm">
+                            <div class="h-8 w-8 rounded-full bg-blue-100 dark:bg-blue-900/40 text-blue-600 dark:text-blue-400 flex items-center justify-center mb-1.5">
+                                <svg class="h-4.5 w-4.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5">
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
+                                </svg>
+                            </div>
+                            <span class="text-[9px] text-gray-400 font-bold uppercase tracking-wider">Approval Time</span>
+                            <span class="text-sm font-black text-gray-800 dark:text-white mt-1">${delayDays === 0 ? 'Instant' : `${delayDays} Days`}</span>
+                        </div>
+                        
+                        <!-- Task Type Card -->
+                        <div class="bg-purple-50/20 dark:bg-purple-950/10 p-3.5 rounded-2xl border border-purple-100/50 dark:border-purple-900/20 flex flex-col items-center text-center shadow-sm">
+                            <div class="h-8 w-8 rounded-full bg-purple-100 dark:bg-purple-900/40 text-purple-600 dark:text-purple-400 flex items-center justify-center mb-1.5">
+                                <svg class="h-4.5 w-4.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5">
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="M20.25 7.5l-.625 10.632a2.25 2.25 0 01-2.247 2.118H6.622a2.25 2.25 0 01-2.247-2.118L3.75 7.5M10 11.25h4M3.375 7.5h17.25c.621 0 1.125-.504 1.125-1.125v-1.5c0-.621-.504-1.125-1.125-1.125H3.375c-.621 0-1.125.504-1.125 1.125v1.5c0 .621.504 1.125 1.125 1.125z" />
+                                </svg>
+                            </div>
+                            <span class="text-[9px] text-gray-400 font-bold uppercase tracking-wider">Task Type</span>
+                            <span class="text-sm font-black text-gray-800 dark:text-white mt-1">${isReviewTask ? 'Play Store' : 'Others'}</span>
+                        </div>
+                    </div>
+
+                    <!-- Stepper Timeline (Design based on Screenshot 2) -->
+                    <div class="bg-white dark:bg-gray-800 p-5 rounded-3xl border border-gray-100 dark:border-gray-850 shadow-sm space-y-4">
                         <p class="text-[10px] font-black uppercase text-gray-400 tracking-wider">Submission Timeline</p>
-                        <div class="relative pl-7 space-y-6 before:absolute before:left-[11px] before:top-2 before:bottom-2 before:w-[2px] before:bg-gray-150 dark:before:bg-gray-700">
+                        <div class="relative pl-7 space-y-6 before:absolute before:left-[11px] before:top-2.5 before:bottom-2.5 before:w-[2px] before:bg-gray-100 dark:before:bg-gray-700">
                             <!-- Step 1: Submitted -->
                             <div class="relative flex gap-3.5 items-start">
-                                <span class="absolute -left-[27px] flex h-[24px] w-[24px] items-center justify-center rounded-full ${getStageCircleClass('emerald')}">
-                                    ${getStageIcon('emerald')}
+                                <span class="absolute -left-[27px] flex h-[24px] w-[24px] items-center justify-center rounded-full ${stage1.circleBg}">
+                                    ${stage1.icon}
                                 </span>
                                 <div class="min-w-0 flex-1">
-                                    <p class="text-xs font-bold text-gray-855 dark:text-gray-200">Submitted</p>
-                                    <p class="text-[9px] text-gray-400 font-semibold mt-0.5">${stage1Time}</p>
+                                    <p class="text-xs font-black text-gray-900 dark:text-white">Submitted</p>
+                                    <p class="text-[9px] text-gray-400 font-bold mt-0.5">${timeStr}</p>
                                 </div>
+                                <svg class="h-5 w-5 text-emerald-500 shrink-0" fill="none" stroke="currentColor" stroke-width="3" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"></path></svg>
                             </div>
 
-                            <!-- Step 2: OCR Verified -->
+                            <!-- Step 2: Under Review -->
                             <div class="relative flex gap-3.5 items-start">
-                                <span class="absolute -left-[27px] flex h-[24px] w-[24px] items-center justify-center rounded-full ${getStageCircleClass(stage2Color)}">
-                                    ${stage2Color === 'gray' ? `<svg class="h-3 w-3 text-gray-400" viewBox="0 0 24 24">${getStageIcon('gray')}</svg>` : getStageIcon(stage2Color)}
+                                <span class="absolute -left-[27px] flex h-[24px] w-[24px] items-center justify-center rounded-full ${stage2.circleBg}">
+                                    ${stage2.icon}
                                 </span>
                                 <div class="min-w-0 flex-1">
-                                    <p class="text-xs font-bold text-gray-855 dark:text-gray-200">OCR Verified</p>
-                                    <p class="text-[9px] text-gray-400 font-semibold mt-0.5">Status: ${stage2Status}</p>
+                                    <p class="text-xs font-black text-gray-900 dark:text-white">Under Review</p>
+                                    <p class="text-[9px] text-gray-400 font-bold mt-0.5">${stage2Sub}</p>
                                 </div>
+                                ${s.manual_status === 'approved' || s.manual_status === 'rejected' 
+                                    ? `<svg class="h-5 w-5 text-emerald-500 shrink-0" fill="none" stroke="currentColor" stroke-width="3" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"></path></svg>`
+                                    : `<span class="flex h-5 w-5 items-center justify-center rounded-full border-2 border-indigo-600 text-[10px] font-black text-indigo-600 animate-pulse">2</span>`}
                             </div>
 
-                            <!-- Step 3: Play Store Verification -->
+                            <!-- Step 3: Approval -->
                             <div class="relative flex gap-3.5 items-start">
-                                <span class="absolute -left-[27px] flex h-[24px] w-[24px] items-center justify-center rounded-full ${getStageCircleClass(stage3Color)}">
-                                    ${stage3Color === 'gray' ? `<svg class="h-3 w-3 text-gray-400" viewBox="0 0 24 24">${getStageIcon('gray')}</svg>` : getStageIcon(stage3Color)}
+                                <span class="absolute -left-[27px] flex h-[24px] w-[24px] items-center justify-center rounded-full ${stage3.circleBg}">
+                                    ${stage3.icon}
                                 </span>
                                 <div class="min-w-0 flex-1">
-                                    <p class="text-xs font-bold text-gray-855 dark:text-gray-200">Play Store Verification</p>
-                                    <p class="text-[9px] text-gray-400 font-semibold mt-0.5">Status: ${stage3Status}</p>
+                                    <p class="text-xs font-black text-gray-900 dark:text-white">Approval</p>
+                                    <p class="text-[9px] text-gray-400 font-bold mt-0.5">${stage3Sub}</p>
                                 </div>
+                                ${s.manual_status === 'approved'
+                                    ? `<svg class="h-5 w-5 text-emerald-500 shrink-0" fill="none" stroke="currentColor" stroke-width="3" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"></path></svg>`
+                                    : s.manual_status === 'rejected'
+                                    ? `<svg class="h-5 w-5 text-rose-500 shrink-0" fill="none" stroke="currentColor" stroke-width="3" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"></path></svg>`
+                                    : `<svg class="h-5 w-5 text-gray-300 dark:text-gray-600 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z"></path></svg>`}
                             </div>
 
-                            <!-- Step 4: Approved / Rejected -->
+                            <!-- Step 4: Payout -->
                             <div class="relative flex gap-3.5 items-start">
-                                <span class="absolute -left-[27px] flex h-[24px] w-[24px] items-center justify-center rounded-full ${getStageCircleClass(stage4Color)}">
-                                    ${stage4Color === 'gray' ? `<svg class="h-3 w-3 text-gray-400" viewBox="0 0 24 24">${getStageIcon('gray')}</svg>` : getStageIcon(stage4Color)}
+                                <span class="absolute -left-[27px] flex h-[24px] w-[24px] items-center justify-center rounded-full ${stage4.circleBg}">
+                                    ${stage4.icon}
                                 </span>
                                 <div class="min-w-0 flex-1">
-                                    <p class="text-xs font-bold text-gray-855 dark:text-gray-200">Approved / Rejected</p>
-                                    <p class="text-[9px] text-gray-400 font-semibold mt-0.5">Status: ${stage4Status || 'Pending'}</p>
+                                    <p class="text-xs font-black text-gray-900 dark:text-white">Payout</p>
+                                    <p class="text-[9px] text-gray-400 font-bold mt-0.5">${stage4Sub}</p>
                                 </div>
+                                ${s.payout_status === 'paid'
+                                    ? `<svg class="h-5 w-5 text-emerald-500 shrink-0" fill="none" stroke="currentColor" stroke-width="3" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"></path></svg>`
+                                    : `<svg class="h-5 w-5 text-gray-300 dark:text-gray-600 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M6.75 12a.75.75 0 1 1-1.5 0 .75.75 0 0 1 1.5 0ZM12.75 12a.75.75 0 1 1-1.5 0 .75.75 0 0 1 1.5 0ZM18.75 12a.75.75 0 1 1-1.5 0 .75.75 0 0 1 1.5 0Z"/></svg>`}
                             </div>
                         </div>
                     </div>
 
-                    <!-- Details Section based on Status -->
-                    <div class="bg-white dark:bg-gray-800 p-5 rounded-2xl shadow-[0_2px_8px_rgba(0,0,0,0.03)] border border-gray-100 dark:border-gray-800 space-y-4">
-                        <p class="text-[10px] font-black uppercase text-gray-400 tracking-wider">Submission Info</p>
+                    <!-- Your Submission / Play Store Listing style card -->
+                    <div class="bg-white dark:bg-gray-800 p-5 rounded-3xl border border-gray-100 dark:border-gray-850 shadow-sm space-y-3.5">
+                        <p class="text-[11px] font-black uppercase text-gray-400 tracking-wider">Your Submission</p>
                         
-                        <div class="space-y-3 text-xs font-semibold text-gray-655 dark:text-gray-300">
-                            <div class="flex justify-between">
-                                <span class="text-gray-450">Reward</span>
-                                <span class="font-extrabold text-purple-600 dark:text-purple-400">₹${s.reward}</span>
+                        <div class="space-y-2">
+                            <span class="text-[11px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wide">Screenshot</span>
+                            
+                            <!-- Play Store style card -->
+                            <div class="relative bg-gray-50 dark:bg-gray-900/60 p-4 rounded-2xl border border-gray-150 dark:border-gray-800 flex flex-col gap-4 shadow-sm hover:border-indigo-200 dark:hover:border-indigo-900 transition duration-200 cursor-pointer" onclick="window.showScreenshotLightbox('${escapeHtml(s.screenshot_url)}', '${escapeHtml(s.screenshot_view_url || '')}')">
+                                <!-- Top Right Fullscreen Icon -->
+                                <button type="button" class="absolute top-3.5 right-3.5 p-1 rounded-lg text-gray-400 hover:text-gray-600 dark:hover:white hover:bg-gray-100 dark:hover:bg-gray-800 transition" style="outline: none;">
+                                    <svg class="h-4.5 w-4.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5">
+                                        <path stroke-linecap="round" stroke-linejoin="round" d="M3.75 3.75v4.5m0-4.5h4.5m-4.5 0L9 9M20.25 3.75h-4.5m4.5 0v4.5m0-4.5L15 9m-11.25 11.25h4.5m-4.5 0v-4.5m0 4.5L9 15m11.25 0v4.5m0-4.5h-4.5m4.5 0L15 15" />
+                                    </svg>
+                                </button>
+                                
+                                <div class="flex gap-3">
+                                    <img src="${escapeHtml(appLogo)}" class="h-12 w-12 rounded-xl object-cover shrink-0 border border-gray-100 dark:border-gray-850" onerror="this.src='https://cdn-icons-png.flaticon.com/512/3176/3176366.png';">
+                                    <div class="min-w-0 flex-1 pr-6">
+                                        <h4 class="text-sm font-extrabold text-gray-900 dark:text-white truncate">${escapeHtml(s.app_name || 'Task Submission')}</h4>
+                                        <p class="text-xs font-semibold text-gray-450 dark:text-gray-400 mt-0.5">${escapeHtml(devName)}</p>
+                                        <div class="flex items-center gap-1 mt-1">
+                                            <svg class="h-3 w-3 text-blue-500 shrink-0" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                                <path d="M3.25 2.75V21.25L13.75 12L3.25 2.75Z" fill="#00E676"/>
+                                                <path d="M13.75 12L3.25 21.25H4.25L15.75 13.5L13.75 12Z" fill="#FFD600"/>
+                                                <path d="M15.75 13.5L18.75 12L15.75 10.5L13.75 12L15.75 13.5Z" fill="#FF1744"/>
+                                                <path d="M3.25 2.75L13.75 12L15.75 10.5L4.25 2.75H3.25Z" fill="#00B0FF"/>
+                                            </svg>
+                                            <span class="text-[10px] font-bold text-gray-400">${isReviewTask ? 'Play Store Review' : 'Others'}</span>
+                                        </div>
+                                    </div>
+                                </div>
+                                
+                                <!-- Divider -->
+                                <div class="border-t border-gray-150 dark:border-gray-800"></div>
+                                
+                                <!-- Columns at bottom -->
+                                <div class="grid grid-cols-3 divide-x divide-gray-150 dark:divide-gray-800 text-center text-xs font-bold text-gray-700 dark:text-gray-300">
+                                    <div class="flex flex-col gap-0.5">
+                                        <span class="font-extrabold text-gray-900 dark:text-white">4.5 ★</span>
+                                        <span class="text-[9px] text-gray-400 uppercase tracking-wide">Reviews</span>
+                                    </div>
+                                    <div class="flex flex-col gap-0.5">
+                                        <span class="font-extrabold text-gray-900 dark:text-white">50M+</span>
+                                        <span class="text-[9px] text-gray-400 uppercase tracking-wide">Downloads</span>
+                                    </div>
+                                    <div class="flex flex-col gap-0.5">
+                                        <span class="font-extrabold text-gray-900 dark:text-white">Rated 3+</span>
+                                        <span class="text-[9px] text-gray-400 uppercase tracking-wide">Age Rating</span>
+                                    </div>
+                                </div>
                             </div>
-                            <div class="flex justify-between">
-                                <span class="text-gray-455">Submission Time</span>
-                                <span class="font-extrabold text-gray-850 dark:text-white">${timeStr}</span>
-                            </div>
-                            ${s.manual_status === 'approved' && approvalDateStr ? `
-                            <div class="flex justify-between">
-                                <span class="text-gray-455">Approval Date</span>
-                                <span class="font-extrabold text-gray-855 dark:text-white">${approvalDateStr}</span>
-                            </div>
-                            ` : ''}
-
-                            ${s.manual_status === 'rejected' ? `
-                            <div class="flex justify-between border-t border-rose-100/50 pt-3 text-rose-600">
-                                <span>Rejection Reason</span>
-                                <span class="font-black text-rose-700 dark:text-rose-400 uppercase tracking-wide">
-                                    ${s.reject_reason || (s.ocr_status === 'failed' ? 'OCR failed' : 'Review not found')}
-                                </span>
-                            </div>
-                            ` : ''}
                         </div>
 
                         ${isReviewTask ? `
                         <div class="space-y-1.5 pt-3 border-t border-gray-100 dark:border-gray-750">
                             <div class="flex items-center justify-between">
-                                <p class="text-[10px] font-black uppercase text-gray-400 tracking-wider">Review Used</p>
-                                <button class="text-[10px] text-purple-600 hover:text-purple-700 font-bold flex items-center gap-1 select-none" onclick="copyToClipboard('${escapeHtml(s.assigned_comment || '')}')">
+                                <p class="text-[11px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wide">Review Used</p>
+                                <button class="text-xs text-indigo-600 dark:text-indigo-400 font-extrabold flex items-center gap-1 select-none" onclick="window.copyReviewText('${escapeHtml(s.assigned_comment || '')}')">
+                                    <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M15.75 17.25v3.375c0 .621-.504 1.125-1.125 1.125h-9.75a1.125 1.125 0 0 1-1.125-1.125V7.875c0-.621.504-1.125 1.125-1.125H6.75M19.5 9v11.25c0 .621-.504 1.125-1.125 1.125h-9.75a1.125 1.125 0 0 1-1.125-1.125V9c0-.621.504-1.125 1.125-1.125h9.75c.621 0 1.125.504 1.125 1.125z" /></svg>
                                     <span>Copy</span>
                                 </button>
                             </div>
-                            <p class="mt-1 text-xs font-semibold text-gray-850 dark:text-gray-255 bg-gray-50 dark:bg-gray-900/50 p-3 rounded-xl border border-gray-100 dark:border-gray-750 leading-relaxed font-mono">
+                            <p class="mt-1.5 text-xs font-semibold text-gray-800 dark:text-gray-200 bg-gray-50 dark:bg-gray-900/60 p-3.5 rounded-2xl border border-gray-150 dark:border-gray-800 leading-relaxed italic">
                                 "${escapeHtml(s.assigned_comment)}"
                             </p>
                         </div>
                         ` : ''}
-
-                        ${s.screenshot_url ? `
-                        <div class="pt-3 border-t border-gray-100 dark:border-gray-750 space-y-2">
-                            <p class="text-[10px] font-black uppercase text-gray-400 tracking-wider">Uploaded Screenshot</p>
-                            <div class="relative overflow-hidden rounded-xl bg-gray-50 dark:bg-gray-955 flex items-center justify-center py-4 border border-gray-100 dark:border-gray-800">
-                                <img id="user-detail-screenshot-img" src="${escapeHtml(s.screenshot_url)}" alt="Screenshot Proof" class="h-44 w-28 rounded-lg object-cover cursor-zoom-in hover:scale-102 transition shadow-sm">
-                            </div>
-                        </div>
-                        ` : ''}
                     </div>
+
+                    ${s.manual_status === 'rejected' ? `
+                    <div class="bg-rose-50/40 dark:bg-rose-950/10 p-4.5 rounded-3xl border border-rose-100 dark:border-rose-900/30 text-rose-700 dark:text-rose-400 text-xs font-bold leading-normal">
+                        <span class="font-black uppercase tracking-wider block mb-1">Rejection Reason</span>
+                        <p class="italic">"${escapeHtml(s.reject_reason || (s.ocr_status === 'failed' ? 'OCR Verification failed' : 'Review comment not found on Play Store.'))}"</p>
+                    </div>
+                    ` : ''}
                 </div>
                 ${getPageFooter()}
             `;
 
             showPage(detailContent, { returnTo: 'task-history', keepBottomNav: false, onBack: showUserTaskHistoryPage });
 
+            // Lightbox attachment
             const userScreenshotImg = document.getElementById('user-detail-screenshot-img');
             if (userScreenshotImg) {
                 userScreenshotImg.onclick = () => {
@@ -1237,6 +1460,111 @@ window.showUserTaskHistoryDetail = (submissionId) => {
                 };
             }
         };
+
+window.copyReviewText = (text) => {
+    navigator.clipboard.writeText(text).then(() => {
+        showNotification('Review comment copied to clipboard!');
+    }).catch(err => {
+        console.error('Failed to copy text:', err);
+    });
+};
+
+window.showSubmissionStatusPage = (submissionId) => {
+    const idx = userTaskHistoryCache.findIndex(x => x.id === submissionId);
+    if (idx === -1) return;
+    const s = userTaskHistoryCache[idx];
+
+    const timeStr = s.submitted_at 
+        ? new Date(s.submitted_at).toLocaleString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: true }) 
+        : 'Unknown';
+
+    const isReviewTask = !!(s.assigned_comment && String(s.assigned_comment).trim().length > 0);
+    const delayDays = Number(s.payout_delay_days || s.payoutDelayDays || 7);
+
+    // Compute Stage counts
+    const isUploaded = 1;
+    const isUnderReview = s.manual_status === 'pending' ? 1 : 0;
+    const isApproved = s.manual_status === 'approved' ? 1 : 0;
+    const isRejected = s.manual_status === 'rejected' ? 1 : 0;
+
+    let alertText = 'We will check your review on Play Store. If found, it will be approved and added to your wallet.';
+    if (s.manual_status === 'approved') {
+        alertText = 'Your review has been successfully verified on Play Store and the reward has been added to your wallet.';
+    } else if (s.manual_status === 'rejected') {
+        alertText = 'Your review could not be verified on Play Store. Please contact support if you believe this is an error.';
+    }
+
+    const content = `
+        <header class="flex items-center justify-between p-4 bg-white dark:bg-gray-800 shadow-[0_2px_8px_rgba(0,0,0,0.015)] border-b border-gray-100 dark:border-gray-750 page-header-fixed">
+            <div class="flex items-center gap-3">
+                <button class="page-back-btn p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700 mr-1 shrink-0 text-gray-700 dark:text-white" style="outline: none;">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"></line><line x1="12" y1="19" x2="5" y2="12"></line><line x1="12" y1="5" x2="5" y2="12"></line></svg>
+                </button>
+                <h2 class="text-lg font-black text-gray-900 dark:text-white">Submission Status</h2>
+            </div>
+        </header>
+
+        <div class="max-w-xl mx-auto space-y-6 pb-24 px-4 pt-4 text-left">
+            <!-- Stat Cards Row (Design based on Screenshot 3) -->
+            <div class="grid grid-cols-4 gap-2 text-center text-xs font-bold">
+                <div class="bg-emerald-50/50 dark:bg-emerald-950/20 p-3 rounded-2xl border border-emerald-100/60 dark:border-emerald-900/30 shadow-sm">
+                    <span class="block text-2xl font-black text-emerald-600 dark:text-emerald-400">${isUploaded}</span>
+                    <span class="text-[9px] font-black uppercase text-emerald-500 mt-1 block">Uploaded</span>
+                </div>
+                <div class="bg-indigo-50/50 dark:bg-indigo-950/20 p-3 rounded-2xl border border-indigo-100/60 dark:border-indigo-900/30 shadow-sm">
+                    <span class="block text-2xl font-black text-indigo-600 dark:text-indigo-400">${isUnderReview}</span>
+                    <span class="text-[9px] font-black uppercase text-indigo-500 mt-1 block">Under Review</span>
+                </div>
+                <div class="bg-blue-50/50 dark:bg-blue-950/20 p-3 rounded-2xl border border-blue-100/60 dark:border-blue-900/30 shadow-sm">
+                    <span class="block text-2xl font-black text-blue-600 dark:text-blue-400">${isApproved}</span>
+                    <span class="text-[9px] font-black uppercase text-blue-500 mt-1 block">Approved</span>
+                </div>
+                <div class="bg-rose-50/50 dark:bg-rose-950/20 p-3 rounded-2xl border border-rose-100/60 dark:border-rose-900/30 shadow-sm">
+                    <span class="block text-2xl font-black text-rose-600 dark:text-rose-450">${isRejected}</span>
+                    <span class="text-[9px] font-black uppercase text-rose-500 mt-1 block">Rejected</span>
+                </div>
+            </div>
+
+            <!-- Submission Details Card -->
+            <div class="bg-white dark:bg-gray-800 p-5 rounded-3xl border border-gray-100 dark:border-gray-850 shadow-sm space-y-4">
+                <h3 class="text-sm font-extrabold text-gray-900 dark:text-white">Submission Details</h3>
+                <div class="space-y-3.5 text-xs font-semibold text-gray-600 dark:text-gray-300">
+                    <div class="flex justify-between items-start gap-4">
+                        <span class="text-gray-400 shrink-0">Task Name</span>
+                        <span class="font-extrabold text-gray-900 dark:text-white text-right">${escapeHtml(s.app_name || 'Task Submission')}</span>
+                    </div>
+                    <div class="flex justify-between">
+                        <span class="text-gray-400">Task Type</span>
+                        <span class="font-extrabold text-gray-900 dark:text-white">${isReviewTask ? 'Play Store Review' : 'Screenshot Task'}</span>
+                    </div>
+                    <div class="flex justify-between">
+                        <span class="text-gray-400">Payout</span>
+                        <span class="font-extrabold text-indigo-600 dark:text-indigo-400">₹${s.reward}</span>
+                    </div>
+                    <div class="flex justify-between">
+                        <span class="text-gray-400">Approval Time</span>
+                        <span class="font-extrabold text-gray-900 dark:text-white">${delayDays === 0 ? 'Instant' : `${delayDays} Days`}</span>
+                    </div>
+                    <div class="flex justify-between">
+                        <span class="text-gray-400">Submitted On</span>
+                        <span class="font-extrabold text-gray-900 dark:text-white">${timeStr}</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Info Box -->
+            <div class="bg-blue-50/40 dark:bg-indigo-950/10 p-4.5 rounded-2xl border border-blue-100/50 dark:border-indigo-900/20 flex items-start gap-3 shadow-sm">
+                <span class="text-blue-500 dark:text-indigo-400 mt-0.5 shrink-0 text-base">ⓘ</span>
+                <p class="text-xs font-bold text-blue-700 dark:text-indigo-300 leading-relaxed">
+                    ${alertText}
+                </p>
+            </div>
+        </div>
+        ${getPageFooter()}
+    `;
+
+    showPage(content, { returnTo: 'task-details', keepBottomNav: false, onBack: () => window.showUserTaskHistoryDetail(submissionId) });
+};
 
 window.showBulkerTaskOverview = (taskId) => {
             const taskSubs = userTaskHistoryCache.filter(x => (x.task_id === taskId || x.taskId === taskId));
