@@ -860,6 +860,14 @@ const getUserTaskHistoryListHtml = () => {
 
     let subs = [...(userTaskHistoryCache || [])].filter(s => s);
 
+    // Only show submissions of tasks that currently exist in allTasksCache (if allTasksCache has been loaded)
+    if (typeof allTasksCache !== 'undefined' && Array.isArray(allTasksCache) && allTasksCache.length > 0) {
+        subs = subs.filter(s => {
+            const taskId = s.task_id || s.taskId;
+            return allTasksCache.some(t => t && t.id === taskId);
+        });
+    }
+
     // Filter by category
     if (categoryTab !== 'all') {
         subs = subs.filter(s => {
@@ -1223,6 +1231,17 @@ const loadUserTaskHistory = async () => {
             if (userTaskHistoryLoading) return;
             userTaskHistoryLoading = true;
             try {
+                // 1. Fetch latest tasks from Firestore to update allTasksCache
+                if (typeof db !== 'undefined' && typeof appId !== 'undefined' && typeof collection === 'function' && typeof getDocs === 'function') {
+                    try {
+                        const tasksSnap = await getDocs(collection(db, `artifacts/${appId}/public/data/tasks`));
+                        allTasksCache = tasksSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                    } catch (taskErr) {
+                        console.warn('Failed to refresh tasks in history page:', taskErr);
+                    }
+                }
+
+                // 2. Fetch submissions from Backend API
                 const token = await getBackendAuthToken();
                 const response = await fetchWithTimeout(`${BACKEND_BASE_URL}/api/task-submissions`, {
                     headers: { Authorization: `Bearer ${token}` }
