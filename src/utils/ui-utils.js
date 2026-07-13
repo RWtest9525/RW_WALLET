@@ -2003,7 +2003,7 @@ window.showScreenshotLightbox = function(url, driveUrl) {
                     </div>
                     <div class="mt-4 flex items-center gap-3 bg-gray-900/85 px-4 py-2.5 rounded-2xl border border-gray-800 backdrop-blur-md shrink-0">
                         ${driveUrl ? `<a href="${driveUrl}" target="_blank" class="rounded-xl bg-blue-600 px-4 py-2 text-xs font-black text-white hover:bg-blue-700 transition">📁 Open in Drive</a>` : ''}
-                        <button id="lightbox-close-btn" class="rounded-xl bg-gray-700 px-4 py-2 text-xs font-black text-white hover:bg-gray-650 transition">✕ Close</button>
+                        <button id="lightbox-close-btn" class="rounded-xl bg-white text-gray-900 px-4 py-2 text-xs font-black hover:bg-gray-100 transition shadow-md">✕ Close</button>
                     </div>
                 </div>
             `;
