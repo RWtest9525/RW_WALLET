@@ -730,6 +730,7 @@ const getPageFooter = () => `</div>`;
 const clientAppLogoCache = {};
 
 const getSubmissionAppLogo = (s) => {
+    if (!s) return 'https://cdn-icons-png.flaticon.com/512/3176/3176366.png';
     const taskId = s.task_id || s.taskId;
     if (!taskId) return 'https://cdn-icons-png.flaticon.com/512/3176/3176366.png';
 
@@ -737,7 +738,7 @@ const getSubmissionAppLogo = (s) => {
     let taskAppId = s.appId || s.app_id || '';
     
     if (typeof allTasksCache !== 'undefined' && Array.isArray(allTasksCache)) {
-        const task = allTasksCache.find(t => t.id === taskId);
+        const task = allTasksCache.find(t => t && t.id === taskId);
         if (task) {
             taskAppId = task.appId || task.app_id || taskAppId;
         }
@@ -748,8 +749,8 @@ const getSubmissionAppLogo = (s) => {
     // If we have no taskAppId, try to check if task document itself has a logoUrl as fallback (if not play store url)
     if (!taskAppId) {
         if (typeof allTasksCache !== 'undefined' && Array.isArray(allTasksCache)) {
-            const task = allTasksCache.find(t => t.id === taskId);
-            if (task?.logoUrl && !task.logoUrl.includes('play.google.com') && !task.logoUrl.includes('play-store')) {
+            const task = allTasksCache.find(t => t && t.id === taskId);
+            if (task?.logoUrl && typeof task.logoUrl === 'string' && !task.logoUrl.includes('play.google.com') && !task.logoUrl.includes('play-store')) {
                 return task.logoUrl;
             }
         }
@@ -762,22 +763,26 @@ const getSubmissionAppLogo = (s) => {
     }
 
     // 3. Fetch from Firestore (apps collection) asynchronously and update DOM elements matching data-app-id
-    if (typeof db !== 'undefined' && typeof appId !== 'undefined') {
-        const appDocRef = doc(db, `artifacts/${appId}/public/data/apps`, taskAppId);
-        getDoc(appDocRef).then(docSnap => {
-            if (docSnap.exists()) {
-                const appData = docSnap.data();
-                const logo = appData.logoUrl || appData.logo || appData.imageUrl || '';
-                if (logo) {
-                    clientAppLogoCache[taskAppId] = logo;
-                    // Update all img tags with data-app-id="taskAppId"
-                    const imgs = document.querySelectorAll(`img[data-app-id="${taskAppId}"]`);
-                    imgs.forEach(img => {
-                        img.src = logo;
-                    });
+    if (typeof db !== 'undefined' && typeof appId !== 'undefined' && typeof doc === 'function' && typeof getDoc === 'function') {
+        try {
+            const appDocRef = doc(db, `artifacts/${appId}/public/data/apps`, taskAppId);
+            getDoc(appDocRef).then(docSnap => {
+                if (docSnap.exists()) {
+                    const appData = docSnap.data();
+                    const logo = appData.logoUrl || appData.logo || appData.imageUrl || '';
+                    if (logo) {
+                        clientAppLogoCache[taskAppId] = logo;
+                        // Update all img tags with data-app-id="taskAppId"
+                        const imgs = document.querySelectorAll(`img[data-app-id="${taskAppId}"]`);
+                        imgs.forEach(img => {
+                            img.src = logo;
+                        });
+                    }
                 }
-            }
-        }).catch(err => console.warn('Failed to fetch app logo from Firestore:', err));
+            }).catch(err => console.warn('Failed to fetch app logo from Firestore:', err));
+        } catch (e) {
+            console.warn('Error fetching logo from Firestore:', e);
+        }
     }
 
     return defaultPlaceholder;
@@ -803,39 +808,43 @@ const getSubmissionDateText = (submittedAt) => {
 };
 
 const getTaskTypeLabel = (s) => {
+    if (!s) return 'Play Store Review';
     const isReview = !!(s.assigned_comment && String(s.assigned_comment).trim().length > 0);
     const link = s.task_link || s.taskLink || '';
     
     // 1. Try to find the task in allTasksCache to get the actual sub-type/name
     if (typeof allTasksCache !== 'undefined' && Array.isArray(allTasksCache)) {
-        const task = allTasksCache.find(t => t.id === (s.task_id || s.taskId));
+        const task = allTasksCache.find(t => t && t.id === (s.task_id || s.taskId));
         if (task) {
             const type = task.taskType || task.type || task.subtype || '';
             if (type) {
-                const lowerType = type.toLowerCase();
+                const lowerType = String(type).toLowerCase();
                 if (lowerType.includes('google') || lowerType.includes('map')) return 'Google Maps Review';
                 if (lowerType.includes('play') || lowerType.includes('review')) return 'Play Store Review';
                 if (lowerType.includes('screenshot')) return 'Screenshot Task';
                 if (lowerType.includes('custom')) return 'Custom Task';
-                return type.split(/[_-]+/).map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+                return String(type).split(/[_-]+/).map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
             }
         }
     }
     
     // 2. Fallbacks based on link and assigned_comment
-    if (link.includes('play.google.com') || isReview) {
-        return 'Play Store Review';
-    }
-    if (link.includes('maps.google.com') || link.includes('google.com/maps')) {
-        return 'Google Maps Review';
-    }
-    if (link.includes('custom')) {
-        return 'Custom Task';
+    if (typeof link === 'string') {
+        if (link.includes('play.google.com') || isReview) {
+            return 'Play Store Review';
+        }
+        if (link.includes('maps.google.com') || link.includes('google.com/maps')) {
+            return 'Google Maps Review';
+        }
+        if (link.includes('custom')) {
+            return 'Custom Task';
+        }
     }
     return isReview ? 'Play Store Review' : 'Screenshot Task';
 };
 
 const getPayoutBadgeLabel = (s) => {
+    if (!s) return 'Instant';
     const delayDays = Number(s.payout_delay_days || s.payoutDelayDays || 0);
     if (delayDays === 0) return 'Instant';
     if (delayDays === 3) return '3 Days';
@@ -849,7 +858,7 @@ const getUserTaskHistoryListHtml = () => {
     const statusFilter = window.userTaskHistoryStatusFilter || 'all';
     const isBulker = isBulkTaskUser();
 
-    let subs = [...(userTaskHistoryCache || [])];
+    let subs = [...(userTaskHistoryCache || [])].filter(s => s);
 
     // Filter by category
     if (categoryTab !== 'all') {
@@ -987,7 +996,7 @@ const getUserTaskHistoryListHtml = () => {
             const taskId = s.task_id || s.taskId;
             let taskAppId = s.appId || s.app_id || '';
             if (typeof allTasksCache !== 'undefined' && Array.isArray(allTasksCache)) {
-                const task = allTasksCache.find(t => t.id === taskId);
+                const task = allTasksCache.find(t => t && t.id === taskId);
                 if (task) {
                     taskAppId = task.appId || task.app_id || taskAppId;
                 }
@@ -1015,7 +1024,21 @@ const getUserTaskHistoryListHtml = () => {
             if (s.payout_status !== 'paid' && s.manual_status !== 'rejected') {
                 const delayDays = Number(s.payout_delay_days || s.payoutDelayDays || 0);
                 const submittedMs = s.submitted_at || s.submittedAt || Date.now();
-                const submittedTimeMs = typeof submittedMs === 'object' && submittedMs.seconds ? submittedMs.seconds * 1000 : Number(submittedMs);
+                
+                let submittedTimeMs = Date.now();
+                if (submittedMs) {
+                    if (typeof submittedMs === 'object') {
+                        if (typeof submittedMs.toDate === 'function') {
+                            submittedTimeMs = submittedMs.toDate().getTime();
+                        } else if (submittedMs.seconds) {
+                            submittedTimeMs = submittedMs.seconds * 1000;
+                        } else if (submittedMs._seconds) {
+                            submittedTimeMs = submittedMs._seconds * 1000;
+                        }
+                    } else {
+                        submittedTimeMs = Number(submittedMs) || Date.now();
+                    }
+                }
                 
                 let payoutText = payoutBadgeText;
                 let payoutEmoji = payoutBadgeText === 'Instant' ? '⚡' : '🕒';
