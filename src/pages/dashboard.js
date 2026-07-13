@@ -925,38 +925,57 @@ const getUserTaskHistoryListHtml = () => {
             const rejectedCount = g.submissions.filter(s => s.manual_status === 'rejected').length;
             
             const completionPercent = total > 0 ? Math.round((approvedCount / total) * 100) : 0;
-            const dateStr = g.lastUpdated ? new Date(g.lastUpdated).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }) : 'Unknown';
+            const dateStr = g.lastUpdated 
+                ? new Date(g.lastUpdated).toLocaleString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: true }) 
+                : 'Unknown';
 
             return `
-            <div class="bg-white dark:bg-gray-800 p-5 rounded-2xl border border-gray-100 dark:border-gray-800 hover:shadow-[0_4px_16px_rgba(0,0,0,0.04)] cursor-pointer transition select-none text-left space-y-4 shadow-[0_2px_8px_rgba(0,0,0,0.03)]" onclick="window.showBulkerTaskOverview('${g.taskId}')">
-                <div class="flex items-center gap-3">
-                    <img src="${escapeHtml(g.logoUrl)}" data-task-logo-id="${g.taskId}" class="h-10 w-10 rounded-xl object-cover shrink-0" onerror="this.src='https://cdn-icons-png.flaticon.com/512/3176/3176366.png';">
-                    <div class="min-w-0 flex-1">
-                        <h4 class="text-sm font-extrabold text-gray-900 dark:text-white truncate">${escapeHtml(g.taskName)}</h4>
-                        <div class="flex items-center gap-2 text-[10px] text-gray-400 font-semibold mt-0.5">
-                            <span>Submitted: ${total}</span>
-                            <span>•</span>
-                            <span class="text-emerald-600 dark:text-emerald-400 font-bold">Approved: ${approvedCount}</span>
-                            <span>•</span>
-                            <span class="text-amber-500 font-bold">Pending: ${pendingCount}</span>
-                            <span>•</span>
-                            <span class="text-rose-600 dark:text-rose-455 font-bold">Rejected: ${rejectedCount}</span>
+            <div class="bg-white dark:bg-gray-800 p-5 rounded-2xl border border-gray-150 dark:border-gray-750 hover:shadow-[0_4px_16px_rgba(0,0,0,0.03)] cursor-pointer transition select-none text-left space-y-4 shadow-[0_2px_8px_rgba(0,0,0,0.02)]" onclick="window.showBulkerTaskOverview('${g.taskId}')">
+                <!-- Top Section: App info and Arrow -->
+                <div class="flex items-center justify-between gap-3">
+                    <div class="flex items-center gap-3 min-w-0">
+                        <img src="${escapeHtml(g.logoUrl)}" data-task-logo-id="${g.taskId}" class="h-12 w-12 rounded-2xl object-cover shrink-0 border border-gray-50 dark:border-gray-700 shadow-sm" onerror="this.src='https://cdn-icons-png.flaticon.com/512/3176/3176366.png';">
+                        <div class="min-w-0 flex-1">
+                            <h4 class="text-[14px] font-black text-gray-900 dark:text-white truncate">${escapeHtml(g.taskName)}</h4>
+                            <div class="flex items-center gap-1 mt-0.5 text-xs text-gray-400 font-semibold">
+                                <img src="https://upload.wikimedia.org/wikipedia/commons/d/d0/Google_Play_Arrow_Logo_%282022%29.svg" class="h-3 w-3 shrink-0" style="width: 12px; height: 12px;">
+                                <span>Play Store Review • ₹${g.reward}</span>
+                            </div>
                         </div>
                     </div>
-                    <svg class="h-4 w-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M9 5l7 7-7 7"></path></svg>
+                    <svg class="h-5 w-5 text-gray-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"></path></svg>
                 </div>
                 
-                <div class="space-y-1">
-                    <div class="flex items-center justify-between text-[10px] font-bold text-purple-600 dark:text-purple-400">
-                        <span>Completion</span>
-                        <span>${completionPercent}%</span>
+                <!-- Stats Row -->
+                <div class="grid grid-cols-4 gap-2 text-center select-none pt-1">
+                    <div>
+                        <span class="block text-[11px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wide">Submitted</span>
+                        <span class="block text-[15px] font-black text-gray-855 dark:text-white mt-1">${total}</span>
                     </div>
-                    <div class="w-full bg-gray-100 dark:bg-gray-700 h-1.5 rounded-full overflow-hidden">
-                        <div class="bg-purple-600 h-full rounded-full" style="width: ${completionPercent}%"></div>
+                    <div>
+                        <span class="block text-[11px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wide">Approved</span>
+                        <span class="block text-[15px] font-black text-emerald-600 dark:text-emerald-400 mt-1">${approvedCount}</span>
+                    </div>
+                    <div>
+                        <span class="block text-[11px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wide">Pending</span>
+                        <span class="block text-[15px] font-black text-amber-500 mt-1">${pendingCount}</span>
+                    </div>
+                    <div>
+                        <span class="block text-[11px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wide">Rejected</span>
+                        <span class="block text-[15px] font-black text-rose-600 dark:text-rose-455 mt-1">${rejectedCount}</span>
                     </div>
                 </div>
                 
-                <p class="text-[9px] text-gray-400 dark:text-gray-500 font-semibold">Last Updated: ${dateStr}</p>
+                <!-- Completion Bar -->
+                <div class="flex items-center gap-3 pt-1">
+                    <div class="flex-1 bg-gray-100 dark:bg-gray-700 h-2 rounded-full overflow-hidden">
+                        <div class="bg-indigo-600 h-full rounded-full" style="width: ${completionPercent}%"></div>
+                    </div>
+                    <span class="text-[11px] font-extrabold text-indigo-600 dark:text-indigo-400 shrink-0">${completionPercent}% Completed</span>
+                </div>
+                
+                <!-- Footer -->
+                <p class="text-[10px] text-gray-400 dark:text-gray-500 font-semibold pt-1 border-t border-gray-50 dark:border-gray-750/30">Last Updated: ${dateStr}</p>
             </div>`;
         }).join('');
     } else {
@@ -1733,155 +1752,180 @@ window.showBulkerTaskOverview = (taskId) => {
             const rejected = taskSubs.filter(s => s.manual_status === 'rejected').length;
 
             const completionPercent = total > 0 ? Math.round((approved / total) * 100) : 0;
-            const ocrSuccessRate = total > 0 ? Math.round((taskSubs.filter(x => x.ocr_status === 'completed').length / total) * 100) : 0;
-            const playStoreProgress = total > 0 ? Math.round(((approved + rejected) / total) * 100) : 0;
-
-            if (typeof window.bulkerActiveGroup === 'undefined') {
-                window.bulkerActiveGroup = 'approved';
-            }
-
-            const activeGroup = window.bulkerActiveGroup;
-            let groupSubs = [...taskSubs];
-            if (activeGroup === 'approved') {
-                groupSubs = groupSubs.filter(x => x.manual_status === 'approved');
-            } else if (activeGroup === 'pending') {
-                groupSubs = groupSubs.filter(x => x.manual_status === 'pending');
-            } else if (activeGroup === 'rejected') {
-                groupSubs = groupSubs.filter(x => x.manual_status === 'rejected');
-            }
+            
+            // Status Breakdown SVG Donut chart calculation
+            const approvedPercent = total > 0 ? Math.round((approved / total) * 100) : 0;
+            const pendingPercent = total > 0 ? Math.round((pending / total) * 100) : 0;
+            const rejectedPercent = total > 0 ? (100 - approvedPercent - pendingPercent) : 0;
 
             const content = `
-                <header class="flex items-center justify-between p-4 bg-white dark:bg-gray-800 shadow-[0_2px_8px_rgba(0,0,0,0.02)] border-b border-gray-100 dark:border-gray-755 page-header-fixed">
-                    <div class="flex items-center gap-3">
-                        <button class="page-back-btn p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700 mr-1 shrink-0 text-gray-700 dark:text-white" style="outline: none;">
-                            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"></line><line x1="12" y1="19" x2="5" y2="12"></line><line x1="12" y1="5" x2="5" y2="12"></line></svg>
-                        </button>
-                        <h2 class="text-lg font-black text-gray-900 dark:text-white">Task Overview</h2>
-                    </div>
-                    <button class="p-2 rounded-xl text-[10px] bg-purple-50 text-purple-600 hover:bg-purple-100 font-bold flex items-center gap-1" onclick="window.exportBulkerReport('${taskId}')" style="outline: none;">
-                        Export CSV
+                <header class="relative flex items-center justify-between p-4 bg-white dark:bg-gray-800 shadow-[0_2px_8px_rgba(0,0,0,0.015)] border-b border-gray-100 dark:border-gray-755 page-header-fixed">
+                    <button class="page-back-btn p-2 rounded-full hover:bg-gray-105 dark:hover:bg-gray-700 text-gray-700 dark:text-white" style="outline: none;">
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor" class="w-6 h-6">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5" />
+                        </svg>
                     </button>
+                    <h2 class="absolute left-1/2 -translate-x-1/2 text-lg font-black text-gray-900 dark:text-white">Task Overview</h2>
                 </header>
 
-                <div class="max-w-xl mx-auto space-y-5 pb-24 px-4 pt-4 text-left">
-                    <!-- App Card -->
-                    <div class="bg-white dark:bg-gray-800 p-5 rounded-2xl shadow-[0_2px_8px_rgba(0,0,0,0.03)] border border-gray-100 dark:border-gray-800 flex items-center gap-4">
-                        <img src="${escapeHtml(logoUrl)}" class="h-10 w-10 rounded-xl object-cover shrink-0" onerror="this.src='https://cdn-icons-png.flaticon.com/512/3176/3176366.png';">
-                        <div class="min-w-0 flex-1">
-                            <h4 class="text-sm font-extrabold text-gray-900 dark:text-white truncate">${escapeHtml(taskName)}</h4>
-                            <p class="text-[10px] text-gray-400 font-semibold mt-0.5">Play Store Review • ₹${reward}</p>
-                        </div>
-                    </div>
-
-                    <!-- Overall Statistics Card -->
-                    <div class="bg-white dark:bg-gray-800 p-5 rounded-2xl shadow-[0_2px_8px_rgba(0,0,0,0.03)] border border-gray-100 dark:border-gray-800 space-y-4">
-                        <h4 class="text-[10px] font-black uppercase text-gray-400 tracking-wider">Overall Statistics</h4>
-                        
-                        <div class="grid grid-cols-4 gap-2 text-center">
-                            <div class="bg-gray-50 dark:bg-gray-900/40 p-3 rounded-xl border border-gray-100 dark:border-gray-800">
-                                <span class="block text-base font-black text-gray-855 dark:text-white">${total}</span>
-                                <span class="text-[8px] font-bold text-gray-400 uppercase">Submitted</span>
-                            </div>
-                            <div class="bg-emerald-50/40 dark:bg-emerald-955/20 p-3 rounded-xl border border-emerald-100/50 dark:border-emerald-900/30">
-                                <span class="block text-base font-black text-emerald-600 dark:text-emerald-400">${approved}</span>
-                                <span class="text-[8px] font-bold text-emerald-500 uppercase">Approved</span>
-                            </div>
-                            <div class="bg-amber-50/40 dark:bg-amber-955/20 p-3 rounded-xl border border-amber-100/50 dark:border-amber-900/30">
-                                <span class="block text-base font-black text-amber-505">${pending}</span>
-                                <span class="text-[8px] font-bold text-amber-500 uppercase">Pending</span>
-                            </div>
-                            <div class="bg-rose-55 dark:bg-rose-955/20 p-3 rounded-xl border border-rose-100/50 dark:border-rose-900/30">
-                                <span class="block text-base font-black text-rose-600">${rejected}</span>
-                                <span class="text-[8px] font-bold text-rose-500 uppercase">Rejected</span>
+                <div class="max-w-xl mx-auto space-y-4.5 pb-24 px-4 pt-4 text-left">
+                    <!-- App Card & Stats (Single unified card as in Screenshot 2) -->
+                    <div class="bg-white dark:bg-gray-800 p-5 rounded-3xl border border-gray-150 dark:border-gray-750 shadow-sm space-y-4">
+                        <!-- App header -->
+                        <div class="flex items-center gap-3.5">
+                            <img src="${escapeHtml(logoUrl)}" class="h-12 w-12 rounded-2xl object-cover shrink-0 border border-gray-50 dark:border-gray-700 shadow-sm" onerror="this.src='https://cdn-icons-png.flaticon.com/512/3176/3176366.png';">
+                            <div class="min-w-0 flex-1">
+                                <h4 class="text-[14px] font-black text-gray-900 dark:text-white truncate">${escapeHtml(taskName)}</h4>
+                                <div class="flex items-center gap-1 mt-0.5 text-xs text-gray-400 font-semibold">
+                                    <img src="https://upload.wikimedia.org/wikipedia/commons/d/d0/Google_Play_Arrow_Logo_%282022%29.svg" class="h-3 w-3 shrink-0" style="width: 12px; height: 12px;">
+                                    <span>Play Store Review • ₹${reward}</span>
+                                </div>
                             </div>
                         </div>
 
-                        <div class="space-y-3.5 pt-2 border-t border-gray-100 dark:border-gray-755">
-                            <div class="space-y-1">
-                                <div class="flex items-center justify-between text-[10px] font-bold text-purple-600 dark:text-purple-400">
-                                    <span>Verification Progress</span>
-                                    <span>${completionPercent}%</span>
-                                </div>
-                                <div class="w-full bg-gray-100 dark:bg-gray-700 h-1.5 rounded-full overflow-hidden">
-                                    <div class="bg-purple-600 h-full rounded-full" style="width: ${completionPercent}%"></div>
+                        <!-- Stats Divider -->
+                        <div class="border-t border-gray-100 dark:border-gray-750/50"></div>
+
+                        <!-- 4-column Stats Counter Grid -->
+                        <div class="grid grid-cols-4 gap-2 text-center select-none">
+                            <div>
+                                <span class="block text-[11px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wide">Total</span>
+                                <span class="block text-[15px] font-black text-gray-855 dark:text-white mt-1">${total}</span>
+                            </div>
+                            <div>
+                                <span class="block text-[11px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wide">Approved</span>
+                                <span class="block text-[15px] font-black text-emerald-600 dark:text-emerald-400 mt-1">${approved}</span>
+                            </div>
+                            <div>
+                                <span class="block text-[11px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wide">Pending</span>
+                                <span class="block text-[15px] font-black text-amber-500 mt-1">${pending}</span>
+                            </div>
+                            <div>
+                                <span class="block text-[11px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wide">Rejected</span>
+                                <span class="block text-[15px] font-black text-rose-600 dark:text-rose-455 mt-1">${rejected}</span>
+                            </div>
+                        </div>
+
+                        <!-- Divider -->
+                        <div class="border-t border-gray-100 dark:border-gray-750/50"></div>
+
+                        <!-- Status Breakdown Section with CSS SVG Donut Chart -->
+                        <div class="flex items-center gap-6 pt-1">
+                            <!-- Left: CSS SVG Donut Chart -->
+                            <div class="relative w-24 h-24 flex items-center justify-center shrink-0">
+                                <svg class="w-full h-full transform -rotate-90" viewBox="0 0 36 36">
+                                    <!-- Gray background track -->
+                                    <circle cx="18" cy="18" r="15.915" fill="transparent" stroke="#E5E7EB" class="dark:stroke-gray-700" stroke-width="3"></circle>
+                                    
+                                    <!-- Approved segment (emerald) -->
+                                    <circle cx="18" cy="18" r="15.915" fill="transparent" stroke="#10B981" stroke-width="3" 
+                                        stroke-dasharray="${approvedPercent} ${100 - approvedPercent}" stroke-dashoffset="0"></circle>
+                                        
+                                    <!-- Pending segment (amber) -->
+                                    <circle cx="18" cy="18" r="15.915" fill="transparent" stroke="#F59E0B" stroke-width="3" 
+                                        stroke-dasharray="${pendingPercent} ${100 - pendingPercent}" stroke-dashoffset="-${approvedPercent}"></circle>
+                                        
+                                    <!-- Rejected segment (rose) -->
+                                    <circle cx="18" cy="18" r="15.915" fill="transparent" stroke="#EF4444" stroke-width="3" 
+                                        stroke-dasharray="${rejectedPercent} ${100 - rejectedPercent}" stroke-dashoffset="-${approvedPercent + pendingPercent}"></circle>
+                                </svg>
+                                <div class="absolute flex flex-col items-center justify-center text-center">
+                                    <span class="text-sm font-black text-gray-900 dark:text-white leading-none">${completionPercent}%</span>
+                                    <span class="text-[8px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-wide mt-1">Completed</span>
                                 </div>
                             </div>
 
-                            <div class="flex justify-between text-xs font-semibold text-gray-655 dark:text-gray-300">
-                                <span class="text-gray-400">OCR Success Rate</span>
-                                <span class="font-extrabold text-gray-855 dark:text-white">${ocrSuccessRate}%</span>
-                            </div>
-
-                            <div class="flex justify-between text-xs font-semibold text-gray-655 dark:text-gray-300">
-                                <span class="text-gray-400">Play Store Verification Progress</span>
-                                <span class="font-extrabold text-gray-855 dark:text-white">${playStoreProgress}%</span>
+                            <!-- Right: Legend Details -->
+                            <div class="flex-1 min-w-0 space-y-2">
+                                <h5 class="text-xs font-black text-gray-900 dark:text-white">Status Breakdown</h5>
+                                <div class="space-y-1 text-[11px] font-bold text-gray-500 dark:text-gray-400">
+                                    <div class="flex items-center justify-between">
+                                        <div class="flex items-center gap-1.5 min-w-0">
+                                            <span class="h-2 w-2 rounded-full bg-emerald-500 shrink-0"></span>
+                                            <span class="truncate">Approved</span>
+                                        </div>
+                                        <span class="font-extrabold text-gray-855 dark:text-white shrink-0">${approved} (${approvedPercent}%)</span>
+                                    </div>
+                                    <div class="flex items-center justify-between">
+                                        <div class="flex items-center gap-1.5 min-w-0">
+                                            <span class="h-2 w-2 rounded-full bg-amber-500 shrink-0"></span>
+                                            <span class="truncate">Pending / Under Review</span>
+                                        </div>
+                                        <span class="font-extrabold text-gray-855 dark:text-white shrink-0">${pending} (${pendingPercent}%)</span>
+                                    </div>
+                                    <div class="flex items-center justify-between">
+                                        <div class="flex items-center gap-1.5 min-w-0">
+                                            <span class="h-2 w-2 rounded-full bg-rose-500 shrink-0"></span>
+                                            <span class="truncate">Rejected</span>
+                                        </div>
+                                        <span class="font-extrabold text-gray-855 dark:text-white shrink-0">${rejected} (${rejectedPercent}%)</span>
+                                    </div>
+                                </div>
                             </div>
                         </div>
                     </div>
 
-                    <!-- Switch Between Groups Tabs -->
-                    <div class="flex bg-gray-100 dark:bg-gray-900 p-1 rounded-xl">
-                        ${[
-                            { val: 'approved', label: `Approved (${approved})` },
-                            { val: 'pending', label: `Pending (${pending})` },
-                            { val: 'rejected', label: `Rejected (${rejected})` }
-                        ].map(group => {
-                            const isActive = activeGroup === group.val;
-                            return `
-                                <button type="button" data-action="select-bulker-group" data-group="${group.val}" class="flex-1 text-center py-2 text-xs font-black rounded-lg transition-all ${isActive ? 'bg-white dark:bg-gray-800 text-purple-600 dark:text-purple-400 shadow-sm border border-gray-200/50 dark:border-gray-700' : 'text-gray-500 dark:text-gray-455 hover:text-gray-800 dark:hover:text-gray-200'}" style="outline: none;">
-                                    ${group.label}
-                                </button>
-                            `;
-                        }).join('')}
-                    </div>
+                    <!-- Quick Actions -->
+                    <div class="space-y-3 pt-1.5">
+                        <h5 class="text-[10px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-wider">Quick Actions</h5>
 
-                    <!-- Submissions Grid inside group -->
-                    <div class="grid grid-cols-2 gap-3.5">
-                        ${groupSubs.length === 0 ? `
-                            <div class="col-span-2 rounded-2xl py-12 text-center text-xs font-semibold text-gray-400 bg-white dark:bg-gray-800 border border-dashed border-gray-150 dark:border-gray-700">
-                                No submissions in this group.
+                        <!-- View All Submissions -->
+                        <button onclick="window.showBulkerAllSubmissions('${taskId}', 'all')" class="w-full flex items-center justify-between p-3 bg-white dark:bg-gray-800 hover:bg-indigo-50/10 dark:hover:bg-indigo-950/10 rounded-2xl border border-gray-150 dark:border-gray-750 shadow-sm transition text-left" style="outline: none;">
+                            <div class="flex items-center gap-3">
+                                <span class="p-2 rounded-xl bg-purple-50 dark:bg-purple-950/30 text-purple-600 dark:text-purple-400 shrink-0">
+                                    <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5">
+                                        <path stroke-linecap="round" stroke-linejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25H12" />
+                                    </svg>
+                                </span>
+                                <span class="text-xs font-black text-purple-950 dark:text-purple-300 font-extrabold">View All Submissions</span>
                             </div>
-                        ` : groupSubs.map((s, idx) => {
-                            const dateStr = s.submitted_at ? new Date(s.submitted_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }) : 'Unknown';
+                            <svg class="h-4 w-4 text-purple-600 dark:text-purple-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"></path></svg>
+                        </button>
 
-                            let badgeColor = 'amber';
-                            if (s.manual_status === 'approved') badgeColor = 'emerald';
-                            if (s.manual_status === 'rejected') badgeColor = 'rose';
+                        <!-- View Pending -->
+                        <button onclick="window.showBulkerAllSubmissions('${taskId}', 'pending')" class="w-full flex items-center justify-between p-3 bg-white dark:bg-gray-800 hover:bg-amber-50/10 dark:hover:bg-amber-955/10 rounded-2xl border border-gray-150 dark:border-gray-750 shadow-sm transition text-left" style="outline: none;">
+                            <div class="flex items-center gap-3">
+                                <span class="p-2 rounded-xl bg-amber-50 dark:bg-amber-955/20 text-amber-600 dark:text-amber-500 shrink-0">
+                                    <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5">
+                                        <path stroke-linecap="round" stroke-linejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
+                                    </svg>
+                                </span>
+                                <span class="text-xs font-black text-amber-950 dark:text-amber-300 font-extrabold">View Pending (${pending})</span>
+                            </div>
+                            <svg class="h-4 w-4 text-amber-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"></path></svg>
+                        </button>
 
-                            return `
-                            <div class="bg-white dark:bg-gray-800 p-3.5 rounded-2xl border border-gray-100 dark:border-gray-800 hover:shadow-[0_4px_16px_rgba(0,0,0,0.04)] transition cursor-pointer flex flex-col text-left space-y-2 shadow-[0_2px_8px_rgba(0,0,0,0.02)]" onclick="window.showBulkerSubmissionDetail('${s.id}')">
-                                <div class="flex items-center justify-between text-[10px] font-bold text-gray-400 border-b border-gray-100 dark:border-gray-750 pb-1.5">
-                                    <span class="font-mono">#${s.id.substring(0, 8)}</span>
-                                    <span class="rounded-full bg-${badgeColor}-50 dark:bg-${badgeColor}-950/20 px-2 py-0.5 text-[8px] font-black text-${badgeColor}-700 dark:text-${badgeColor}-400 border border-${badgeColor}-100 dark:border-${badgeColor}-900/30 uppercase tracking-wide">
-                                        ${s.manual_status || 'Pending'}
-                                    </span>
-                                </div>
-                                
-                                <div class="relative aspect-[9/12] rounded-lg overflow-hidden bg-gray-50 flex items-center justify-center border border-gray-100 dark:border-gray-755">
-                                    <img src="${escapeHtml(s.screenshot_url)}" class="h-full w-full object-cover" loading="lazy">
-                                </div>
-                                
-                                <div class="text-[9px] text-gray-400 font-semibold mt-1">
-                                    <p>${dateStr}</p>
-                                </div>
-                            </div>`;
-                        }).join('')}
+                        <!-- View Rejected -->
+                        <button onclick="window.showBulkerAllSubmissions('${taskId}', 'rejected')" class="w-full flex items-center justify-between p-3 bg-white dark:bg-gray-800 hover:bg-rose-50/10 dark:hover:bg-rose-955/10 rounded-2xl border border-gray-150 dark:border-gray-750 shadow-sm transition text-left" style="outline: none;">
+                            <div class="flex items-center gap-3">
+                                <span class="p-2 rounded-xl bg-rose-50 dark:bg-rose-955/20 text-rose-600 dark:text-rose-500 shrink-0">
+                                    <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5">
+                                        <path stroke-linecap="round" stroke-linejoin="round" d="M9.75 9.75 4.5 4.5m0-4.5-4.5 4.5M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
+                                    </svg>
+                                </span>
+                                <span class="text-xs font-black text-rose-950 dark:text-rose-300 font-extrabold">View Rejected (${rejected})</span>
+                            </div>
+                            <svg class="h-4 w-4 text-rose-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"></path></svg>
+                        </button>
+
+                        <!-- Export Report -->
+                        <button onclick="window.exportBulkerReport('${taskId}')" class="w-full flex items-center justify-between p-3 bg-white dark:bg-gray-800 hover:bg-blue-50/10 dark:hover:bg-blue-955/10 rounded-2xl border border-gray-150 dark:border-gray-750 shadow-sm transition text-left" style="outline: none;">
+                            <div class="flex items-center gap-3">
+                                <span class="p-2 rounded-xl bg-blue-50 dark:bg-blue-955/20 text-blue-600 dark:text-blue-500 shrink-0">
+                                    <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5">
+                                        <path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5M16.5 12 12 16.5m0 0L7.5 12m4.5 4.5V3" />
+                                    </svg>
+                                </span>
+                                <span class="text-xs font-black text-blue-955 dark:text-blue-300 font-extrabold">Export Report</span>
+                            </div>
+                            <svg class="h-4 w-4 text-blue-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"></path></svg>
+                        </button>
                     </div>
                 </div>
                 ${getPageFooter()}
             `;
 
             showPage(content, { returnTo: 'task-history', keepBottomNav: false, onBack: showUserTaskHistoryPage });
-
-            const pageEl = document.getElementById('page-container');
-            if (pageEl) {
-                pageEl.querySelectorAll('[data-action="select-bulker-group"]').forEach(btn => {
-                    btn.onclick = (e) => {
-                        window.bulkerActiveGroup = e.currentTarget.dataset.group;
-                        window.showBulkerTaskOverview(taskId);
-                    };
-                });
-            }
         };
 
 window.exportBulkerReport = (taskId) => {
@@ -1910,6 +1954,148 @@ window.exportBulkerReport = (taskId) => {
             link.click();
             link.remove();
             showNotification('Report CSV downloaded successfully.');
+        };
+
+window.showBulkerAllSubmissions = (taskId, filterStatus = 'all') => {
+            window.bulkerSubmissionDetailReturnPage = 'all-submissions';
+            window.bulkerAllSubmissionsFilter = filterStatus;
+
+            const taskSubs = userTaskHistoryCache.filter(x => (x.task_id === taskId || x.taskId === taskId));
+            if (taskSubs.length === 0) {
+                window.showBulkerTaskOverview(taskId);
+                return;
+            }
+
+            const total = taskSubs.length;
+            const approved = taskSubs.filter(s => s.manual_status === 'approved').length;
+            const pending = taskSubs.filter(s => s.manual_status === 'pending').length;
+            const rejected = taskSubs.filter(s => s.manual_status === 'rejected').length;
+
+            // Sort submissions descending (newest first)
+            const sortedSubs = [...taskSubs].sort((a, b) => {
+                const tA = a.submitted_at || a.submittedAt || 0;
+                const tB = b.submitted_at || b.submittedAt || 0;
+                return tB - tA;
+            });
+
+            let filteredSubs = sortedSubs;
+            if (filterStatus === 'approved') {
+                filteredSubs = sortedSubs.filter(s => s.manual_status === 'approved');
+            } else if (filterStatus === 'pending') {
+                filteredSubs = sortedSubs.filter(s => s.manual_status === 'pending');
+            } else if (filterStatus === 'rejected') {
+                filteredSubs = sortedSubs.filter(s => s.manual_status === 'rejected');
+            }
+
+            const getPillClass = (status) => {
+                const isActive = filterStatus === status;
+                if (status === 'all') {
+                    return isActive 
+                        ? 'bg-indigo-600 text-white shadow-sm border-indigo-600'
+                        : 'bg-indigo-50 dark:bg-indigo-950/20 text-indigo-600 dark:text-indigo-400 border-transparent hover:bg-indigo-100';
+                }
+                if (status === 'approved') {
+                    return isActive 
+                        ? 'bg-emerald-500 text-white shadow-sm border-emerald-500'
+                        : 'bg-emerald-50 dark:bg-emerald-950/20 text-emerald-600 dark:text-emerald-400 border-transparent hover:bg-emerald-100';
+                }
+                if (status === 'pending') {
+                    return isActive 
+                        ? 'bg-amber-500 text-white shadow-sm border-amber-500'
+                        : 'bg-amber-50 dark:bg-amber-955/20 text-amber-600 dark:text-amber-400 border-transparent hover:bg-amber-100';
+                }
+                if (status === 'rejected') {
+                    return isActive 
+                        ? 'bg-rose-500 text-white shadow-sm border-rose-500'
+                        : 'bg-rose-50 dark:bg-rose-955/20 text-rose-600 dark:text-rose-455 border-transparent hover:bg-rose-100';
+                }
+            };
+
+            const content = `
+                <header class="relative flex items-center justify-between p-4 bg-white dark:bg-gray-800 shadow-[0_2px_8px_rgba(0,0,0,0.015)] border-b border-gray-100 dark:border-gray-750 page-header-fixed">
+                    <button class="page-back-btn p-2 rounded-full hover:bg-gray-105 dark:hover:bg-gray-700 text-gray-700 dark:text-white" style="outline: none;">
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor" class="w-6 h-6">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5" />
+                        </svg>
+                    </button>
+                    <h2 class="absolute left-1/2 -translate-x-1/2 text-lg font-black text-gray-900 dark:text-white">All Submissions</h2>
+                    <button class="p-2 rounded-full hover:bg-gray-105 dark:hover:bg-gray-700 text-gray-700 dark:text-white" style="outline: none;" onclick="showNotification('Filters are active via tabs.')">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon></svg>
+                    </button>
+                </header>
+
+                <div class="max-w-xl mx-auto space-y-4 pb-24 px-4 pt-4 text-left">
+                    <!-- Filter Pills Row -->
+                    <div class="flex items-center gap-2 overflow-x-auto pb-1 select-none no-scrollbar">
+                        <button onclick="window.showBulkerAllSubmissions('${taskId}', 'all')" class="rounded-full px-4 py-1.5 text-xs font-black uppercase tracking-wider transition border ${getPillClass('all')}" style="outline: none;">
+                            All (${total})
+                        </button>
+                        <button onclick="window.showBulkerAllSubmissions('${taskId}', 'approved')" class="rounded-full px-4 py-1.5 text-xs font-black uppercase tracking-wider transition border ${getPillClass('approved')}" style="outline: none;">
+                            Approved (${approved})
+                        </button>
+                        <button onclick="window.showBulkerAllSubmissions('${taskId}', 'pending')" class="rounded-full px-4 py-1.5 text-xs font-black uppercase tracking-wider transition border ${getPillClass('pending')}" style="outline: none;">
+                            Pending (${pending})
+                        </button>
+                        <button onclick="window.showBulkerAllSubmissions('${taskId}', 'rejected')" class="rounded-full px-4 py-1.5 text-xs font-black uppercase tracking-wider transition border ${getPillClass('rejected')}" style="outline: none;">
+                            Rejected (${rejected})
+                        </button>
+                    </div>
+
+                    <!-- Submissions list -->
+                    <div class="bg-white dark:bg-gray-800 rounded-3xl border border-gray-150 dark:border-gray-755 shadow-sm divide-y divide-gray-100 dark:divide-gray-750/60 overflow-hidden">
+                        ${filteredSubs.length === 0 ? `
+                            <div class="py-12 text-center text-xs font-bold text-gray-400 dark:text-gray-500">
+                                No submissions found matching this filter.
+                            </div>
+                        ` : filteredSubs.map(s => {
+                            const originalIdx = sortedSubs.indexOf(s);
+                            const displayNum = total - originalIdx;
+                            const dateStr = s.submitted_at 
+                                ? new Date(s.submitted_at).toLocaleString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: true }) 
+                                : 'Unknown';
+
+                            let badgeColor = 'amber';
+                            if (s.manual_status === 'approved') badgeColor = 'emerald';
+                            if (s.manual_status === 'rejected') badgeColor = 'rose';
+
+                            return `
+                            <div class="flex items-center justify-between p-3.5 hover:bg-gray-55/50 dark:hover:bg-gray-750/30 transition cursor-pointer select-none" onclick="window.showBulkerSubmissionDetail('${s.id}')">
+                                <div class="flex items-center gap-3.5 min-w-0">
+                                    <!-- Left Index -->
+                                    <span class="text-xs font-black text-gray-400 dark:text-gray-500 w-8 shrink-0">#${displayNum}</span>
+                                    
+                                    <!-- Thumbnail -->
+                                    <img src="${escapeHtml(s.screenshot_url)}" class="h-11 w-11 rounded-xl object-cover shrink-0 border border-gray-100 dark:border-gray-700 shadow-sm" onclick="event.stopPropagation(); window.showScreenshotLightbox('${escapeHtml(s.screenshot_url)}', '${escapeHtml(s.screenshot_view_url || '')}')" onerror="this.src='https://placehold.co/100x100?text=No+Img';">
+                                    
+                                    <!-- Info -->
+                                    <div class="min-w-0">
+                                        <span class="rounded bg-${badgeColor}-50 dark:bg-${badgeColor}-950/20 px-1.5 py-0.5 text-[8px] font-black text-${badgeColor}-700 dark:text-${badgeColor}-400 border border-${badgeColor}-100 dark:border-${badgeColor}-900/30 uppercase tracking-wide inline-block">
+                                            ${s.manual_status || 'Pending'}
+                                        </span>
+                                        <p class="text-[10px] text-gray-400 dark:text-gray-500 font-semibold mt-1">${dateStr}</p>
+                                    </div>
+                                </div>
+                                
+                                <!-- Three dot menu -->
+                                <button type="button" class="p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-400 dark:text-gray-500 shrink-0" onclick="window.showBulkerSubmissionMenu(event, '${s.id}')" style="outline: none;">
+                                    <svg class="h-4.5 w-4.5" fill="currentColor" viewBox="0 0 24 24">
+                                        <path d="M12 8c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm0 2c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm0 6c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2z"/>
+                                    </svg>
+                                </button>
+                            </div>
+                            `;
+                        }).join('')}
+                    </div>
+                </div>
+                ${getPageFooter()}
+            `;
+
+            showPage(content, { returnTo: 'task-overview', keepBottomNav: false, onBack: () => window.showBulkerTaskOverview(taskId) });
+        };
+
+window.showBulkerSubmissionMenu = (event, submissionId) => {
+            event.stopPropagation();
+            showNotification('Options for this submission will be linked soon.');
         };
 
 window.showBulkerSubmissionDetail = (submissionId) => {
@@ -2035,7 +2221,15 @@ window.showBulkerSubmissionDetail = (submissionId) => {
                 ${getPageFooter()}
             `;
 
-            showPage(content, { returnTo: 'task-overview', keepBottomNav: false, onBack: () => window.showBulkerTaskOverview(s.task_id || s.taskId) });
+            const returnPage = window.bulkerSubmissionDetailReturnPage === 'all-submissions' ? 'all-submissions' : 'task-overview';
+            const onBackCallback = () => {
+                if (window.bulkerSubmissionDetailReturnPage === 'all-submissions') {
+                    window.showBulkerAllSubmissions(s.task_id || s.taskId, window.bulkerAllSubmissionsFilter || 'all');
+                } else {
+                    window.showBulkerTaskOverview(s.task_id || s.taskId);
+                }
+            };
+            showPage(content, { returnTo: returnPage, keepBottomNav: false, onBack: onBackCallback });
 
             const userScreenshotImg = document.getElementById('bulker-detail-screenshot-img');
             if (userScreenshotImg) {
