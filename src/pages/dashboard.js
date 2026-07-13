@@ -1397,64 +1397,64 @@ window.showUserTaskHistoryDetail = (submissionId) => {
                 </header>
 
                 <div class="max-w-xl mx-auto space-y-4 pb-24 px-4 pt-4 text-left">
-                    <!-- App Card Header (Premium Border Box) -->
-                    <div class="bg-white dark:bg-gray-800 p-4 rounded-2xl border border-gray-150 dark:border-gray-750 shadow-sm overflow-hidden select-none">
-                        <div class="flex items-center justify-between gap-3">
-                            <div class="flex items-center gap-2.5 min-w-0">
-                                <img src="${escapeHtml(appLogo)}" class="h-14 w-14 rounded-2xl object-cover shrink-0 border border-gray-100 dark:border-gray-700 shadow-sm" onerror="this.src='https://cdn-icons-png.flaticon.com/512/3176/3176366.png';">
+                    <!-- App Card Header (Premium Border Box - Compact) -->
+                    <div class="bg-white dark:bg-gray-800 py-2.5 px-3 rounded-2xl border border-gray-150 dark:border-gray-750 shadow-sm overflow-hidden select-none">
+                        <div class="flex items-center justify-between gap-2.5">
+                            <div class="flex items-center gap-2 min-w-0">
+                                <img src="${escapeHtml(appLogo)}" class="h-11 w-11 rounded-xl object-cover shrink-0 border border-gray-100 dark:border-gray-700 shadow-sm" onerror="this.src='https://cdn-icons-png.flaticon.com/512/3176/3176366.png';">
                                 <div class="min-w-0">
-                                    <h3 class="text-base font-black text-gray-900 dark:text-white truncate">${escapeHtml(s.app_name || 'Task Submission')}</h3>
-                                    <div class="flex items-center gap-1.5 mt-1 text-xs text-gray-400 font-semibold">
-                                        <img src="https://upload.wikimedia.org/wikipedia/commons/d/d0/Google_Play_Arrow_logo.svg" class="h-3.5 w-3.5 object-contain shrink-0" alt="Play Store">
+                                    <h3 class="text-sm font-black text-gray-900 dark:text-white truncate leading-tight">${escapeHtml(s.app_name || 'Task Submission')}</h3>
+                                    <div class="flex items-center gap-1 mt-0.5 text-[11px] text-gray-400 font-semibold leading-tight">
+                                        <img src="https://upload.wikimedia.org/wikipedia/commons/d/d0/Google_Play_Arrow_logo.svg" class="h-3 w-3 object-contain shrink-0" alt="Play Store">
                                         <span>Play Store Review</span>
                                     </div>
                                 </div>
                             </div>
                             <!-- Payout square box badge -->
-                            <div class="flex items-center justify-center h-12 w-12 rounded-xl bg-purple-50 dark:bg-purple-950/20 border border-purple-100 dark:border-purple-900/30 shrink-0">
-                                <span class="text-base font-black text-purple-600 dark:text-purple-400">₹${s.reward}</span>
+                            <div class="flex items-center justify-center h-10 w-10 rounded-xl bg-purple-50 dark:bg-purple-950/20 border border-purple-100 dark:border-purple-900/30 shrink-0">
+                                <span class="text-sm font-black text-purple-600 dark:text-purple-400">₹${s.reward}</span>
                             </div>
                         </div>
                     </div>
 
                     <!-- Row of 3 stats cards -->
-                    <div class="bg-white dark:bg-gray-800 rounded-2xl border border-gray-150 dark:border-gray-700 py-3.5 px-2.5 shadow-[0_2px_8px_rgba(0,0,0,0.01)]">
+                    <div class="bg-white dark:bg-gray-800 rounded-2xl border border-gray-150 dark:border-gray-700 py-3 px-2 shadow-[0_2px_8px_rgba(0,0,0,0.01)]">
                         <div class="grid grid-cols-3 divide-x divide-gray-150 dark:divide-gray-700 text-left select-none">
                             <!-- Payout Card -->
-                            <div class="flex items-center gap-2.5 pl-2">
+                            <div class="flex items-center gap-2 pl-1.5">
                                 <div class="text-emerald-500 shrink-0">
-                                    <svg class="h-6.5 w-6.5" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24">
+                                    <svg class="h-6 w-6 text-emerald-500 shrink-0" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24" style="width: 24px; height: 24px;">
                                         <path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75 11.25 15 15 9.75M21 12c0 1.268-.63 2.39-1.593 3.068a3.745 3.745 0 0 1-1.043 3.296 3.745 3.745 0 0 1-3.296 1.043A3.745 3.745 0 0 1 12 21c-1.268 0-2.39-.63-3.068-1.593a3.746 3.746 0 0 1-3.296-1.043 3.745 3.745 0 0 1-1.043-3.296A3.745 3.745 0 0 1 3 12c0-1.268.63-2.39 1.593-3.068a3.745 3.745 0 0 1 1.043-3.296 3.746 3.746 0 0 1 3.296-1.043A3.746 3.746 0 0 1 12 3c1.268 0 2.39.63 3.068 1.593a3.746 3.746 0 0 1 3.296 1.043 3.746 3.746 0 0 1 1.043 3.296A3.745 3.745 0 0 1 21 12Z" />
                                     </svg>
                                 </div>
                                 <div class="min-w-0">
-                                    <p class="text-[10px] text-gray-400 font-bold uppercase tracking-wider leading-none">Payout</p>
+                                    <p class="text-[9px] text-gray-400 font-bold uppercase tracking-wider leading-none">Payout</p>
                                     <p class="text-xs font-black text-gray-800 dark:text-white mt-1 leading-none">₹${s.reward}</p>
                                 </div>
                             </div>
                             
                             <!-- Approval Time Card -->
-                            <div class="flex items-center gap-2.5 pl-3">
+                            <div class="flex items-center gap-2 pl-2">
                                 <div class="text-blue-500 shrink-0">
-                                    <svg class="h-6.5 w-6.5" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24">
+                                    <svg class="h-6 w-6 text-blue-500 shrink-0" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24" style="width: 24px; height: 24px;">
                                         <path stroke-linecap="round" stroke-linejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
                                     </svg>
                                 </div>
                                 <div class="min-w-0">
-                                    <p class="text-[10px] text-gray-400 font-bold uppercase tracking-wider leading-none">Approval Time</p>
+                                    <p class="text-[9px] text-gray-400 font-bold uppercase tracking-wider leading-none">Approval</p>
                                     <p class="text-xs font-black text-gray-800 dark:text-white mt-1 leading-none">${delayDays === 0 ? 'Instant' : `${delayDays} Days`}</p>
                                 </div>
                             </div>
                             
                             <!-- Task Type Card -->
-                            <div class="flex items-center gap-2.5 pl-3">
+                            <div class="flex items-center gap-2 pl-2">
                                 <div class="text-purple-500 shrink-0">
-                                    <svg class="h-6.5 w-6.5" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24">
+                                    <svg class="h-6 w-6 text-purple-500 shrink-0" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24" style="width: 24px; height: 24px;">
                                         <path stroke-linecap="round" stroke-linejoin="round" d="M20.25 7.5l-.625 10.632a2.25 2.25 0 0 1-2.247 2.118H6.622a2.25 2.25 0 0 1-2.247-2.118L3.75 7.5M10 11.25h4M3.375 7.5h17.25c.621 0 1.125-.504 1.125-1.125v-1.5c0-.621-.504-1.125-1.125-1.125H3.375c-.621 0-1.125.504-1.125 1.125v1.5c0 .621.504 1.125 1.125 1.125z" />
                                     </svg>
                                 </div>
                                 <div class="min-w-0">
-                                    <p class="text-[10px] text-gray-400 font-bold uppercase tracking-wider leading-none">Task Type</p>
+                                    <p class="text-[9px] text-gray-400 font-bold uppercase tracking-wider leading-none">Task Type</p>
                                     <p class="text-xs font-black text-gray-800 dark:text-white mt-1 leading-none">${isReviewTask ? 'Play Store' : 'Others'}</p>
                                 </div>
                             </div>
