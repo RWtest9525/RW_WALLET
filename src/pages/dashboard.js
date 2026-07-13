@@ -950,24 +950,29 @@ const getUserTaskHistoryListHtml = () => {
             // STATUS MEANING MAPPING
             let statusColor = 'blue';
             let statusText = 'Under Review';
+            let statusEmoji = '🔵';
             let statusIcon = `<svg class="h-3.5 w-3.5 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0 3.181 3.183a8.25 8.25 0 0 0 13.803-3.7M4.031 9.865a8.25 8.25 0 0 1 13.803-3.7l3.181 3.182m0-4.991v4.99"></path></svg>`;
 
             if (s.manual_status === 'approved') {
                 statusColor = 'emerald';
                 statusText = 'Approved';
+                statusEmoji = '🟢';
                 statusIcon = `<svg class="h-3.5 w-3.5 text-emerald-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="3"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"></path></svg>`;
             } else if (s.manual_status === 'rejected') {
                 statusColor = 'rose';
                 statusText = 'Rejected';
+                statusEmoji = '🔴';
                 statusIcon = `<svg class="h-3.5 w-3.5 text-rose-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="m9.75 9.75 4.5 4.5m0-4.5-4.5 4.5M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z"></path></svg>`;
             } else if (s.manual_status === 'pending') {
                 if (s.ocr_status === 'completed') {
                     statusColor = 'orange';
                     statusText = 'Pending';
+                    statusEmoji = '🟡';
                     statusIcon = `<svg class="h-3.5 w-3.5 text-orange-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z"></path></svg>`;
                 } else {
                     statusColor = 'blue';
                     statusText = 'Under Review';
+                    statusEmoji = '🔵';
                     statusIcon = `<svg class="h-3.5 w-3.5 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0 3.181 3.183a8.25 8.25 0 0 0 13.803-3.7M4.031 9.865a8.25 8.25 0 0 1 13.803-3.7l3.181 3.182m0-4.991v4.99"></path></svg>`;
                 }
             }
