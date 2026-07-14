@@ -349,6 +349,12 @@ document.body.addEventListener('click', (e) => {
             e.stopPropagation();
 
             switch (action) {
+                case 'show-user-actions-menu':
+                    if (window.showUserActionsModal) {
+                        window.showUserActionsModal(userid);
+                    }
+                    break;
+
                 case 'copy-text':
                     handleCopyText(text, target);
                     break;

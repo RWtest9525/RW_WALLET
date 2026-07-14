@@ -281,21 +281,9 @@ const renderAdminUsersList = (users) => {
                         <p class="text-xs font-bold ${isMinusBalance ? 'text-red-600 dark:text-red-300' : 'text-blue-600 dark:text-blue-400'} mt-1">Balance: ${formatCompactBalance(balance)}</p>
                         ${isMinusBalance ? '<p class="text-[10px] font-semibold text-red-500 dark:text-red-300 mt-0.5">Check pending withdrawals before approving more payouts.</p>' : ''}
                     </div>
-                    <details class="admin-user-actions relative shrink-0">
-                        <summary class="list-none h-9 w-9 rounded-full bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 shadow-sm flex items-center justify-center cursor-pointer text-gray-600 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700">
-                            <span class="text-xl leading-none -mt-1">...</span>
-                        </summary>
-                        <div class="absolute right-0 top-10 z-30 w-36 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 shadow-xl p-1.5 text-xs font-bold">
-                            <button data-action="view-user-dashboard" data-userid="${u.id}" class="w-full text-left px-3 py-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-emerald-700 dark:text-emerald-300">View</button>
-                            <button data-action="edit-user-balance" data-userid="${u.id}" class="w-full text-left px-3 py-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-blue-700 dark:text-blue-300">Edit</button>
-                            <button data-action="flag-user" data-userid="${u.id}" data-flagged="${u.isFlagged || false}" class="w-full text-left px-3 py-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-orange-600 dark:text-orange-300">${u.isFlagged ? 'Unflag' : 'Flag'}</button>
-                            ${currentUserData?.role !== 'admin' ? `
-                            <button data-action="toggle-pro-user" data-userid="${u.id}" data-pro="${u.isProProfile || false}" class="w-full text-left px-3 py-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-indigo-700 dark:text-indigo-300">${u.isProProfile ? 'Remove Pro' : 'Make Pro'}</button>
-                            ` : ''}
-                            <button data-action="promote-user-tier" data-userid="${u.id}" data-tier="${getTaskTier(u)}" class="w-full text-left px-3 py-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-purple-700 dark:text-purple-300">Promote User</button>
-                            <button data-action="delete-user" data-userid="${u.id}" data-username="${escapeHtml(u.name || u.email || 'User')}" class="w-full text-left px-3 py-2 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/30 text-red-600 dark:text-red-300">Delete</button>
-                        </div>
-                    </details>
+                    <button data-action="show-user-actions-menu" data-userid="${u.id}" class="h-9 w-9 rounded-full bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 shadow-sm flex items-center justify-center cursor-pointer text-gray-600 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 shrink-0" style="outline: none;">
+                        <span class="text-xl leading-none -mt-1 font-bold">...</span>
+                    </button>
                 </div>`;
             };
 
@@ -626,6 +614,52 @@ const renderAdminUserTransactions = () => {
             }).join('') : '<p class="text-center text-gray-500 py-6">No transactions found.</p>';
         };
 
+const showUserActionsModal = (userId) => {
+            const u = allUsersCache.find(user => user.id === userId);
+            if (!u) return;
+
+            const balance = getUserAvailableBalance(u);
+            const isOwner = currentUserData?.role !== 'admin';
+
+            const content = `
+                <div class="space-y-4 text-left">
+                    <div class="rounded-2xl bg-gray-50 dark:bg-gray-750 p-4 border border-gray-150 dark:border-gray-700">
+                        <h4 class="font-extrabold text-gray-900 dark:text-white text-base">${escapeHtml(u.name || 'No Name')}</h4>
+                        <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">${escapeHtml(u.email || '')}</p>
+                        <p class="text-xs text-gray-500 dark:text-gray-400">${escapeHtml(u.mobile || 'No Mobile')}</p>
+                        <p class="text-xs font-bold text-blue-600 dark:text-blue-400 mt-2">Balance: ${formatCurrency(balance)}</p>
+                    </div>
+                    
+                    <div class="grid grid-cols-1 gap-2">
+                        <button data-action="view-user-dashboard" data-userid="${u.id}" onclick="window.closeModal()" class="w-full text-center px-4 py-3 rounded-xl bg-emerald-50 dark:bg-emerald-950/20 text-emerald-700 dark:text-emerald-300 font-bold text-sm border border-emerald-100/50 hover:bg-emerald-100/50 transition">
+                            🔍 View Dashboard
+                        </button>
+                        <button data-action="edit-user-balance" data-userid="${u.id}" onclick="window.closeModal()" class="w-full text-center px-4 py-3 rounded-xl bg-blue-50 dark:bg-blue-955/20 text-blue-700 dark:text-blue-300 font-bold text-sm border border-blue-100/50 hover:bg-blue-100/50 transition">
+                            💵 Edit Balance
+                        </button>
+                        <button data-action="flag-user" data-userid="${u.id}" data-flagged="${u.isFlagged || false}" onclick="window.closeModal()" class="w-full text-center px-4 py-3 rounded-xl bg-orange-50 dark:bg-orange-950/20 text-orange-700 dark:text-orange-300 font-bold text-sm border border-orange-100/50 hover:bg-orange-100/50 transition">
+                            ⚠️ ${u.isFlagged ? 'Unflag User' : 'Flag User'}
+                        </button>
+                        
+                        ${isOwner ? `
+                        <button data-action="toggle-pro-user" data-userid="${u.id}" data-pro="${u.isProProfile || false}" onclick="window.closeModal()" class="w-full text-center px-4 py-3 rounded-xl bg-indigo-50 dark:bg-indigo-950/20 text-indigo-700 dark:text-indigo-300 font-bold text-sm border border-indigo-100/50 hover:bg-indigo-100/50 transition">
+                            ✨ ${u.isProProfile ? 'Remove Pro Status' : 'Make Pro Profile'}
+                        </button>
+                        ` : ''}
+                        
+                        <button data-action="promote-user-tier" data-userid="${u.id}" data-tier="${getTaskTier(u)}" onclick="window.closeModal()" class="w-full text-center px-4 py-3 rounded-xl bg-purple-50 dark:bg-purple-950/20 text-purple-700 dark:text-purple-300 font-bold text-sm border border-purple-100/50 hover:bg-purple-100/50 transition">
+                            🚀 Promote User
+                        </button>
+                        <button data-action="delete-user" data-userid="${u.id}" data-username="${escapeHtml(u.name || u.email || 'User')}" onclick="window.closeModal()" class="w-full text-center px-4 py-3 rounded-xl bg-red-50 dark:bg-red-955/20 text-red-600 dark:text-red-300 font-bold text-sm border border-red-100/50 hover:bg-red-100/50 transition">
+                            🗑️ Delete User
+                        </button>
+                    </div>
+                </div>
+            `;
+
+            renderModal('User Actions', content, `<button onclick="window.closeModal()" class="px-5 py-2.5 text-xs font-bold bg-gray-100 dark:bg-gray-700 rounded-xl hover:bg-gray-200 dark:hover:bg-gray-600">Close</button>`, 'max-w-sm');
+        };
+
 // Expose functions to window for global access
 window.isAdminUserRecord = isAdminUserRecord;
 window.applyAdminUsersCache = applyAdminUsersCache;
@@ -638,3 +672,4 @@ window.updateAdminUserListView = updateAdminUserListView;
 window.showAdminUserDashboardPage = showAdminUserDashboardPage;
 window.loadAdminUserPendingWithdrawals = loadAdminUserPendingWithdrawals;
 window.renderAdminUserTransactions = renderAdminUserTransactions;
+window.showUserActionsModal = showUserActionsModal;
