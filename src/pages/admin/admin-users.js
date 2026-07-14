@@ -288,7 +288,7 @@ const renderAdminUsersList = (users) => {
                             <button data-action="edit-user-balance" data-userid="${u.id}" class="w-full text-left px-3 py-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-blue-700 dark:text-blue-300">Edit</button>
                             <button data-action="flag-user" data-userid="${u.id}" data-flagged="${u.isFlagged || false}" class="w-full text-left px-3 py-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-orange-600 dark:text-orange-300">${u.isFlagged ? 'Unflag' : 'Flag'}</button>
                             <button data-action="toggle-pro-user" data-userid="${u.id}" data-pro="${u.isProProfile || false}" class="w-full text-left px-3 py-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-indigo-700 dark:text-indigo-300">${u.isProProfile ? 'Remove Pro' : 'Make Pro'}</button>
-                            <button data-action="promote-user-tier" data-userid="${u.id}" data-tier="${getTaskTier(u)}" class="w-full text-left px-3 py-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-purple-700 dark:text-purple-300">Set Tier</button>
+                            <button data-action="promote-user-tier" data-userid="${u.id}" data-tier="${getTaskTier(u)}" class="w-full text-left px-3 py-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-purple-700 dark:text-purple-300">Promote User</button>
                             <button data-action="delete-user" data-userid="${u.id}" data-username="${escapeHtml(u.name || u.email || 'User')}" class="w-full text-left px-3 py-2 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/30 text-red-600 dark:text-red-300">Delete</button>
                         </div>
                     </details>
