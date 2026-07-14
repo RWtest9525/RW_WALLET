@@ -660,22 +660,26 @@ const findExistingUserByMobile = async (mobile, excludeUid = '') => {
 const userMatchesSearch = (user = {}, searchTerm = '') => {
             const rawSearch = String(searchTerm || '').trim().toLowerCase();
             if (!rawSearch) return true;
+            
+            // 1. If search term contains '@', only search in email
+            if (rawSearch.includes('@')) {
+                const userEmail = String(user.email || '').toLowerCase();
+                return userEmail.includes(rawSearch);
+            }
+            
+            // 2. If search term contains phone digits
             const digitSearch = normalizePhoneDigits(rawSearch);
-            const userDigits = normalizePhoneDigits(getUserMobileValue(user));
-            return [
-                user.email,
-                user.name,
-                user.fullName,
-                user.displayName,
-                user.mobile,
-                user.phoneNumber,
-                user.phone,
-                user.userMobile,
-                user.contactNumber,
-                user.id,
-                user.uid
-            ].some(value => String(value || '').toLowerCase().includes(rawSearch))
-                || (!!digitSearch && userDigits.includes(digitSearch));
+            if (digitSearch && /^\d+$/.test(digitSearch) && digitSearch.length >= 3) {
+                const userDigits = normalizePhoneDigits(getUserMobileValue(user));
+                return userDigits.includes(digitSearch);
+            }
+            
+            // 3. General search: Name, Email prefix, or User ID
+            const userName = String(user.name || user.fullName || user.displayName || '').toLowerCase();
+            const userEmail = String(user.email || '').toLowerCase();
+            const userId = String(user.id || user.uid || '').toLowerCase();
+            
+            return userName.includes(rawSearch) || userEmail.includes(rawSearch) || userId.includes(rawSearch);
         };
 
 const maskMobile = (mobile) => {
