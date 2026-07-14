@@ -351,6 +351,8 @@ async function initSchema(d1) {
   `);
   await d1.query(`CREATE INDEX IF NOT EXISTS idx_task_reservations_task_status ON task_comment_reservations (task_id, status, expires_at)`);
   await d1.query(`CREATE INDEX IF NOT EXISTS idx_task_reservations_user ON task_comment_reservations (user_id, status)`);
+  await d1.query(`CREATE UNIQUE INDEX IF NOT EXISTS idx_active_task_comments ON task_comment_reservations (task_id, comment) WHERE status IN ('reserved', 'submitted')`);
+
 
   await d1.query(`
     CREATE TABLE IF NOT EXISTS task_submissions (
@@ -1266,61 +1268,64 @@ async function reserveTaskComment(d1, { taskId, userId, userName, userEmail, com
     if (submitted) throw new Error('TASK_ALREADY_SUBMITTED');
   }
 
-  // Find used comments by other active reservations
-  let activeReservations;
-  if (isBulker) {
-    // Bulkers shouldn't reuse comments they themselves or others have already reserved or submitted
-    activeReservations = await d1.all(
-      `SELECT comment FROM task_comment_reservations WHERE task_id = ? AND status IN ('reserved', 'submitted') AND (expires_at > ? OR status = 'submitted')`,
-      [taskId, nowMs()]
-    );
-  } else {
-    activeReservations = await d1.all(
-      `SELECT comment FROM task_comment_reservations WHERE task_id = ? AND status IN ('reserved', 'submitted') AND (expires_at > ? OR status = 'submitted') AND user_id != ?`,
-      [taskId, nowMs(), userId]
-    );
-  }
-  const usedComments = new Set(activeReservations.map(r => r.comment));
-
-  // Pick first available comment
+  // Pick first available comment with retry loop
   const commentsList = (Array.isArray(comments) ? comments : []).map(c => String(c || '').trim()).filter(Boolean);
   if (commentsList.length === 0) {
     throw new Error('NO_COMMENTS_AVAILABLE');
   }
 
-  const comment = commentsList.find(c => !usedComments.has(c));
-  if (!comment) {
-    throw new Error('NO_COMMENTS_AVAILABLE');
+  let attempt = 0;
+  while (attempt < 5) {
+    attempt++;
+    let activeReservations;
+    if (isBulker) {
+      activeReservations = await d1.all(
+        `SELECT comment FROM task_comment_reservations WHERE task_id = ? AND status IN ('reserved', 'submitted') AND (expires_at > ? OR status = 'submitted')`,
+        [taskId, nowMs()]
+      );
+    } else {
+      activeReservations = await d1.all(
+        `SELECT comment FROM task_comment_reservations WHERE task_id = ? AND status IN ('reserved', 'submitted') AND (expires_at > ? OR status = 'submitted') AND user_id != ?`,
+        [taskId, nowMs(), userId]
+      );
+    }
+    const usedComments = new Set(activeReservations.map(r => r.comment));
+    const comment = commentsList.find(c => !usedComments.has(c));
+    if (!comment) {
+      throw new Error('NO_COMMENTS_AVAILABLE');
+    }
+    const commentIndex = commentsList.indexOf(comment);
+
+    const now = nowMs();
+    let expiresAt = now + reservationMs;
+    if (isBulker) {
+      const d = new Date();
+      const istOffset = 5.5 * 60 * 60 * 1000;
+      const istTime = d.getTime() + istOffset;
+      const istDate = new Date(istTime);
+      const endOfTodayIST = Date.UTC(istDate.getUTCFullYear(), istDate.getUTCMonth(), istDate.getUTCDate() + 1, 0, 0, 0, 0) - istOffset;
+      expiresAt = endOfTodayIST;
+    }
+
+    const id = `res_${taskId.slice(0,12)}_${userId.slice(0,12)}_${now}`;
+    const detailsObj = { userName: userName || '', userEmail: userEmail || '' };
+
+    try {
+      await d1.query(
+        `INSERT INTO task_comment_reservations (id, task_id, user_id, comment, comment_index, status, reserved_at, expires_at, details_json)
+         VALUES (?, ?, ?, ?, ?, 'reserved', ?, ?, ?)`,
+        [id, taskId, userId, comment, commentIndex, now, expiresAt, JSON.stringify(detailsObj)]
+      );
+      return { id, task_id: taskId, user_id: userId, comment, comment_index: commentIndex, status: 'reserved', reserved_at: now, expires_at: expiresAt, ...detailsObj };
+    } catch (err) {
+      if (String(err.message || '').includes('UNIQUE constraint failed')) {
+        console.warn(`Unique constraint hit for comment "${comment}", retrying...`);
+        continue;
+      }
+      throw err;
+    }
   }
-  const commentIndex = commentsList.indexOf(comment);
-
-  const now = nowMs();
-  let expiresAt = now + reservationMs;
-  if (isBulker) {
-    // Expire at midnight IST today (12:00 AM of tomorrow IST)
-    const d = new Date();
-    const istOffset = 5.5 * 60 * 60 * 1000;
-    const istTime = d.getTime() + istOffset;
-    const istDate = new Date(istTime);
-    const endOfTodayIST = Date.UTC(istDate.getUTCFullYear(), istDate.getUTCMonth(), istDate.getUTCDate() + 1, 0, 0, 0, 0) - istOffset;
-    expiresAt = endOfTodayIST;
-  }
-
-  const id = `res_${taskId.slice(0,12)}_${userId.slice(0,12)}_${now}`;
-
-  const detailsObj = { userName: userName || '', userEmail: userEmail || '' };
-
-  await d1.query(
-    `INSERT INTO task_comment_reservations (id, task_id, user_id, comment, comment_index, status, reserved_at, expires_at, details_json)
-     VALUES (?, ?, ?, ?, ?, 'reserved', ?, ?, ?)
-     ON CONFLICT(id) DO UPDATE SET
-       comment = excluded.comment, comment_index = excluded.comment_index,
-       status = 'reserved', reserved_at = excluded.reserved_at,
-       expires_at = excluded.expires_at, details_json = excluded.details_json`,
-    [id, taskId, userId, comment, commentIndex, now, expiresAt, JSON.stringify(detailsObj)]
-  );
-
-  return { id, task_id: taskId, user_id: userId, comment, comment_index: commentIndex, status: 'reserved', reserved_at: now, expires_at: expiresAt, ...detailsObj };
+  throw new Error('NO_COMMENTS_AVAILABLE');
 }
 
 async function getTaskReservation(d1, taskId, userId) {
@@ -3127,8 +3132,172 @@ ${memoriesContext}`
   });
 
   app.get('/api/task-reservations/:taskId', requireHttpAuth, async (req, res) => {
-    const reservation = await getTaskReservation(d1, req.params.taskId, req.auth.sub);
-    res.json({ ok: true, reservation });
+    try {
+      const isBulker = await checkIsBulker(d1, req.auth.sub);
+      if (isBulker) {
+        const reservations = await d1.all(
+          `SELECT * FROM task_comment_reservations WHERE task_id = ? AND user_id = ? AND status = 'reserved' AND expires_at > ? ORDER BY reserved_at ASC`,
+          [req.params.taskId, req.auth.sub, nowMs()]
+        );
+        const formatted = reservations.map(r => {
+          let details = {};
+          try { details = r.details_json ? JSON.parse(r.details_json) : {}; } catch {}
+          return { ...details, ...r, details_json: undefined };
+        });
+        res.json({ ok: true, isBulker: true, reservations: formatted });
+      } else {
+        const reservation = await getTaskReservation(d1, req.params.taskId, req.auth.sub);
+        res.json({ ok: true, isBulker: false, reservation });
+      }
+    } catch (err) {
+      console.error('Failed to get task reservations:', err);
+      res.status(500).json({ ok: false, error: 'GET_RESERVATIONS_FAILED' });
+    }
+  });
+
+  app.get('/api/tasks/:taskId/availability', requireHttpAuth, async (req, res) => {
+    try {
+      await cleanupExpiredReservations(d1);
+      const userId = req.auth.sub;
+      const isBulker = await checkIsBulker(d1, userId);
+      
+      const taskDoc = await db.doc(`artifacts/digital-wallet-prod/public/data/tasks/${req.params.taskId}`).get();
+      if (!taskDoc.exists) {
+        return res.status(404).json({ ok: false, error: 'TASK_NOT_FOUND' });
+      }
+      
+      const taskData = taskDoc.data() || {};
+      const getTaskCommentPool = (t = {}) => {
+        const src = Array.isArray(t.reviewComments) && t.reviewComments.length
+            ? t.reviewComments
+            : String(t.reviewComment || t.commentToCopy || '').split(/\r?\n/);
+        return src.map(v => String(v || '').trim()).filter(Boolean);
+      };
+      
+      const commentPool = getTaskCommentPool(taskData);
+      
+      // Get all active reservations or submissions for this task
+      const activeReservations = isBulker
+        ? await d1.all(
+            `SELECT comment FROM task_comment_reservations WHERE task_id = ? AND status IN ('reserved', 'submitted') AND (expires_at > ? OR status = 'submitted')`,
+            [req.params.taskId, nowMs()]
+          ).catch(() => [])
+        : await d1.all(
+            `SELECT comment FROM task_comment_reservations WHERE task_id = ? AND status IN ('reserved', 'submitted') AND (expires_at > ? OR status = 'submitted') AND NOT (user_id = ? AND status = 'reserved')`,
+            [req.params.taskId, nowMs(), userId]
+          ).catch(() => []);
+      
+      const usedSet = new Set(activeReservations.map(r => String(r.comment).trim()));
+      const availableComments = commentPool.filter(c => !usedSet.has(c));
+      
+      res.json({
+        ok: true,
+        totalCount: commentPool.length,
+        availableCount: availableComments.length,
+        availableComments
+      });
+    } catch (error) {
+      console.error('Failed to get task availability:', error);
+      res.status(500).json({ ok: false, error: 'AVAILABILITY_FAILED' });
+    }
+  });
+
+  app.post('/api/task-reservations/bulk', requireHttpAuth, async (req, res) => {
+    try {
+      await cleanupExpiredReservations(d1);
+      const userId = req.auth.sub;
+      const { taskId, count } = req.body;
+      const requestedCount = Math.max(1, parseInt(count) || 1);
+      
+      const isBulker = await checkIsBulker(d1, userId);
+      if (!isBulker) {
+        return res.status(403).json({ ok: false, error: 'BULKER_ROLE_REQUIRED' });
+      }
+      
+      const taskDoc = await db.doc(`artifacts/digital-wallet-prod/public/data/tasks/${taskId}`).get();
+      if (!taskDoc.exists) {
+        return res.status(404).json({ ok: false, error: 'TASK_NOT_FOUND' });
+      }
+      
+      const taskData = taskDoc.data() || {};
+      const getTaskCommentPool = (t = {}) => {
+        const src = Array.isArray(t.reviewComments) && t.reviewComments.length
+            ? t.reviewComments
+            : String(t.commentToCopy || t.reviewComment || '').split(/\r?\n/);
+        return src.map(v => String(v || '').trim()).filter(Boolean);
+      };
+      const commentPool = getTaskCommentPool(taskData);
+      if (commentPool.length === 0) {
+        return res.status(400).json({ ok: false, error: 'NO_COMMENTS_AVAILABLE' });
+      }
+      
+      const reservedComments = [];
+      
+      // Calculate midnight expiry for bulkers
+      const d = new Date();
+      const istOffset = 5.5 * 60 * 60 * 1000;
+      const istTime = d.getTime() + istOffset;
+      const istDate = new Date(istTime);
+      const endOfTodayIST = Date.UTC(istDate.getUTCFullYear(), istDate.getUTCMonth(), istDate.getUTCDate() + 1, 0, 0, 0, 0) - istOffset;
+      const expiresAt = endOfTodayIST;
+      
+      const userName = req.auth.name || req.auth.email || 'User';
+      const userEmail = req.auth.email || '';
+      
+      let reservedCount = 0;
+      let attempt = 0;
+      
+      while (reservedCount < requestedCount && attempt < 100) {
+        attempt++;
+        
+        const activeReservations = await d1.all(
+          `SELECT comment FROM task_comment_reservations WHERE task_id = ? AND status IN ('reserved', 'submitted') AND (expires_at > ? OR status = 'submitted')`,
+          [taskId, nowMs()]
+        ).catch(() => []);
+        
+        const usedSet = new Set(activeReservations.map(r => String(r.comment).trim()));
+        const availableList = commentPool.filter(c => !usedSet.has(c));
+        
+        if (availableList.length === 0) {
+          break; 
+        }
+        
+        const commentToReserve = availableList[0];
+        const commentIndex = commentPool.indexOf(commentToReserve);
+        const id = `res_bulk_${taskId.slice(0,12)}_${userId.slice(0,12)}_${nowMs()}_${reservedCount}`;
+        const detailsObj = { userName, userEmail };
+        
+        try {
+          await d1.query(
+            `INSERT INTO task_comment_reservations (id, task_id, user_id, comment, comment_index, status, reserved_at, expires_at, details_json)
+             VALUES (?, ?, ?, ?, ?, 'reserved', ?, ?, ?)`,
+            [id, taskId, userId, commentToReserve, commentIndex, nowMs(), expiresAt, JSON.stringify(detailsObj)]
+          );
+          reservedComments.push({
+            id,
+            comment: commentToReserve,
+            commentIndex
+          });
+          reservedCount++;
+        } catch (err) {
+          if (String(err.message || '').includes('UNIQUE constraint failed')) {
+            console.warn(`Unique constraint hit in bulk reserve for comment "${commentToReserve}", retrying...`);
+            continue; 
+          }
+          throw err;
+        }
+      }
+      
+      res.json({
+        ok: true,
+        reservedComments,
+        requestedCount,
+        actualCount: reservedComments.length
+      });
+    } catch (error) {
+      console.error('Failed bulk reservation:', error);
+      res.status(500).json({ ok: false, error: 'BULK_RESERVATION_FAILED' });
+    }
   });
 
   app.get('/api/admin/task-reservations/:taskId', requireHttpAuth, async (req, res) => {
