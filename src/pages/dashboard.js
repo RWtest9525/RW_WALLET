@@ -1591,7 +1591,7 @@ window.showUserTaskHistoryDetail = (submissionId) => {
                                     <div class="flex flex-col gap-0.5 border-t border-rose-100/50 pt-2">
                                         <span class="text-gray-400 dark:text-gray-500">Details</span>
                                         <span class="font-medium text-gray-600 dark:text-gray-405 text-left text-[10px] leading-snug italic max-h-[40px] overflow-y-auto">
-                                            ${escapeHtml(s.reject_reason || (s.ocr_status === 'failed' ? 'OCR Verification failed.' : "We couldn't find your review on Play Store."))}
+                                            ${escapeHtml(s.reject_reason || (s.ocr_status === 'failed' ? 'Verification scan failed.' : "We couldn't find your review on Play Store."))}
                                         </span>
                                     </div>
                                 </div>
@@ -2258,7 +2258,7 @@ window.showBulkerSubmissionMenu = (event, submissionId) => {
                             <svg class="h-4 w-4 text-gray-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"></path></svg>
                         </button>
                         ` : s.manual_status === 'rejected' ? `
-                        <button class="w-full flex items-center justify-between p-3.5 rounded-2xl hover:bg-gray-50 dark:hover:bg-gray-750/30 transition text-left" onclick="window.closeBulkerSubmissionMenu(); window.showBulkerRejectionReasonDialog('${escapeHtml(s.reject_reason || (s.ocr_status === 'failed' ? 'OCR Verification Failed' : 'Review comment not found on Play Store'))}')" style="outline: none;">
+                        <button class="w-full flex items-center justify-between p-3.5 rounded-2xl hover:bg-gray-50 dark:hover:bg-gray-750/30 transition text-left" onclick="window.closeBulkerSubmissionMenu(); window.showBulkerRejectionReasonDialog('${escapeHtml(s.reject_reason || (s.ocr_status === 'failed' ? 'Verification check failed' : 'Review comment not found on Play Store'))}')" style="outline: none;">
                             <div class="flex items-center gap-3">
                                 <span class="p-2 rounded-xl bg-rose-50 dark:bg-rose-955/20 text-rose-600 dark:text-rose-455 shrink-0">
                                     <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5">
@@ -2518,9 +2518,9 @@ window.showBulkerSubmissionDetail = (submissionId) => {
 
                             ${isReviewTask ? `
                             <div class="flex justify-between border-t border-gray-100 dark:border-gray-755 pt-3.5">
-                                <span class="text-gray-400">OCR Result</span>
+                                <span class="text-gray-400">User Name</span>
                                 <span class="font-extrabold text-gray-855 dark:text-white text-right max-w-[200px] truncate">
-                                    ${s.ocr_status === 'completed' ? `Success (${gmailName || 'Extracted'})` : s.ocr_status === 'failed' ? 'Failed' : 'Pending'}
+                                    ${gmailName || s.username || 'Not Available'}
                                 </span>
                             </div>
                             <div class="flex justify-between">
@@ -2535,7 +2535,7 @@ window.showBulkerSubmissionDetail = (submissionId) => {
                             <div class="flex justify-between border-t border-rose-100/50 pt-3 text-rose-600">
                                 <span>Rejection Reason</span>
                                 <span class="font-black text-rose-700 dark:text-rose-400 uppercase tracking-wide">
-                                    ${s.reject_reason || (s.ocr_status === 'failed' ? 'OCR failed' : 'Review not found')}
+                                    ${s.reject_reason || (s.ocr_status === 'failed' ? 'Auto check failed' : 'Review not found')}
                                 </span>
                             </div>
                             ` : ''}
@@ -3415,8 +3415,8 @@ const compressImage = async (file) => {
         img.onload = () => {
             URL.revokeObjectURL(img.src);
             const canvas = document.createElement('canvas');
-            const MAX_WIDTH = 1200;
-            const MAX_HEIGHT = 1600;
+            const MAX_WIDTH = 950;
+            const MAX_HEIGHT = 1250;
             let width = img.width;
             let height = img.height;
 
@@ -3445,7 +3445,7 @@ const compressImage = async (file) => {
                     lastModified: Date.now()
                 });
                 resolve(compressedFile.size < file.size ? compressedFile : file);
-            }, 'image/jpeg', 0.85);
+            }, 'image/jpeg', 0.70);
         };
         img.onerror = () => resolve(file);
     });
@@ -3474,6 +3474,51 @@ const generateMiniThumbnail = (file) => {
             resolve(canvas.toDataURL('image/jpeg', 0.7));
         };
         img.onerror = () => resolve(null);
+    });
+};
+
+// Helper for real-time progress uploading using XMLHttpRequest
+const uploadFileWithProgress = (url, file, headers, onProgress) => {
+    return new Promise((resolve, reject) => {
+        const xhr = new XMLHttpRequest();
+        xhr.open('POST', url, true);
+        
+        for (const [key, value] of Object.entries(headers)) {
+            xhr.setRequestHeader(key, value);
+        }
+        
+        if (xhr.upload && typeof onProgress === 'function') {
+            xhr.upload.onprogress = (e) => {
+                if (e.lengthComputable) {
+                    const percent = Math.round((e.loaded / e.total) * 100);
+                    onProgress(percent);
+                }
+            };
+        }
+        
+        xhr.onload = () => {
+            if (xhr.status >= 200 && xhr.status < 300) {
+                try {
+                    const data = JSON.parse(xhr.responseText);
+                    resolve({ ok: true, status: xhr.status, data });
+                } catch (err) {
+                    resolve({ ok: true, status: xhr.status, data: {} });
+                }
+            } else {
+                try {
+                    const data = JSON.parse(xhr.responseText);
+                    reject(new Error(data.detail || data.error || `Upload failed with status ${xhr.status}`));
+                } catch {
+                    reject(new Error(`Upload failed with status ${xhr.status}`));
+                }
+            }
+        };
+        
+        xhr.onerror = () => reject(new Error('Network error during upload'));
+        xhr.ontimeout = () => reject(new Error('Upload timeout'));
+        
+        xhr.timeout = 45000;
+        xhr.send(file);
     });
 };
 
@@ -3614,7 +3659,7 @@ class TaskUploadQueueManager {
         
         while (navigator.onLine) {
             // Count currently active uploads
-            const activeCount = queue.filter(item => item.status === 'Uploading' || item.status === 'OCR Processing').length;
+            const activeCount = queue.filter(item => item.status === 'Uploading' || item.status === 'System Checking').length;
             if (activeCount >= 5) {
                 break;
             }
@@ -3634,7 +3679,7 @@ class TaskUploadQueueManager {
 
     async uploadItem(taskId, item) {
         const fileToUpload = item.compressedFile || item.rawFile;
-        item.status = 'OCR Processing';
+        item.status = 'System Checking';
         item.progress = 10;
         this.notify(taskId);
 
@@ -3792,20 +3837,18 @@ class TaskUploadQueueManager {
                 assignedComment: matchedComment || ''
             });
 
-            const uploadResponse = await fetchWithTimeout(`${BACKEND_BASE_URL}/api/uploads/task-screenshot?${params.toString()}`, {
-                method: 'POST',
-                headers: {
-                    Authorization: `Bearer ${token}`,
-                    'Content-Type': fileToUpload.type || 'image/jpeg',
-                    'Content-Length': String(fileToUpload.size)
-                },
-                body: fileToUpload
-            }, 35000);
+            const uploadUrl = `${BACKEND_BASE_URL}/api/uploads/task-screenshot?${params.toString()}`;
+            const headers = {
+                Authorization: `Bearer ${token}`,
+                'Content-Type': fileToUpload.type || 'image/jpeg'
+            };
 
-            const uploadData = await uploadResponse.json().catch(() => ({}));
-            if (!uploadResponse.ok || !uploadData.ok) {
-                throw new Error(uploadData.detail || uploadData.error || 'Upload failed');
-            }
+            const uploadResult = await uploadFileWithProgress(uploadUrl, fileToUpload, headers, (percent) => {
+                item.progress = Math.round(40 + (percent * 0.45));
+                this.notify(taskId);
+            });
+
+            const uploadData = uploadResult.data;
 
             const verification = uploadData.verification;
             if (!verification) {
@@ -4305,15 +4348,7 @@ const showUserTaskDetailsPage = async (taskId) => {
                                     </div>
                                 </div>
 
-                                <!-- Submit Button (For Single User flow) -->
-                                ${isBulk ? '' : `
-                                    <button id="task-submit-mission-btn" class="mt-4 flex w-full items-center justify-center gap-2 rounded-2xl bg-gradient-to-r ${acc.bannerGradient} text-white font-extrabold tracking-wider px-4 py-3.5 text-xs uppercase shadow-md transition-all active:scale-[0.99] disabled:opacity-50" disabled>
-                                        <svg class="w-4 h-4 transform rotate-45" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"></path></svg>
-                                        <span>Submit Screenshot</span>
-                                    </button>
-                                `}
-
-                                <!-- Persistent Queue Progress UI -->
+                                ${isBulk ? `
                                 <div id="upload-queue-container" class="mt-4 space-y-3 hidden">
                                     <div class="flex items-center justify-between text-xs font-bold text-gray-600 dark:text-gray-400">
                                         <span>Upload Queue</span>
@@ -4359,6 +4394,7 @@ const showUserTaskDetailsPage = async (taskId) => {
                                         <!-- File cards rendered here dynamically -->
                                     </div>
                                 </div>
+                                ` : ''}
                             </div>
                         </div>
                     </div>
@@ -4651,7 +4687,7 @@ const showUserTaskDetailsPage = async (taskId) => {
 
                 const total = queue.length;
                 const uploaded = queue.filter(item => item.status === 'Uploaded').length;
-                const active = queue.filter(item => item.status === 'Uploading' || item.status === 'OCR Processing').length;
+                const active = queue.filter(item => item.status === 'Uploading' || item.status === 'System Checking').length;
                 const waiting = queue.filter(item => item.status === 'Waiting').length;
                 const failed = queue.filter(item => item.status === 'Failed').length;
 
@@ -4682,7 +4718,7 @@ const showUserTaskDetailsPage = async (taskId) => {
                         const statusColors = {
                             'Waiting': 'text-amber-500 bg-amber-50 dark:bg-amber-950/20 border-amber-200 dark:border-amber-900/30',
                             'Uploading': 'text-blue-500 bg-blue-50 dark:bg-blue-950/20 border-blue-200 dark:border-blue-900/30',
-                            'OCR Processing': 'text-purple-500 bg-purple-50 dark:bg-purple-950/20 border-purple-200 dark:border-purple-900/30',
+                            'System Checking': 'text-purple-500 bg-purple-50 dark:bg-purple-950/20 border-purple-200 dark:border-purple-900/30',
                             'Uploaded': 'text-green-600 bg-green-50 dark:bg-green-950/20 border-green-200 dark:border-green-900/30',
                             'Failed': 'text-red-600 bg-red-50 dark:bg-red-950/20 border-red-200 dark:border-red-900/30'
                         };
@@ -4709,7 +4745,7 @@ const showUserTaskDetailsPage = async (taskId) => {
                                     ? `<p class="text-[9px] font-semibold text-red-600 dark:text-red-400 bg-red-50/50 dark:bg-red-950/10 p-1.5 rounded-lg border border-red-100 dark:border-red-900/30 cursor-help" title="${escapeHtml(item.error)}">⚠️ ${escapeHtml(item.error)}</p>` 
                                     : ''
                                 }
-                                ${item.status === 'Uploading' || item.status === 'OCR Processing'
+                                ${item.status === 'Uploading' || item.status === 'System Checking'
                                     ? `<div class="h-1 w-full bg-gray-100 dark:bg-gray-700 rounded-full overflow-hidden">
                                          <div class="h-full bg-indigo-500 rounded-full transition-all duration-300" style="width: ${item.progress || 0}%"></div>
                                        </div>`
@@ -4721,22 +4757,20 @@ const showUserTaskDetailsPage = async (taskId) => {
                 }
             };
 
-            window.TaskUploadQueueManager.registerCallback(task.id, renderQueueUi);
+            if (isBulk) {
+                window.TaskUploadQueueManager.registerCallback(task.id, renderQueueUi);
 
-            const initialQueue = window.TaskUploadQueueManager.getQueue(task.id);
-            if (initialQueue.length > 0) {
-                renderQueueUi(initialQueue);
+                const initialQueue = window.TaskUploadQueueManager.getQueue(task.id);
+                if (initialQueue.length > 0) {
+                    renderQueueUi(initialQueue);
+                }
             }
 
             const fileInput = document.getElementById('task-proof-input');
-            const submitBtn = document.getElementById('task-submit-mission-btn');
             if (fileInput) {
                 fileInput.onchange = (event) => {
                     const files = Array.from(event.target.files || []);
-                    if (files.length === 0) {
-                        if (submitBtn) submitBtn.disabled = true;
-                        return;
-                    }
+                    if (files.length === 0) return;
                     
                     if (isBulk) {
                         window.TaskUploadQueueManager.addFiles(
@@ -4754,37 +4788,10 @@ const showUserTaskDetailsPage = async (taskId) => {
                         );
                         fileInput.value = '';
                     } else {
-                        const labelEl = document.getElementById('task-proof-label');
-                        if (labelEl) labelEl.textContent = files[0].name;
-                        if (submitBtn) submitBtn.disabled = false;
+                        const file = files[0];
+                        fileInput.value = '';
+                        window.submitSingleUserTask(task, file, reward, appName, taskLink, image, taskTitle);
                     }
-                };
-            }
-
-            if (submitBtn) {
-                submitBtn.onclick = () => {
-                    const files = Array.from(fileInput.files || []);
-                    if (files.length === 0) return;
-                    
-                    window.TaskUploadQueueManager.addFiles(
-                        task.id,
-                        files,
-                        isBulk,
-                        task,
-                        reward,
-                        appName,
-                        taskLink,
-                        image,
-                        taskTitle,
-                        commentPool,
-                        submittedComments
-                    );
-                    
-                    const queueContainer = document.getElementById('upload-queue-container');
-                    if (queueContainer) queueContainer.classList.remove('hidden');
-                    
-                    fileInput.value = '';
-                    submitBtn.disabled = true;
                 };
             }
 
@@ -4804,6 +4811,281 @@ const showUserTaskDetailsPage = async (taskId) => {
                 };
             }
         };
+
+window.submitSingleUserTask = async (task, file, reward, appName, taskLink, image, taskTitle) => {
+    // Show premium processing modal
+    renderModal('Submitting Proof', 
+        `<div class="text-center p-5 space-y-4 select-none">
+            <!-- Icon/Loader Container -->
+            <div class="flex justify-center items-center py-2" id="single-upload-status-icon">
+                <div class="animate-spin rounded-full h-12 w-12 border-4 border-indigo-500 border-t-transparent shadow-sm"></div>
+            </div>
+            <h4 class="text-sm font-black text-gray-900 dark:text-white uppercase tracking-wider" id="single-upload-status-title">Uploading Screenshot</h4>
+            <p class="text-[11px] text-gray-400 font-bold leading-normal px-2" id="single-upload-status-text">Compressing and scanning screenshot...</p>
+            <!-- Progress Bar Wrapper -->
+            <div class="h-2 w-full bg-slate-100 dark:bg-slate-700/60 rounded-full overflow-hidden mt-1 shadow-inner" id="single-upload-progress-bar-wrapper">
+                <div id="single-upload-progress" class="h-full bg-gradient-to-r from-indigo-500 to-blue-500 rounded-full transition-all duration-300" style="width: 5%"></div>
+            </div>
+            <p class="text-[10px] font-black text-indigo-600 dark:text-indigo-400 uppercase tracking-widest mt-1" id="single-upload-progress-percent">5%</p>
+        </div>`,
+        `<button id="single-upload-close-btn" class="w-full py-2.5 text-xs font-black bg-gray-100 dark:bg-gray-700 text-gray-400 dark:text-gray-500 rounded-xl uppercase tracking-wider cursor-not-allowed" style="outline: none;" disabled>Please Wait</button>`,
+        'max-w-sm'
+    );
+
+    const progressEl = document.getElementById('single-upload-progress');
+    const percentEl = document.getElementById('single-upload-progress-percent');
+    const statusTitleEl = document.getElementById('single-upload-status-title');
+    const statusTextEl = document.getElementById('single-upload-status-text');
+    const statusIconEl = document.getElementById('single-upload-status-icon');
+    const closeBtn = document.getElementById('single-upload-close-btn');
+
+    const updateProgress = (pct, title, text) => {
+        if (progressEl) progressEl.style.width = `${pct}%`;
+        if (percentEl) percentEl.textContent = `${pct}%`;
+        if (title && statusTitleEl) statusTitleEl.textContent = title;
+        if (text && statusTextEl) statusTextEl.textContent = text;
+    };
+
+    try {
+        // 1. Compress image
+        updateProgress(8, 'Uploading Screenshot', 'Compressing image proof...');
+        const compressed = await compressImage(file);
+        
+        // 2. OCR check
+        updateProgress(15, 'Uploading Screenshot', 'Scanning review comment...');
+        let ocrText = '';
+        let clientOcrSuccess = false;
+        try {
+            const formData = new FormData();
+            formData.append('file', compressed);
+            formData.append('language', 'eng');
+            formData.append('OCREngine', '2');
+            formData.append('apikey', 'helloworld');
+
+            const ocrResponse = await fetch('https://api.ocr.space/parse/image', {
+                method: 'POST',
+                body: formData
+            });
+            if (ocrResponse.ok) {
+                const ocrData = await ocrResponse.json();
+                if (ocrData.OCRExitCode === 1 && ocrData.ParsedResults && ocrData.ParsedResults.length > 0) {
+                    ocrText = ocrData.ParsedResults[0].ParsedText || '';
+                    clientOcrSuccess = true;
+                }
+            }
+        } catch (ocrErr) {
+            console.error('Client OCR call failed:', ocrErr);
+        }
+
+        // 3. Match Comment
+        updateProgress(35, 'Uploading Screenshot', 'Verifying reviewer comment match...');
+        const activeReservation = window.activeTaskReservation;
+        const expiresAt = timestampToMillis(activeReservation?.expiresAt);
+        if (!activeReservation?.comment || !expiresAt || expiresAt <= Date.now()) {
+            throw new Error('Assigned comment reservation has expired. Please copy again.');
+        }
+        
+        const matchedComment = activeReservation.comment;
+        let gmailName = 'Unknown User';
+        let skipOcr = 'false';
+
+        if (clientOcrSuccess) {
+            const cleanStr = (s) => String(s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+            const ocrTextLower = ocrText.toLowerCase().replace(/[^a-z0-9\s]/g, '');
+            const expectedCommentWords = String(matchedComment || '').trim().split(/\s+/).filter(Boolean);
+
+            let matchFound = false;
+            if (expectedCommentWords.length >= 2) {
+                const word1 = cleanStr(expectedCommentWords[0]);
+                const word2 = cleanStr(expectedCommentWords[1]);
+                const combined = word1 + word2;
+                const normalizedFullText = ocrTextLower.replace(/\s+/g, '');
+                if (normalizedFullText.includes(combined) || (ocrTextLower.includes(word1) && ocrTextLower.includes(word2))) {
+                    matchFound = true;
+                }
+            } else if (expectedCommentWords.length === 1) {
+                const word1 = cleanStr(expectedCommentWords[0]);
+                if (ocrTextLower.includes(word1)) {
+                    matchFound = true;
+                }
+            }
+
+            if (!matchFound) {
+                throw new Error('Comment mismatch. Ensure screenshot displays the correct assigned review.');
+            }
+
+            try {
+                gmailName = await window.extractReviewerName(ocrText, matchedComment);
+            } catch (chatErr) {
+                console.warn('Failed to extract name:', chatErr);
+            }
+            skipOcr = 'true';
+        } else {
+            skipOcr = 'false';
+        }
+
+        // 4. File Upload (using XHR with smooth progress listener!)
+        const gmailLogoUrl = `https://ui-avatars.com/api/?name=${encodeURIComponent(gmailName)}&background=random`;
+        const token = await getBackendAuthToken();
+        const params = new URLSearchParams({
+            taskId: task.id,
+            fileName: compressed.name,
+            appName: appName || 'Unknown App',
+            isBulk: 'false',
+            skipOcr,
+            ocrText: ocrText.slice(0, 1000),
+            gmailName,
+            gmailLogoUrl,
+            matchedComment: matchedComment || '',
+            assignedComment: matchedComment || ''
+        });
+
+        const uploadUrl = `${BACKEND_BASE_URL}/api/uploads/task-screenshot?${params.toString()}`;
+        const headers = {
+            Authorization: `Bearer ${token}`,
+            'Content-Type': compressed.type || 'image/jpeg'
+        };
+
+        const uploadResult = await uploadFileWithProgress(uploadUrl, compressed, headers, (percent) => {
+            // Map 0-100% upload progress to 40-85% overall progress
+            const overallPct = Math.round(40 + (percent * 0.45));
+            updateProgress(overallPct, 'Uploading Screenshot', `Uploading image proof (${percent}%)...`);
+        });
+
+        const uploadData = uploadResult.data;
+        const verification = uploadData.verification;
+        if (!verification) {
+            throw new Error('Verification data missing from upload response');
+        }
+
+        const finalComment = verification.matchedComment || matchedComment;
+        const screenshotUrl = uploadData.screenshot.url || '';
+        const screenshotKey = uploadData.screenshot.key || '';
+        const screenshotViewUrl = uploadData.screenshot.viewUrl || '';
+        const screenshotDrivePath = uploadData.screenshot.drivePath || '';
+
+        // 5. Submit to Backend
+        updateProgress(90, 'Uploading Screenshot', 'Submitting verification details...');
+        
+        const commentsPool = getTaskCommentPool(task);
+        const commentIdx = commentsPool.indexOf(finalComment);
+        const finalCommentIndex = activeReservation 
+            ? (activeReservation.commentIndex ?? activeReservation.comment_index ?? 0) 
+            : (commentIdx >= 0 ? commentIdx : 0);
+        const taskIndexVal = task.taskIndex || task.task_index || 1;
+        const reservationId = activeReservation?.id || getTaskReservationDocId(task.id, currentUser.uid);
+        const submissionId = `sub_${task.id.slice(0, 12)}_${currentUser.uid.slice(0, 12)}_${Date.now()}_0`;
+
+        const submitResponse = await fetchWithTimeout(`${BACKEND_BASE_URL}/api/task-submissions`, {
+            method: 'POST',
+            headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                id: submissionId,
+                taskId: task.id,
+                reservationId,
+                assignedComment: finalComment,
+                screenshotUrl,
+                screenshotKey,
+                screenshotViewUrl,
+                screenshotDrivePath,
+                reward: Number(reward || 0),
+                taskLink: taskLink,
+                appName: appName,
+                userName: currentUserData?.name || currentUser.email || 'User',
+                userEmail: currentUser.email || currentUserData?.email || '',
+                payoutDelayDays: Number(task.paymentDelayDays || task.paymentDays || 7),
+                ocrStatus: 'completed',
+                ocrExtractedName: verification.gmailName,
+                ocrExtractedText: verification.ocrText || ocrText,
+                ocrConfidence: verification.ocrConfidence || 1.0,
+                details: { 
+                    gmailLogoUrl: verification.gmailLogoUrl, 
+                    avatarHash: verification.avatarHash || '', 
+                    avatarCrop: verification.avatarCrop || null,
+                    taskIndex: taskIndexVal,
+                    task_index: taskIndexVal,
+                    commentIndex: finalCommentIndex,
+                    comment_index: finalCommentIndex
+                }
+            })
+        }, 15000);
+
+        const resData = await submitResponse.json().catch(() => ({}));
+        if (!submitResponse.ok || !resData.ok) {
+            throw new Error(resData.detail || resData.error || 'Submission failed');
+        }
+
+        // Clean reservation timer
+        if (activeTaskReservationTimer) {
+            clearInterval(activeTaskReservationTimer);
+            activeTaskReservationTimer = null;
+        }
+        activeTaskReservation = null;
+        window.activeTaskReservation = null;
+
+        // Success Popup state
+        updateProgress(100, 'Upload Successful');
+        if (statusIconEl) {
+            statusIconEl.innerHTML = `
+                <div class="h-16 w-16 bg-emerald-100 dark:bg-emerald-950/30 rounded-full flex items-center justify-center border-2 border-emerald-500 scale-in-animation shadow-sm">
+                    <svg class="h-9 w-9 text-emerald-600 dark:text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="3">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+                    </svg>
+                </div>
+            `;
+        }
+        if (statusTitleEl) statusTitleEl.className = "text-sm font-black text-emerald-600 dark:text-emerald-400 uppercase tracking-wider";
+        if (statusTitleEl) statusTitleEl.textContent = "Upload Successful";
+        if (statusTextEl) statusTextEl.className = "text-xs text-gray-500 dark:text-gray-400 font-bold leading-normal px-2 mt-1";
+        if (statusTextEl) statusTextEl.textContent = "Your review screenshot has been uploaded successfully.";
+
+        const progressWrapper = document.getElementById('single-upload-progress-bar-wrapper');
+        if (progressWrapper) progressWrapper.classList.add('hidden');
+        if (percentEl) percentEl.classList.add('hidden');
+
+        if (closeBtn) {
+            closeBtn.disabled = false;
+            closeBtn.className = "w-full py-3 text-xs font-black bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl transition uppercase tracking-wider shadow-sm";
+            closeBtn.textContent = "Okay";
+            closeBtn.onclick = () => {
+                window.closeModal();
+                showUserTaskPage();
+            };
+        }
+    } catch (err) {
+        console.error('Single user auto-submission failed:', err);
+        // Error state
+        if (statusIconEl) {
+            statusIconEl.innerHTML = `
+                <div class="h-16 w-16 bg-rose-100 dark:bg-rose-955/20 rounded-full flex items-center justify-center border-2 border-rose-500 scale-in-animation shadow-sm">
+                    <svg class="h-9 w-9 text-rose-600 dark:text-rose-455" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="3">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                </div>
+            `;
+        }
+        if (statusTitleEl) statusTitleEl.className = "text-sm font-black text-rose-600 dark:text-rose-455 uppercase tracking-wider";
+        if (statusTitleEl) statusTitleEl.textContent = "Upload Failed";
+        if (statusTextEl) statusTextEl.className = "text-xs text-rose-600 dark:text-rose-400 font-bold leading-normal px-3 mt-1";
+        if (statusTextEl) statusTextEl.textContent = err.message || "Something went wrong. Please try again.";
+
+        const progressWrapper = document.getElementById('single-upload-progress-bar-wrapper');
+        if (progressWrapper) progressWrapper.classList.add('hidden');
+        if (percentEl) percentEl.classList.add('hidden');
+
+        if (closeBtn) {
+            closeBtn.disabled = false;
+            closeBtn.className = "w-full py-3 text-xs font-black bg-rose-600 hover:bg-rose-700 text-white rounded-xl transition uppercase tracking-wider shadow-sm";
+            closeBtn.textContent = "Try Again";
+            closeBtn.onclick = () => {
+                window.closeModal();
+                // Click file input again
+                const fileInput = document.getElementById('task-proof-input');
+                if (fileInput) fileInput.click();
+            };
+        }
+    }
+};
 
 const getIncomeTransactions = () => unifiedHistoryCache.filter(item => {
             if (item.status && item.status !== 'completed') return false;
