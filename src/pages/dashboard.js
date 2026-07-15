@@ -971,7 +971,7 @@ const getUserTaskHistoryListHtml = () => {
                     <div class="flex-1 bg-slate-100 dark:bg-gray-700 h-1.5 rounded-full overflow-hidden">
                         <div class="bg-indigo-600 h-full rounded-full" style="width: ${completionPercent}%"></div>
                     </div>
-                    <span class="text-[10px] font-extrabold text-indigo-600 dark:text-indigo-400 shrink-0 leading-none">${completionPercent}% Completed</span>
+                    <span class="text-[10px] font-extrabold text-indigo-600 dark:text-indigo-400 shrink-0 leading-none">${completionPercent}% Approved</span>
                 </div>
                 
                 <!-- Footer -->
