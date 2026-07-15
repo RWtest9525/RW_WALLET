@@ -1880,53 +1880,53 @@ window.showBulkerTaskOverview = (taskId) => {
                         <h5 class="text-[10px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-wider">Quick Actions</h5>
 
                         <!-- View All Submissions -->
-                        <button onclick="window.showBulkerAllSubmissions('${taskId}', 'all')" class="w-full flex items-center justify-between p-3 bg-white dark:bg-gray-800 hover:bg-indigo-50/10 dark:hover:bg-indigo-950/10 rounded-2xl border border-gray-150 dark:border-gray-750 shadow-sm transition text-left" style="outline: none;">
+                        <button onclick="window.showBulkerAllSubmissions('${taskId}', 'all')" class="w-full flex items-center justify-between p-3 bg-indigo-50/50 dark:bg-indigo-950/20 hover:bg-indigo-100/40 dark:hover:bg-indigo-900/30 rounded-2xl border border-indigo-100 dark:border-indigo-900/40 shadow-sm transition text-left" style="outline: none;">
                             <div class="flex items-center gap-3">
-                                <span class="p-2 rounded-xl bg-purple-50 dark:bg-purple-950/30 text-purple-600 dark:text-purple-400 shrink-0">
-                                    <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5">
+                                <span class="p-1.5 rounded-lg bg-indigo-600 text-white shrink-0">
+                                    <svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="3">
                                         <path stroke-linecap="round" stroke-linejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25H12" />
                                     </svg>
                                 </span>
-                                <span class="text-xs font-black text-purple-950 dark:text-purple-300 font-extrabold">View All Submissions</span>
+                                <span class="text-xs font-black text-indigo-600 dark:text-indigo-400 font-extrabold">View All Submissions</span>
                             </div>
-                            <svg class="h-4 w-4 text-purple-600 dark:text-purple-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"></path></svg>
+                            <svg class="h-4 w-4 text-indigo-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"></path></svg>
                         </button>
 
                         <!-- View Pending -->
-                        <button onclick="window.showBulkerAllSubmissions('${taskId}', 'pending')" class="w-full flex items-center justify-between p-3 bg-white dark:bg-gray-800 hover:bg-amber-50/10 dark:hover:bg-amber-955/10 rounded-2xl border border-gray-150 dark:border-gray-750 shadow-sm transition text-left" style="outline: none;">
+                        <button onclick="window.showBulkerAllSubmissions('${taskId}', 'pending')" class="w-full flex items-center justify-between p-3 bg-amber-50/50 dark:bg-amber-950/20 hover:bg-amber-100/40 dark:hover:bg-amber-900/30 rounded-2xl border border-amber-100 dark:border-amber-900/40 shadow-sm transition text-left" style="outline: none;">
                             <div class="flex items-center gap-3">
-                                <span class="p-2 rounded-xl bg-amber-50 dark:bg-amber-955/20 text-amber-600 dark:text-amber-500 shrink-0">
-                                    <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5">
+                                <span class="p-1.5 rounded-lg bg-amber-500 text-white shrink-0">
+                                    <svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="3">
                                         <path stroke-linecap="round" stroke-linejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
                                     </svg>
                                 </span>
-                                <span class="text-xs font-black text-amber-950 dark:text-amber-300 font-extrabold">View Pending (${pending})</span>
+                                <span class="text-xs font-black text-amber-600 dark:text-amber-400 font-extrabold">View Pending (${pending})</span>
                             </div>
                             <svg class="h-4 w-4 text-amber-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"></path></svg>
                         </button>
 
                         <!-- View Rejected -->
-                        <button onclick="window.showBulkerAllSubmissions('${taskId}', 'rejected')" class="w-full flex items-center justify-between p-3 bg-white dark:bg-gray-800 hover:bg-rose-50/10 dark:hover:bg-rose-955/10 rounded-2xl border border-gray-150 dark:border-gray-750 shadow-sm transition text-left" style="outline: none;">
+                        <button onclick="window.showBulkerAllSubmissions('${taskId}', 'rejected')" class="w-full flex items-center justify-between p-3 bg-red-50/50 dark:bg-rose-950/20 hover:bg-red-100/40 dark:hover:bg-rose-900/30 rounded-2xl border border-red-100 dark:border-rose-900/40 shadow-sm transition text-left" style="outline: none;">
                             <div class="flex items-center gap-3">
-                                <span class="p-2 rounded-xl bg-rose-50 dark:bg-rose-955/20 text-rose-600 dark:text-rose-500 shrink-0">
-                                    <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5">
-                                        <path stroke-linecap="round" stroke-linejoin="round" d="M9.75 9.75 4.5 4.5m0-4.5-4.5 4.5M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
+                                <span class="p-1.5 rounded-lg bg-red-600 text-white shrink-0">
+                                    <svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="3">
+                                        <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
                                     </svg>
                                 </span>
-                                <span class="text-xs font-black text-rose-950 dark:text-rose-300 font-extrabold">View Rejected (${rejected})</span>
+                                <span class="text-xs font-black text-red-600 dark:text-rose-400 font-extrabold">View Rejected (${rejected})</span>
                             </div>
-                            <svg class="h-4 w-4 text-rose-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"></path></svg>
+                            <svg class="h-4 w-4 text-red-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"></path></svg>
                         </button>
 
                         <!-- Export Report -->
-                        <button onclick="window.exportBulkerReport('${taskId}')" class="w-full flex items-center justify-between p-3 bg-white dark:bg-gray-800 hover:bg-blue-50/10 dark:hover:bg-blue-955/10 rounded-2xl border border-gray-150 dark:border-gray-750 shadow-sm transition text-left" style="outline: none;">
+                        <button onclick="window.exportBulkerReport('${taskId}')" class="w-full flex items-center justify-between p-3 bg-blue-50/50 dark:bg-blue-950/20 hover:bg-blue-100/40 dark:hover:bg-blue-900/30 rounded-2xl border border-blue-100 dark:border-blue-900/40 shadow-sm transition text-left" style="outline: none;">
                             <div class="flex items-center gap-3">
-                                <span class="p-2 rounded-xl bg-blue-50 dark:bg-blue-955/20 text-blue-600 dark:text-blue-500 shrink-0">
-                                    <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5">
+                                <span class="p-1.5 rounded-lg bg-blue-600 text-white shrink-0">
+                                    <svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="3">
                                         <path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5M16.5 12 12 16.5m0 0L7.5 12m4.5 4.5V3" />
                                     </svg>
                                 </span>
-                                <span class="text-xs font-black text-blue-955 dark:text-blue-300 font-extrabold">Export Report</span>
+                                <span class="text-xs font-black text-blue-600 dark:text-blue-400 font-extrabold">Export Report</span>
                             </div>
                             <svg class="h-4 w-4 text-blue-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"></path></svg>
                         </button>
@@ -2158,6 +2158,12 @@ window.showBulkerSubmissionDetail = (submissionId) => {
                         </button>
                         <h2 class="text-lg font-black text-gray-900 dark:text-white">Submission Detail</h2>
                     </div>
+                    <!-- Three dot menu on right side of detail header -->
+                    <button type="button" class="p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-500 dark:text-gray-400 shrink-0" onclick="window.showBulkerSubmissionMenu(event, '${s.id}')" style="outline: none;">
+                        <svg class="h-5 w-5" fill="currentColor" viewBox="0 0 24 24">
+                            <path d="M12 8c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm0 2c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm0 6c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2z"/>
+                        </svg>
+                    </button>
                 </header>
  
                 <div class="max-w-xl mx-auto space-y-5 pb-24 px-4 pt-4 text-left">
