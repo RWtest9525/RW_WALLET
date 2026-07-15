@@ -925,7 +925,6 @@ async function createNotification(d1, { title = '', message = '', audience = 'se
 }
 
 async function listUserNotifications(d1, userId, limit = 80) {
-  await cleanupExpiredNotifications(d1).catch((error) => console.error('Notification cleanup failed:', error));
   const rows = await d1.all(
     `SELECT n.id, n.title, n.message, n.sender_id, n.audience, n.created_at, n.expires_at,
             r.delivered_at, r.read_at
@@ -942,7 +941,6 @@ async function listUserNotifications(d1, userId, limit = 80) {
 }
 
 async function listAdminNotifications(d1, limit = 80) {
-  await cleanupExpiredNotifications(d1).catch((error) => console.error('Notification cleanup failed:', error));
   const rows = await d1.all(
     `SELECT n.id, n.title, n.message, n.sender_id, n.audience, n.created_at, n.expires_at,
             COUNT(r.user_id) AS delivered_count,

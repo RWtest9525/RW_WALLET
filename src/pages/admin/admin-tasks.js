@@ -101,7 +101,20 @@ const getAdminTaskSubtype = (task = {}) => {
 const getAdminTaskEffectiveStatus = (task = {}) => {
             const status = String(task.status || 'draft').toLowerCase();
             const expiresAt = timestampToMillis(task.expiresAt || task.autoCloseAt || task.closeAt);
-            if (status === 'active' && expiresAt && expiresAt <= Date.now()) return 'closed';
+            if (status === 'active' && expiresAt && expiresAt <= Date.now()) {
+                const createdAtMillis = timestampToMillis(task.createdAt);
+                if (createdAtMillis) {
+                    const createdDate = new Date(createdAtMillis);
+                    const today = new Date();
+                    const isSameDay = createdDate.getFullYear() === today.getFullYear() &&
+                                      createdDate.getMonth() === today.getMonth() &&
+                                      createdDate.getDate() === today.getDate();
+                    if (isSameDay) {
+                        return 'closed';
+                    }
+                }
+                return 'over';
+            }
             return status;
         };
 
@@ -548,6 +561,7 @@ const showAdminTaskPage = () => {
                                     <option value="active">Live</option>
                                     <option value="draft">Off</option>
                                     <option value="closed">Closed</option>
+                                    <option value="over">Over</option>
                                 </select>
                             </div>
                         </div>
@@ -1247,7 +1261,8 @@ const renderAdminTaskList = () => {
                     active: 'bg-emerald-50 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-200',
                     draft: 'bg-amber-50 text-amber-700 dark:bg-amber-900/30 dark:text-amber-200',
                     paused: 'bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-200',
-                    closed: 'bg-red-50 text-red-700 dark:bg-red-900/30 dark:text-red-200'
+                    closed: 'bg-red-50 text-red-700 dark:bg-red-900/30 dark:text-red-200',
+                    over: 'bg-rose-50 text-rose-700 dark:bg-rose-900/30 dark:text-rose-200'
                 }[status] || 'bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-200';
                 return `
                     <div class="rounded-xl border border-gray-100 dark:border-gray-700 bg-white dark:bg-gray-800 p-3 shadow-sm hover:shadow-md transition flex flex-col justify-between min-h-[145px]">
@@ -1263,7 +1278,7 @@ const renderAdminTaskList = () => {
                                 <h4 class="mt-0.5 text-sm font-black text-gray-900 dark:text-white truncate" title="${escapeHtml(task.title || subtypeMeta.label)}">${escapeHtml(task.title || subtypeMeta.label)}</h4>
                                 <div class="mt-1 flex items-center gap-1 flex-wrap">
                                     <span class="rounded bg-cyan-50 dark:bg-cyan-900/20 px-1.5 py-0.5 text-[9px] font-bold text-cyan-700 dark:text-cyan-300">${escapeHtml(getAdminTaskFamilyLabel(family))}</span>
-                    <span class="rounded px-1.5 py-0.5 text-[9px] font-bold ${statusClass}">${isLive ? 'Live' : status === 'closed' ? 'Closed' : 'Off'}</span>
+                                    <span class="rounded px-1.5 py-0.5 text-[9px] font-bold ${statusClass}">${status === 'active' ? 'Live' : status === 'closed' ? 'Closed' : status === 'over' ? 'Over' : 'Off'}</span>
                                     <span class="text-[9px] font-bold text-gray-400 dark:text-gray-500">Lim: ${task.limit || 'Open'}</span>
                                     ${expiresAt ? `<span class="text-[9px] font-bold text-amber-600 dark:text-amber-400">Close: ${escapeHtml(closesText)}</span>` : ''}
                                 </div>
@@ -1271,20 +1286,24 @@ const renderAdminTaskList = () => {
                         </div>
                         <div class="mt-3 pt-2 border-t border-gray-50 dark:border-gray-700/50 flex items-center justify-between gap-2">
                             ${canAdminManageTask(task) ? `
-                                <button type="button" data-action="toggle-admin-task-status" data-taskid="${task.id}" class="inline-flex items-center gap-1.5 text-xs font-black ${isLive ? 'text-emerald-600 dark:text-emerald-400' : 'text-gray-400 dark:text-gray-500'}">
-                                    <span class="relative inline-flex h-5 w-9 rounded-full ${isLive ? 'bg-emerald-500' : 'bg-gray-300 dark:bg-gray-600'} transition">
-                                        <span class="absolute top-0.5 left-0.5 h-4 w-4 rounded-full bg-white shadow transition transform ${isLive ? 'translate-x-4' : 'translate-x-0'}"></span>
-                                    </span>
-                                    ${isLive ? 'ON' : 'OFF'}
-                                </button>
+                                ${status === 'over' ? `
+                                    <span class="text-xs font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wider bg-gray-50 dark:bg-gray-700/50 px-2.5 py-1 rounded-lg">Over</span>
+                                ` : `
+                                    <button type="button" data-action="toggle-admin-task-status" data-taskid="${task.id}" class="inline-flex items-center gap-1.5 text-xs font-black ${isLive ? 'text-emerald-600 dark:text-emerald-400' : 'text-gray-400 dark:text-gray-500'}">
+                                        <span class="relative inline-flex h-5 w-9 rounded-full ${isLive ? 'bg-emerald-500' : 'bg-gray-300 dark:bg-gray-600'} transition">
+                                            <span class="absolute top-0.5 left-0.5 h-4 w-4 rounded-full bg-white shadow transition transform ${isLive ? 'translate-x-4' : 'translate-x-0'}"></span>
+                                        </span>
+                                        ${isLive ? 'ON' : 'OFF'}
+                                    </button>
+                                `}
                                 <div class="flex gap-1">
                                     ${isAdminReviewTask(task) ? getAdminTaskIconButtonMini('manage-task-comments', task.id, 'Comments', '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a10.6 10.6 0 0 1-4.51-.98L3 20l1.26-3.78A7.55 7.55 0 0 1 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"></path>', 'blue') : ''}
                                     ${getAdminTaskIconButtonMini('edit-admin-task', task.id, 'Edit', '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L10.582 16.07a4.5 4.5 0 0 1-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 0 1 1.13-1.897l8.932-8.931z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19.5 7.125 16.875 4.5"></path>', 'slate')}
-                                    ${getAdminTaskIconButtonMini('delete-admin-task', task.id, 'Delete', '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="m14.74 9-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673A2.25 2.25 0 0 1 15.916 21H8.084a2.25 2.25 0 0 1-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 0 0-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 0 1 3.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 0 0-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 0 0-7.5 0"></path>', 'red')}
+                                    ${status !== 'over' ? getAdminTaskIconButtonMini('delete-admin-task', task.id, 'Delete', '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="m14.74 9-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673A2.25 2.25 0 0 1 15.916 21H8.084a2.25 2.25 0 0 1-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 0 0-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 0 1 3.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 0 0-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 0 0-7.5 0"></path>', 'red') : ''}
                                 </div>
                             ` : `
                                 <div class="inline-flex items-center gap-1.5 text-xs font-bold text-slate-400 dark:text-slate-500">
-                                    Status: <span class="uppercase font-black ${isLive ? 'text-emerald-500' : 'text-amber-500'}">${isLive ? 'Live' : 'Off'}</span> (Owner Task)
+                                    Status: <span class="uppercase font-black ${isLive ? 'text-emerald-500' : status === 'over' ? 'text-rose-500' : 'text-amber-500'}">${isLive ? 'Live' : status === 'closed' ? 'Closed' : status === 'over' ? 'Over' : 'Off'}</span> (Owner Task)
                                 </div>
                                 <div class="text-[10px] text-gray-400 font-bold bg-gray-50 dark:bg-gray-700/50 px-2 py-1 rounded-lg">View Only</div>
                             `}

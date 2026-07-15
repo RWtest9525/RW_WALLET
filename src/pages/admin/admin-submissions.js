@@ -362,71 +362,74 @@ window.extractReviewerName = async (ocrText, targetComment) => {
         };
 
 const loadAdminSubmissions = async () => {
-            // Always force-load tasks from Firestore to ensure allTasksCache is populated
-            try {
-                const tasksQuery = query(collection(db, `artifacts/${appId}/public/data/tasks`), orderBy("createdAt", "desc"));
-                const tasksSnap = await getDocs(tasksQuery);
-                const taskDocs = tasksSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-                if (taskDocs.length > 0) {
-                    window.allTasksCache = taskDocs;
+            const fetchTasksPromise = (async () => {
+                if (window.allTasksCache && window.allTasksCache.length > 0) {
+                    return;
                 }
-                console.log('[AdminSubs] Tasks loaded:', window.allTasksCache.length);
-            } catch (e) {
-                console.warn('[AdminSubs] Tasks pre-fetch failed:', e);
-            }
+                try {
+                    const tasksQuery = query(collection(db, `artifacts/${appId}/public/data/tasks`), orderBy("createdAt", "desc"));
+                    const tasksSnap = await getDocs(tasksQuery);
+                    const taskDocs = tasksSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                    if (taskDocs.length > 0) {
+                        window.allTasksCache = taskDocs;
+                    }
+                    console.log('[AdminSubs] Tasks loaded:', window.allTasksCache.length);
+                } catch (e) {
+                    console.warn('[AdminSubs] Tasks pre-fetch failed:', e);
+                }
+            })();
 
-            try {
-                const token = await getBackendAuthToken();
-                const response = await fetchWithTimeout(`${BACKEND_BASE_URL}/api/admin/task-submissions?limit=500`, {
-                    headers: { Authorization: `Bearer ${token}` }
-                }, 15000);
-                const data = await response.json().catch(() => ({}));
-                if (data.ok && Array.isArray(data.submissions)) {
-                    adminSubmissionsCache = data.submissions;
-                    console.log('[AdminSubs] Backend submissions loaded:', adminSubmissionsCache.length);
-                    if (adminSubmissionsCache.length > 0) {
-                        console.log('[AdminSubs] Sample submission keys:', Object.keys(adminSubmissionsCache[0]));
-                        console.log('[AdminSubs] Sample task_id:', adminSubmissionsCache[0].task_id);
-                        console.log('[AdminSubs] Sample app_name:', adminSubmissionsCache[0].app_name);
+            const fetchSubmissionsPromise = (async () => {
+                try {
+                    const token = await getBackendAuthToken();
+                    const response = await fetchWithTimeout(`${BACKEND_BASE_URL}/api/admin/task-submissions?limit=500`, {
+                        headers: { Authorization: `Bearer ${token}` }
+                    }, 15000);
+                    const data = await response.json().catch(() => ({}));
+                    if (data.ok && Array.isArray(data.submissions)) {
+                        adminSubmissionsCache = data.submissions;
+                        console.log('[AdminSubs] Backend submissions loaded:', adminSubmissionsCache.length);
+                    }
+                } catch (err) {
+                    console.warn('[AdminSubs] Backend load failed, trying Firebase:', err);
+                    try {
+                        const snap = await getDocs(query(
+                            collection(db, `artifacts/${appId}/public/data/task_submissions`),
+                            orderBy('submittedAt', 'desc'),
+                            limit(500)
+                        ));
+                        adminSubmissionsCache = snap.docs.map(d => {
+                            const data = d.data();
+                            return {
+                                id: d.id,
+                                task_id: data.taskId,
+                                user_id: data.userId,
+                                user_name: data.userName || '',
+                                user_email: data.userEmail || '',
+                                app_name: data.appName || data.taskTitle || '',
+                                assigned_comment: data.assignedComment || '',
+                                screenshot_url: data.screenshotUrl || '',
+                                manual_status: data.manualStatus || 'pending',
+                                ocr_status: data.ocrStatus || 'pending',
+                                ocr_extracted_name: data.ocrExtractedName || '',
+                                ocr_extracted_text: data.ocrExtractedText || '',
+                                details_json: JSON.stringify({ gmailLogoUrl: data.ocrExtractedLogoUrl || '' }),
+                                scraper_status: data.scraperStatus || 'not_configured',
+                                payout_status: data.payoutStatus || 'pending',
+                                reward: Number(data.reward || 0),
+                                task_link: data.taskLink || '',
+                                submitted_at: timestampToMillis(data.submittedAt),
+                                _source: 'firebase'
+                            };
+                        });
+                        console.log('[AdminSubs] Firebase fallback loaded:', adminSubmissionsCache.length);
+                    } catch (fbErr) {
+                        console.error('[AdminSubs] Firebase also failed:', fbErr);
                     }
                 }
-            } catch (err) {
-                console.warn('[AdminSubs] Backend load failed, trying Firebase:', err);
-                try {
-                    const snap = await getDocs(query(
-                        collection(db, `artifacts/${appId}/public/data/task_submissions`),
-                        orderBy('submittedAt', 'desc'),
-                        limit(500)
-                    ));
-                    adminSubmissionsCache = snap.docs.map(d => {
-                        const data = d.data();
-                        return {
-                            id: d.id,
-                            task_id: data.taskId,
-                            user_id: data.userId,
-                            user_name: data.userName || '',
-                            user_email: data.userEmail || '',
-                            app_name: data.appName || data.taskTitle || '',
-                            assigned_comment: data.assignedComment || '',
-                            screenshot_url: data.screenshotUrl || '',
-                            manual_status: data.manualStatus || 'pending',
-                            ocr_status: data.ocrStatus || 'pending',
-                            ocr_extracted_name: data.ocrExtractedName || '',
-                            ocr_extracted_text: data.ocrExtractedText || '',
-                            details_json: JSON.stringify({ gmailLogoUrl: data.ocrExtractedLogoUrl || '' }),
-                            scraper_status: data.scraperStatus || 'not_configured',
-                            payout_status: data.payoutStatus || 'pending',
-                            reward: Number(data.reward || 0),
-                            task_link: data.taskLink || '',
-                            submitted_at: timestampToMillis(data.submittedAt),
-                            _source: 'firebase'
-                        };
-                    });
-                    console.log('[AdminSubs] Firebase fallback loaded:', adminSubmissionsCache.length);
-                } catch (fbErr) {
-                    console.error('[AdminSubs] Firebase also failed:', fbErr);
-                }
-            }
+            })();
+
+            await Promise.all([fetchTasksPromise, fetchSubmissionsPromise]);
             console.log('[AdminSubs] Calling renderAdminSubmissions. allTasksCache:', window.allTasksCache.length, 'submissions:', adminSubmissionsCache.length);
             renderAdminSubmissions();
         };
@@ -442,6 +445,82 @@ const formatDatePickerDate = (dateStr) => {
     const [y, m, d] = dateStr.split('-').map(Number);
     const dateObj = new Date(y, m - 1, d);
     return dateObj.toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' });
+};
+
+let calendarYear = null;
+let calendarMonth = null;
+
+const initCalendarState = (selectedDate) => {
+    if (calendarYear === null || calendarMonth === null) {
+        const [y, m] = selectedDate.split('-').map(Number);
+        calendarYear = y;
+        calendarMonth = m - 1;
+    }
+};
+
+const drawCalendarGrid = (availableDates, dateCounts, selectedDate) => {
+    const monthYearEl = document.getElementById('cal-month-year');
+    const gridEl = document.getElementById('cal-days-grid');
+    if (!monthYearEl || !gridEl) return;
+
+    const dateObj = new Date(calendarYear, calendarMonth, 1);
+    monthYearEl.textContent = dateObj.toLocaleDateString('en-IN', { month: 'long', year: 'numeric' });
+
+    const totalDays = new Date(calendarYear, calendarMonth + 1, 0).getDate();
+    const startDay = new Date(calendarYear, calendarMonth, 1).getDay();
+
+    let html = '';
+
+    for (let i = 0; i < startDay; i++) {
+        html += `<div class="aspect-square"></div>`;
+    }
+
+    const todayStr = getSubmissionLocalDateStr(new Date());
+
+    for (let day = 1; day <= totalDays; day++) {
+        const dStr = `${calendarYear}-${String(calendarMonth + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+        const hasSubmissions = dateCounts[dStr] > 0;
+        const isTodayDate = dStr === todayStr;
+        const isSelectable = isTodayDate || availableDates.includes(dStr) || hasSubmissions;
+        const isCurrentlySelected = dStr === selectedDate;
+        const count = dateCounts[dStr] || 0;
+
+        let dayClass = 'flex flex-col items-center justify-center aspect-square rounded-xl relative transition ';
+        let dotHtml = '';
+
+        if (isCurrentlySelected) {
+            dayClass += 'bg-indigo-600 text-white font-extrabold shadow-md';
+        } else if (isSelectable) {
+            dayClass += 'hover:bg-indigo-50 dark:hover:bg-indigo-900/40 text-gray-900 dark:text-gray-100 font-bold cursor-pointer';
+            if (isTodayDate) {
+                dayClass += ' border border-indigo-400';
+            }
+        } else {
+            dayClass += 'text-gray-300 dark:text-gray-700 pointer-events-none opacity-40';
+        }
+
+        if (count > 0 && !isCurrentlySelected) {
+            dotHtml = `<span class="absolute bottom-1 h-1 w-1 rounded-full bg-indigo-500"></span>`;
+        }
+
+        html += `
+            <button type="button" class="${dayClass}" data-date="${dStr}" ${isSelectable ? '' : 'disabled'} style="outline: none;">
+                <span>${day}</span>
+                ${dotHtml}
+                ${count > 0 ? `<span class="absolute -top-1 -right-1 text-[8px] scale-75 bg-indigo-100 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300 px-1 rounded-full font-black">${count}</span>` : ''}
+            </button>
+        `;
+    }
+
+    gridEl.innerHTML = html;
+
+    gridEl.querySelectorAll('[data-date]').forEach(btn => {
+        btn.onclick = () => {
+            window.adminSubmissionsView.selectedDate = btn.dataset.date;
+            document.getElementById('admin-sub-calendar-popup')?.classList.add('hidden');
+            renderAdminSubmissions();
+        };
+    });
 };
 
 const renderAdminSubmissions = () => {
@@ -709,15 +788,22 @@ const renderAdminSubmissions = () => {
                         <h3 class="text-lg font-black text-gray-900 dark:text-white">Submissions Overview</h3>
                         <p class="text-xs text-gray-500 dark:text-gray-400">Track and manage task submissions by date.</p>
                     </div>
-                    <div class="relative flex items-center">
-                        <select id="admin-sub-date-select" class="appearance-none rounded-xl bg-gray-100 hover:bg-gray-200 dark:bg-gray-750 dark:hover:bg-gray-700 px-3.5 py-2 pr-8 text-xs font-black text-gray-850 dark:text-gray-200 border border-gray-200/40 dark:border-gray-700/50 shadow-sm focus:outline-none cursor-pointer">
-                            ${availableDates.map(dStr => {
-                                const count = dateCounts[dStr] || 0;
-                                const label = formatDatePickerDate(dStr);
-                                return `<option value="${dStr}" ${dStr === selectedDate ? 'selected' : ''}>${label} (${count} subs)</option>`;
-                            }).join('')}
-                        </select>
-                        <div class="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-500 dark:text-gray-400 text-[10px]">▼</div>
+                    <div class="relative">
+                        <button id="admin-sub-date-picker-btn" class="flex items-center gap-2 rounded-xl bg-gray-100 hover:bg-gray-200 dark:bg-gray-750 dark:hover:bg-gray-700 px-3.5 py-2 text-xs font-black text-gray-850 dark:text-gray-200 border border-gray-200/40 dark:border-gray-700/50 shadow-sm focus:outline-none cursor-pointer" type="button" style="outline: none;">
+                            <span>📅 ${formatDatePickerDate(selectedDate)}</span>
+                            <span class="text-gray-400 dark:text-gray-500 text-[10px]">▼</span>
+                        </button>
+                        <div id="admin-sub-calendar-popup" class="hidden absolute right-0 top-full mt-2 z-[9995] w-72 bg-white dark:bg-gray-950 rounded-3xl border border-gray-150 dark:border-gray-850 shadow-2xl p-4 space-y-3">
+                            <div class="flex items-center justify-between">
+                                <button id="cal-prev-month" type="button" class="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg text-sm font-bold text-gray-700 dark:text-gray-300" style="outline: none;">&lt;</button>
+                                <span id="cal-month-year" class="text-sm font-black text-gray-905 dark:text-white"></span>
+                                <button id="cal-next-month" type="button" class="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg text-sm font-bold text-gray-700 dark:text-gray-300" style="outline: none;">&gt;</button>
+                            </div>
+                            <div class="grid grid-cols-7 gap-1 text-center text-[10px] font-extrabold text-gray-400 dark:text-gray-500 uppercase">
+                                <span>Su</span><span>Mo</span><span>Tu</span><span>We</span><span>Th</span><span>Fr</span><span>Sa</span>
+                            </div>
+                            <div id="cal-days-grid" class="grid grid-cols-7 gap-1 text-center text-xs"></div>
+                        </div>
                     </div>
                 </div>
 
@@ -879,12 +965,58 @@ const renderAdminSubmissions = () => {
     shellEl.innerHTML = html;
 
     // Bind Event Listeners
-    const dateSelect = document.getElementById('admin-sub-date-select');
-    if (dateSelect) {
-        dateSelect.onchange = (e) => {
-            window.adminSubmissionsView.selectedDate = e.target.value;
-            renderAdminSubmissions();
+    const datePickerBtn = document.getElementById('admin-sub-date-picker-btn');
+    if (datePickerBtn) {
+        datePickerBtn.onclick = (e) => {
+            e.stopPropagation();
+            const popup = document.getElementById('admin-sub-calendar-popup');
+            if (popup) {
+                const isHidden = popup.classList.contains('hidden');
+                popup.classList.toggle('hidden', !isHidden);
+                if (isHidden) {
+                    initCalendarState(selectedDate);
+                    drawCalendarGrid(availableDates, dateCounts, selectedDate);
+                }
+            }
         };
+    }
+
+    const prevMonthBtn = document.getElementById('cal-prev-month');
+    if (prevMonthBtn) {
+        prevMonthBtn.onclick = (e) => {
+            e.stopPropagation();
+            calendarMonth--;
+            if (calendarMonth < 0) {
+                calendarMonth = 11;
+                calendarYear--;
+            }
+            drawCalendarGrid(availableDates, dateCounts, selectedDate);
+        };
+    }
+
+    const nextMonthBtn = document.getElementById('cal-next-month');
+    if (nextMonthBtn) {
+        nextMonthBtn.onclick = (e) => {
+            e.stopPropagation();
+            calendarMonth++;
+            if (calendarMonth > 11) {
+                calendarMonth = 0;
+                calendarYear++;
+            }
+            drawCalendarGrid(availableDates, dateCounts, selectedDate);
+        };
+    }
+
+    // Close calendar on document click
+    if (!window._adminSubCalendarOutsideListenerBound) {
+        document.addEventListener('click', (e) => {
+            const popup = document.getElementById('admin-sub-calendar-popup');
+            const btn = document.getElementById('admin-sub-date-picker-btn');
+            if (popup && btn && !popup.contains(e.target) && !btn.contains(e.target)) {
+                popup.classList.add('hidden');
+            }
+        });
+        window._adminSubCalendarOutsideListenerBound = true;
     }
 
     const refreshBtn = document.getElementById('admin-sub-refresh-btn');
