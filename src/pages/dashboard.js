@@ -1186,7 +1186,7 @@ const showUserTaskHistoryPage = () => {
                 </header>
                 `}
                 
-                <div class="max-w-md mx-auto space-y-3 pb-24 px-4 pt-3 text-left">
+                <div class="max-w-xl mx-auto space-y-3 pb-24 px-4 pt-3 text-left">
                     <!-- Category Tabs (Styled Pill Tabs based on Screenshot 1) -->
                     <div class="grid grid-cols-3 gap-2.5 mb-1.5 select-none">
                         ${['all', 'play_store', 'others'].map(tab => {
