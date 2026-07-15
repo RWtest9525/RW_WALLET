@@ -1121,7 +1121,7 @@ async function uploadToGoogleDrive(buffer, fileName, mimeType, rootFolderId, { a
     },
     media: {
       mimeType: mimeType || 'image/jpeg',
-      body: Readable.from(buffer)
+      body: buffer
     },
     fields: 'id, name, webViewLink, webContentLink, size'
   });
@@ -3616,7 +3616,7 @@ ${memoriesContext}`
             uploadedAt: nowMs()
           };
         } catch (driveError) {
-          console.error('[OCR-Upload] Google Drive upload failed, falling back to R2:', driveError.message);
+          console.error('[OCR-Upload] Google Drive upload failed, falling back to R2:', driveError);
         }
       }
 
