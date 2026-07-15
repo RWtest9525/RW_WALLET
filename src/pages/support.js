@@ -1323,6 +1323,12 @@ const openAdminInspectDetailsModal = async (chatUserId, messageText) => {
             }
         };
 
+        const rawOcrText = s.ocr_extracted_text || s.ocrExtractedText || '';
+        const gmailName = s.ocr_extracted_name || '';
+        const extractedReviewText = typeof window.extractActualReviewText === 'function'
+            ? window.extractActualReviewText(rawOcrText, gmailName)
+            : rawOcrText;
+
         let currentReplyText = getPrefilledReply(s);
         const subDate = s.submitted_at ? new Date(s.submitted_at).toLocaleDateString('en-GB') : 'Unknown';
         
@@ -1380,7 +1386,7 @@ const openAdminInspectDetailsModal = async (chatUserId, messageText) => {
 
                         <div class="space-y-1.5 text-xs bg-gray-50 dark:bg-gray-800/40 p-3 rounded-2xl border border-gray-150 dark:border-gray-800">
                             <span class="block text-[9px] font-black uppercase text-purple-500 dark:text-purple-400">Used Comment (OCR Extracted Text)</span>
-                            <p class="font-semibold text-gray-800 dark:text-gray-200 leading-relaxed">${escapeHtml(s.ocr_extracted_text || 'No text extracted by OCR')}</p>
+                            <p class="font-semibold text-gray-800 dark:text-gray-200 leading-relaxed bg-purple-50/50 dark:bg-purple-950/10 p-2.5 rounded-xl border border-purple-100/50 dark:border-purple-900/30">${escapeHtml(extractedReviewText || 'Not found in screenshot')}</p>
                         </div>
                         
                         <div class="space-y-2 border-t border-gray-100 dark:border-gray-800 pt-3">
