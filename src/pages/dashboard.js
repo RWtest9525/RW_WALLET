@@ -2182,7 +2182,7 @@ window.showBulkerAllSubmissions = (taskId, filterStatus = 'all') => {
                                 
                                 <!-- Three dot menu -->
                                 <button type="button" class="p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-400 dark:text-gray-500 shrink-0" onclick="window.showBulkerSubmissionMenu(event, '${s.id}')" style="outline: none;">
-                                    <svg class="h-4.5 w-4.5" fill="currentColor" viewBox="0 0 24 24">
+                                    <svg class="h-5 w-5" fill="currentColor" viewBox="0 0 24 24">
                                         <path d="M12 8c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm0 2c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm0 6c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2z"/>
                                     </svg>
                                 </button>
