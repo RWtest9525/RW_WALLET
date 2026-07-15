@@ -1760,6 +1760,7 @@ window.showBulkerTaskOverview = (taskId) => {
             const approved = taskSubs.filter(s => s.manual_status === 'approved').length;
             const pending = taskSubs.filter(s => s.manual_status === 'pending').length;
             const rejected = taskSubs.filter(s => s.manual_status === 'rejected').length;
+            const isReviewTask = taskSubs.some(s => s.assigned_comment && String(s.assigned_comment).trim().length > 0);
 
             const completionPercent = total > 0 ? Math.round((approved / total) * 100) : 0;
             
@@ -1918,7 +1919,20 @@ window.showBulkerTaskOverview = (taskId) => {
                             <svg class="h-4 w-4 text-red-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"></path></svg>
                         </button>
 
-                        <!-- Export Report -->
+                        <!-- View Live List or Export Report -->
+                        ${isReviewTask ? `
+                        <button onclick="window.showBulkerLiveList('${taskId}')" class="w-full flex items-center justify-between p-3 bg-blue-50/50 dark:bg-blue-950/20 hover:bg-blue-100/40 dark:hover:bg-blue-900/30 rounded-2xl border border-blue-100 dark:border-blue-900/40 shadow-sm transition text-left" style="outline: none;">
+                            <div class="flex items-center gap-3">
+                                <span class="p-1.5 rounded-lg bg-blue-600 text-white shrink-0">
+                                    <svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="3">
+                                        <path stroke-linecap="round" stroke-linejoin="round" d="M8.25 6.75h12M8.25 12h12m-12 5.25h12M3.75 6.75h.007v.008H3.75V6.75zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zM3.75 12h.007v.008H3.75V12zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm-.375 5.25h.007v.008H3.75v-.008zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0z" />
+                                    </svg>
+                                </span>
+                                <span class="text-xs font-black text-blue-600 dark:text-blue-400 font-extrabold">View Live List</span>
+                            </div>
+                            <svg class="h-4 w-4 text-blue-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"></path></svg>
+                        </button>
+                        ` : `
                         <button onclick="window.exportBulkerReport('${taskId}')" class="w-full flex items-center justify-between p-3 bg-blue-50/50 dark:bg-blue-950/20 hover:bg-blue-100/40 dark:hover:bg-blue-900/30 rounded-2xl border border-blue-100 dark:border-blue-900/40 shadow-sm transition text-left" style="outline: none;">
                             <div class="flex items-center gap-3">
                                 <span class="p-1.5 rounded-lg bg-blue-600 text-white shrink-0">
@@ -1930,6 +1944,7 @@ window.showBulkerTaskOverview = (taskId) => {
                             </div>
                             <svg class="h-4 w-4 text-blue-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"></path></svg>
                         </button>
+                        `}
                     </div>
                 </div>
                 ${getPageFooter()}
@@ -1964,6 +1979,81 @@ window.exportBulkerReport = (taskId) => {
             link.click();
             link.remove();
             showNotification('Report CSV downloaded successfully.');
+        };
+
+window.showBulkerLiveList = (taskId) => {
+            const taskSubs = userTaskHistoryCache.filter(x => (x.task_id === taskId || x.taskId === taskId));
+            if (taskSubs.length === 0) {
+                window.showBulkerTaskOverview(taskId);
+                return;
+            }
+            const sample = taskSubs[0];
+            const taskName = sample.app_name || sample.taskTitle || 'Task';
+            
+            // Format current date as DD-MM-YYYY
+            const d = new Date();
+            const day = String(d.getDate()).padStart(2, '0');
+            const month = String(d.getMonth() + 1).padStart(2, '0');
+            const year = d.getFullYear();
+            const dateStr = `${day}-${month}-${year}`;
+            
+            let listText = `${taskName} :-\n${dateStr}\n\n`;
+            
+            // Sort ascending (oldest submission first)
+            const sortedSubs = [...taskSubs].sort((a, b) => {
+                const tA = a.submitted_at || a.submittedAt || 0;
+                const tB = b.submitted_at || b.submittedAt || 0;
+                return tA - tB;
+            });
+
+            sortedSubs.forEach((s, index) => {
+                const name = s.ocr_extracted_name || s.username || `User #${index + 1}`;
+                let symbol = '🕒';
+                if (s.manual_status === 'approved') symbol = '✅';
+                else if (s.manual_status === 'rejected') symbol = '❌';
+                
+                listText += `${index + 1}. ${name} ${symbol}\n`;
+            });
+
+            const content = `
+                <header class="relative flex items-center justify-between p-4 bg-white dark:bg-gray-800 shadow-[0_2px_8px_rgba(0,0,0,0.015)] border-b border-gray-100 dark:border-gray-755 page-header-fixed">
+                    <button class="page-back-btn p-2 rounded-full hover:bg-gray-105 dark:hover:bg-gray-700 text-gray-700 dark:text-white" style="outline: none;">
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor" class="w-6 h-6">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5" />
+                        </svg>
+                    </button>
+                    <h2 class="absolute left-1/2 -translate-x-1/2 text-lg font-black text-gray-900 dark:text-white">Live List</h2>
+                </header>
+
+                <div class="max-w-xl mx-auto space-y-4.5 pb-24 px-4 pt-4 text-left">
+                    <div class="bg-white dark:bg-gray-800 p-5 rounded-3xl border border-gray-150 dark:border-gray-750 shadow-sm space-y-4">
+                        <div class="flex items-center justify-between">
+                            <h5 class="text-xs font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wider">Live List Format</h5>
+                            <span class="rounded bg-blue-50 dark:bg-blue-950/20 px-2.5 py-0.5 text-[9px] font-black text-blue-600 dark:text-blue-400 border border-blue-100 uppercase">Review Task</span>
+                        </div>
+                        
+                        <div class="bg-gray-50 dark:bg-gray-900/50 border border-gray-150 dark:border-gray-800 p-5 rounded-2xl font-mono text-sm leading-relaxed whitespace-pre-wrap select-all text-gray-800 dark:text-gray-200" id="bulker-live-list-text-container">${escapeHtml(listText)}</div>
+                        
+                        <button class="w-full py-3.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-2xl text-xs font-black transition uppercase tracking-wider shadow-sm flex items-center justify-center gap-2" onclick="window.copyBulkerLiveListText()" style="outline: none;">
+                            <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 17.25v3.375c0 .621-.504 1.125-1.125 1.125h-9.75a1.125 1.125 0 01-1.125-1.125V7.875c0-.621.504-1.125 1.125-1.125H5.25m11.9-3.664A2.251 2.251 0 0015 2.25h-3a2.251 2.251 0 00-1.85 1.136m8.75 3.148t-8.75 0M16.5 7.75v10.5c0 .621-.504 1.125-1.125 1.125h-9.75a1.125 1.125 0 01-1.125-1.125V7.75c0-.621.504-1.125 1.125-1.125h9.75c.621 0 1.125.504 1.125 1.125z" />
+                            </svg>
+                            <span>Copy Live List</span>
+                        </button>
+                    </div>
+                </div>
+                ${getPageFooter()}
+            `;
+
+            showPage(content, { returnTo: 'task-overview', keepBottomNav: false, onBack: () => window.showBulkerTaskOverview(taskId) });
+        };
+
+window.copyBulkerLiveListText = () => {
+            const el = document.getElementById('bulker-live-list-text-container');
+            if (el) {
+                copyToClipboard(el.textContent.trim());
+                showNotification('Live List copied to clipboard!');
+            }
         };
 
 window.showBulkerAllSubmissions = (taskId, filterStatus = 'all') => {
@@ -2108,8 +2198,291 @@ window.showBulkerAllSubmissions = (taskId, filterStatus = 'all') => {
         };
 
 window.showBulkerSubmissionMenu = (event, submissionId) => {
-            event.stopPropagation();
-            showNotification('Options for this submission will be linked soon.');
+            if (event) event.stopPropagation();
+            const idx = userTaskHistoryCache.findIndex(x => x.id === submissionId);
+            if (idx === -1) return;
+            const s = userTaskHistoryCache[idx];
+            
+            const taskId = s.task_id || s.taskId;
+            const taskIndexVal = s.task_index || s.taskIndex || 1;
+            const commentIndexVal = s.comment_index !== undefined ? s.comment_index : (s.commentIndex ?? s.assignedCommentIndex ?? 0);
+            const displaySubmissionId = `#${String(taskIndexVal).padStart(2, '0')}_${String(commentIndexVal + 1).padStart(2, '0')}`;
+            
+            const existing = document.getElementById('submission-menu-sheet-overlay');
+            if (existing) existing.remove();
+            
+            const overlay = document.createElement('div');
+            overlay.id = 'submission-menu-sheet-overlay';
+            overlay.className = 'fixed inset-0 z-[999] bg-black/60 flex items-end justify-center select-none';
+            
+            overlay.innerHTML = `
+                <div class="w-full max-w-md bg-white dark:bg-gray-800 rounded-t-[32px] p-5 shadow-2xl space-y-4 transform translate-y-full transition-transform duration-300 border-t border-gray-150 dark:border-gray-700" onclick="event.stopPropagation()" id="submission-menu-sheet-content">
+                    <!-- Drag handle -->
+                    <div class="w-12 h-1 bg-gray-200 dark:bg-gray-700 rounded-full mx-auto mb-1"></div>
+                    
+                    <div class="flex justify-between items-center pb-2 border-b border-gray-100 dark:border-gray-750">
+                        <h3 class="text-sm font-black text-gray-900 dark:text-white">Submission ${displaySubmissionId}</h3>
+                    </div>
+                    
+                    <div class="space-y-1.5 max-h-[60vh] overflow-y-auto pr-0.5 scrollbar-thin">
+                        <!-- Option 1: View Submission Details -->
+                        <button class="w-full flex items-center justify-between p-3.5 rounded-2xl hover:bg-gray-50 dark:hover:bg-gray-750/30 transition text-left" onclick="window.closeBulkerSubmissionMenu(); window.showBulkerSubmissionDetail('${s.id}')" style="outline: none;">
+                            <div class="flex items-center gap-3">
+                                <span class="p-2 rounded-xl bg-purple-50 dark:bg-purple-955/20 text-purple-600 dark:text-purple-400 shrink-0">
+                                    <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5">
+                                        <path stroke-linecap="round" stroke-linejoin="round" d="M11.25 11.25l.041-.02a.75.75 0 11.751 1.299l-.041.02a.75.75 0 01-.751-1.299zm0 4.5l.041-.02a.75.75 0 11.751 1.299l-.041.02a.75.75 0 01-.751-1.299zm0-9l.041-.02a.75.75 0 11.751 1.299l-.041.02a.75.75 0 01-.751-1.299zM12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10z" />
+                                    </svg>
+                                </span>
+                                <div>
+                                    <p class="text-xs font-black text-gray-900 dark:text-white">View Submission Details</p>
+                                    <p class="text-[10px] text-gray-400 font-semibold mt-0.5">See complete submission information</p>
+                                </div>
+                            </div>
+                            <svg class="h-4 w-4 text-gray-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"></path></svg>
+                        </button>
+
+                        <!-- Option 2: View Screenshot -->
+                        ${s.screenshot_url ? `
+                        <button class="w-full flex items-center justify-between p-3.5 rounded-2xl hover:bg-gray-50 dark:hover:bg-gray-750/30 transition text-left" onclick="window.closeBulkerSubmissionMenu(); window.showScreenshotLightbox('${escapeHtml(s.screenshot_url)}', '${escapeHtml(s.screenshot_view_url || '')}')" style="outline: none;">
+                            <div class="flex items-center gap-3">
+                                <span class="p-2 rounded-xl bg-blue-50 dark:bg-blue-955/20 text-blue-600 dark:text-blue-400 shrink-0">
+                                    <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5">
+                                        <path stroke-linecap="round" stroke-linejoin="round" d="M2.25 15.75l5.159-5.159a2.25 2.25 0 013.182 0l5.159 5.159m-1.5-1.5l1.409-1.409a2.25 2.25 0 013.182 0l2.909 2.909m-18 3.75h16.5a1.5 1.5 0 001.5-1.5V6a1.5 1.5 0 00-1.5-1.5H3.75A1.5 1.5 0 002.25 6v12a1.5 1.5 0 001.5 1.5zm10.5-11.25h.008v.008h-.008V8.25zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0z" />
+                                    </svg>
+                                </span>
+                                <div>
+                                    <p class="text-xs font-black text-gray-900 dark:text-white">View Screenshot</p>
+                                    <p class="text-[10px] text-gray-400 font-semibold mt-0.5">View uploaded screenshot</p>
+                                </div>
+                            </div>
+                            <svg class="h-4 w-4 text-gray-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"></path></svg>
+                        </button>
+                        ` : ''}
+
+                        <!-- Option 3: View Assigned Review -->
+                        ${(s.assigned_comment && String(s.assigned_comment).trim().length > 0) ? `
+                        <button class="w-full flex items-center justify-between p-3.5 rounded-2xl hover:bg-gray-50 dark:hover:bg-gray-750/30 transition text-left" onclick="window.closeBulkerSubmissionMenu(); window.showBulkerReviewDialog('${escapeHtml(s.assigned_comment)}')" style="outline: none;">
+                            <div class="flex items-center gap-3">
+                                <span class="p-2 rounded-xl bg-indigo-50 dark:bg-indigo-955/20 text-indigo-600 dark:text-indigo-400 shrink-0">
+                                    <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5">
+                                        <path stroke-linecap="round" stroke-linejoin="round" d="M7.5 8.25h9m-9 3H12m-9.75 1.51c0 1.6 1.123 2.994 2.707 3.227 1.129.166 2.27.293 3.423.379.35.026.67.21.865.501L12 21l2.755-4.133a1.14 1.14 0 01.865-.501 48.172 48.172 0 003.423-.379c1.584-.233 2.707-1.626 2.707-3.228V6.741c0-1.602-1.123-2.995-2.707-3.228A48.394 48.394 0 0012 3c-2.392 0-4.744.175-7.043.513C3.373 3.746 2.25 5.14 2.25 6.741v6.018z" />
+                                    </svg>
+                                </span>
+                                <div>
+                                    <p class="text-xs font-black text-gray-900 dark:text-white">View Assigned Review</p>
+                                    <p class="text-[10px] text-gray-400 font-semibold mt-0.5">See the review/comment used</p>
+                                </div>
+                            </div>
+                            <svg class="h-4 w-4 text-gray-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"></path></svg>
+                        </button>
+                        ` : ''}
+
+                        <!-- Option 4: Status Specific -->
+                        ${s.manual_status === 'approved' ? `
+                        <button class="w-full flex items-center justify-between p-3.5 rounded-2xl hover:bg-gray-50 dark:hover:bg-gray-750/30 transition text-left" onclick="window.closeBulkerSubmissionMenu(); window.showBulkerPaymentDialog('${s.reward}', '${s.payout_status || 'pending'}')" style="outline: none;">
+                            <div class="flex items-center gap-3">
+                                <span class="p-2 rounded-xl bg-emerald-50 dark:bg-emerald-955/20 text-emerald-600 dark:text-emerald-400 shrink-0">
+                                    <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5">
+                                        <path stroke-linecap="round" stroke-linejoin="round" d="M2.25 8.25h19.5M2.25 9h19.5m-19.5 5.25h19.5m-19.5 0h19.5M2.25 12h19.5m-19.5 0h19.5M3 18.75V7.5a2.25 2.25 0 012.25-2.25h13.5A2.25 2.25 0 0121 7.5v11.25m-18 0A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75m-18 0v-7.5" />
+                                    </svg>
+                                </span>
+                                <div>
+                                    <p class="text-xs font-black text-emerald-600 dark:text-emerald-400">Payment Details</p>
+                                    <p class="text-[10px] text-gray-400 font-semibold mt-0.5">See reward & payout details</p>
+                                </div>
+                            </div>
+                            <svg class="h-4 w-4 text-gray-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"></path></svg>
+                        </button>
+                        ` : s.manual_status === 'rejected' ? `
+                        <button class="w-full flex items-center justify-between p-3.5 rounded-2xl hover:bg-gray-50 dark:hover:bg-gray-750/30 transition text-left" onclick="window.closeBulkerSubmissionMenu(); window.showBulkerRejectionReasonDialog('${escapeHtml(s.reject_reason || (s.ocr_status === 'failed' ? 'OCR Verification Failed' : 'Review comment not found on Play Store'))}')" style="outline: none;">
+                            <div class="flex items-center gap-3">
+                                <span class="p-2 rounded-xl bg-rose-50 dark:bg-rose-955/20 text-rose-600 dark:text-rose-455 shrink-0">
+                                    <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5">
+                                        <path stroke-linecap="round" stroke-linejoin="round" d="M9.75 9.75l4.5 4.5m0-4.5l-4.5 4.5M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                    </svg>
+                                </span>
+                                <div>
+                                    <p class="text-xs font-black text-rose-600 dark:text-rose-455">View Rejection Reason</p>
+                                    <p class="text-[10px] text-gray-400 font-semibold mt-0.5">See why this submission was rejected</p>
+                                </div>
+                            </div>
+                            <svg class="h-4 w-4 text-gray-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"></path></svg>
+                        </button>
+                        ` : `
+                        <button class="w-full flex items-center justify-between p-3.5 rounded-2xl hover:bg-gray-50 dark:hover:bg-gray-750/30 transition text-left" onclick="window.closeBulkerSubmissionMenu(); window.showBulkerVerificationProgressDialog()" style="outline: none;">
+                            <div class="flex items-center gap-3">
+                                <span class="p-2 rounded-xl bg-amber-50 dark:bg-amber-955/20 text-amber-600 dark:text-amber-500 shrink-0">
+                                    <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5">
+                                        <path stroke-linecap="round" stroke-linejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                    </svg>
+                                </span>
+                                <div>
+                                    <p class="text-xs font-black text-amber-600 dark:text-amber-500">View Verification Progress</p>
+                                    <p class="text-[10px] text-gray-400 font-semibold mt-0.5">See current verification status</p>
+                                </div>
+                            </div>
+                            <svg class="h-4 w-4 text-gray-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"></path></svg>
+                        </button>
+                        `}
+
+                        <!-- Option 5: Copy Submission ID -->
+                        <button class="w-full flex items-center justify-between p-3.5 rounded-2xl hover:bg-gray-50 dark:hover:bg-gray-750/30 transition text-left" onclick="window.closeBulkerSubmissionMenu(); copyToClipboard('${displaySubmissionId}'); showNotification('Submission ID Copied!')" style="outline: none;">
+                            <div class="flex items-center gap-3">
+                                <span class="p-2 rounded-xl bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 shrink-0">
+                                    <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5">
+                                        <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 17.25v3.375c0 .621-.504 1.125-1.125 1.125h-9.75a1.125 1.125 0 01-1.125-1.125V7.875c0-.621.504-1.125 1.125-1.125H5.25m11.9-3.664A2.251 2.251 0 0015 2.25h-3a2.251 2.251 0 00-1.85 1.136m8.75 3.148t-8.75 0M16.5 7.75v10.5c0 .621-.504 1.125-1.125 1.125h-9.75a1.125 1.125 0 01-1.125-1.125V7.75c0-.621.504-1.125 1.125-1.125h9.75c.621 0 1.125.504 1.125 1.125z" />
+                                    </svg>
+                                </span>
+                                <div>
+                                    <p class="text-xs font-black text-gray-900 dark:text-white">Copy Submission ID</p>
+                                    <p class="text-[10px] text-gray-400 font-semibold mt-0.5">Copy ID for support</p>
+                                </div>
+                            </div>
+                            <svg class="h-4 w-4 text-gray-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"></path></svg>
+                        </button>
+
+                        <!-- Option 6: Share Submission ID -->
+                        <button class="w-full flex items-center justify-between p-3.5 rounded-2xl hover:bg-gray-50 dark:hover:bg-gray-750/30 transition text-left" onclick="window.closeBulkerSubmissionMenu(); window.shareBulkerSubmission('${displaySubmissionId}')" style="outline: none;">
+                            <div class="flex items-center gap-3">
+                                <span class="p-2 rounded-xl bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 shrink-0">
+                                    <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5">
+                                        <path stroke-linecap="round" stroke-linejoin="round" d="M7.217 10.907a2.25 2.25 0 100 2.186m0-2.186l.908.452a2.25 2.25 0 002.502-.314l5.385-3.59a2.25 2.25 0 10-.866-1.8l-5.385 3.59a2.25 2.25 0 00-.2 3.86l.908.452m0 0l.908-.452m-1.816 0l.908.452m0 0a2.25 2.25 0 102.25-2.25m-2.25 2.25a2.25 2.25 0 00-2.25-2.25m0 0h.008v.008h-.008z" />
+                                    </svg>
+                                </span>
+                                <div>
+                                    <p class="text-xs font-black text-gray-900 dark:text-white">Share Submission ID</p>
+                                    <p class="text-[10px] text-gray-400 font-semibold mt-0.5">Share with support</p>
+                                </div>
+                            </div>
+                            <svg class="h-4 w-4 text-gray-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"></path></svg>
+                        </button>
+
+                        <!-- Option 7: Report Issue -->
+                        <button class="w-full flex items-center justify-between p-3.5 rounded-2xl hover:bg-gray-50 dark:hover:bg-gray-750/30 transition text-left" onclick="window.closeBulkerSubmissionMenu(); window.reportBulkerSubmissionIssue('${s.id}', '${displaySubmissionId}')" style="outline: none;">
+                            <div class="flex items-center gap-3">
+                                <span class="p-2 rounded-xl bg-red-50 dark:bg-red-955/20 text-red-600 dark:text-red-500 shrink-0">
+                                    <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5">
+                                        <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
+                                    </svg>
+                                </span>
+                                <div>
+                                    <p class="text-xs font-black text-red-600 dark:text-red-500">Report Issue</p>
+                                    <p class="text-[10px] text-gray-400 font-semibold mt-0.5">Report issue to support team</p>
+                                </div>
+                            </div>
+                            <svg class="h-4 w-4 text-gray-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"></path></svg>
+                        </button>
+                    </div>
+                    
+                    <!-- Close Button -->
+                    <button class="w-full py-3 bg-gray-100 hover:bg-gray-200 dark:bg-gray-700 dark:hover:bg-gray-650 rounded-2xl text-xs font-black text-gray-900 dark:text-white transition uppercase tracking-wider" onclick="window.closeBulkerSubmissionMenu()" style="outline: none;">
+                        Close
+                    </button>
+                </div>
+            `;
+            
+            document.body.appendChild(overlay);
+            document.body.style.overflow = 'hidden';
+            
+            // Slide up animation trigger
+            setTimeout(() => {
+                const contentEl = document.getElementById('submission-menu-sheet-content');
+                if (contentEl) {
+                    contentEl.classList.remove('translate-y-full');
+                    contentEl.classList.add('translate-y-0');
+                }
+            }, 10);
+            
+            overlay.onclick = window.closeBulkerSubmissionMenu;
+        };
+
+        window.closeBulkerSubmissionMenu = () => {
+            const overlay = document.getElementById('submission-menu-sheet-overlay');
+            if (!overlay) return;
+            
+            const contentEl = document.getElementById('submission-menu-sheet-content');
+            if (contentEl) {
+                contentEl.classList.remove('translate-y-0');
+                contentEl.classList.add('translate-y-full');
+            }
+            
+            setTimeout(() => {
+                overlay.remove();
+                document.body.style.overflow = '';
+            }, 220);
+        };
+
+        window.showBulkerReviewDialog = (comment) => {
+            renderModal('Assigned Review', 
+                `<div class="p-3.5 bg-gray-50 dark:bg-gray-900/50 border border-gray-150 dark:border-gray-800 rounded-2xl font-mono text-xs text-gray-700 dark:text-gray-300 italic select-all leading-relaxed">${escapeHtml(comment)}</div>`,
+                `<button onclick="window.closeModal(); copyToClipboard('${escapeHtml(comment)}'); showNotification('Review copied to clipboard!');" class="w-full py-2.5 text-xs font-black bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 transition uppercase tracking-wider" style="outline: none;">Copy Review</button>`,
+                'max-w-sm'
+            );
+        };
+
+        window.showBulkerPaymentDialog = (reward, payoutStatus) => {
+            const isPaid = payoutStatus === 'paid';
+            renderModal('Payment Details',
+                `<div class="space-y-2 text-xs font-semibold text-gray-655 dark:text-gray-300 text-left">
+                    <div class="flex justify-between py-1 border-b border-gray-100 dark:border-gray-800">
+                        <span class="text-gray-400">Reward Rate</span>
+                        <span class="font-extrabold text-emerald-600">₹${reward}</span>
+                    </div>
+                    <div class="flex justify-between py-1 pt-1.5">
+                        <span class="text-gray-400">Payout Status</span>
+                        <span class="rounded-full px-2 py-0.5 text-[9px] font-black uppercase ${isPaid ? 'bg-emerald-50 text-emerald-600 border border-emerald-100' : 'bg-amber-50 text-amber-600 border border-amber-100'}">
+                            ${isPaid ? 'Paid' : 'Pending Payout'}
+                        </span>
+                    </div>
+                </div>`,
+                `<button onclick="window.closeModal()" class="w-full py-2.5 text-xs font-black bg-gray-100 hover:bg-gray-200 dark:bg-gray-700 text-gray-900 dark:text-white rounded-xl transition uppercase tracking-wider" style="outline: none;">Close</button>`,
+                'max-w-sm'
+            );
+        };
+
+        window.showBulkerRejectionReasonDialog = (reason) => {
+            renderModal('Rejection Reason',
+                `<div class="p-3.5 bg-rose-50/30 border border-rose-100/50 rounded-2xl text-xs text-rose-600 font-bold select-text leading-relaxed">${escapeHtml(reason)}</div>`,
+                `<button onclick="window.closeModal()" class="w-full py-2.5 text-xs font-black bg-gray-105 hover:bg-gray-200 dark:bg-gray-700 text-gray-900 dark:text-white rounded-xl transition uppercase tracking-wider" style="outline: none;">Close</button>`,
+                'max-w-sm'
+            );
+        };
+
+        window.showBulkerVerificationProgressDialog = () => {
+            renderModal('Verification Progress',
+                `<div class="text-xs font-semibold text-gray-655 dark:text-gray-300 leading-relaxed text-left space-y-2">
+                    <p class="font-black text-gray-800 dark:text-white flex items-center gap-1.5">🕒 <span>Checking on Play Store</span></p>
+                    <p class="mt-1">Verification usually takes 1 to 7 working days to complete. Our automated systems and quality team verify that your review comment remains active on the Google Play Store page.</p>
+                </div>`,
+                `<button onclick="window.closeModal()" class="w-full py-2.5 text-xs font-black bg-gray-105 hover:bg-gray-200 dark:bg-gray-700 text-gray-900 dark:text-white rounded-xl transition uppercase tracking-wider" style="outline: none;">Okay</button>`,
+                'max-w-sm'
+            );
+        };
+
+        window.shareBulkerSubmission = (displayId) => {
+            const text = `Check out my submission ${displayId} on RW Wallet!`;
+            if (navigator.share) {
+                navigator.share({
+                    title: 'Submission Share',
+                    text: text,
+                    url: window.location.href
+                }).catch(() => {});
+            } else {
+                copyToClipboard(text);
+                showNotification('Share message copied to clipboard!');
+            }
+        };
+
+        window.reportBulkerSubmissionIssue = (submissionId, displayId) => {
+            window.supportChatDraftMessage = `Hello Support, I have an issue with my Bulker Submission ${displayId} (ID: ${submissionId}). Please verify this.`;
+            if (typeof window.showSupportChatPage === 'function') {
+                window.showSupportChatPage();
+            } else if (typeof window.showSettingsPage === 'function') {
+                window.showSettingsPage();
+                showNotification('Go to support section to file your report.');
+            } else {
+                showNotification('Support page is currently unavailable.');
+            }
         };
 
 window.showBulkerSubmissionDetail = (submissionId) => {

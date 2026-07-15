@@ -286,10 +286,15 @@ onAuthStateChanged(auth, async (user) => {
                         initializeUserListeners(currentUser.uid);
                         startWithdrawalSettingsListener();
                         initializePublicHomeRealtime();
+
+                        // Silent prefetch of user task history for instant loading
+                        if (typeof window.loadUserTaskHistory === 'function') {
+                            window.loadUserTaskHistory().catch(e => console.warn('Silent prefetch of task history skipped:', e));
+                        }
                     } catch (err) {
                         console.error("Error initializing user listeners:", err);
                     }
-                }, 100);
+                }, 200);
 
                 if (isAdmin) {
                     console.log("User is Admin, initializing admin listeners...");
