@@ -929,6 +929,29 @@ const getUserTaskHistoryListHtml = () => {
                 ? new Date(g.lastUpdated).toLocaleString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: true }) 
                 : 'Unknown';
 
+            const task = (typeof allTasksCache !== 'undefined' && Array.isArray(allTasksCache)) 
+                ? allTasksCache.find(t => t && t.id === g.taskId) 
+                : null;
+            
+            const firstSub = g.submissions[0] || {};
+            const family = firstSub.taskFamily || task?.taskFamily || task?.family || 'review';
+            const subtype = firstSub.taskSubtype || task?.taskSubtype || task?.subtype || 'app_review';
+            
+            let subtypeLabel = 'Play Store Review';
+            let subtypeLogo = 'https://upload.wikimedia.org/wikipedia/commons/d/d0/Google_Play_Arrow_Logo_%282022%29.svg';
+            
+            if (typeof ADMIN_TASK_REVIEW_TYPES !== 'undefined' && typeof ADMIN_TASK_SOCIAL_TYPES !== 'undefined') {
+                const allTypes = [...ADMIN_TASK_REVIEW_TYPES, ...ADMIN_TASK_SOCIAL_TYPES];
+                const matchedType = allTypes.find(t => t.value === subtype);
+                if (matchedType) {
+                    subtypeLabel = matchedType.label;
+                    subtypeLogo = matchedType.logo;
+                }
+            }
+            if (subtype === 'app_review') {
+                subtypeLabel = 'Play Store Review';
+            }
+
             return `
             <div class="bg-white dark:bg-gray-800 px-4 py-3 rounded-2xl border border-gray-100 dark:border-gray-800 hover:shadow-[0_4px_16px_rgba(0,0,0,0.03)] cursor-pointer transition select-none text-left space-y-2 shadow-[0_2px_8px_rgba(0,0,0,0.012)]" onclick="window.showBulkerTaskOverview('${g.taskId}')">
                 <!-- Top Section: App info and Arrow -->
@@ -936,10 +959,10 @@ const getUserTaskHistoryListHtml = () => {
                     <div class="flex items-center gap-3 min-w-0">
                         <img src="${escapeHtml(g.logoUrl)}" data-task-logo-id="${g.taskId}" class="h-11 w-11 rounded-xl object-cover shrink-0 border border-gray-50 dark:border-gray-700 shadow-sm" onerror="this.src='https://cdn-icons-png.flaticon.com/512/3176/3176366.png';">
                         <div class="min-w-0 flex-1">
-                            <h4 class="text-[14px] font-bold text-gray-900 dark:text-white truncate leading-tight">${escapeHtml(g.taskName)}</h4>
-                            <div class="flex items-center gap-1.5 mt-0.5 text-[10px] text-gray-450 dark:text-gray-400 font-bold">
-                                <img src="https://upload.wikimedia.org/wikipedia/commons/d/d0/Google_Play_Arrow_Logo_%282022%29.svg" class="h-3 w-3 shrink-0">
-                                <span>Play Store Review • ₹${g.reward}</span>
+                            <h4 class="text-[14px] font-black text-gray-900 dark:text-white truncate leading-tight">${escapeHtml(g.taskName)}</h4>
+                            <div class="flex items-center gap-1.5 mt-0.5 text-[11px] text-gray-450 dark:text-gray-400 font-bold">
+                                <img src="${escapeHtml(subtypeLogo)}" class="h-3.5 w-3.5 shrink-0 rounded-sm object-contain bg-gray-50 dark:bg-gray-800 p-0.5 border border-gray-100 dark:border-gray-700 shadow-sm">
+                                <span>${escapeHtml(subtypeLabel)} • ₹${g.reward}</span>
                             </div>
                         </div>
                     </div>
@@ -947,20 +970,23 @@ const getUserTaskHistoryListHtml = () => {
                 </div>
                 
                 <!-- Stats Row -->
-                <div class="grid grid-cols-4 gap-1 text-center select-none">
-                    <div>
+                <div class="flex items-center justify-between text-center select-none py-1.5 border-y border-gray-50/50 dark:border-gray-750/30">
+                    <div class="flex-1">
                         <span class="block text-[10px] font-semibold text-gray-400 dark:text-gray-500 leading-none">Submitted</span>
                         <span class="block text-[18px] font-black text-gray-900 dark:text-white mt-1 leading-none">${total}</span>
                     </div>
-                    <div>
+                    <div class="h-6 w-px bg-gray-150 dark:bg-gray-700/60 shrink-0"></div>
+                    <div class="flex-1">
                         <span class="block text-[10px] font-semibold text-gray-400 dark:text-gray-500 leading-none">Approved</span>
                         <span class="block text-[18px] font-black text-emerald-500 mt-1 leading-none">${approvedCount}</span>
                     </div>
-                    <div>
+                    <div class="h-6 w-px bg-gray-150 dark:bg-gray-700/60 shrink-0"></div>
+                    <div class="flex-1">
                         <span class="block text-[10px] font-semibold text-gray-400 dark:text-gray-500 leading-none">Pending</span>
                         <span class="block text-[18px] font-black text-amber-500 mt-1 leading-none">${pendingCount}</span>
                     </div>
-                    <div>
+                    <div class="h-6 w-px bg-gray-150 dark:bg-gray-700/60 shrink-0"></div>
+                    <div class="flex-1">
                         <span class="block text-[10px] font-semibold text-gray-400 dark:text-gray-500 leading-none">Rejected</span>
                         <span class="block text-[18px] font-black text-rose-500 mt-1 leading-none">${rejectedCount}</span>
                     </div>
