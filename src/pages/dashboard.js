@@ -2230,7 +2230,7 @@ window.showBulkerAllSubmissions = (taskId, filterStatus = 'all') => {
                                     <span class="text-[10px] font-black text-gray-400 dark:text-gray-500 w-14 shrink-0 font-mono">${displaySubmissionId}</span>
                                     
                                     <!-- Thumbnail -->
-                                    <img src="${escapeHtml(s.screenshot_url)}" class="h-11 w-11 rounded-none object-cover shrink-0 border border-gray-150 dark:border-gray-700 shadow-sm" onclick="event.stopPropagation(); window.showScreenshotLightbox('${escapeHtml(s.screenshot_url)}', '${escapeHtml(s.screenshot_view_url || '')}')" onerror="this.src='https://placehold.co/100x100?text=No+Img';">
+                                    <img src="${escapeHtml(s.screenshot_url)}" class="h-11 w-11 rounded object-cover shrink-0 border border-gray-150 dark:border-gray-700 shadow-sm" onclick="event.stopPropagation(); window.showScreenshotLightbox('${escapeHtml(s.screenshot_url)}', '${escapeHtml(s.screenshot_view_url || '')}')" onerror="this.src='https://placehold.co/100x100?text=No+Img';">
                                     
                                     <!-- Info -->
                                     <div class="min-w-0">
