@@ -1287,6 +1287,14 @@ const openAdminInspectDetailsModal = async (chatUserId, messageText) => {
         if (dbSubId) {
             s = submissions.find(x => x.id === dbSubId);
         }
+        if (!s && displayId) {
+            s = submissions.find(x => {
+                const taskIndexVal = x.task_index || x.taskIndex || 1;
+                const commentIndexVal = x.comment_index !== undefined ? x.comment_index : (x.commentIndex ?? x.assignedCommentIndex ?? 0);
+                const subDisplayId = `#${String(taskIndexVal).padStart(2, '0')}_${String(commentIndexVal + 1).padStart(2, '0')}`;
+                return subDisplayId === displayId;
+            });
+        }
         if (!s && taskId) {
             s = submissions.find(x => x.task_id === taskId || x.taskId === taskId);
         }

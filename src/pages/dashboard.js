@@ -2287,7 +2287,7 @@ window.showBulkerAllSubmissions = (taskId, filterStatus = 'all') => {
                                     <span class="text-[10px] font-black text-gray-400 dark:text-gray-500 w-14 shrink-0 font-mono">${displaySubmissionId}</span>
                                     
                                     <!-- Thumbnail -->
-                                    <img src="${escapeHtml(s.screenshot_url)}" class="h-11 w-11 rounded object-cover shrink-0 border border-gray-150 dark:border-gray-700 shadow-sm" onclick="event.stopPropagation(); window.showScreenshotLightbox('${escapeHtml(s.screenshot_url)}', '${escapeHtml(s.screenshot_view_url || '')}')" onerror="this.src='https://placehold.co/100x100?text=No+Img';">
+                                    <img src="${escapeHtml(s.screenshot_url)}" class="h-11 w-11 rounded object-cover shrink-0 border border-gray-150 dark:border-gray-700 shadow-sm" onclick="event.stopPropagation(); window.showBulkerScreenshotLightbox('${s.id}')" onerror="this.src='https://placehold.co/100x100?text=No+Img';">
                                     
                                     <!-- Info -->
                                     <div class="min-w-0">
@@ -2313,6 +2313,28 @@ window.showBulkerAllSubmissions = (taskId, filterStatus = 'all') => {
             `;
 
             showPage(content, { returnTo: 'task-overview', keepBottomNav: false, onBack: () => window.showBulkerTaskOverview(taskId) });
+        };
+
+window.showBulkerScreenshotLightbox = (subId) => {
+            const s = userTaskHistoryCache.find(x => x.id === subId);
+            if (s && typeof window.showScreenshotLightbox === 'function') {
+                window.showScreenshotLightbox(s.screenshot_url, s.screenshot_view_url || s.view_url || '');
+            }
+        };
+
+window.showBulkerPaymentDialogById = (subId) => {
+            const s = userTaskHistoryCache.find(x => x.id === subId);
+            if (s && typeof window.showBulkerPaymentDialog === 'function') {
+                window.showBulkerPaymentDialog(s.reward, s.payout_status || 'pending');
+            }
+        };
+
+window.showBulkerRejectionReasonDialogById = (subId) => {
+            const s = userTaskHistoryCache.find(x => x.id === subId);
+            if (s && typeof window.showBulkerRejectionReasonDialog === 'function') {
+                const reason = s.reject_reason || (s.ocr_status === 'failed' ? 'Auto check failed' : 'Review comment not found on Play Store');
+                window.showBulkerRejectionReasonDialog(reason);
+            }
         };
 
 window.showBulkerSubmissionMenu = (event, submissionId) => {
@@ -2361,7 +2383,7 @@ window.showBulkerSubmissionMenu = (event, submissionId) => {
 
                         <!-- Option 2: Status Specific -->
                         ${s.manual_status === 'approved' ? `
-                        <button class="w-full flex items-center justify-between p-3.5 rounded-2xl hover:bg-gray-50 dark:hover:bg-gray-750/30 transition text-left" onclick="window.closeBulkerSubmissionMenu(); window.showBulkerPaymentDialog('${s.reward}', '${s.payout_status || 'pending'}')" style="outline: none;">
+                        <button class="w-full flex items-center justify-between p-3.5 rounded-2xl hover:bg-gray-55/50 dark:hover:bg-gray-750/30 transition text-left" onclick="window.closeBulkerSubmissionMenu(); window.showBulkerPaymentDialogById('${s.id}')" style="outline: none;">
                             <div class="flex items-center gap-3">
                                 <span class="p-2 rounded-xl bg-emerald-50 dark:bg-emerald-955/20 text-emerald-600 dark:text-emerald-400 shrink-0">
                                     <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5">
@@ -2376,7 +2398,7 @@ window.showBulkerSubmissionMenu = (event, submissionId) => {
                             <svg class="h-4 w-4 text-gray-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"></path></svg>
                         </button>
                         ` : s.manual_status === 'rejected' ? `
-                        <button class="w-full flex items-center justify-between p-3.5 rounded-2xl hover:bg-gray-50 dark:hover:bg-gray-750/30 transition text-left" onclick="window.closeBulkerSubmissionMenu(); window.showBulkerRejectionReasonDialog('${escapeHtml(s.reject_reason || (s.ocr_status === 'failed' ? 'Verification check failed' : 'Review comment not found on Play Store'))}')" style="outline: none;">
+                        <button class="w-full flex items-center justify-between p-3.5 rounded-2xl hover:bg-gray-55/50 dark:hover:bg-gray-750/30 transition text-left" onclick="window.closeBulkerSubmissionMenu(); window.showBulkerRejectionReasonDialogById('${s.id}')" style="outline: none;">
                             <div class="flex items-center gap-3">
                                 <span class="p-2 rounded-xl bg-rose-50 dark:bg-rose-955/20 text-rose-600 dark:text-rose-455 shrink-0">
                                     <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5">
@@ -2540,7 +2562,7 @@ window.showBulkerSubmissionMenu = (event, submissionId) => {
                         return;
                     }
 
-                    const prefilledMsg = `📱 App Name: ${appName}\n📅 Date: ${subDate}\n🆔 Task ID: ${taskIdVal}\n🔢 Submission ID: ${displayId}\n📄 [DbSubId: ${submissionId}]\n\n❓ My Doubt:\n${queryText}`;
+                    const prefilledMsg = `📱 App Name: ${appName}\n📅 Date: ${subDate}\n🆔 Task ID: ${taskIdVal}\n🔢 Submission ID: ${displayId}\n\n❓ My Doubt:\n${queryText}`;
                     window.closeModal();
 
                     if (typeof window.openSupportChatPage === 'function') {
@@ -2680,7 +2702,7 @@ window.showBulkerSubmissionDetail = (submissionId) => {
                     <div class="bg-white dark:bg-gray-800 p-5 rounded-2xl border border-gray-100 dark:border-gray-800 shadow-[0_2px_8px_rgba(0,0,0,0.03)] space-y-3">
                         <p class="text-[10px] font-black uppercase text-gray-400 tracking-wider">Large Screenshot</p>
                         <div class="relative overflow-hidden rounded-xl bg-gray-50 dark:bg-gray-955 flex items-center justify-center py-4 border border-gray-100 dark:border-gray-800">
-                            <img id="bulker-detail-screenshot-img" src="${escapeHtml(s.screenshot_url)}" alt="Screenshot Proof" class="h-80 w-52 rounded-xl object-cover cursor-zoom-in hover:scale-102 transition shadow-sm" onclick="window.showScreenshotLightbox('${escapeHtml(s.screenshot_url)}', '${escapeHtml(s.screenshot_view_url || '')}')">
+                            <img id="bulker-detail-screenshot-img" src="${escapeHtml(s.screenshot_url)}" alt="Screenshot Proof" class="h-80 w-52 rounded-xl object-cover cursor-zoom-in hover:scale-102 transition shadow-sm" onclick="window.showBulkerScreenshotLightbox('${s.id}')">
                         </div>
                     </div>
                     ` : ''}
