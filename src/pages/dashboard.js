@@ -1823,23 +1823,26 @@ window.showBulkerTaskOverview = (taskId) => {
                         <!-- Stats Divider -->
                         <div class="border-t border-gray-100 dark:border-gray-750/50"></div>
 
-                        <!-- 4-column Stats Counter Grid -->
-                        <div class="grid grid-cols-4 gap-2 text-center select-none">
-                            <div>
-                                <span class="block text-[11px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wide">Total</span>
-                                <span class="block text-[15px] font-black text-gray-855 dark:text-white mt-1">${total}</span>
+                        <!-- Stats Row with Dividers -->
+                        <div class="flex items-center justify-between text-center select-none py-1.5 border-y border-gray-50/50 dark:border-gray-750/30">
+                            <div class="flex-1">
+                                <span class="block text-[11px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wide leading-none">Submitted</span>
+                                <span class="block text-[18px] font-black text-gray-900 dark:text-white mt-1.5 leading-none">${total}</span>
                             </div>
-                            <div>
-                                <span class="block text-[11px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wide">Approved</span>
-                                <span class="block text-[15px] font-black text-emerald-600 dark:text-emerald-400 mt-1">${approved}</span>
+                            <div class="h-6 w-px bg-gray-150 dark:bg-gray-700/60 shrink-0"></div>
+                            <div class="flex-1">
+                                <span class="block text-[11px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wide leading-none">Approved</span>
+                                <span class="block text-[18px] font-black text-emerald-500 mt-1.5 leading-none">${approved}</span>
                             </div>
-                            <div>
-                                <span class="block text-[11px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wide">Pending</span>
-                                <span class="block text-[15px] font-black text-amber-500 mt-1">${pending}</span>
+                            <div class="h-6 w-px bg-gray-150 dark:bg-gray-700/60 shrink-0"></div>
+                            <div class="flex-1">
+                                <span class="block text-[11px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wide leading-none">Pending</span>
+                                <span class="block text-[18px] font-black text-amber-500 mt-1.5 leading-none">${pending}</span>
                             </div>
-                            <div>
-                                <span class="block text-[11px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wide">Rejected</span>
-                                <span class="block text-[15px] font-black text-rose-600 dark:text-rose-455 mt-1">${rejected}</span>
+                            <div class="h-6 w-px bg-gray-150 dark:bg-gray-700/60 shrink-0"></div>
+                            <div class="flex-1">
+                                <span class="block text-[11px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wide leading-none">Rejected</span>
+                                <span class="block text-[18px] font-black text-rose-500 mt-1.5 leading-none">${rejected}</span>
                             </div>
                         </div>
 
