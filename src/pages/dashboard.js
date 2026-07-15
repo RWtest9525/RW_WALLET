@@ -2540,7 +2540,7 @@ window.showBulkerSubmissionMenu = (event, submissionId) => {
                         return;
                     }
 
-                    const prefilledMsg = `App Name: ${appName}\nDate: ${subDate}\nTask ID: ${taskIdVal}\nSubmission ID: ${displayId}\n[DbSubId: ${submissionId}]\n\nMy Doubt: ${queryText}`;
+                    const prefilledMsg = `📱 App Name: ${appName}\n📅 Date: ${subDate}\n🆔 Task ID: ${taskIdVal}\n🔢 Submission ID: ${displayId}\n📄 [DbSubId: ${submissionId}]\n\n❓ My Doubt:\n${queryText}`;
                     window.closeModal();
 
                     if (typeof window.openSupportChatPage === 'function') {

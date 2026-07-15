@@ -331,7 +331,7 @@ const renderSupportMessages = (messages, viewerRole) => {
                         ${dateDivider}
                         <div class="flex ${isMine ? 'justify-end' : 'justify-start'}" data-message-id="${message.id}">
                             <div class="w-fit max-w-[82%] px-3 py-1.5 shadow-sm ${isMine ? 'chat-bubble-user bg-emerald-50 dark:bg-emerald-900/40 text-gray-900 dark:text-white border border-emerald-100 dark:border-emerald-800' : 'chat-bubble-admin bg-white dark:bg-gray-800 text-gray-900 dark:text-white border border-gray-100 dark:border-gray-700'}">
-                                <span class="text-sm leading-5 break-words align-baseline">${escapeHtml(message.text || '')}</span>
+                                <span class="text-sm leading-5 break-words align-baseline whitespace-pre-wrap block">${escapeHtml(message.text || '')}</span>
                                 ${inspectBtnHtml}
                                 <span class="inline-flex items-center text-[10px] ml-2 text-gray-400 align-baseline mt-1.5 w-full justify-end select-none">
                                     <span>${formatChatTime(message.createdAt)}</span>
