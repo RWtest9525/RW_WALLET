@@ -147,7 +147,8 @@ const getAdminChatUserMeta = (user = {}) => ({
             userId: user.id || user.uid || '',
             userName: user.name || user.fullName || user.displayName || user.email || 'User',
             userEmail: user.email || '',
-            userMobile: user.mobile || user.phoneNumber || user.phone || ''
+            userMobile: user.mobile || user.phoneNumber || user.phone || '',
+            userAvatar: user.profilePhoto || user.profile_photo || user.avatarUrl || user.avatar_url || ''
         });
 
 const ensureAdminChatUsersLoaded = async () => {
@@ -193,9 +194,17 @@ const renderAdminChatsList = () => {
             const chatRows = chatsToRender.map(chat => {
                     const roomId = chat.roomId || getSupportRoomId(chat.userId || chat.id);
                     const isUnread = (chat.lastSenderId || '') !== currentUser?.uid && timestampToMillis(chat.updatedAt) > Number(localStorage.getItem(getAdminSupportChatSeenKey(roomId)) || 0);
+                    
+                    const userProfile = allUsersCache.find(u => String(u.id || u.uid) === String(chat.userId || chat.id)) || {};
+                    const avatarUrl = userProfile.profilePhoto || userProfile.profile_photo || userProfile.avatarUrl || userProfile.avatar_url || chat.userAvatar || 'https://cdn-icons-png.flaticon.com/512/3135/3135715.png';
+                    const hasCustomAvatar = !!(userProfile.profilePhoto || userProfile.profile_photo || userProfile.avatarUrl || userProfile.avatar_url || chat.userAvatar);
+                    const avatarClass = hasCustomAvatar 
+                        ? "h-12 w-12 rounded-full object-cover border border-gray-100 dark:border-gray-700 bg-white" 
+                        : "h-12 w-12 rounded-full object-contain bg-blue-50 p-2 shadow-inner border border-gray-100 dark:border-gray-700";
+
                     return `
                     <button data-chat-userid="${chat.userId || chat.id}" class="admin-chat-row w-full flex items-center gap-3 p-4 bg-white dark:bg-gray-800 border border-gray-100 dark:border-gray-700 rounded-2xl shadow-sm text-left hover:bg-gray-50 dark:hover:bg-gray-700/50 transition">
-                        <img src="https://cdn-icons-png.flaticon.com/512/3135/3135715.png" alt="${escapeHtml(chat.userName || 'User')}" class="h-12 w-12 rounded-full object-contain bg-blue-50 p-2">
+                        <img src="${escapeHtml(avatarUrl)}" alt="${escapeHtml(chat.userName || 'User')}" class="${avatarClass}">
                         <div class="flex-1 min-w-0">
                             <div class="flex items-center justify-between gap-2">
                                 <h3 class="font-bold truncate">${escapeHtml(chat.userName || 'User')}</h3>
@@ -209,9 +218,16 @@ const renderAdminChatsList = () => {
                         </div>
                     </button>`;
                 }).join('');
-            const userRows = usersToStartChat.map(user => `
+            const userRows = usersToStartChat.map(user => {
+                    const avatarUrl = user.userAvatar || 'https://cdn-icons-png.flaticon.com/512/3135/3135715.png';
+                    const hasCustomAvatar = !!user.userAvatar;
+                    const avatarClass = hasCustomAvatar 
+                        ? "h-12 w-12 rounded-full object-cover border border-gray-150 dark:border-gray-700 bg-white" 
+                        : "h-12 w-12 rounded-full object-contain bg-white dark:bg-gray-800 p-2 shadow-inner border border-gray-150 dark:border-gray-700";
+
+                    return `
                     <button data-chat-userid="${user.userId}" data-chat-source="user-search" class="admin-chat-row w-full flex items-center gap-3 p-4 bg-blue-50 dark:bg-blue-900/20 border border-blue-100 dark:border-blue-800 rounded-2xl shadow-sm text-left hover:bg-blue-100 dark:hover:bg-blue-900/40 transition">
-                        <img src="https://cdn-icons-png.flaticon.com/512/3135/3135715.png" alt="${escapeHtml(user.userName || 'User')}" class="h-12 w-12 rounded-full object-contain bg-white dark:bg-gray-800 p-2">
+                        <img src="${escapeHtml(avatarUrl)}" alt="${escapeHtml(user.userName || 'User')}" class="${avatarClass}">
                         <div class="flex-1 min-w-0">
                             <div class="flex items-center justify-between gap-2">
                                 <h3 class="font-bold truncate">${escapeHtml(user.userName || 'User')}</h3>
@@ -220,7 +236,8 @@ const renderAdminChatsList = () => {
                             <p class="text-xs text-gray-500 dark:text-gray-400 truncate">${escapeHtml(user.userMobile || user.userEmail || '')}</p>
                             <p class="text-sm text-blue-700 dark:text-blue-300 truncate">Send a new message to this user</p>
                         </div>
-                    </button>`).join('');
+                    </button>`;
+                }).join('');
 
             if (!chatRows && !userRows) {
                 list.innerHTML = searchTerm

@@ -504,9 +504,15 @@ const openSupportChatPage = async (chatUserId, viewerRole = 'user', chatMeta = {
             const displayEmail = isAdminView
                 ? (chatMeta.userEmail || '')
                 : (chatMeta.adminEmail || getSupportAdminEmail());
-            const logo = isAdminView 
-                ? 'https://cdn-icons-png.flaticon.com/512/3135/3135715.png' 
-                : (chatMeta.adminLogo || getSupportLogo());
+            let logo = 'https://cdn-icons-png.flaticon.com/512/3135/3135715.png';
+            if (isAdminView) {
+                const userProfile = (typeof allUsersCache !== 'undefined' && Array.isArray(allUsersCache)) 
+                    ? allUsersCache.find(u => String(u.id || u.uid) === String(chatUserId)) 
+                    : {};
+                logo = userProfile.profilePhoto || userProfile.profile_photo || userProfile.avatarUrl || userProfile.avatar_url || chatMeta.userAvatar || logo;
+            } else {
+                logo = chatMeta.adminLogo || getSupportLogo();
+            }
             const initialMessage = chatMeta.initialMessage || '';
             const returnToBlocked = !!chatMeta.returnToBlocked;
             const content = `
