@@ -1401,9 +1401,9 @@ const openAdminInspectDetailsModal = async (chatUserId, messageText) => {
                 </div>
             `;
             
-            document.getElementById('inspect-close-btn').onclick = () => modal.remove();
+            modal.querySelector('#inspect-close-btn').onclick = () => modal.remove();
             
-            const screenshotImg = document.getElementById('inspect-screenshot-img');
+            const screenshotImg = modal.querySelector('#inspect-screenshot-img');
             if (screenshotImg) {
                 screenshotImg.onclick = () => {
                     if (typeof window.showScreenshotLightbox === 'function') {
@@ -1412,7 +1412,7 @@ const openAdminInspectDetailsModal = async (chatUserId, messageText) => {
                 };
             }
             
-            const approveBtn = document.getElementById('inspect-approve-btn');
+            const approveBtn = modal.querySelector('#inspect-approve-btn');
             if (approveBtn) {
                 approveBtn.onclick = async () => {
                     approveBtn.disabled = true;
@@ -1438,10 +1438,10 @@ const openAdminInspectDetailsModal = async (chatUserId, messageText) => {
                 };
             }
             
-            const solveBtn = document.getElementById('inspect-solve-btn');
+            const solveBtn = modal.querySelector('#inspect-solve-btn');
             if (solveBtn) {
                 solveBtn.onclick = () => {
-                    const textarea = document.getElementById('inspect-reply-textarea');
+                    const textarea = modal.querySelector('#inspect-reply-textarea');
                     const resolvedMsg = `Hello! We checked your task submission. The issue is resolved now. Thank you for your support!`;
                     if (textarea) {
                         textarea.value = resolvedMsg;
@@ -1451,10 +1451,10 @@ const openAdminInspectDetailsModal = async (chatUserId, messageText) => {
                 };
             }
             
-            const sendBtn = document.getElementById('inspect-send-btn');
+            const sendBtn = modal.querySelector('#inspect-send-btn');
             if (sendBtn) {
                 sendBtn.onclick = () => {
-                    const textarea = document.getElementById('inspect-reply-textarea');
+                    const textarea = modal.querySelector('#inspect-reply-textarea');
                     const text = textarea ? textarea.value.trim() : '';
                     if (!text) {
                         showNotification('Please enter a response message.', true);
@@ -1494,8 +1494,8 @@ const openAdminInspectDetailsModal = async (chatUserId, messageText) => {
             }
         };
         
-        updateModalContent();
         document.body.appendChild(modal);
+        updateModalContent();
         
     } catch (err) {
         if (typeof hideLoading === 'function') hideLoading();
