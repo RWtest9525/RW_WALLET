@@ -1160,6 +1160,17 @@ const showUserTaskHistoryPage = () => {
                 : `<div class="py-8 text-center text-sm text-gray-450 dark:text-gray-500">Loading history...</div>`;
 
             const content = `
+                ${isBulker ? `
+                <header class="flex items-center justify-between p-4 bg-white dark:bg-gray-800 shadow-[0_2px_8px_rgba(0,0,0,0.015)] border-b border-gray-100 dark:border-gray-750 page-header-fixed select-none">
+                    <button class="page-back-btn p-2 rounded-xl hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-700 dark:text-white shrink-0" style="outline: none;">
+                        <svg class="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M4 12h16M4 18h16"></path></svg>
+                    </button>
+                    <h2 class="text-md font-extrabold text-gray-900 dark:text-white text-center flex-1 pr-1">${title}</h2>
+                    <button id="user-task-history-filter-toggle" class="p-2 rounded-xl hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-700 dark:text-white shrink-0" style="outline: none;">
+                        <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z"></path></svg>
+                    </button>
+                </header>
+                ` : `
                 <header class="flex items-center justify-between p-4 bg-white dark:bg-gray-800 shadow-[0_2px_8px_rgba(0,0,0,0.015)] border-b border-gray-100 dark:border-gray-750 page-header-fixed">
                     <div class="flex items-center gap-3">
                         <button class="page-back-btn p-2 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700 mr-1 shrink-0 text-gray-700 dark:text-white" style="outline: none;">
@@ -1168,13 +1179,12 @@ const showUserTaskHistoryPage = () => {
                         <h2 class="text-lg font-black text-gray-900 dark:text-white">${title}</h2>
                     </div>
                     <div class="flex items-center gap-2">
-                        ${!isBulker ? `
                         <button id="user-task-history-filter-toggle" class="p-2 rounded-full hover:bg-gray-255 dark:hover:bg-gray-700 shrink-0 ${window.userTaskHistoryFilterDrawerOpen ? 'bg-purple-100 dark:bg-purple-950/30 text-purple-600 dark:text-purple-400' : 'text-gray-700 dark:text-white'}" style="outline: none;">
                             <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon></svg>
                         </button>
-                        ` : ''}
                     </div>
                 </header>
+                `}
                 
                 <div class="max-w-[390px] mx-auto space-y-3.5 pb-24 px-3.5 pt-3 text-left">
                     <!-- Category Tabs (Styled Pill Tabs based on Screenshot 1) -->
