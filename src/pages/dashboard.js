@@ -975,17 +975,17 @@ const getUserTaskHistoryListHtml = () => {
                         <span class="block text-[10px] font-semibold text-gray-400 dark:text-gray-500 leading-none">Submitted</span>
                         <span class="block text-[18px] font-black text-gray-900 dark:text-white mt-1 leading-none">${total}</span>
                     </div>
-                    <div class="h-6 w-px bg-gray-150 dark:bg-gray-700/60 shrink-0"></div>
+                    <div class="h-6 w-px bg-gray-200 dark:bg-gray-700/60 shrink-0"></div>
                     <div class="flex-1">
                         <span class="block text-[10px] font-semibold text-gray-400 dark:text-gray-500 leading-none">Approved</span>
                         <span class="block text-[18px] font-black text-emerald-500 mt-1 leading-none">${approvedCount}</span>
                     </div>
-                    <div class="h-6 w-px bg-gray-150 dark:bg-gray-700/60 shrink-0"></div>
+                    <div class="h-6 w-px bg-gray-200 dark:bg-gray-700/60 shrink-0"></div>
                     <div class="flex-1">
                         <span class="block text-[10px] font-semibold text-gray-400 dark:text-gray-500 leading-none">Pending</span>
                         <span class="block text-[18px] font-black text-amber-500 mt-1 leading-none">${pendingCount}</span>
                     </div>
-                    <div class="h-6 w-px bg-gray-150 dark:bg-gray-700/60 shrink-0"></div>
+                    <div class="h-6 w-px bg-gray-200 dark:bg-gray-700/60 shrink-0"></div>
                     <div class="flex-1">
                         <span class="block text-[10px] font-semibold text-gray-400 dark:text-gray-500 leading-none">Rejected</span>
                         <span class="block text-[18px] font-black text-rose-500 mt-1 leading-none">${rejectedCount}</span>
@@ -1829,17 +1829,17 @@ window.showBulkerTaskOverview = (taskId) => {
                                 <span class="block text-[11px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wide leading-none">Submitted</span>
                                 <span class="block text-[18px] font-black text-gray-900 dark:text-white mt-1.5 leading-none">${total}</span>
                             </div>
-                            <div class="h-6 w-px bg-gray-150 dark:bg-gray-700/60 shrink-0"></div>
+                            <div class="h-6 w-px bg-gray-200 dark:bg-gray-700/60 shrink-0"></div>
                             <div class="flex-1">
                                 <span class="block text-[11px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wide leading-none">Approved</span>
                                 <span class="block text-[18px] font-black text-emerald-500 mt-1.5 leading-none">${approved}</span>
                             </div>
-                            <div class="h-6 w-px bg-gray-150 dark:bg-gray-700/60 shrink-0"></div>
+                            <div class="h-6 w-px bg-gray-200 dark:bg-gray-700/60 shrink-0"></div>
                             <div class="flex-1">
                                 <span class="block text-[11px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wide leading-none">Pending</span>
                                 <span class="block text-[18px] font-black text-amber-500 mt-1.5 leading-none">${pending}</span>
                             </div>
-                            <div class="h-6 w-px bg-gray-150 dark:bg-gray-700/60 shrink-0"></div>
+                            <div class="h-6 w-px bg-gray-200 dark:bg-gray-700/60 shrink-0"></div>
                             <div class="flex-1">
                                 <span class="block text-[11px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wide leading-none">Rejected</span>
                                 <span class="block text-[18px] font-black text-rose-500 mt-1.5 leading-none">${rejected}</span>
