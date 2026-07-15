@@ -2056,6 +2056,67 @@ window.copyBulkerLiveListText = () => {
             }
         };
 
+window.showBulkerStatusMeaningDialog = () => {
+            const content = `
+                <div class="space-y-4 text-xs font-semibold select-none text-left p-2">
+                    <div class="space-y-4">
+                        <!-- Approved -->
+                        <div class="flex items-start gap-3">
+                            <span class="p-1 rounded-full bg-emerald-50 dark:bg-emerald-950/20 text-emerald-600 dark:text-emerald-400 shrink-0 mt-0.5">
+                                <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="3">
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                </svg>
+                            </span>
+                            <div class="space-y-0.5">
+                                <p class="font-extrabold text-emerald-600 dark:text-emerald-400 text-[11px] uppercase tracking-wider">Approved</p>
+                                <p class="text-[10px] text-gray-500 dark:text-gray-400 leading-normal">Review found on Play Store. Payout will be added.</p>
+                            </div>
+                        </div>
+
+                        <!-- Pending -->
+                        <div class="flex items-start gap-3">
+                            <span class="p-1 rounded-full bg-amber-50 dark:bg-amber-950/20 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5">
+                                <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="3">
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z" />
+                                </svg>
+                            </span>
+                            <div class="space-y-0.5">
+                                <p class="font-extrabold text-amber-600 dark:text-amber-400 text-[11px] uppercase tracking-wider">Pending / Under Review</p>
+                                <p class="text-[10px] text-gray-500 dark:text-gray-400 leading-normal">We are checking your review on Play Store.</p>
+                            </div>
+                        </div>
+
+                        <!-- Under Review -->
+                        <div class="flex items-start gap-3">
+                            <span class="p-1 rounded-full bg-blue-50 dark:bg-blue-955/20 text-blue-600 dark:text-blue-400 shrink-0 mt-0.5">
+                                <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="3">
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                </svg>
+                            </span>
+                            <div class="space-y-0.5">
+                                <p class="font-extrabold text-blue-600 dark:text-blue-400 text-[11px] uppercase tracking-wider">Under Review</p>
+                                <p class="text-[10px] text-gray-500 dark:text-gray-400 leading-normal">Screenshot received, verification in progress.</p>
+                            </div>
+                        </div>
+
+                        <!-- Rejected -->
+                        <div class="flex items-start gap-3">
+                            <span class="p-1 rounded-full bg-rose-50 dark:bg-rose-955/20 text-rose-600 dark:text-rose-455 shrink-0 mt-0.5">
+                                <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="3">
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="M9.75 9.75l4.5 4.5m0-4.5l-4.5 4.5M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                </svg>
+                            </span>
+                            <div class="space-y-0.5">
+                                <p class="font-extrabold text-rose-600 dark:text-rose-455 text-[11px] uppercase tracking-wider">Rejected</p>
+                                <p class="text-[10px] text-gray-500 dark:text-gray-400 leading-normal">Review not found / Policy mismatch / Other issue.</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+            renderModal('Status Meaning', content, `<button onclick="window.closeModal()" class="w-full py-2.5 text-xs font-black bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl uppercase tracking-wider shadow-sm" style="outline: none;">Close</button>`, 'max-w-sm');
+        };
+
 window.showBulkerAllSubmissions = (taskId, filterStatus = 'all') => {
             window.bulkerSubmissionDetailReturnPage = 'all-submissions';
             window.bulkerAllSubmissionsFilter = filterStatus;
@@ -2119,8 +2180,8 @@ window.showBulkerAllSubmissions = (taskId, filterStatus = 'all') => {
                         </svg>
                     </button>
                     <h2 class="absolute left-1/2 -translate-x-1/2 text-lg font-black text-gray-900 dark:text-white">All Submissions</h2>
-                    <button class="p-2 rounded-full hover:bg-gray-105 dark:hover:bg-gray-700 text-gray-700 dark:text-white" style="outline: none;" onclick="showNotification('Filters are active via tabs.')">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon></svg>
+                    <button class="h-8 w-8 rounded-full bg-gray-50 dark:bg-gray-700 hover:bg-gray-100 dark:hover:bg-gray-600 flex items-center justify-center text-sm font-black border border-gray-200 dark:border-gray-600 text-gray-700 dark:text-gray-300 shadow-sm shrink-0 mr-1" style="outline: none; line-height: 1;" onclick="window.showBulkerStatusMeaningDialog()">
+                        ?
                     </button>
                 </header>
 
@@ -2169,14 +2230,14 @@ window.showBulkerAllSubmissions = (taskId, filterStatus = 'all') => {
                                     <span class="text-[10px] font-black text-gray-400 dark:text-gray-500 w-14 shrink-0 font-mono">${displaySubmissionId}</span>
                                     
                                     <!-- Thumbnail -->
-                                    <img src="${escapeHtml(s.screenshot_url)}" class="h-11 w-11 rounded-xl object-cover shrink-0 border border-gray-100 dark:border-gray-700 shadow-sm" onclick="event.stopPropagation(); window.showScreenshotLightbox('${escapeHtml(s.screenshot_url)}', '${escapeHtml(s.screenshot_view_url || '')}')" onerror="this.src='https://placehold.co/100x100?text=No+Img';">
+                                    <img src="${escapeHtml(s.screenshot_url)}" class="h-11 w-11 rounded-none object-cover shrink-0 border border-gray-150 dark:border-gray-700 shadow-sm" onclick="event.stopPropagation(); window.showScreenshotLightbox('${escapeHtml(s.screenshot_url)}', '${escapeHtml(s.screenshot_view_url || '')}')" onerror="this.src='https://placehold.co/100x100?text=No+Img';">
                                     
                                     <!-- Info -->
                                     <div class="min-w-0">
-                                        <span class="rounded bg-${badgeColor}-50 dark:bg-${badgeColor}-950/20 px-1.5 py-0.5 text-[8px] font-black text-${badgeColor}-700 dark:text-${badgeColor}-400 border border-${badgeColor}-100 dark:border-${badgeColor}-900/30 uppercase tracking-wide inline-block">
+                                        <span class="rounded bg-${badgeColor}-50 dark:bg-${badgeColor}-950/20 px-1.5 py-0.5 text-[9px] font-black text-${badgeColor}-700 dark:text-${badgeColor}-400 border border-${badgeColor}-100 dark:border-${badgeColor}-900/30 uppercase tracking-wide inline-block">
                                             ${s.manual_status || 'Pending'}
                                         </span>
-                                        <p class="text-[10px] text-gray-400 dark:text-gray-500 font-semibold mt-1">${dateStr}</p>
+                                        <p class="text-[10px] text-gray-400 dark:text-gray-500 font-extrabold mt-1">${dateStr}</p>
                                     </div>
                                 </div>
                                 
