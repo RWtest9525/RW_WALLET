@@ -930,52 +930,52 @@ const getUserTaskHistoryListHtml = () => {
                 : 'Unknown';
 
             return `
-            <div class="bg-white dark:bg-gray-800 p-4 rounded-3xl border border-gray-100 dark:border-gray-800 hover:shadow-[0_4px_16px_rgba(0,0,0,0.03)] cursor-pointer transition select-none text-left space-y-3 shadow-[0_2px_8px_rgba(0,0,0,0.015)]" onclick="window.showBulkerTaskOverview('${g.taskId}')">
+            <div class="bg-white dark:bg-gray-800 px-4 py-3 rounded-2xl border border-gray-100 dark:border-gray-800 hover:shadow-[0_4px_16px_rgba(0,0,0,0.03)] cursor-pointer transition select-none text-left space-y-2 shadow-[0_2px_8px_rgba(0,0,0,0.012)]" onclick="window.showBulkerTaskOverview('${g.taskId}')">
                 <!-- Top Section: App info and Arrow -->
                 <div class="flex items-center justify-between gap-3">
                     <div class="flex items-center gap-3 min-w-0">
-                        <img src="${escapeHtml(g.logoUrl)}" data-task-logo-id="${g.taskId}" class="h-12 w-12 rounded-xl object-cover shrink-0 border border-gray-50 dark:border-gray-700 shadow-sm" onerror="this.src='https://cdn-icons-png.flaticon.com/512/3176/3176366.png';">
+                        <img src="${escapeHtml(g.logoUrl)}" data-task-logo-id="${g.taskId}" class="h-11 w-11 rounded-xl object-cover shrink-0 border border-gray-50 dark:border-gray-700 shadow-sm" onerror="this.src='https://cdn-icons-png.flaticon.com/512/3176/3176366.png';">
                         <div class="min-w-0 flex-1">
-                            <h4 class="text-[15px] font-extrabold text-gray-900 dark:text-white truncate">${escapeHtml(g.taskName)}</h4>
-                            <div class="flex items-center gap-1.5 mt-0.5 text-[11px] text-gray-450 dark:text-gray-400 font-bold">
-                                <img src="https://upload.wikimedia.org/wikipedia/commons/d/d0/Google_Play_Arrow_Logo_%282022%29.svg" class="h-3.5 w-3.5 shrink-0" style="width: 14px; height: 14px;">
+                            <h4 class="text-[14px] font-bold text-gray-900 dark:text-white truncate leading-tight">${escapeHtml(g.taskName)}</h4>
+                            <div class="flex items-center gap-1.5 mt-0.5 text-[10px] text-gray-450 dark:text-gray-400 font-bold">
+                                <img src="https://upload.wikimedia.org/wikipedia/commons/d/d0/Google_Play_Arrow_Logo_%282022%29.svg" class="h-3 w-3 shrink-0">
                                 <span>Play Store Review • ₹${g.reward}</span>
                             </div>
                         </div>
                     </div>
-                    <svg class="h-5 w-5 text-gray-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"></path></svg>
+                    <svg class="h-4.5 w-4.5 text-gray-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"></path></svg>
                 </div>
                 
                 <!-- Stats Row -->
-                <div class="grid grid-cols-4 gap-1 text-center select-none pt-1">
+                <div class="grid grid-cols-4 gap-1 text-center select-none">
                     <div>
-                        <span class="block text-[11px] font-semibold text-gray-400 dark:text-gray-500">Submitted</span>
-                        <span class="block text-[19px] font-black text-gray-900 dark:text-white mt-0.5">${total}</span>
+                        <span class="block text-[10px] font-semibold text-gray-400 dark:text-gray-500 leading-none">Submitted</span>
+                        <span class="block text-[18px] font-black text-gray-900 dark:text-white mt-1 leading-none">${total}</span>
                     </div>
                     <div>
-                        <span class="block text-[11px] font-semibold text-gray-400 dark:text-gray-500">Approved</span>
-                        <span class="block text-[19px] font-black text-emerald-500 mt-0.5">${approvedCount}</span>
+                        <span class="block text-[10px] font-semibold text-gray-400 dark:text-gray-500 leading-none">Approved</span>
+                        <span class="block text-[18px] font-black text-emerald-500 mt-1 leading-none">${approvedCount}</span>
                     </div>
                     <div>
-                        <span class="block text-[11px] font-semibold text-gray-400 dark:text-gray-500">Pending</span>
-                        <span class="block text-[19px] font-black text-amber-500 mt-0.5">${pendingCount}</span>
+                        <span class="block text-[10px] font-semibold text-gray-400 dark:text-gray-500 leading-none">Pending</span>
+                        <span class="block text-[18px] font-black text-amber-500 mt-1 leading-none">${pendingCount}</span>
                     </div>
                     <div>
-                        <span class="block text-[11px] font-semibold text-gray-400 dark:text-gray-500">Rejected</span>
-                        <span class="block text-[19px] font-black text-rose-500 mt-0.5">${rejectedCount}</span>
+                        <span class="block text-[10px] font-semibold text-gray-400 dark:text-gray-500 leading-none">Rejected</span>
+                        <span class="block text-[18px] font-black text-rose-500 mt-1 leading-none">${rejectedCount}</span>
                     </div>
                 </div>
                 
                 <!-- Completion Bar -->
                 <div class="flex items-center gap-3 pt-0.5">
-                    <div class="flex-1 bg-slate-100 dark:bg-gray-700 h-2 rounded-full overflow-hidden">
+                    <div class="flex-1 bg-slate-100 dark:bg-gray-700 h-1.5 rounded-full overflow-hidden">
                         <div class="bg-indigo-600 h-full rounded-full" style="width: ${completionPercent}%"></div>
                     </div>
-                    <span class="text-[11px] font-extrabold text-indigo-600 dark:text-indigo-400 shrink-0">${completionPercent}% Completed</span>
+                    <span class="text-[10px] font-extrabold text-indigo-600 dark:text-indigo-400 shrink-0 leading-none">${completionPercent}% Completed</span>
                 </div>
                 
                 <!-- Footer -->
-                <p class="text-[10px] text-gray-400 dark:text-gray-500 font-semibold mt-0.5">Last Updated: ${dateStr}</p>
+                <p class="text-[9px] text-gray-400 dark:text-gray-500 font-semibold leading-none mt-0.5">Last Updated: ${dateStr}</p>
             </div>`;
         }).join('');
     } else {
@@ -1186,7 +1186,7 @@ const showUserTaskHistoryPage = () => {
                 </header>
                 `}
                 
-                <div class="max-w-[390px] mx-auto space-y-3.5 pb-24 px-3.5 pt-3 text-left">
+                <div class="max-w-md mx-auto space-y-3 pb-24 px-4 pt-3 text-left">
                     <!-- Category Tabs (Styled Pill Tabs based on Screenshot 1) -->
                     <div class="grid grid-cols-3 gap-2.5 mb-1.5 select-none">
                         ${['all', 'play_store', 'others'].map(tab => {
