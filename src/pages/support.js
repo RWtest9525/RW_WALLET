@@ -319,8 +319,8 @@ const renderSupportMessages = (messages, viewerRole) => {
                     let inspectBtnHtml = '';
                     if (isAdminView && !isMine && (message.text.includes('Submission ID:') || message.text.includes('Task ID:'))) {
                         inspectBtnHtml = `
-                            <div class="mt-2 pt-1.5 border-t border-gray-100 dark:border-gray-750/40 w-full">
-                                <button type="button" class="admin-inspect-btn w-full bg-indigo-600 hover:bg-indigo-700 text-white text-[10px] font-black uppercase tracking-wider px-3 py-2 rounded-xl shadow-sm transition active:scale-95 flex items-center justify-center gap-1" data-msg-id="${message.id}" data-msg-text="${escapeHtml(message.text)}" style="outline: none;">
+                            <div class="mt-2 pt-1.5 border-t border-gray-100 dark:border-gray-755 w-full">
+                                <button type="button" class="admin-inspect-btn w-full bg-indigo-600 hover:bg-indigo-700 text-white text-[10px] font-black uppercase tracking-wider px-3 py-2 rounded-xl shadow-sm transition active:scale-95 flex items-center justify-center gap-1" data-msg-id="${message.id}" style="outline: none;">
                                     🔍 Inspect details
                                 </button>
                             </div>
@@ -331,7 +331,7 @@ const renderSupportMessages = (messages, viewerRole) => {
                         ${dateDivider}
                         <div class="flex ${isMine ? 'justify-end' : 'justify-start'}" data-message-id="${message.id}">
                             <div class="w-fit max-w-[82%] px-3 py-1.5 shadow-sm ${isMine ? 'chat-bubble-user bg-emerald-50 dark:bg-emerald-900/40 text-gray-900 dark:text-white border border-emerald-100 dark:border-emerald-800' : 'chat-bubble-admin bg-white dark:bg-gray-800 text-gray-900 dark:text-white border border-gray-100 dark:border-gray-700'}">
-                                <span class="text-sm leading-5 break-words align-baseline whitespace-pre-wrap block">${escapeHtml(message.text || '')}</span>
+                                <span class="text-sm leading-5 break-words align-baseline whitespace-pre-wrap block" id="msg-text-content-${message.id}">${escapeHtml(message.text || '')}</span>
                                 ${inspectBtnHtml}
                                 <span class="inline-flex items-center text-[10px] ml-2 text-gray-400 align-baseline mt-1.5 w-full justify-end select-none">
                                     <span>${formatChatTime(message.createdAt)}</span>
@@ -346,7 +346,9 @@ const renderSupportMessages = (messages, viewerRole) => {
                 list.querySelectorAll('.admin-inspect-btn').forEach(btn => {
                     btn.onclick = (e) => {
                         e.stopPropagation();
-                        const msgText = e.currentTarget.dataset.msgText;
+                        const msgId = e.currentTarget.dataset.msgId;
+                        const textSpan = document.getElementById(`msg-text-content-${msgId}`);
+                        const msgText = textSpan ? textSpan.textContent : '';
                         window.openAdminInspectDetailsModal(window.activeChatUserId, msgText);
                     };
                 });
@@ -1267,9 +1269,9 @@ const openAdminInspectDetailsModal = async (chatUserId, messageText) => {
     if (typeof showLoading === 'function') showLoading();
     
     try {
-        const taskIdMatch = messageText.match(/Task ID:\s*([^\n\r]+)/i);
-        const displayIdMatch = messageText.match(/Submission ID:\s*([^\n\r]+)/i);
-        const dbSubIdMatch = messageText.match(/\[DbSubId:\s*([^\]]+)\]/i);
+        const taskIdMatch = messageText.match(/(?:Task ID:|🆔)\s*([^\n\r]+)/i);
+        const displayIdMatch = messageText.match(/(?:Submission ID:|🔢)\s*([^\n\r]+)/i);
+        const dbSubIdMatch = messageText.match(/(?:\[DbSubId:|📄\s*\[DbSubId:)\s*([^\]\s]+)\]?/i);
 
         const taskId = taskIdMatch ? taskIdMatch[1].trim() : '';
         const displayId = displayIdMatch ? displayIdMatch[1].trim() : '';
