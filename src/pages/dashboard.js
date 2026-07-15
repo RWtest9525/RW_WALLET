@@ -4498,7 +4498,31 @@ const showUserTaskDetailsPage = async (taskId) => {
             // Setup buttons & actions
             const downloadBtn = document.getElementById('task-download-btn');
             if (downloadBtn) {
-                downloadBtn.onclick = () => taskLink ? window.open(taskLink, '_blank', 'noopener') : showNotification('Task link is not added yet.', true);
+                downloadBtn.onclick = () => {
+                    if (!taskLink) {
+                        showNotification('Task link is not added yet.', true);
+                        return;
+                    }
+                    
+                    let targetUrl = taskLink;
+                    if (taskLink.includes('play.google.com/store/apps/details') || taskLink.includes('market.android.com/details')) {
+                        try {
+                            const urlObj = new URL(taskLink);
+                            const id = urlObj.searchParams.get('id');
+                            if (id) {
+                                targetUrl = `market://details?id=${id}`;
+                            }
+                        } catch (e) {
+                            console.warn('URL parsing failed:', e);
+                        }
+                    }
+
+                    try {
+                        window.open(targetUrl, '_system');
+                    } catch (e) {
+                        window.open(targetUrl, '_blank', 'noopener');
+                    }
+                };
             }
 
             // Copy & Review logic
