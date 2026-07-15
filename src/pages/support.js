@@ -1281,7 +1281,8 @@ const openAdminInspectDetailsModal = async (chatUserId, messageText) => {
         }, 10000);
         
         if (!response.ok) throw new Error('Failed to fetch submissions');
-        const submissions = await response.json();
+        const resData = await response.json();
+        const submissions = resData.submissions || [];
         
         let s = null;
         if (dbSubId) {
