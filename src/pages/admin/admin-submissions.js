@@ -598,7 +598,7 @@ const renderAdminSubmissions = () => {
 
     let taskRows = [];
     if (filteredTasks.length > 0) {
-        // Build from cache — includes tasks with 0 submissions
+        // Build from cache — only include tasks that have at least one submission on this selected date
         taskRows = filteredTasks.map(task => {
             const taskSubs = dateSubs.filter(s => s.task_id === task.id || s.taskId === task.id);
             const family = window.getAdminTaskFamily ? window.getAdminTaskFamily(task) : 'review';
@@ -615,7 +615,7 @@ const renderAdminSubmissions = () => {
                 approved: taskSubs.filter(s => s.manual_status === 'approved').length,
                 rejected: taskSubs.filter(s => s.manual_status === 'rejected').length
             };
-        });
+        }).filter(r => r.total > 0);
     } else {
         // Fallback: Build task rows from submissions data when allTasksCache is empty
         const taskIdMap = {};

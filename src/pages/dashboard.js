@@ -4,6 +4,8 @@ const getHistoryCacheKey = (userId) => `rw_wallet_history_cache_${userId}`;
 
 const getHistoryDataCacheKey = (userId) => `rw_wallet_history_data_cache_${userId}`;
 
+const getUserTaskHistoryCacheKey = (userId) => `rw_wallet_user_task_history_cache_${userId}`;
+
 const normalizeHistoryItemForCache = (item = {}) => {
             const cached = { ...item };
             ['timestamp', 'requestedAt', 'processedAt'].forEach(field => {
@@ -858,15 +860,10 @@ const getUserTaskHistoryListHtml = () => {
     const statusFilter = window.userTaskHistoryStatusFilter || 'all';
     const isBulker = isBulkTaskUser();
 
-    let subs = [...(userTaskHistoryCache || [])].filter(s => s);
 
-    // Only show submissions of tasks that currently exist in allTasksCache (if allTasksCache has been loaded)
-    if (typeof allTasksCache !== 'undefined' && Array.isArray(allTasksCache) && allTasksCache.length > 0) {
-        subs = subs.filter(s => {
-            const taskId = s.task_id || s.taskId;
-            return allTasksCache.some(t => t && t.id === taskId);
-        });
-    }
+    let subs = [...(userTaskHistoryCache || [])].filter(s => s);
+    // Disabled filtering by allTasksCache to ensure users can always see all their historical submissions
+    // even if the task has expired, finished, or is no longer listed in active/public tasks.
 
     // Filter by category
     if (categoryTab !== 'all') {
@@ -1180,6 +1177,14 @@ const showUserTaskHistoryPage = () => {
             const isBulker = isBulkTaskUser();
             const title = isBulker ? 'Task History (Bulker)' : 'Task History';
 
+            // Load from localStorage cache if memory cache is empty for instant rendering
+            if ((!userTaskHistoryCache || userTaskHistoryCache.length === 0) && typeof currentUser !== 'undefined' && currentUser?.uid) {
+                const cached = readJsonCache(getUserTaskHistoryCacheKey(currentUser.uid));
+                if (Array.isArray(cached) && cached.length > 0) {
+                    userTaskHistoryCache = cached;
+                }
+            }
+
             // INSTANT LOAD: render list content immediately if cached data is present!
             const initialListHtml = (userTaskHistoryCache && userTaskHistoryCache.length > 0)
                 ? getUserTaskHistoryListHtml()
@@ -1284,6 +1289,19 @@ const showUserTaskHistoryPage = () => {
 
 const loadUserTaskHistory = async () => {
             if (userTaskHistoryLoading) return;
+
+            // Load from localStorage cache if memory cache is empty to make it instant
+            if ((!userTaskHistoryCache || userTaskHistoryCache.length === 0) && typeof currentUser !== 'undefined' && currentUser?.uid) {
+                const cached = readJsonCache(getUserTaskHistoryCacheKey(currentUser.uid));
+                if (Array.isArray(cached) && cached.length > 0) {
+                    userTaskHistoryCache = cached;
+                    const listEl = document.getElementById('user-task-history-list');
+                    if (listEl) {
+                        listEl.innerHTML = getUserTaskHistoryListHtml();
+                    }
+                }
+            }
+
             userTaskHistoryLoading = true;
             try {
                 // 1. Fetch latest tasks from Firestore to update allTasksCache
@@ -1304,12 +1322,22 @@ const loadUserTaskHistory = async () => {
                 const data = await response.json().catch(() => ({}));
                 if (data.ok && Array.isArray(data.submissions)) {
                     userTaskHistoryCache = data.submissions;
+                    // Update cache in localStorage
+                    if (typeof currentUser !== 'undefined' && currentUser?.uid) {
+                        writeJsonCache(getUserTaskHistoryCacheKey(currentUser.uid), data.submissions);
+                    }
                 } else {
                     userTaskHistoryCache = [];
+                    if (typeof currentUser !== 'undefined' && currentUser?.uid) {
+                        writeJsonCache(getUserTaskHistoryCacheKey(currentUser.uid), []);
+                    }
                 }
             } catch (err) {
                 console.error('Failed to load user task history:', err);
-                userTaskHistoryCache = [];
+                // Keep the cached items on error instead of resetting to empty array!
+                if (!userTaskHistoryCache || userTaskHistoryCache.length === 0) {
+                    userTaskHistoryCache = [];
+                }
             }
             userTaskHistoryLoading = false;
             
@@ -2512,7 +2540,7 @@ window.showBulkerSubmissionMenu = (event, submissionId) => {
                         return;
                     }
 
-                    const prefilledMsg = `App Name: ${appName}\nDate: ${subDate}\nTask ID: ${taskIdVal}\nSubmission ID: ${displayId}\n\nMy Doubt: ${queryText}`;
+                    const prefilledMsg = `App Name: ${appName}\nDate: ${subDate}\nTask ID: ${taskIdVal}\nSubmission ID: ${displayId}\n[DbSubId: ${submissionId}]\n\nMy Doubt: ${queryText}`;
                     window.closeModal();
 
                     if (typeof window.openSupportChatPage === 'function') {

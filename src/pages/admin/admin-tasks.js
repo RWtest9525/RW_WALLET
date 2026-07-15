@@ -908,6 +908,16 @@ const getAdminTaskFormData = (existingTask = null) => {
                 taskIndex = indices.length > 0 ? Math.max(...indices) + 1 : 1;
             }
 
+            let taskAppId = existingTask ? (existingTask.appId || existingTask.app_id) : null;
+            if (!taskAppId) {
+                const appIds = allTasksCache.map(t => {
+                    const match = String(t.appId || t.app_id || '').match(/^app_id_(\d+)$/i);
+                    return match ? parseInt(match[1], 10) : 0;
+                }).filter(Boolean);
+                const nextAppIdNum = appIds.length > 0 ? Math.max(...appIds) + 1 : 1;
+                taskAppId = `app_id_${String(nextAppIdNum).padStart(2, '0')}`;
+            }
+
             return {
                 title,
                 taskFamily: family,
@@ -915,6 +925,8 @@ const getAdminTaskFormData = (existingTask = null) => {
                 taskSubtype: subtype,
                 taskIndex,
                 task_index: taskIndex,
+                appId: taskAppId,
+                app_id: taskAppId,
                 taskSubtypeLabel: subtypeMeta.label,
                 category: subtypeMeta.label,
                 taskGroup: getAdminTaskFamilyLabel(family),
@@ -982,6 +994,22 @@ const resetAdminTaskForm = () => {
             applyDefaultAdminTaskInstructions(true);
         };
 
+const generateNextTaskId = () => {
+            let maxNum = 0;
+            if (Array.isArray(allTasksCache)) {
+                allTasksCache.forEach(t => {
+                    const match = String(t.id || '').match(/^RW(\d+)$/i);
+                    if (match) {
+                        const num = parseInt(match[1], 10);
+                        if (num > maxNum) {
+                            maxNum = num;
+                        }
+                    }
+                });
+            }
+            return `RW${String(maxNum + 1).padStart(2, '0')}`;
+        };
+
 const handleSaveAdminTask = async (event) => {
             event.preventDefault();
             const isCurrentAdmin = currentUser?.uid === ADMIN_UID || currentUser?.email === 'reviewsworld51@gmail.com' || currentUser?.email === 'reviewsworld01@gmail.com' || currentUserData?.role === 'admin' || currentUserData?.role === 'owner';
@@ -1027,9 +1055,10 @@ const handleSaveAdminTask = async (event) => {
                     allTasksCache = allTasksCache.map(task => task.id === editId ? { ...task, ...payload, updatedAt: Date.now() } : task);
                     showNotification('Task updated.');
                 } else {
-                    const taskRef = doc(collection(db, `artifacts/${appId}/public/data/tasks`));
+                    const nextId = generateNextTaskId();
+                    const taskRef = doc(db, `artifacts/${appId}/public/data/tasks`, nextId);
                     const task = {
-                        id: taskRef.id,
+                        id: nextId,
                         ...payload,
                         submissions: 0,
                         completed: 0,
@@ -1039,6 +1068,7 @@ const handleSaveAdminTask = async (event) => {
                     allTasksCache = [task, ...allTasksCache];
                     renderAdminTaskList();
                     await setDoc(taskRef, {
+                        id: nextId,
                         ...payload,
                         submissions: 0,
                         completed: 0,

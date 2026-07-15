@@ -314,18 +314,44 @@ const renderSupportMessages = (messages, viewerRole) => {
                                 <span class="rounded-full bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 px-3 py-1 text-[10px] font-bold text-gray-500 dark:text-gray-400 shadow-sm">${messageDate}</span>
                            </div>`
                         : '';
+                    
+                    const isAdminView = viewerRole === 'admin';
+                    let inspectBtnHtml = '';
+                    if (isAdminView && !isMine && (message.text.includes('Submission ID:') || message.text.includes('Task ID:'))) {
+                        inspectBtnHtml = `
+                            <div class="mt-2 pt-1.5 border-t border-gray-100 dark:border-gray-750/40 w-full">
+                                <button type="button" class="admin-inspect-btn w-full bg-indigo-600 hover:bg-indigo-700 text-white text-[10px] font-black uppercase tracking-wider px-3 py-2 rounded-xl shadow-sm transition active:scale-95 flex items-center justify-center gap-1" data-msg-id="${message.id}" data-msg-text="${escapeHtml(message.text)}" style="outline: none;">
+                                    🔍 Inspect details
+                                </button>
+                            </div>
+                        `;
+                    }
+
                     return `
                         ${dateDivider}
                         <div class="flex ${isMine ? 'justify-end' : 'justify-start'}" data-message-id="${message.id}">
                             <div class="w-fit max-w-[82%] px-3 py-1.5 shadow-sm ${isMine ? 'chat-bubble-user bg-emerald-50 dark:bg-emerald-900/40 text-gray-900 dark:text-white border border-emerald-100 dark:border-emerald-800' : 'chat-bubble-admin bg-white dark:bg-gray-800 text-gray-900 dark:text-white border border-gray-100 dark:border-gray-700'}">
                                 <span class="text-sm leading-5 break-words align-baseline">${escapeHtml(message.text || '')}</span>
-                                <span class="inline-flex items-center text-[10px] ml-2 text-gray-400 align-baseline">
+                                ${inspectBtnHtml}
+                                <span class="inline-flex items-center text-[10px] ml-2 text-gray-400 align-baseline mt-1.5 w-full justify-end select-none">
                                     <span>${formatChatTime(message.createdAt)}</span>
                                     ${renderMessageTicks(message, isMine, viewerRole)}
                                 </span>
                             </div>
                         </div>`;
                 }).join('');
+
+            // Bind Inspect Details button handlers
+            if (viewerRole === 'admin' && window.activeChatUserId) {
+                list.querySelectorAll('.admin-inspect-btn').forEach(btn => {
+                    btn.onclick = (e) => {
+                        e.stopPropagation();
+                        const msgText = e.currentTarget.dataset.msgText;
+                        window.openAdminInspectDetailsModal(window.activeChatUserId, msgText);
+                    };
+                });
+            }
+
             if (wasNearBottom) {
                 list.scrollTop = list.scrollHeight;
             }
@@ -493,6 +519,7 @@ const preloadSupportChatForUser = async (userId = currentUser?.uid) => {
         };
 
 const openSupportChatPage = async (chatUserId, viewerRole = 'user', chatMeta = {}) => {
+            window.activeChatUserId = chatUserId;
             if (activeChatUnsubscribe) {
                 activeChatUnsubscribe();
                 activeChatUnsubscribe = null;
@@ -645,6 +672,7 @@ const openSupportChatPage = async (chatUserId, viewerRole = 'user', chatMeta = {
             const roomIdAtOpen = activeSupportRoomId;
             const attachSupportRealtime = (nextSocket) => {
                 if (!nextSocket || activeSupportRoomId !== roomIdAtOpen || !document.getElementById('support-chat-messages')) return;
+                window.activeSupportSocket = nextSocket;
                 if (socket && socket !== nextSocket && realtimeAttached) {
                     socket.off('chat_history', handleHistory);
                     socket.off('new_message', handleNewMessage);
@@ -678,6 +706,7 @@ const openSupportChatPage = async (chatUserId, viewerRole = 'user', chatMeta = {
                     socket.emit('leave_room', { roomId: roomIdAtOpen });
                 }
                 realtimeAttached = false;
+                window.activeSupportSocket = null;
             };
 
             const sendMessage = async () => {
@@ -1234,6 +1263,236 @@ const showHelpSupportPage = () => {
             }
         };
 
+const openAdminInspectDetailsModal = async (chatUserId, messageText) => {
+    if (typeof showLoading === 'function') showLoading();
+    
+    try {
+        const taskIdMatch = messageText.match(/Task ID:\s*([^\n\r]+)/i);
+        const displayIdMatch = messageText.match(/Submission ID:\s*([^\n\r]+)/i);
+        const dbSubIdMatch = messageText.match(/\[DbSubId:\s*([^\]]+)\]/i);
+
+        const taskId = taskIdMatch ? taskIdMatch[1].trim() : '';
+        const displayId = displayIdMatch ? displayIdMatch[1].trim() : '';
+        const dbSubId = dbSubIdMatch ? dbSubIdMatch[1].trim() : '';
+
+        const token = await getBackendAuthToken();
+        const response = await fetchWithTimeout(`${BACKEND_BASE_URL}/api/admin/task-submissions?userId=${chatUserId}`, {
+            headers: { Authorization: `Bearer ${token}` }
+        }, 10000);
+        
+        if (!response.ok) throw new Error('Failed to fetch submissions');
+        const submissions = await response.json();
+        
+        let s = null;
+        if (dbSubId) {
+            s = submissions.find(x => x.id === dbSubId);
+        }
+        if (!s && taskId) {
+            s = submissions.find(x => x.task_id === taskId || x.taskId === taskId);
+        }
+        
+        if (!s) {
+            if (typeof hideLoading === 'function') hideLoading();
+            showNotification('Could not find submission details for this task.', true);
+            return;
+        }
+        
+        if (typeof hideLoading === 'function') hideLoading();
+        
+        const getPrefilledReply = (sub) => {
+            if (sub.manual_status === 'approved') {
+                return `Hello! We inspected your task submission for "${sub.app_name || 'Task'}". It is already approved and paid. Your reward of ₹${sub.reward} has been credited. Please verify your balance. Thank you!`;
+            } else if (sub.manual_status === 'pending') {
+                return `Hello! We inspected your task submission for "${sub.app_name || 'Task'}". It is currently under review (Pending). Our quality team is verifying that your review comment is active on the Play Store. It will be verified within 1-7 working days. Thanks for your patience!`;
+            } else if (sub.manual_status === 'rejected') {
+                const reason = sub.reject_reason || (sub.ocr_status === 'failed' ? 'Verification check failed' : 'Review comment not found on Play Store');
+                return `Hello! We inspected your task submission for "${sub.app_name || 'Task'}". The verification team rejected it for the following reason: "${reason}". Please verify the steps and submit again if correct. Thank you!`;
+            } else {
+                return `Hello! Regarding your task submission for "${sub.app_name || 'Task'}", we have checked the details. Our team is looking into it and will update you shortly. Thank you!`;
+            }
+        };
+
+        let currentReplyText = getPrefilledReply(s);
+        const subDate = s.submitted_at ? new Date(s.submitted_at).toLocaleDateString('en-GB') : 'Unknown';
+        
+        const existing = document.getElementById('admin-inspect-modal');
+        if (existing) existing.remove();
+        
+        const modal = document.createElement('div');
+        modal.id = 'admin-inspect-modal';
+        modal.className = 'fixed inset-0 z-[9999] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4';
+        
+        const updateModalContent = () => {
+            modal.innerHTML = `
+                <div class="relative w-full max-w-lg bg-white dark:bg-gray-900 rounded-3xl border border-gray-150 dark:border-gray-800 shadow-2xl overflow-y-auto max-h-[95vh] text-left">
+                    <button id="inspect-close-btn" class="absolute top-4 right-4 z-50 h-7 w-7 flex items-center justify-center rounded-full bg-black/40 hover:bg-black/60 text-white text-xs font-bold transition">✕</button>
+                    
+                    <div class="p-6 space-y-4">
+                        <div class="border-b border-gray-100 dark:border-gray-800 pb-3">
+                            <h3 class="text-base font-black text-gray-900 dark:text-white">Inspect details</h3>
+                            <p class="text-[10px] font-bold text-indigo-500 uppercase tracking-wide mt-0.5">Support ID: support_${chatUserId}</p>
+                        </div>
+                        
+                        <div class="grid grid-cols-2 gap-3 text-xs">
+                            <div>
+                                <span class="block text-[9px] font-black uppercase text-gray-400">Task Name</span>
+                                <span class="font-extrabold text-gray-800 dark:text-gray-200">${escapeHtml(s.app_name || 'Task')}</span>
+                            </div>
+                            <div>
+                                <span class="block text-[9px] font-black uppercase text-gray-400">Submission Date</span>
+                                <span class="font-extrabold text-gray-800 dark:text-gray-200">${subDate}</span>
+                            </div>
+                        </div>
+
+                        <div class="grid grid-cols-2 gap-3 text-xs">
+                            <div>
+                                <span class="block text-[9px] font-black uppercase text-gray-400">Task ID</span>
+                                <span class="font-bold text-gray-800 dark:text-gray-200 font-mono">${escapeHtml(s.task_id || '')}</span>
+                            </div>
+                            <div>
+                                <span class="block text-[9px] font-black uppercase text-gray-400">Status</span>
+                                <span class="font-bold uppercase tracking-wider ${s.manual_status === 'approved' ? 'text-emerald-500' : s.manual_status === 'rejected' ? 'text-rose-500' : 'text-amber-500'}">${s.manual_status}</span>
+                            </div>
+                        </div>
+                        
+                        <div class="space-y-1.5 text-xs">
+                            <span class="block text-[9px] font-black uppercase text-gray-400">Screenshot Proof</span>
+                            <div class="relative w-32 aspect-[9/16] rounded-xl overflow-hidden border border-gray-200 dark:border-gray-800 bg-gray-950 flex items-center justify-center cursor-zoom-in">
+                                <img id="inspect-screenshot-img" src="${escapeHtml(s.screenshot_url)}" alt="Screenshot" class="h-full w-full object-cover">
+                            </div>
+                        </div>
+
+                        <div class="space-y-1.5 text-xs bg-gray-50 dark:bg-gray-800/40 p-3 rounded-2xl border border-gray-150 dark:border-gray-800">
+                            <span class="block text-[9px] font-black uppercase text-gray-400">Assigned Comment</span>
+                            <p class="font-bold text-gray-800 dark:text-gray-200 italic">"${escapeHtml(s.assigned_comment || 'None')}"</p>
+                        </div>
+
+                        <div class="space-y-1.5 text-xs bg-gray-50 dark:bg-gray-800/40 p-3 rounded-2xl border border-gray-150 dark:border-gray-800">
+                            <span class="block text-[9px] font-black uppercase text-purple-500 dark:text-purple-400">Used Comment (OCR Extracted Text)</span>
+                            <p class="font-semibold text-gray-800 dark:text-gray-200 leading-relaxed">${escapeHtml(s.ocr_extracted_text || 'No text extracted by OCR')}</p>
+                        </div>
+                        
+                        <div class="space-y-2 border-t border-gray-100 dark:border-gray-800 pt-3">
+                            <span class="block text-[9px] font-black uppercase text-gray-400">Automated Reply / Response</span>
+                            <textarea id="inspect-reply-textarea" class="w-full h-24 p-3 text-xs bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-2xl focus:outline-none focus:ring-2 focus:ring-indigo-500 font-semibold text-gray-950 dark:text-white resize-none" style="outline: none;">${escapeHtml(currentReplyText)}</textarea>
+                        </div>
+                        
+                        <div class="flex flex-col gap-2 border-t border-gray-100 dark:border-gray-800 pt-3">
+                            <div class="grid grid-cols-2 gap-2">
+                                ${s.manual_status !== 'approved' ? `
+                                    <button id="inspect-approve-btn" class="rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-black py-2.5 text-xs transition active:scale-95 shadow-sm">✅ Approve Manual</button>
+                                ` : ''}
+                                <button id="inspect-solve-btn" class="rounded-xl bg-amber-500 hover:bg-amber-600 text-white font-black py-2.5 text-xs transition active:scale-95 shadow-sm ${s.manual_status === 'approved' ? 'col-span-2' : ''}">⭐ Mark as Solved</button>
+                            </div>
+                            <button id="inspect-send-btn" class="w-full rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-black py-2.5 text-xs transition active:scale-95 shadow-sm uppercase tracking-wider">📤 Send Reply</button>
+                        </div>
+                    </div>
+                </div>
+            `;
+            
+            document.getElementById('inspect-close-btn').onclick = () => modal.remove();
+            
+            const screenshotImg = document.getElementById('inspect-screenshot-img');
+            if (screenshotImg) {
+                screenshotImg.onclick = () => {
+                    if (typeof window.showScreenshotLightbox === 'function') {
+                        window.showScreenshotLightbox(s.screenshot_url, s.view_url || s.screenshot_view_url || '');
+                    }
+                };
+            }
+            
+            const approveBtn = document.getElementById('inspect-approve-btn');
+            if (approveBtn) {
+                approveBtn.onclick = async () => {
+                    approveBtn.disabled = true;
+                    approveBtn.textContent = 'Approving...';
+                    try {
+                        const token = await getBackendAuthToken();
+                        await fetchWithTimeout(`${BACKEND_BASE_URL}/api/admin/task-submissions/${encodeURIComponent(s.id)}`, {
+                            method: 'PATCH',
+                            headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ manualStatus: 'approved', verifiedAt: Date.now() })
+                        }, 8000);
+                        
+                        s.manual_status = 'approved';
+                        showNotification('Submission approved manually.');
+                        currentReplyText = getPrefilledReply(s);
+                        updateModalContent();
+                    } catch (err) {
+                        console.error('Approve failed:', err);
+                        showNotification('Approval failed. Please try again.', true);
+                        approveBtn.disabled = false;
+                        approveBtn.textContent = '✅ Approve Manual';
+                    }
+                };
+            }
+            
+            const solveBtn = document.getElementById('inspect-solve-btn');
+            if (solveBtn) {
+                solveBtn.onclick = () => {
+                    const textarea = document.getElementById('inspect-reply-textarea');
+                    const resolvedMsg = `Hello! We checked your task submission. The issue is resolved now. Thank you for your support!`;
+                    if (textarea) {
+                        textarea.value = resolvedMsg;
+                        currentReplyText = resolvedMsg;
+                    }
+                    showNotification('Doubt response prefilled with resolved reply.');
+                };
+            }
+            
+            const sendBtn = document.getElementById('inspect-send-btn');
+            if (sendBtn) {
+                sendBtn.onclick = () => {
+                    const textarea = document.getElementById('inspect-reply-textarea');
+                    const text = textarea ? textarea.value.trim() : '';
+                    if (!text) {
+                        showNotification('Please enter a response message.', true);
+                        return;
+                    }
+                    
+                    const socket = window.activeSupportSocket;
+                    if (!socket?.connected) {
+                        showNotification('Chat socket not connected. Please try again in a moment.', true);
+                        return;
+                    }
+                    
+                    const clientMsgId = `${window.activeSupportRoomId}-admin-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+                    const userMeta = {
+                        userId: chatUserId,
+                        userName: 'User',
+                        userEmail: '',
+                        userMobile: ''
+                    };
+                    
+                    socket.emit('send_message', {
+                        roomId: window.activeSupportRoomId,
+                        message: text,
+                        userMeta,
+                        clientMessageId: clientMsgId
+                    }, (response) => {
+                        if (response?.ok) {
+                            showNotification('Reply sent successfully.');
+                        } else {
+                            console.error('Failed to send admin support message:', response?.error);
+                            showNotification('Failed to send reply.', true);
+                        }
+                    });
+                    
+                    modal.remove();
+                };
+            }
+        };
+        
+        updateModalContent();
+        document.body.appendChild(modal);
+        
+    } catch (err) {
+        if (typeof hideLoading === 'function') hideLoading();
+        console.error('Inspect details load failed:', err);
+        showNotification('Failed to load submission details.', true);
+    }
+};
+
 // Expose functions to window for global access
 window.getSupportSocket = getSupportSocket;
 window.installChatViewportLock = installChatViewportLock;
@@ -1267,3 +1526,4 @@ window.renderRevyBotMessages = renderRevyBotMessages;
 window.addRevyBotMessage = addRevyBotMessage;
 window.openRevyBotChatPage = openRevyBotChatPage;
 window.showHelpSupportPage = showHelpSupportPage;
+window.openAdminInspectDetailsModal = openAdminInspectDetailsModal;
