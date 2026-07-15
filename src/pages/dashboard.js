@@ -2220,7 +2220,7 @@ window.showBulkerSubmissionMenu = (event, submissionId) => {
                     <!-- Drag handle -->
                     <div class="w-12 h-1 bg-gray-200 dark:bg-gray-700 rounded-full mx-auto mb-1"></div>
                     
-                    <div class="flex justify-between items-center pb-2 border-b border-gray-100 dark:border-gray-750">
+                    <div class="flex justify-between items-center pb-2 border-b border-gray-100 dark:border-gray-755">
                         <h3 class="text-sm font-black text-gray-900 dark:text-white">Submission ${displaySubmissionId}</h3>
                     </div>
                     
@@ -2241,43 +2241,7 @@ window.showBulkerSubmissionMenu = (event, submissionId) => {
                             <svg class="h-4 w-4 text-gray-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"></path></svg>
                         </button>
 
-                        <!-- Option 2: View Screenshot -->
-                        ${s.screenshot_url ? `
-                        <button class="w-full flex items-center justify-between p-3.5 rounded-2xl hover:bg-gray-50 dark:hover:bg-gray-750/30 transition text-left" onclick="window.closeBulkerSubmissionMenu(); window.showScreenshotLightbox('${escapeHtml(s.screenshot_url)}', '${escapeHtml(s.screenshot_view_url || '')}')" style="outline: none;">
-                            <div class="flex items-center gap-3">
-                                <span class="p-2 rounded-xl bg-blue-50 dark:bg-blue-955/20 text-blue-600 dark:text-blue-400 shrink-0">
-                                    <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5">
-                                        <path stroke-linecap="round" stroke-linejoin="round" d="M2.25 15.75l5.159-5.159a2.25 2.25 0 013.182 0l5.159 5.159m-1.5-1.5l1.409-1.409a2.25 2.25 0 013.182 0l2.909 2.909m-18 3.75h16.5a1.5 1.5 0 001.5-1.5V6a1.5 1.5 0 00-1.5-1.5H3.75A1.5 1.5 0 002.25 6v12a1.5 1.5 0 001.5 1.5zm10.5-11.25h.008v.008h-.008V8.25zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0z" />
-                                    </svg>
-                                </span>
-                                <div>
-                                    <p class="text-xs font-black text-gray-900 dark:text-white">View Screenshot</p>
-                                    <p class="text-[10px] text-gray-400 font-semibold mt-0.5">View uploaded screenshot</p>
-                                </div>
-                            </div>
-                            <svg class="h-4 w-4 text-gray-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"></path></svg>
-                        </button>
-                        ` : ''}
-
-                        <!-- Option 3: View Assigned Review -->
-                        ${(s.assigned_comment && String(s.assigned_comment).trim().length > 0) ? `
-                        <button class="w-full flex items-center justify-between p-3.5 rounded-2xl hover:bg-gray-50 dark:hover:bg-gray-750/30 transition text-left" onclick="window.closeBulkerSubmissionMenu(); window.showBulkerReviewDialog('${escapeHtml(s.assigned_comment)}')" style="outline: none;">
-                            <div class="flex items-center gap-3">
-                                <span class="p-2 rounded-xl bg-indigo-50 dark:bg-indigo-955/20 text-indigo-600 dark:text-indigo-400 shrink-0">
-                                    <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5">
-                                        <path stroke-linecap="round" stroke-linejoin="round" d="M7.5 8.25h9m-9 3H12m-9.75 1.51c0 1.6 1.123 2.994 2.707 3.227 1.129.166 2.27.293 3.423.379.35.026.67.21.865.501L12 21l2.755-4.133a1.14 1.14 0 01.865-.501 48.172 48.172 0 003.423-.379c1.584-.233 2.707-1.626 2.707-3.228V6.741c0-1.602-1.123-2.995-2.707-3.228A48.394 48.394 0 0012 3c-2.392 0-4.744.175-7.043.513C3.373 3.746 2.25 5.14 2.25 6.741v6.018z" />
-                                    </svg>
-                                </span>
-                                <div>
-                                    <p class="text-xs font-black text-gray-900 dark:text-white">View Assigned Review</p>
-                                    <p class="text-[10px] text-gray-400 font-semibold mt-0.5">See the review/comment used</p>
-                                </div>
-                            </div>
-                            <svg class="h-4 w-4 text-gray-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"></path></svg>
-                        </button>
-                        ` : ''}
-
-                        <!-- Option 4: Status Specific -->
+                        <!-- Option 2: Status Specific -->
                         ${s.manual_status === 'approved' ? `
                         <button class="w-full flex items-center justify-between p-3.5 rounded-2xl hover:bg-gray-50 dark:hover:bg-gray-750/30 transition text-left" onclick="window.closeBulkerSubmissionMenu(); window.showBulkerPaymentDialog('${s.reward}', '${s.payout_status || 'pending'}')" style="outline: none;">
                             <div class="flex items-center gap-3">
@@ -2325,39 +2289,7 @@ window.showBulkerSubmissionMenu = (event, submissionId) => {
                         </button>
                         `}
 
-                        <!-- Option 5: Copy Submission ID -->
-                        <button class="w-full flex items-center justify-between p-3.5 rounded-2xl hover:bg-gray-50 dark:hover:bg-gray-750/30 transition text-left" onclick="window.closeBulkerSubmissionMenu(); copyToClipboard('${displaySubmissionId}'); showNotification('Submission ID Copied!')" style="outline: none;">
-                            <div class="flex items-center gap-3">
-                                <span class="p-2 rounded-xl bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 shrink-0">
-                                    <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5">
-                                        <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 17.25v3.375c0 .621-.504 1.125-1.125 1.125h-9.75a1.125 1.125 0 01-1.125-1.125V7.875c0-.621.504-1.125 1.125-1.125H5.25m11.9-3.664A2.251 2.251 0 0015 2.25h-3a2.251 2.251 0 00-1.85 1.136m8.75 3.148t-8.75 0M16.5 7.75v10.5c0 .621-.504 1.125-1.125 1.125h-9.75a1.125 1.125 0 01-1.125-1.125V7.75c0-.621.504-1.125 1.125-1.125h9.75c.621 0 1.125.504 1.125 1.125z" />
-                                    </svg>
-                                </span>
-                                <div>
-                                    <p class="text-xs font-black text-gray-900 dark:text-white">Copy Submission ID</p>
-                                    <p class="text-[10px] text-gray-400 font-semibold mt-0.5">Copy ID for support</p>
-                                </div>
-                            </div>
-                            <svg class="h-4 w-4 text-gray-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"></path></svg>
-                        </button>
-
-                        <!-- Option 6: Share Submission ID -->
-                        <button class="w-full flex items-center justify-between p-3.5 rounded-2xl hover:bg-gray-50 dark:hover:bg-gray-750/30 transition text-left" onclick="window.closeBulkerSubmissionMenu(); window.shareBulkerSubmission('${displaySubmissionId}')" style="outline: none;">
-                            <div class="flex items-center gap-3">
-                                <span class="p-2 rounded-xl bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 shrink-0">
-                                    <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5">
-                                        <path stroke-linecap="round" stroke-linejoin="round" d="M7.217 10.907a2.25 2.25 0 100 2.186m0-2.186l.908.452a2.25 2.25 0 002.502-.314l5.385-3.59a2.25 2.25 0 10-.866-1.8l-5.385 3.59a2.25 2.25 0 00-.2 3.86l.908.452m0 0l.908-.452m-1.816 0l.908.452m0 0a2.25 2.25 0 102.25-2.25m-2.25 2.25a2.25 2.25 0 00-2.25-2.25m0 0h.008v.008h-.008z" />
-                                    </svg>
-                                </span>
-                                <div>
-                                    <p class="text-xs font-black text-gray-900 dark:text-white">Share Submission ID</p>
-                                    <p class="text-[10px] text-gray-400 font-semibold mt-0.5">Share with support</p>
-                                </div>
-                            </div>
-                            <svg class="h-4 w-4 text-gray-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"></path></svg>
-                        </button>
-
-                        <!-- Option 7: Report Issue -->
+                        <!-- Option 3: Report Issue -->
                         <button class="w-full flex items-center justify-between p-3.5 rounded-2xl hover:bg-gray-50 dark:hover:bg-gray-750/30 transition text-left" onclick="window.closeBulkerSubmissionMenu(); window.reportBulkerSubmissionIssue('${s.id}', '${displaySubmissionId}')" style="outline: none;">
                             <div class="flex items-center gap-3">
                                 <span class="p-2 rounded-xl bg-red-50 dark:bg-red-955/20 text-red-600 dark:text-red-500 shrink-0">
@@ -2459,29 +2391,49 @@ window.showBulkerSubmissionMenu = (event, submissionId) => {
             );
         };
 
-        window.shareBulkerSubmission = (displayId) => {
-            const text = `Check out my submission ${displayId} on RW Wallet!`;
-            if (navigator.share) {
-                navigator.share({
-                    title: 'Submission Share',
-                    text: text,
-                    url: window.location.href
-                }).catch(() => {});
-            } else {
-                copyToClipboard(text);
-                showNotification('Share message copied to clipboard!');
-            }
-        };
-
         window.reportBulkerSubmissionIssue = (submissionId, displayId) => {
-            window.supportChatDraftMessage = `Hello Support, I have an issue with my Bulker Submission ${displayId} (ID: ${submissionId}). Please verify this.`;
-            if (typeof window.showSupportChatPage === 'function') {
-                window.showSupportChatPage();
-            } else if (typeof window.showSettingsPage === 'function') {
-                window.showSettingsPage();
-                showNotification('Go to support section to file your report.');
-            } else {
-                showNotification('Support page is currently unavailable.');
+            const idx = userTaskHistoryCache.findIndex(x => x.id === submissionId);
+            if (idx === -1) return;
+            const s = userTaskHistoryCache[idx];
+            
+            const appName = s.app_name || s.taskTitle || 'Task';
+            const subDate = s.submitted_at ? new Date(s.submitted_at).toLocaleDateString('en-GB') : new Date().toLocaleDateString('en-GB');
+            const taskIdVal = s.task_id || s.taskId || '';
+
+            renderModal('Report Issue',
+                `<div class="space-y-3 text-left select-none">
+                    <p class="text-xs font-semibold text-gray-500 dark:text-gray-400">Please describe your query or doubt below. Our support team will resolve it in the chat room.</p>
+                    <textarea id="bulker-issue-doubt-textarea" placeholder="Enter your doubt here..." class="w-full h-24 p-3 text-xs bg-gray-55 dark:bg-gray-900 border border-gray-150 dark:border-gray-800 rounded-2xl focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-none font-semibold text-gray-950 dark:text-white" style="outline: none;"></textarea>
+                </div>`,
+                `<div class="flex gap-2 w-full">
+                    <button onclick="window.closeModal()" class="flex-1 py-2.5 text-xs font-black bg-gray-100 hover:bg-gray-200 dark:bg-gray-700 text-gray-900 dark:text-white rounded-xl transition uppercase tracking-wider" style="outline: none;">Cancel</button>
+                    <button id="send-bulker-doubt-btn" class="flex-1 py-2.5 text-xs font-black bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 transition uppercase tracking-wider" style="outline: none;">Send</button>
+                </div>`,
+                'max-w-sm'
+            );
+
+            const sendBtn = document.getElementById('send-bulker-doubt-btn');
+            if (sendBtn) {
+                sendBtn.onclick = () => {
+                    const textarea = document.getElementById('bulker-issue-doubt-textarea');
+                    const queryText = textarea ? textarea.value.trim() : '';
+                    if (!queryText) {
+                        showNotification('Please enter your doubt/query first.', true);
+                        return;
+                    }
+
+                    const prefilledMsg = `App Name: ${appName}\nDate: ${subDate}\nTask ID: ${taskIdVal}\nSubmission ID: ${displayId}\n\nMy Doubt: ${queryText}`;
+                    window.closeModal();
+
+                    if (typeof window.openSupportChatPage === 'function') {
+                        window.openSupportChatPage(currentUser.uid, 'user', { 
+                            adminId: ADMIN_UID, 
+                            initialMessage: prefilledMsg 
+                        });
+                    } else {
+                        showNotification('Support chat page is currently unavailable.');
+                    }
+                };
             }
         };
 
@@ -2610,7 +2562,7 @@ window.showBulkerSubmissionDetail = (submissionId) => {
                     <div class="bg-white dark:bg-gray-800 p-5 rounded-2xl border border-gray-100 dark:border-gray-800 shadow-[0_2px_8px_rgba(0,0,0,0.03)] space-y-3">
                         <p class="text-[10px] font-black uppercase text-gray-400 tracking-wider">Large Screenshot</p>
                         <div class="relative overflow-hidden rounded-xl bg-gray-50 dark:bg-gray-955 flex items-center justify-center py-4 border border-gray-100 dark:border-gray-800">
-                            <img id="bulker-detail-screenshot-img" src="${escapeHtml(s.screenshot_url)}" alt="Screenshot Proof" class="h-80 w-52 rounded-xl object-cover cursor-zoom-in hover:scale-102 transition shadow-sm">
+                            <img id="bulker-detail-screenshot-img" src="${escapeHtml(s.screenshot_url)}" alt="Screenshot Proof" class="h-80 w-52 rounded-xl object-cover cursor-zoom-in hover:scale-102 transition shadow-sm" onclick="window.showScreenshotLightbox('${escapeHtml(s.screenshot_url)}', '${escapeHtml(s.screenshot_view_url || '')}')">
                         </div>
                     </div>
                     ` : ''}
