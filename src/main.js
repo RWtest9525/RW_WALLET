@@ -94,12 +94,19 @@ onAuthStateChanged(auth, async (user) => {
             adminLoanRequestsLoaded = false;
             allLoansCache = [];
             allInvestmentsCache = [];
-            allTasksCache = [];
+            try {
+                const cached = localStorage.getItem('all_tasks_cache');
+                allTasksCache = cached ? JSON.parse(cached) : [];
+            } catch (e) {
+                allTasksCache = [];
+            }
             if (forceRecoverTask) {
                 try {
                     const restoredTask = JSON.parse(lastActiveTaskData);
                     if (restoredTask && restoredTask.id === lastActiveTaskId) {
-                        allTasksCache = [restoredTask];
+                        if (!allTasksCache.find(t => t.id === restoredTask.id)) {
+                            allTasksCache.push(restoredTask);
+                        }
                     }
                 } catch (e) {
                     console.warn('Restoring task cache failed:', e);
@@ -300,6 +307,18 @@ onAuthStateChanged(auth, async (user) => {
                     setMainChrome(true);
                     if (typeof window.showUserTaskDetailsPage === 'function') {
                         window.showUserTaskDetailsPage(lastActiveTaskId).catch(e => console.warn('Instant task restore failed:', e));
+                    }
+                } else if (window.pendingTabRedirect) {
+                    const target = window.pendingTabRedirect;
+                    window.pendingTabRedirect = null;
+                    if (target === 'task' && typeof window.showUserTaskPage === 'function') {
+                        window.showUserTaskPage();
+                    } else if (target === 'refer' && typeof window.showReferEarnPage === 'function') {
+                        window.showReferEarnPage();
+                    } else if (target === 'admin' && typeof window.showAdminMainPage === 'function') {
+                        window.showAdminMainPage();
+                    } else if (target === 'help' && typeof window.showHelpSupportPage === 'function') {
+                        window.showHelpSupportPage();
                     }
                 }
 
@@ -603,16 +622,45 @@ document.getElementById('tabs-container').addEventListener('click', (e) => {
         });
 
 document.getElementById('bottom-home-btn').addEventListener('click', () => {
+            window.pendingTabRedirect = null;
             showHomeMainPage();
         });
 
-document.getElementById('bottom-refer-btn').addEventListener('click', showReferEarnPage);
+document.getElementById('bottom-refer-btn').addEventListener('click', () => {
+            if (!currentUser && hasCachedLoginSession()) {
+                window.pendingTabRedirect = 'refer';
+                showNotification('App is opening. Please wait a moment.', true, false);
+                return;
+            }
+            showReferEarnPage();
+        });
 
-document.getElementById('bottom-admin-btn').addEventListener('click', showAdminMainPage);
+document.getElementById('bottom-admin-btn').addEventListener('click', () => {
+            if (!currentUser && hasCachedLoginSession()) {
+                window.pendingTabRedirect = 'admin';
+                showNotification('App is opening. Please wait a moment.', true, false);
+                return;
+            }
+            showAdminMainPage();
+        });
 
-document.getElementById('bottom-task-btn').addEventListener('click', showUserTaskPage);
+document.getElementById('bottom-task-btn').addEventListener('click', () => {
+            if (!currentUser && hasCachedLoginSession()) {
+                window.pendingTabRedirect = 'task';
+                showNotification('App is opening. Please wait a moment.', true, false);
+                return;
+            }
+            showUserTaskPage();
+        });
 
-document.getElementById('bottom-help-btn').addEventListener('click', showHelpSupportPage);
+document.getElementById('bottom-help-btn').addEventListener('click', () => {
+            if (!currentUser && hasCachedLoginSession()) {
+                window.pendingTabRedirect = 'help';
+                showNotification('App is opening. Please wait a moment.', true, false);
+                return;
+            }
+            showHelpSupportPage();
+        });
 
 document.getElementById('bottom-settings-btn').addEventListener('click', showSettingsPage);
 

@@ -1309,6 +1309,7 @@ const loadUserTaskHistory = async () => {
                     try {
                         const tasksSnap = await getDocs(collection(db, `artifacts/${appId}/public/data/tasks`));
                         allTasksCache = tasksSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                        localStorage.setItem('all_tasks_cache', JSON.stringify(allTasksCache));
                     } catch (taskErr) {
                         console.warn('Failed to refresh tasks in history page:', taskErr);
                     }
@@ -3477,6 +3478,7 @@ const showUserTaskPage = () => {
                             const snapshot = await getDocs(collection(db, `artifacts/${appId}/public/data/tasks`));
                             const docs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
                             allTasksCache = docs.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+                            localStorage.setItem('all_tasks_cache', JSON.stringify(allTasksCache));
                             if (currentMainSection === 'task') {
                                 renderUI(window.lastTakenCommentsMap || {}, true);
                             }
