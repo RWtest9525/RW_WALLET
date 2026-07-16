@@ -4426,6 +4426,30 @@ async function fetchPlayStoreReviewsForDate(packageId, targetDateMs) {
     }
   });
 
+  app.post('/api/admin/scraper/fetch-reviews', requireHttpAuth, async (req, res) => {
+    if (!req.auth.isAdmin) return res.status(403).json({ ok: false, error: 'ADMIN_REQUIRED' });
+    try {
+      const { url, packageId: packageIdInput } = req.body;
+      const packageId = extractPackageId(url || packageIdInput || '');
+      if (!packageId) return res.status(400).json({ ok: false, error: 'PACKAGE_ID_REQUIRED' });
+
+      console.log(`[Manual Scraper] Fetching reviews for package: ${packageId}`);
+      const reviews = await gplay.reviews({
+        appId: packageId,
+        sort: gplay.sort.NEWEST,
+        lang: 'en',
+        country: 'in',
+        num: 150
+      });
+
+      const list = Array.isArray(reviews) ? reviews : (reviews.data || []);
+      res.json({ ok: true, reviews: list });
+    } catch (error) {
+      console.error('Manual reviews fetch failed:', error);
+      res.status(500).json({ ok: false, error: error.message || 'FETCH_REVIEWS_FAILED' });
+    }
+  });
+
   app.post('/api/admin/auto-payout/run', requireHttpAuth, async (req, res) => {
     if (!req.auth.isAdmin) return res.status(403).json({ ok: false, error: 'ADMIN_REQUIRED' });
     try {

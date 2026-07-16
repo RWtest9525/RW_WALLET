@@ -523,6 +523,155 @@ const drawCalendarGrid = (availableDates, dateCounts, selectedDate) => {
     });
 };
 
+const renderPlayStoreVerifyTabContent = (taskSubs, selectedTask) => {
+    const scraped = window.adminSubmissionsView.scrapedReviews || [];
+    const starFilter = window.adminSubmissionsView.selectedStarFilter || '5';
+    
+    // Filter by star
+    let filteredReviews = [...scraped];
+    if (starFilter !== 'all') {
+        const starNum = Number(starFilter);
+        filteredReviews = filteredReviews.filter(r => Math.round(Number(r.score || r.rating || 5)) === starNum);
+    }
+    
+    const taskSubsMap = new Map();
+    taskSubs.forEach(s => {
+        const ocr = String(s.ocr_extracted_name || '').trim().toLowerCase();
+        const usr = String(s.user_name || '').trim().toLowerCase();
+        if (ocr && ocr !== 'unknown user') taskSubsMap.set(ocr, s);
+        if (usr) taskSubsMap.set(usr, s);
+    });
+
+    const getMatchedSubmission = (review) => {
+        const rName = String(review.userName || review.user || '').trim().toLowerCase();
+        if (!rName) return null;
+        for (const [key, sub] of taskSubsMap.entries()) {
+            if (key.includes(rName) || rName.includes(key)) {
+                return sub;
+            }
+        }
+        return null;
+    };
+
+    const countAll = scraped.length;
+    const countFiltered = filteredReviews.length;
+
+    const actionHtml = `
+        <div class="flex flex-wrap items-center justify-between gap-4 bg-slate-50 dark:bg-slate-900/60 p-4 rounded-2xl border border-slate-100 dark:border-slate-800">
+            <div class="flex items-center gap-3">
+                <button type="button" id="fetch-playstore-reviews-btn" class="rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-black px-4 py-2.5 text-xs transition active:scale-95 shadow-sm uppercase tracking-wider">
+                    🔄 Fetch Reviews
+                </button>
+                <div class="flex items-center gap-2">
+                    <label for="playstore-star-filter" class="text-xs font-extrabold text-slate-500 uppercase">Rating:</label>
+                    <select id="playstore-star-filter" class="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-850 px-2.5 py-1.5 text-xs font-bold text-slate-750 dark:text-slate-200 focus:outline-none focus:ring-1 focus:ring-indigo-500" style="outline: none;">
+                        <option value="all" ${starFilter === 'all' ? 'selected' : ''}>All Stars</option>
+                        <option value="5" ${starFilter === '5' ? 'selected' : ''}>5 Stars</option>
+                        <option value="4" ${starFilter === '4' ? 'selected' : ''}>4 Stars</option>
+                        <option value="3" ${starFilter === '3' ? 'selected' : ''}>3 Stars</option>
+                        <option value="2" ${starFilter === '2' ? 'selected' : ''}>2 Stars</option>
+                        <option value="1" ${starFilter === '1' ? 'selected' : ''}>1 Star</option>
+                    </select>
+                </div>
+            </div>
+            ${countFiltered > 0 ? `
+                <button type="button" id="download-playstore-excel-btn" class="rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-black px-4 py-2.5 text-xs transition active:scale-95 shadow-sm uppercase tracking-wider flex items-center gap-1.5">
+                    📥 Download Excel
+                </button>
+            ` : ''}
+        </div>
+    `;
+
+    const AVATAR_BG = ['#e97100', '#9c27b0', '#e91e63', '#7e57c2', '#00897b', '#43a047', '#3949ab'];
+    const avatarColor = (name, index) => {
+        const key = String(name || 'user');
+        let h = 0;
+        for (let i = 0; i < key.length; i++) h = (h * 31 + key.charCodeAt(i)) | 0;
+        return AVATAR_BG[(Math.abs(h) + index) % AVATAR_BG.length];
+    };
+
+    const starRow = (rating) => {
+        const n = Math.min(5, Math.max(0, Math.round(Number(rating) || 5)));
+        let html = '<span class="inline-flex items-center gap-px">';
+        for (let i = 0; i < 5; i++) {
+            html += `
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="${i < n ? '#01875f' : '#e3e3e3'}">
+                    <path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z" />
+                </svg>
+            `;
+        }
+        html += '</span>';
+        return html;
+    };
+
+    const listHtml = countFiltered === 0 ? `
+        <div class="py-16 text-center text-sm text-gray-455 border border-dashed border-gray-200 dark:border-gray-700 rounded-2xl">
+            ${scraped.length === 0 ? 'Click "Fetch Reviews" to load reviews from the Play Store.' : 'No reviews match the selected rating filter.'}
+        </div>
+    ` : `
+        <div class="space-y-4 max-h-[60vh] overflow-y-auto pr-1">
+            ${filteredReviews.map((r, index) => {
+                const user = r.userName || r.user || 'User';
+                const userImage = String(r.userImage || r.avatar || '').trim();
+                const initial = user.slice(0, 1).toUpperCase() || 'U';
+                const rating = Math.round(Number(r.score || r.rating || 5));
+                const comment = r.text || r.content || '';
+                const dateVal = r.date || r.time;
+                const formattedDate = dateVal ? new Date(dateVal).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : '';
+                const thumbs = r.thumbsUpCount || 0;
+                const matched = getMatchedSubmission(r);
+
+                return `
+                    <div class="bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 p-4 rounded-2xl space-y-3 shadow-sm hover:shadow transition">
+                        <div class="flex items-start justify-between gap-3">
+                            <div class="flex items-center gap-3">
+                                ${userImage ? `
+                                    <img src="${escapeHtml(userImage)}" alt="${escapeHtml(user)}" class="h-9 w-9 shrink-0 rounded-full bg-slate-200 object-cover" referrerPolicy="no-referrer" loading="lazy" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
+                                ` : ''}
+                                <div class="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-xs font-extrabold text-white" style="background-color: ${avatarColor(user, index)}; display: ${userImage ? 'none' : 'flex'}">
+                                    ${initial}
+                                </div>
+                                <div class="min-w-0">
+                                    <h4 class="text-xs font-black text-slate-800 dark:text-slate-200 truncate">${escapeHtml(user)}</h4>
+                                    <div class="flex items-center gap-2 mt-0.5">
+                                        ${starRow(rating)}
+                                        <span class="text-[9px] font-bold text-slate-400">${escapeHtml(formattedDate)}</span>
+                                    </div>
+                                </div>
+                            </div>
+                            ${matched ? `
+                                <div class="shrink-0 flex flex-col items-end gap-1">
+                                    <span class="rounded-full bg-emerald-50 dark:bg-emerald-950/30 px-2 py-0.5 text-[8px] font-black text-emerald-700 dark:text-emerald-300 border border-emerald-100 dark:border-emerald-800">✅ MATCHED</span>
+                                    <span class="text-[8px] font-bold text-slate-400 font-mono">${escapeHtml(matched.user_mobile || matched.userMobile || '')}</span>
+                                </div>
+                            ` : `
+                                <span class="rounded-full bg-slate-50 dark:bg-slate-800/40 px-2 py-0.5 text-[8px] font-black text-slate-500 border border-slate-150 dark:border-slate-700 shrink-0">NOT MATCHED</span>
+                            `}
+                        </div>
+                        <p class="text-xs text-slate-650 dark:text-slate-350 leading-relaxed font-medium pl-12 whitespace-pre-wrap">${escapeHtml(comment)}</p>
+                        ${thumbs > 0 ? `
+                            <div class="flex items-center gap-1 text-[9px] font-black text-slate-400 pl-12">
+                                <svg class="w-3 h-3 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 10h4.757a2.243 2.243 0 012.243 2.243v.273c0 .5-.107 1.002-.315 1.46l-2.455 5.46c-.302.67-.978 1.104-1.716 1.104H9m4-10.5V4a2 2 0 10-4 0v6.5M9 21H5a2 2 0 01-2-2V11a2 2 0 012-2h4"></path></svg>
+                                <span>${thumbs} helpful</span>
+                            </div>
+                        ` : ''}
+                    </div>
+                `;
+            }).join('')}
+        </div>
+    `;
+
+    return `
+        <div class="space-y-4">
+            ${actionHtml}
+            <div class="text-[10px] font-extrabold text-slate-400 dark:text-slate-500 uppercase tracking-wider pl-1">
+                Showing ${countFiltered} of ${countAll} reviews
+            </div>
+            ${listHtml}
+        </div>
+    `;
+};
+
 const renderSubmittedNamesTabContent = (taskSubs) => {
     const getCompareName = (s) => String(s.ocr_extracted_name || s.user_name || s.user_email || '').toLowerCase().trim();
     const sortedSubs = [...taskSubs].sort((a, b) => getCompareName(a).localeCompare(getCompareName(b)));
@@ -787,6 +936,8 @@ const renderAdminSubmissions = () => {
                 <!-- Tab Contents -->
                 ${window.adminSubmissionsView.selectedDetailTab === 'names_list' ? `
                     ${renderSubmittedNamesTabContent(taskSubs)}
+                ` : window.adminSubmissionsView.selectedDetailTab === 'play_store_verify' ? `
+                    ${renderPlayStoreVerifyTabContent(taskSubs, selectedTask)}
                 ` : window.adminSubmissionsView.selectedDetailTab !== 'submissions' ? `
                     <div class="py-12 text-center text-sm text-gray-455">
                         <p class="font-extrabold uppercase tracking-wide text-gray-400 dark:text-gray-500">${escapeHtml(window.adminSubmissionsView.selectedDetailTab)} Panel</p>
@@ -1115,6 +1266,8 @@ const renderAdminSubmissions = () => {
             window.adminSubmissionsView.viewState = 'detail';
             window.adminSubmissionsView.selectedDetailTab = 'submissions';
             window.adminSubmissionsView.selectedSubFilter = 'all';
+            window.adminSubmissionsView.scrapedReviews = [];
+            window.adminSubmissionsView.selectedStarFilter = '5';
             renderAdminSubmissions();
         };
     });
@@ -1191,6 +1344,158 @@ const renderAdminSubmissions = () => {
                         row.classList.add('hidden');
                     }
                 });
+            };
+        }
+    }
+
+    // --- Play Store Verify event bindings ---
+    if (window.adminSubmissionsView.selectedDetailTab === 'play_store_verify') {
+        const fetchBtn = document.getElementById('fetch-playstore-reviews-btn');
+        if (fetchBtn) {
+            fetchBtn.onclick = async () => {
+                const originalText = fetchBtn.innerHTML;
+                fetchBtn.disabled = true;
+                fetchBtn.innerHTML = '⏳ Fetching...';
+                
+                const selectedTask = allTasksCache.find(t => t.id === selectedTaskId);
+                const taskLink = selectedTask?.taskLink || selectedTask?.task_link || selectedTask?.link || '';
+                if (!taskLink) {
+                    showNotification('No task link found to fetch reviews.', true);
+                    fetchBtn.disabled = false;
+                    fetchBtn.innerHTML = originalText;
+                    return;
+                }
+                
+                try {
+                    const token = await getBackendAuthToken();
+                    const resp = await fetchWithTimeout(`${BACKEND_BASE_URL}/api/admin/scraper/fetch-reviews`, {
+                        method: 'POST',
+                        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ url: taskLink })
+                    }, 15000);
+                    
+                    const data = await resp.json().catch(() => ({}));
+                    if (data.ok && Array.isArray(data.reviews)) {
+                        window.adminSubmissionsView.scrapedReviews = data.reviews;
+                        showNotification(`Successfully fetched ${data.reviews.length} reviews from Play Store.`);
+                        renderAdminSubmissions();
+                    } else {
+                        throw new Error(data.error || 'Fetch failed');
+                    }
+                } catch (err) {
+                    console.error('Fetch reviews failed:', err);
+                    showNotification(`Failed to fetch reviews: ${err.message || 'Server error'}`, true);
+                    fetchBtn.disabled = false;
+                    fetchBtn.innerHTML = originalText;
+                }
+            };
+        }
+
+        const starFilterEl = document.getElementById('playstore-star-filter');
+        if (starFilterEl) {
+            starFilterEl.onchange = function() {
+                window.adminSubmissionsView.selectedStarFilter = this.value;
+                renderAdminSubmissions();
+            };
+        }
+
+        const downloadExcelBtn = document.getElementById('download-playstore-excel-btn');
+        if (downloadExcelBtn) {
+            downloadExcelBtn.onclick = () => {
+                const scraped = window.adminSubmissionsView.scrapedReviews || [];
+                const starFilter = window.adminSubmissionsView.selectedStarFilter || '5';
+                
+                let filtered = [...scraped];
+                if (starFilter !== 'all') {
+                    const starNum = Number(starFilter);
+                    filtered = filtered.filter(r => Math.round(Number(r.score || r.rating || 5)) === starNum);
+                }
+                
+                if (!filtered.length) {
+                    showNotification('No reviews to export.', true);
+                    return;
+                }
+                
+                const selectedTask = allTasksCache.find(t => t.id === selectedTaskId);
+                const selectedTaskName = selectedTask ? (selectedTask.appName || selectedTask.title) : 'Task';
+                const appName = selectedTaskName || 'App';
+                
+                const d = new Date();
+                const day = String(d.getDate()).padStart(2, '0');
+                const month = String(d.getMonth() + 1).padStart(2, '0');
+                const year = d.getFullYear();
+                const dateStr = `${day}_${month}_${year}`;
+                const filename = `${appName}_${dateStr}.xls`;
+                
+                const headers = ['Reviewer Name', 'Rating (Stars)', 'Review Comment', 'Status', 'User Mobile', 'Review Date', 'Helpful Count'];
+                
+                const taskSubs = dateSubs.filter(s => s.task_id === selectedTaskId || s.taskId === selectedTaskId);
+                const taskSubsMap = new Map();
+                taskSubs.forEach(s => {
+                    const ocr = String(s.ocr_extracted_name || '').trim().toLowerCase();
+                    const usr = String(s.user_name || '').trim().toLowerCase();
+                    if (ocr && ocr !== 'unknown user') taskSubsMap.set(ocr, s);
+                    if (usr) taskSubsMap.set(usr, s);
+                });
+
+                const getMatchedSub = (review) => {
+                    const rName = String(review.userName || review.user || '').trim().toLowerCase();
+                    if (!rName) return null;
+                    for (const [key, sub] of taskSubsMap.entries()) {
+                        if (key.includes(rName) || rName.includes(key)) {
+                            return sub;
+                        }
+                    }
+                    return null;
+                };
+
+                const rows = filtered.map(r => {
+                    const matched = getMatchedSub(r);
+                    const reviewDate = r.date || r.time ? new Date(r.date || r.time).toLocaleDateString('en-GB') : '';
+                    return [
+                        r.userName || r.user || 'User',
+                        Math.round(Number(r.score || r.rating || 5)),
+                        r.text || r.content || '',
+                        matched ? 'Matched' : 'Not Matched',
+                        matched ? (matched.user_mobile || matched.userMobile || '') : '',
+                        reviewDate,
+                        r.thumbsUpCount || 0
+                    ];
+                });
+                
+                let xml = `<?xml version="1.0"?><Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet" xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet"><Worksheet ss:Name="Sheet1"><Table>`;
+                
+                xml += '<Row>';
+                headers.forEach(h => {
+                    xml += `<Cell><Data ss:Type="String">${h.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')}</Data></Cell>`;
+                });
+                xml += '</Row>';
+                
+                rows.forEach(row => {
+                    xml += '<Row>';
+                    row.forEach(val => {
+                        const cleanVal = String(val === null || val === undefined ? '' : val)
+                            .replace(/&/g, '&amp;')
+                            .replace(/</g, '&lt;')
+                            .replace(/>/g, '&gt;');
+                        xml += `<Cell><Data ss:Type="String">${cleanVal}</Data></Cell>`;
+                    });
+                    xml += '</Row>';
+                });
+                
+                xml += '</Table></Worksheet></Workbook>';
+
+                const blob = new Blob([xml], { type: 'application/vnd.ms-excel' });
+                const link = document.createElement("a");
+                const url = URL.createObjectURL(blob);
+                link.setAttribute("href", url);
+                link.setAttribute("download", filename);
+                link.style.visibility = 'hidden';
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+                
+                showNotification(`Downloaded ${filtered.length} reviews as Excel.`);
             };
         }
 
