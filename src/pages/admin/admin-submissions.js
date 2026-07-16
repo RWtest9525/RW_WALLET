@@ -617,8 +617,14 @@ const renderPlayStoreVerifyTabContent = (taskSubs, selectedTask) => {
     };
 
     const listHtml = countFiltered === 0 ? `
-        <div class="py-16 text-center text-sm text-gray-455 border border-dashed border-gray-200 dark:border-gray-700 rounded-2xl">
-            ${scraped.length === 0 ? 'Click "Fetch Reviews" to load reviews from the Play Store.' : 'No reviews match the selected rating filter.'}
+        <div class="py-16 text-center text-sm border border-dashed border-red-200 dark:border-red-900/40 bg-red-50/20 dark:bg-red-950/5 rounded-2xl p-6">
+            <p class="font-extrabold text-red-600 dark:text-red-400">⚠️ No Reviews Found (0 Live Reviews)</p>
+            <p class="text-xs text-slate-500 dark:text-slate-400 mt-1.5 leading-relaxed">
+                ${scraped.length === 0 
+                  ? 'Click "Fetch Reviews" to load reviews from the Play Store.' 
+                  : `There are no reviews posted on the selected date (${selectedDate}) with the chosen star rating filter. The reviews might not be published or live yet.`
+                }
+            </p>
         </div>
     ` : `
         <div class="space-y-4 max-h-[60vh] overflow-y-auto pr-1">
