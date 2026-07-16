@@ -399,15 +399,15 @@ const showAdminTaskPage = () => {
                         </div>
 
                         <!-- Right Panel Area -->
-                        <div id="admin-task-content-area" class="flex-1 w-full min-w-0 space-y-4">
+                        <div id="admin-task-content-area" class="flex-1 w-full min-w-0 space-y-2.5">
                             <!-- Mobile Navigation Header Bar -->
-                            <div class="md:hidden flex items-center justify-between p-3.5 bg-slate-50 dark:bg-slate-900/50 rounded-3xl border border-slate-100 dark:border-slate-800/80 mb-2">
-                                <button type="button" onclick="window.showAdminTaskMobileMenu()" class="rounded-xl bg-cyan-600 px-4 py-2 text-xs font-black text-white hover:bg-cyan-700 transition active:scale-95 shadow-sm" style="outline: none;">
-                                    ☰ Menu
+                            <div class="md:hidden flex items-center justify-start gap-3 p-3 bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 shadow-sm mb-1">
+                                <button type="button" onclick="window.showAdminTaskMobileMenu()" class="h-8 w-8 shrink-0 rounded-full bg-cyan-600 hover:bg-cyan-700 text-white flex items-center justify-center transition active:scale-95 shadow-sm text-sm" style="outline: none;">
+                                    ☰
                                 </button>
-                                <div class="flex items-center gap-2">
-                                    <span id="admin-mobile-active-tab-icon" class="text-sm">📋</span>
-                                    <span id="admin-mobile-active-tab-title" class="text-xs font-black uppercase tracking-wider text-slate-700 dark:text-slate-200">Tasks List</span>
+                                <div class="flex items-center gap-1.5 min-w-0">
+                                    <span id="admin-mobile-active-tab-icon" class="text-sm shrink-0">📋</span>
+                                    <span id="admin-mobile-active-tab-title" class="text-[11px] font-black uppercase tracking-wider text-slate-700 dark:text-slate-200 truncate">Tasks List</span>
                                 </div>
                             </div>
                             <!-- Board Control Panel -->
@@ -544,15 +544,15 @@ const showAdminTaskPage = () => {
                     </section>
 
                     <section id="admin-task-manage-section" class="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 p-4 sm:p-5">
-                        <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
-                            <div class="flex items-center gap-2.5">
+                        <div class="flex flex-col gap-3 mb-4">
+                            <div class="flex items-center justify-between w-full">
                                 <h3 class="text-lg font-black text-gray-900 dark:text-white">Managing Tasks</h3>
-                                <button type="button" onclick="window.setAdminTaskPanel('add')" class="h-6 w-6 rounded-full bg-cyan-600 hover:bg-cyan-700 text-white font-black text-sm flex items-center justify-center transition active:scale-95 shadow-sm" style="outline: none;" title="Add New Task">+</button>
+                                <button type="button" onclick="window.setAdminTaskPanel('add')" class="w-8 h-8 rounded-full bg-cyan-600 hover:bg-cyan-700 text-white font-black text-base flex items-center justify-center transition active:scale-95 shadow-sm shrink-0 aspect-square" style="outline: none;" title="Add New Task">+</button>
                             </div>
                             <div class="flex gap-2">
-                                <input id="admin-task-search" placeholder="Search task..." class="min-w-0 flex-1 sm:w-64 px-3 py-2 bg-gray-100 dark:bg-gray-700 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500">
+                                <input id="admin-task-search" placeholder="Search task..." class="min-w-0 flex-1 px-3 py-2 bg-gray-100 dark:bg-gray-700 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500">
                                 <select id="admin-task-filter" class="px-3 py-2 bg-gray-100 dark:bg-gray-700 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500">
-                                    <option value="active" selected>Live</option>
+                                    <option value="active" selected>Open</option>
                                     <option value="draft">Off</option>
                                     <option value="over">Over</option>
                                 </select>
@@ -1318,7 +1318,7 @@ const renderAdminTaskList = () => {
                                 <h4 class="mt-0.5 text-sm font-black text-gray-900 dark:text-white truncate" title="${escapeHtml(task.title || subtypeMeta.label)}">${escapeHtml(task.title || subtypeMeta.label)}</h4>
                                 <div class="mt-1 flex items-center gap-1 flex-wrap">
                                     <span class="rounded bg-cyan-50 dark:bg-cyan-900/20 px-1.5 py-0.5 text-[9px] font-bold text-cyan-700 dark:text-cyan-300">${escapeHtml(getAdminTaskFamilyLabel(family))}</span>
-                                    <span class="rounded px-1.5 py-0.5 text-[9px] font-bold ${statusClass}">${status === 'active' ? 'Live' : status === 'closed' ? 'Closed' : status === 'over' ? 'Over' : 'Off'}</span>
+                                    <span class="rounded px-1.5 py-0.5 text-[9px] font-bold ${statusClass}">${status === 'active' ? 'Open' : status === 'closed' ? 'Closed' : status === 'over' ? 'Over' : 'Off'}</span>
                                     <span class="text-[9px] font-bold text-gray-400 dark:text-gray-500">Lim: ${task.limit || 'Open'}</span>
                                     ${expiresAt ? `<span class="text-[9px] font-bold text-amber-600 dark:text-amber-400">Close: ${escapeHtml(closesText)}</span>` : ''}
                                 </div>
@@ -1343,7 +1343,7 @@ const renderAdminTaskList = () => {
                                 </div>
                             ` : `
                                 <div class="inline-flex items-center gap-1.5 text-xs font-bold text-slate-400 dark:text-slate-500">
-                                    Status: <span class="uppercase font-black ${isLive ? 'text-emerald-500' : status === 'over' ? 'text-rose-500' : 'text-amber-500'}">${isLive ? 'Live' : status === 'closed' ? 'Closed' : status === 'over' ? 'Over' : 'Off'}</span> (Owner Task)
+                                    Status: <span class="uppercase font-black ${isLive ? 'text-emerald-500' : status === 'over' ? 'text-rose-500' : 'text-amber-500'}">${isLive ? 'Open' : status === 'closed' ? 'Closed' : status === 'over' ? 'Over' : 'Off'}</span> (Owner Task)
                                 </div>
                                 <div class="text-[10px] text-gray-400 font-bold bg-gray-50 dark:bg-gray-700/50 px-2 py-1 rounded-lg">View Only</div>
                             `}
