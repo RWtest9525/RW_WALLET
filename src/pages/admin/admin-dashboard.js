@@ -550,10 +550,6 @@ const showAdminAdsPage = () => {
                                 <input id="admin-ad-subtitle" placeholder="Small text shown on ad" class="mt-1 w-full rounded-xl bg-gray-100 dark:bg-gray-700 px-4 py-3 focus:outline-none focus:ring-2 focus:ring-fuchsia-500">
                             </div>
                             <div>
-                                <label class="text-xs font-black uppercase text-gray-400">Order</label>
-                                <input id="admin-ad-order" type="number" min="0" step="1" value="0" class="mt-1 w-full rounded-xl bg-gray-100 dark:bg-gray-700 px-4 py-3 focus:outline-none focus:ring-2 focus:ring-fuchsia-500">
-                            </div>
-                            <div>
                                 <label class="text-xs font-black uppercase text-gray-400">Status</label>
                                 <select id="admin-ad-status" class="mt-1 w-full rounded-xl bg-gray-100 dark:bg-gray-700 px-4 py-3 focus:outline-none focus:ring-2 focus:ring-fuchsia-500">
                                     <option value="active">Active</option>
@@ -562,7 +558,6 @@ const showAdminAdsPage = () => {
                             </div>
                             <div class="sm:col-span-2 flex flex-col sm:flex-row gap-2">
                                 <button id="admin-ad-save-btn" type="submit" class="flex-1 rounded-xl bg-fuchsia-600 px-4 py-3 text-sm font-black text-white hover:bg-fuchsia-700 transition">Add Ad</button>
-                                <button id="admin-ad-reset-btn" type="button" class="rounded-xl bg-gray-100 dark:bg-gray-700 px-4 py-3 text-sm font-black text-gray-700 dark:text-gray-200">Clear</button>
                             </div>
                         </form>
                     </section>
@@ -578,7 +573,6 @@ const showAdminAdsPage = () => {
             showPage(content, { returnTo: 'admin', keepBottomNav: true });
             setBottomNavActive('bottom-admin-btn');
             document.getElementById('admin-ad-form')?.addEventListener('submit', handleSaveAdminAd);
-            document.getElementById('admin-ad-reset-btn')?.addEventListener('click', resetAdminAdForm);
             renderAdminAdsList();
             getDocs(query(collection(db, `artifacts/${appId}/public/data/ads`), orderBy("createdAt", "desc")))
                 .then(snapshot => applyAdsSnapshot(snapshot.docs))
@@ -591,6 +585,9 @@ const resetAdminAdForm = () => {
             if (editId) editId.value = '';
             const saveBtn = document.getElementById('admin-ad-save-btn');
             if (saveBtn) saveBtn.textContent = 'Add Ad';
+            if (typeof window.showAdminAdForm === 'function') {
+                window.showAdminAdForm(false);
+            }
         };
 
 const getAdminAdPayload = () => {
@@ -602,7 +599,7 @@ const getAdminAdPayload = () => {
                 subtitle: document.getElementById('admin-ad-subtitle')?.value.trim() || '',
                 mediaUrl,
                 type: typeValue === 'auto' ? (getYoutubeEmbedUrl(mediaUrl) ? 'youtube' : 'image') : typeValue,
-                order: Number(document.getElementById('admin-ad-order')?.value || 0),
+                order: 0,
                 status: document.getElementById('admin-ad-status')?.value || 'active'
             };
         };
@@ -662,9 +659,13 @@ const editAdminAd = (adId) => {
             document.getElementById('admin-ad-type').value = ad.type || 'auto';
             document.getElementById('admin-ad-media-url').value = getAdMediaUrl(ad);
             document.getElementById('admin-ad-subtitle').value = ad.subtitle || '';
-            document.getElementById('admin-ad-order').value = ad.order || 0;
+            const orderInput = document.getElementById('admin-ad-order');
+            if (orderInput) orderInput.value = ad.order || 0;
             document.getElementById('admin-ad-status').value = ad.status || 'active';
             document.getElementById('admin-ad-save-btn').textContent = 'Update Ad';
+            if (typeof window.showAdminAdForm === 'function') {
+                window.showAdminAdForm(true);
+            }
             document.getElementById('admin-ad-title')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
         };
 

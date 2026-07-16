@@ -221,7 +221,6 @@ const setAdminTaskPanel = (panel = 'manage') => {
             if (normalized === 'ads' && !window._adsTabInitialized) {
                 window._adsTabInitialized = true;
                 document.getElementById('admin-ad-form')?.addEventListener('submit', handleSaveAdminAd);
-                document.getElementById('admin-ad-reset-btn')?.addEventListener('click', resetAdminAdForm);
                 if (typeof renderAdminAdsList === 'function') renderAdminAdsList();
                 getDocs(query(collection(db, `artifacts/${appId}/public/data/ads`), orderBy("createdAt", "desc")))
                     .then(snapshot => { if (typeof applyAdsSnapshot === 'function') applyAdsSnapshot(snapshot.docs); })
@@ -263,9 +262,22 @@ window.showAdminTaskMobileMenu = () => {
     window.updateAdminTaskResponsiveLayout();
 };
 
+window.closeAdminTaskMobileMenu = () => {
+    window.adminMobileShowMenu = false;
+    window.updateAdminTaskResponsiveLayout();
+};
+
+window.showAdminAdForm = (show = true) => {
+    const formSec = document.getElementById('admin-ads-form-section');
+    const listSec = document.getElementById('admin-ads-list-section');
+    if (formSec) formSec.classList.toggle('hidden', !show);
+    if (listSec) listSec.classList.toggle('hidden', show);
+};
+
 window.updateAdminTaskResponsiveLayout = () => {
     const sidebar = document.getElementById('admin-task-sidebar');
     const contentArea = document.getElementById('admin-task-content-area');
+    const backdrop = document.getElementById('admin-task-sidebar-backdrop');
     if (!sidebar || !contentArea) return;
 
     const isMobile = window.innerWidth < 768; // md breakpoint is 768px
@@ -276,13 +288,11 @@ window.updateAdminTaskResponsiveLayout = () => {
 
         const showMenu = !!window.adminMobileShowMenu;
         if (showMenu) {
-            sidebar.classList.remove('hidden');
-            sidebar.classList.add('w-full');
-            contentArea.classList.add('hidden');
+            sidebar.classList.remove('-translate-x-full');
+            if (backdrop) backdrop.classList.remove('hidden');
         } else {
-            sidebar.classList.add('hidden');
-            sidebar.classList.remove('w-full');
-            contentArea.classList.remove('hidden');
+            sidebar.classList.add('-translate-x-full');
+            if (backdrop) backdrop.classList.add('hidden');
         }
 
         // Always show labels on mobile menu list
@@ -298,17 +308,28 @@ window.updateAdminTaskResponsiveLayout = () => {
         sidebar.querySelectorAll('[data-admin-task-panel]').forEach(btn => {
             btn.classList.remove('w-12', 'h-12', 'justify-center', 'mx-auto');
             btn.classList.add('w-full', 'px-4', 'py-3.5', 'text-left');
+            
+            // Hide the symbol/emoji icon on mobile menu
+            const emojiSpan = btn.querySelector('.text-sm');
+            if (emojiSpan) emojiSpan.classList.add('hidden');
         });
     } else {
         // Desktop view - restore normal behavior
-        sidebar.classList.remove('hidden', 'w-full');
+        sidebar.classList.remove('-translate-x-full');
         contentArea.classList.remove('hidden');
+        if (backdrop) backdrop.classList.add('hidden');
         
         const toggleBtnContainer = document.getElementById('admin-sidebar-toggle-btn')?.parentElement;
         if (toggleBtnContainer) {
             toggleBtnContainer.classList.remove('hidden');
         }
         
+        // Restore symbols/emojis for desktop
+        sidebar.querySelectorAll('[data-admin-task-panel]').forEach(btn => {
+            const emojiSpan = btn.querySelector('.text-sm');
+            if (emojiSpan) emojiSpan.classList.remove('hidden');
+        });
+
         window.updateAdminTaskSidebar();
     }
 };
@@ -357,6 +378,7 @@ const showAdminTaskPage = () => {
             const isCurrentAdmin = currentUser?.uid === ADMIN_UID || currentUser?.email === 'reviewsworld51@gmail.com' || currentUser?.email === 'reviewsworld01@gmail.com' || currentUserData?.role === 'admin' || currentUserData?.role === 'owner';
             if (!currentUser || !isCurrentAdmin) return showNotification('Admin access only.', true);
             currentMainSection = 'admin';
+            const isOwner = currentUser?.uid === ADMIN_UID || currentUser?.email === 'reviewsworld51@gmail.com' || currentUser?.email === 'reviewsworld01@gmail.com' || currentUserData?.role === 'owner';
             const isTaskPageEnabled = !!appConfigCache?.task_page_enabled;
             const content = `
                 ${getPageHeader('Manage Task')}
@@ -364,18 +386,23 @@ const showAdminTaskPage = () => {
                     <!-- Responsive Side-by-Side / Full-screen Layout -->
                     <div class="flex flex-col md:flex-row gap-6 items-start w-full">
                         
+                        <!-- Mobile Sidebar Backdrop -->
+                        <div id="admin-task-sidebar-backdrop" onclick="window.closeAdminTaskMobileMenu()" class="fixed inset-0 bg-black/40 z-40 hidden transition-opacity duration-300"></div>
+
                         <!-- Left Sidebar Panel -->
-                        <div id="admin-task-sidebar" class="w-64 shrink-0 transition-all duration-300 flex flex-col justify-between border border-slate-100 dark:border-slate-800 bg-white dark:bg-gray-900 rounded-3xl p-3 shadow-sm sticky top-6 min-h-[350px]">
+                        <div id="admin-task-sidebar" class="fixed md:static top-0 left-0 h-full md:h-auto z-50 md:z-auto shadow-2xl md:shadow-sm rounded-r-3xl rounded-l-none md:rounded-3xl w-64 max-w-[70vw] md:max-w-none shrink-0 transition-transform duration-300 flex flex-col justify-between border-y-0 border-l-0 border-r md:border border-slate-100 dark:border-slate-800 bg-white dark:bg-gray-900 p-3 sticky md:top-6 min-h-[350px] -translate-x-full md:translate-x-0">
                             <!-- Top Navigation List -->
                             <div class="space-y-1.5 flex flex-col">
                                 <button type="button" data-admin-task-panel="manage" class="w-full flex items-center gap-3 rounded-2xl px-4 py-3.5 text-xs font-black uppercase tracking-wider text-left transition select-none" style="outline: none;">
                                     <span class="text-sm">📋</span>
                                     <span class="sidebar-label">Tasks List</span>
                                 </button>
+                                ${isOwner ? `
                                 <button type="button" data-admin-task-panel="ads" class="w-full flex items-center gap-3 rounded-2xl px-4 py-3.5 text-xs font-black uppercase tracking-wider text-left transition select-none" style="outline: none;">
                                     <span class="text-sm">📢</span>
                                     <span class="sidebar-label">Manage Ads</span>
                                 </button>
+                                ` : ''}
                                 <button type="button" data-admin-task-panel="submissions" class="w-full flex items-center gap-3 rounded-2xl px-4 py-3.5 text-xs font-black uppercase tracking-wider text-left transition select-none" style="outline: none;">
                                     <span class="text-sm">📥</span>
                                     <span class="sidebar-label">Submissions</span>
@@ -525,10 +552,6 @@ const showAdminTaskPage = () => {
                                     <!-- Populated dynamically -->
                                 </div>
                             </div>
-                            <div class="sm:col-span-2">
-                                <label class="text-xs font-black uppercase text-gray-400">Instructions</label>
-                                <textarea id="admin-task-instructions" rows="4" placeholder="Write exact steps users must follow..." class="mt-1 w-full px-4 py-3 bg-gray-100 dark:bg-gray-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-cyan-500"></textarea>
-                            </div>
                             <div class="sm:col-span-2 flex flex-col sm:flex-row gap-2">
                                 <button type="submit" id="admin-task-save-btn" class="flex-1 rounded-xl bg-cyan-600 px-4 py-3 text-sm font-black text-white hover:bg-cyan-700 transition">Add Task</button>
                             </div>
@@ -554,13 +577,13 @@ const showAdminTaskPage = () => {
                     </section>
 
                     <section id="admin-ads-section" class="hidden space-y-4">
-                        <div class="rounded-2xl border border-gray-100 dark:border-gray-700 bg-white dark:bg-gray-800 p-4 sm:p-5 shadow-sm">
-                            <div class="mb-4 flex items-center justify-between gap-3">
+                        <div id="admin-ads-form-section" class="hidden rounded-2xl border border-gray-100 dark:border-gray-700 bg-white dark:bg-gray-800 p-4 sm:p-5 shadow-sm">
+                            <div class="mb-4 flex items-center gap-3">
+                                <button type="button" id="admin-ad-form-back-btn" class="h-8 w-8 rounded-full bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 flex items-center justify-center transition active:scale-95 font-bold" style="outline: none;" title="Back">←</button>
                                 <div>
-                                    <h3 class="text-lg font-black">Add Advertisement</h3>
+                                    <h3 class="text-lg font-black text-gray-900 dark:text-white">Add Advertisement</h3>
                                     <p class="text-xs text-gray-500 dark:text-gray-400">Paste image link or YouTube link. Users see it instantly in the home carousel.</p>
                                 </div>
-                                <span class="flex h-10 w-10 items-center justify-center rounded-full bg-fuchsia-50 text-2xl font-black text-fuchsia-600 dark:bg-fuchsia-900/30 dark:text-fuchsia-200">+</span>
                             </div>
                             <form id="admin-ad-form" class="grid grid-cols-1 sm:grid-cols-2 gap-3">
                                 <input type="hidden" id="admin-ad-edit-id" value="">
@@ -585,10 +608,6 @@ const showAdminTaskPage = () => {
                                     <input id="admin-ad-subtitle" placeholder="Small text shown on ad" class="mt-1 w-full rounded-xl bg-gray-100 dark:bg-gray-700 px-4 py-3 focus:outline-none focus:ring-2 focus:ring-fuchsia-500">
                                 </div>
                                 <div>
-                                    <label class="text-xs font-black uppercase text-gray-400">Order</label>
-                                    <input id="admin-ad-order" type="number" min="0" step="1" value="0" class="mt-1 w-full rounded-xl bg-gray-100 dark:bg-gray-700 px-4 py-3 focus:outline-none focus:ring-2 focus:ring-fuchsia-500">
-                                </div>
-                                <div>
                                     <label class="text-xs font-black uppercase text-gray-400">Status</label>
                                     <select id="admin-ad-status" class="mt-1 w-full rounded-xl bg-gray-100 dark:bg-gray-700 px-4 py-3 focus:outline-none focus:ring-2 focus:ring-fuchsia-500">
                                         <option value="active">Active</option>
@@ -597,14 +616,16 @@ const showAdminTaskPage = () => {
                                 </div>
                                 <div class="sm:col-span-2 flex flex-col sm:flex-row gap-2">
                                     <button id="admin-ad-save-btn" type="submit" class="flex-1 rounded-xl bg-fuchsia-600 px-4 py-3 text-sm font-black text-white hover:bg-fuchsia-700 transition">Add Ad</button>
-                                    <button id="admin-ad-reset-btn" type="button" class="rounded-xl bg-gray-100 dark:bg-gray-700 px-4 py-3 text-sm font-black text-gray-700 dark:text-gray-200">Clear</button>
                                 </div>
                             </form>
                         </div>
-                        <div class="rounded-2xl border border-gray-100 dark:border-gray-700 bg-white dark:bg-gray-800 p-4 sm:p-5 shadow-sm">
-                            <div class="mb-4 flex items-center justify-between">
-                                <h3 class="text-lg font-black">Active Ads</h3>
-                                <span id="admin-ads-count" class="text-xs font-bold text-gray-400">0 ads</span>
+                        <div id="admin-ads-list-section" class="rounded-2xl border border-gray-100 dark:border-gray-700 bg-white dark:bg-gray-800 p-4 sm:p-5 shadow-sm">
+                            <div class="mb-4 flex items-center justify-between w-full">
+                                <div class="flex items-center gap-2">
+                                    <h3 class="text-lg font-black text-gray-900 dark:text-white">Active Ads</h3>
+                                    <span id="admin-ads-count" class="text-xs font-bold text-gray-400">0 ads</span>
+                                </div>
+                                <button type="button" id="admin-ad-toggle-form-btn" class="w-8 h-8 rounded-full bg-fuchsia-600 hover:bg-fuchsia-700 text-white font-black text-base flex items-center justify-center transition active:scale-95 shadow-sm shrink-0 aspect-square" style="outline: none;" title="Add New Ad">+</button>
                             </div>
                             <div id="admin-ads-list" class="space-y-3"></div>
                         </div>
@@ -699,11 +720,17 @@ const showAdminTaskPage = () => {
             document.getElementById('admin-task-subtype')?.addEventListener('change', () => updateAdminTaskDynamicFields());
             document.getElementById('admin-task-payment-mode')?.addEventListener('change', () => updateAdminTaskDynamicFields());
             document.getElementById('admin-task-link')?.addEventListener('input', () => updateAdminTaskLogoPreview());
-            document.getElementById('admin-task-instructions')?.addEventListener('input', (event) => {
-                event.currentTarget.dataset.autoDefault = 'false';
-            });
             document.getElementById('admin-task-search')?.addEventListener('input', renderAdminTaskList);
             document.getElementById('admin-task-filter')?.addEventListener('change', renderAdminTaskList);
+
+            document.getElementById('admin-ad-toggle-form-btn')?.addEventListener('click', () => {
+                if (typeof resetAdminAdForm === 'function') resetAdminAdForm();
+                window.showAdminAdForm(true);
+            });
+            document.getElementById('admin-ad-form-back-btn')?.addEventListener('click', () => {
+                window.showAdminAdForm(false);
+            });
+
             updateAdminTaskDynamicFields();
             renderAdminTaskList();
 
