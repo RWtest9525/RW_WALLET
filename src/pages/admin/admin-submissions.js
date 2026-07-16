@@ -532,8 +532,15 @@ const renderPlayStoreVerifyTabContent = (taskSubs, selectedTask) => {
     const scraped = window.adminSubmissionsView.scrapedReviews || [];
     const starFilter = window.adminSubmissionsView.selectedStarFilter || '5';
     
-    // Filter by star
-    let filteredReviews = [...scraped];
+    const selectedDate = window.adminSubmissionsView.selectedDate;
+    let filteredReviews = scraped.filter(r => {
+        const dateVal = r.date || r.time;
+        if (!dateVal) return false;
+        const d = new Date(dateVal);
+        const localDateStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+        return localDateStr === selectedDate;
+    });
+
     if (starFilter !== 'all') {
         const starNum = Number(starFilter);
         filteredReviews = filteredReviews.filter(r => Math.round(Number(r.score || r.rating || 5)) === starNum);
@@ -746,7 +753,7 @@ const renderAdminSubmissions = () => {
     if (!isOwner) {
         // Sub-admins only see submissions for tasks they created
         subs = subs.filter(sub => {
-            const task = allTasksCache.find(t => t.id === (sub.task_id || sub.taskId));
+            const task = (window.allTasksCache || []).find(t => t.id === (sub.task_id || sub.taskId));
             return task && task.createdBy === currentUser.uid;
         });
     }
@@ -784,7 +791,7 @@ const renderAdminSubmissions = () => {
 
 
     // Group rows by EVERY task in our cache so that OFF tasks also show up!
-    let filteredTasks = [...allTasksCache];
+    let filteredTasks = [...(window.allTasksCache || [])];
     if (!isOwner && filteredTasks.length > 0) {
         filteredTasks = filteredTasks.filter(task => task.createdBy === currentUser.uid);
     }
@@ -834,7 +841,7 @@ const renderAdminSubmissions = () => {
         taskRows = Object.values(taskIdMap);
     }
 
-    console.log('[AdminSubs-Render] isOwner:', isOwner, 'allTasksCache.length:', allTasksCache.length, 'filteredTasks.length:', filteredTasks.length, 'dateSubs.length:', dateSubs.length, 'taskRows.length:', taskRows.length, 'subs.length:', subs.length, 'selectedDate:', selectedDate);
+    console.log('[AdminSubs-Render] isOwner:', isOwner, 'allTasksCache.length:', (window.allTasksCache || []).length, 'filteredTasks.length:', filteredTasks.length, 'dateSubs.length:', dateSubs.length, 'taskRows.length:', taskRows.length, 'subs.length:', subs.length, 'selectedDate:', selectedDate);
 
     const isDetailView = window.adminSubmissionsView.viewState === 'detail';
     const selectedTaskId = window.adminSubmissionsView.selectedTaskId;
@@ -843,7 +850,7 @@ const renderAdminSubmissions = () => {
 
     if (isDetailView && selectedTaskId) {
         // --- DETAIL VIEW PANEL ---
-        const selectedTask = allTasksCache.find(t => t.id === selectedTaskId);
+        const selectedTask = (window.allTasksCache || []).find(t => t.id === selectedTaskId);
         const selectedTaskName = selectedTask ? (selectedTask.appName || selectedTask.title) : 'Task Detail';
 
         // Filter right-side details list
@@ -1290,7 +1297,7 @@ const renderAdminSubmissions = () => {
                 fetchBtn.disabled = true;
                 fetchBtn.innerHTML = '⏳ Fetching...';
                 
-                const selectedTask = allTasksCache.find(t => t.id === selectedTaskId);
+                const selectedTask = (window.allTasksCache || []).find(t => t.id === selectedTaskId);
                 const taskLink = selectedTask?.taskLink || selectedTask?.task_link || selectedTask?.link || '';
                 if (!taskLink) {
                     showNotification('No task link found to fetch reviews.', true);
@@ -1342,7 +1349,14 @@ const renderAdminSubmissions = () => {
                 const scraped = window.adminSubmissionsView.scrapedReviews || [];
                 const starFilter = window.adminSubmissionsView.selectedStarFilter || '5';
                 
-                let filtered = [...scraped];
+                const selectedDate = window.adminSubmissionsView.selectedDate;
+                let filtered = scraped.filter(r => {
+                    const dateVal = r.date || r.time;
+                    if (!dateVal) return false;
+                    const d = new Date(dateVal);
+                    const localDateStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+                    return localDateStr === selectedDate;
+                });
                 if (starFilter !== 'all') {
                     const starNum = Number(starFilter);
                     filtered = filtered.filter(r => Math.round(Number(r.score || r.rating || 5)) === starNum);
@@ -1353,7 +1367,7 @@ const renderAdminSubmissions = () => {
                     return;
                 }
                 
-                const selectedTask = allTasksCache.find(t => t.id === selectedTaskId);
+                const selectedTask = (window.allTasksCache || []).find(t => t.id === selectedTaskId);
                 const selectedTaskName = selectedTask ? (selectedTask.appName || selectedTask.title) : 'Task';
                 const appName = selectedTaskName || 'App';
                 
