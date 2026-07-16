@@ -3394,7 +3394,7 @@ const showUserTaskPage = () => {
                                 <!-- Reward Right-Aligned -->
                                 <div class="flex flex-col items-end shrink-0">
                                     <span class="text-lg md:text-xl font-black text-${acc.color}-600 dark:text-${acc.color}-400">${escapeHtml(reward)}</span>
-                                    <span class="text-[8px] font-black text-gray-400 uppercase tracking-wider mt-0.5">Per Submit</span>
+                                    <span class="text-[8px] font-black text-gray-400 uppercase tracking-wider mt-0.5">Per Approve</span>
                                 </div>
                             </div>
 
@@ -4596,7 +4596,7 @@ const showUserTaskDetailsPage = async (taskId) => {
                                 <!-- Reward Right-Aligned -->
                                 <div class="flex flex-col items-end shrink-0">
                                     <span class="text-xl md:text-2xl font-black">${formatCurrency(reward).replace('.00', '')}</span>
-                                    <span class="text-[8px] font-bold text-white/70 uppercase tracking-wider mt-0.5 leading-none">Per Submit</span>
+                                    <span class="text-[8px] font-bold text-white/70 uppercase tracking-wider mt-0.5 leading-none">Per Approve</span>
                                 </div>
                             </div>
 
