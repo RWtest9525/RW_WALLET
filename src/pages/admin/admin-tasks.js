@@ -19,238 +19,238 @@ const canAdminManageTask = (task) => {
 const isAdminReviewTask = (task = {}) => getAdminTaskFamily(task) === 'review';
 
 const applyAdminTasksSnapshot = (docs = []) => {
-            allTasksCache = docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    allTasksCache = docs.map(doc => ({ id: doc.id, ...doc.data() }));
 
-            // Auto-assign sequential taskIndex for tasks that are missing it
-            (async () => {
-                let hasChanges = false;
-                const sorted = [...allTasksCache].sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0));
-                for (let i = 0; i < sorted.length; i++) {
-                    const t = sorted[i];
-                    if (!t.taskIndex && !t.task_index) {
-                        const newIdx = i + 1;
-                        t.taskIndex = newIdx;
-                        t.task_index = newIdx;
-                        hasChanges = true;
-                        try {
-                            const ref = doc(db, `artifacts/${appId}/public/data/tasks`, t.id);
-                            await updateDoc(ref, { taskIndex: newIdx, task_index: newIdx });
-                        } catch (e) {
-                            console.warn('Failed to update task index in Firestore:', e);
-                        }
-                    } else if (t.task_index && !t.taskIndex) {
-                        t.taskIndex = t.task_index;
-                    } else if (t.taskIndex && !t.task_index) {
-                        t.task_index = t.taskIndex;
-                    }
+    // Auto-assign sequential taskIndex for tasks that are missing it
+    (async () => {
+        let hasChanges = false;
+        const sorted = [...allTasksCache].sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0));
+        for (let i = 0; i < sorted.length; i++) {
+            const t = sorted[i];
+            if (!t.taskIndex && !t.task_index) {
+                const newIdx = i + 1;
+                t.taskIndex = newIdx;
+                t.task_index = newIdx;
+                hasChanges = true;
+                try {
+                    const ref = doc(db, `artifacts/${appId}/public/data/tasks`, t.id);
+                    await updateDoc(ref, { taskIndex: newIdx, task_index: newIdx });
+                } catch (e) {
+                    console.warn('Failed to update task index in Firestore:', e);
                 }
-                if (hasChanges) {
-                    allTasksCache = sorted;
-                    if (document.getElementById('admin-task-list')) {
-                        renderAdminTaskList();
-                    }
-                    renderHomeTaskCategories();
-                }
-            })();
-
+            } else if (t.task_index && !t.taskIndex) {
+                t.taskIndex = t.task_index;
+            } else if (t.taskIndex && !t.task_index) {
+                t.task_index = t.taskIndex;
+            }
+        }
+        if (hasChanges) {
+            allTasksCache = sorted;
             if (document.getElementById('admin-task-list')) {
                 renderAdminTaskList();
             }
             renderHomeTaskCategories();
-            if (document.querySelector('.task-page-shell')) {
-                showUserTaskPage();
-            }
-        };
+        }
+    })();
+
+    if (document.getElementById('admin-task-list')) {
+        renderAdminTaskList();
+    }
+    renderHomeTaskCategories();
+    if (document.querySelector('.task-page-shell')) {
+        showUserTaskPage();
+    }
+};
 
 const getAdminTaskTypes = (family = 'review') => family === 'social' ? ADMIN_TASK_SOCIAL_TYPES : ADMIN_TASK_REVIEW_TYPES;
 
 const getAdminTaskFamilyLabel = (family = 'review') => family === 'social' ? 'Social Task' : 'Review Task';
 
 const getAdminTaskSubtypeMeta = (family = 'review', subtype = '') => {
-            const options = getAdminTaskTypes(family);
-            return options.find(item => item.value === subtype) || options[0];
-        };
+    const options = getAdminTaskTypes(family);
+    return options.find(item => item.value === subtype) || options[0];
+};
 
 const getAdminTaskFamily = (task = {}) => {
-            const raw = String(task.taskFamily || task.taskType || task.family || '').toLowerCase();
-            if (raw.includes('social')) return 'social';
-            if (raw.includes('review')) return 'review';
-            const text = [task.category, task.title, task.taskSubtype || task.subtype].join(' ').toLowerCase();
-            return text.includes('instagram') || text.includes('youtube') || text.includes('download') || text.includes('social') || text.includes('news') || text.includes('read') ? 'social' : 'review';
-        };
+    const raw = String(task.taskFamily || task.taskType || task.family || '').toLowerCase();
+    if (raw.includes('social')) return 'social';
+    if (raw.includes('review')) return 'review';
+    const text = [task.category, task.title, task.taskSubtype || task.subtype].join(' ').toLowerCase();
+    return text.includes('instagram') || text.includes('youtube') || text.includes('download') || text.includes('social') || text.includes('news') || text.includes('read') ? 'social' : 'review';
+};
 
 const getAdminTaskSubtype = (task = {}) => {
-            const family = getAdminTaskFamily(task);
-            const subtype = String(task.taskSubtype || task.subtype || '').trim();
-            if (getAdminTaskTypes(family).some(item => item.value === subtype)) return subtype;
-            const text = [task.category, task.title].join(' ').toLowerCase();
-            if (family === 'social') {
-                if (text.includes('youtube')) return 'youtube_task';
-                if (text.includes('download') || text.includes('install')) return 'app_download_task';
-                if (text.includes('facebook')) return 'facebook_task';
-                if (text.includes('telegram')) return 'telegram_task';
-                if (text.includes('news') || text.includes('read')) return 'read_news';
-                return 'instagram_task';
-            }
-            if (text.includes('map')) return 'map_review';
-            if (text.includes('trustpilot')) return 'trustpilot_review';
-            if (text.includes('website')) return 'website_review';
-            return 'app_review';
-        };
+    const family = getAdminTaskFamily(task);
+    const subtype = String(task.taskSubtype || task.subtype || '').trim();
+    if (getAdminTaskTypes(family).some(item => item.value === subtype)) return subtype;
+    const text = [task.category, task.title].join(' ').toLowerCase();
+    if (family === 'social') {
+        if (text.includes('youtube')) return 'youtube_task';
+        if (text.includes('download') || text.includes('install')) return 'app_download_task';
+        if (text.includes('facebook')) return 'facebook_task';
+        if (text.includes('telegram')) return 'telegram_task';
+        if (text.includes('news') || text.includes('read')) return 'read_news';
+        return 'instagram_task';
+    }
+    if (text.includes('map')) return 'map_review';
+    if (text.includes('trustpilot')) return 'trustpilot_review';
+    if (text.includes('website')) return 'website_review';
+    return 'app_review';
+};
 
 const getAdminTaskEffectiveStatus = (task = {}) => {
-            const status = String(task.status || 'draft').toLowerCase();
-            const expiresAt = timestampToMillis(task.expiresAt || task.autoCloseAt || task.closeAt);
-            if (status === 'active' && expiresAt && expiresAt <= Date.now()) {
-                const createdAtMillis = timestampToMillis(task.createdAt);
-                if (createdAtMillis) {
-                    const createdDate = new Date(createdAtMillis);
-                    const today = new Date();
-                    const isSameDay = createdDate.getFullYear() === today.getFullYear() &&
-                                      createdDate.getMonth() === today.getMonth() &&
-                                      createdDate.getDate() === today.getDate();
-                    if (isSameDay) {
-                        return 'closed';
-                    }
-                }
-                return 'over';
+    const status = String(task.status || 'draft').toLowerCase();
+    const expiresAt = timestampToMillis(task.expiresAt || task.autoCloseAt || task.closeAt);
+    if (status === 'active' && expiresAt && expiresAt <= Date.now()) {
+        const createdAtMillis = timestampToMillis(task.createdAt);
+        if (createdAtMillis) {
+            const createdDate = new Date(createdAtMillis);
+            const today = new Date();
+            const isSameDay = createdDate.getFullYear() === today.getFullYear() &&
+                createdDate.getMonth() === today.getMonth() &&
+                createdDate.getDate() === today.getDate();
+            if (isSameDay) {
+                return 'closed';
             }
-            return status;
-        };
+        }
+        return 'over';
+    }
+    return status;
+};
 
 const getDefaultAdminTaskInstructions = (family = 'review', subtype = 'app_review') => {
-            const defaults = {
-                app_review: '1. Open the app link.\n2. Install or open the app.\n3. Copy the review comment from this task.\n4. Submit the review on Play Store.\n5. Upload a clear screenshot proof.',
-                map_review: '1. Open the map/place link.\n2. Visit the review section.\n3. Copy the review comment from this task.\n4. Submit the review.\n5. Upload a clear screenshot proof.',
-                trustpilot_review: '1. Open the Trustpilot review link.\n2. Copy the review comment from this task.\n3. Submit the review correctly.\n4. Upload a clear screenshot proof.',
-                website_review: '1. Open the website link.\n2. Check the page properly.\n3. Copy the review comment from this task.\n4. Submit the review where requested.\n5. Upload a clear screenshot proof.',
-                instagram_task: '1. Open the Instagram link.\n2. Complete the required action.\n3. Keep your profile/action visible until verification.\n4. Upload a clear screenshot proof.',
-                youtube_task: '1. Open the YouTube link.\n2. Complete the required action.\n3. Keep the action active until verification.\n4. Upload a clear screenshot proof.',
-                app_download_task: '1. Open the app download link.\n2. Install the app.\n3. Open it once after install.\n4. Upload a clear screenshot proof.',
-                facebook_task: '1. Open the Facebook link.\n2. Complete the required action.\n3. Keep the action active until verification.\n4. Upload a clear screenshot proof.',
-                telegram_task: '1. Open the Telegram link.\n2. Join or complete the required action.\n3. Keep it active until verification.\n4. Upload a clear screenshot proof.',
-                read_news: '1. Click on each of the news article cards below.\n2. Read the article in the sandboxed browser overlay and wait for the 10-second timer to finish.\n3. Close the article reader.\n4. Complete all news articles.\n5. Click the "Complete Task" button to receive your reward instantly.'
-            };
-            return defaults[subtype] || (family === 'social'
-                ? '1. Open the task link.\n2. Complete the required social action.\n3. Upload a clear screenshot proof.'
-                : '1. Open the review link.\n2. Copy the review comment from this task.\n3. Submit the review.\n4. Upload a clear screenshot proof.');
-        };
+    const defaults = {
+        app_review: '1. Open the app link.\n2. Install or open the app.\n3. Copy the review comment from this task.\n4. Submit the review on Play Store.\n5. Upload a clear screenshot proof.',
+        map_review: '1. Open the map/place link.\n2. Visit the review section.\n3. Copy the review comment from this task.\n4. Submit the review.\n5. Upload a clear screenshot proof.',
+        trustpilot_review: '1. Open the Trustpilot review link.\n2. Copy the review comment from this task.\n3. Submit the review correctly.\n4. Upload a clear screenshot proof.',
+        website_review: '1. Open the website link.\n2. Check the page properly.\n3. Copy the review comment from this task.\n4. Submit the review where requested.\n5. Upload a clear screenshot proof.',
+        instagram_task: '1. Open the Instagram link.\n2. Complete the required action.\n3. Keep your profile/action visible until verification.\n4. Upload a clear screenshot proof.',
+        youtube_task: '1. Open the YouTube link.\n2. Complete the required action.\n3. Keep the action active until verification.\n4. Upload a clear screenshot proof.',
+        app_download_task: '1. Open the app download link.\n2. Install the app.\n3. Open it once after install.\n4. Upload a clear screenshot proof.',
+        facebook_task: '1. Open the Facebook link.\n2. Complete the required action.\n3. Keep the action active until verification.\n4. Upload a clear screenshot proof.',
+        telegram_task: '1. Open the Telegram link.\n2. Join or complete the required action.\n3. Keep it active until verification.\n4. Upload a clear screenshot proof.',
+        read_news: '1. Click on each of the news article cards below.\n2. Read the article in the sandboxed browser overlay and wait for the 10-second timer to finish.\n3. Close the article reader.\n4. Complete all news articles.\n5. Click the "Complete Task" button to receive your reward instantly.'
+    };
+    return defaults[subtype] || (family === 'social'
+        ? '1. Open the task link.\n2. Complete the required social action.\n3. Upload a clear screenshot proof.'
+        : '1. Open the review link.\n2. Copy the review comment from this task.\n3. Submit the review.\n4. Upload a clear screenshot proof.');
+};
 
 const applyDefaultAdminTaskInstructions = (force = false) => {
-            // User requested to disable autofilled instructions. Keeping it empty.
-        };
+    // User requested to disable autofilled instructions. Keeping it empty.
+};
 
 const renderAdminTaskSubtypeOptions = (family = 'review', selected = '') => getAdminTaskTypes(family).map(item => `
             <option value="${item.value}" ${item.value === selected ? 'selected' : ''}>${escapeHtml(item.label)}</option>
         `).join('');
 
 const getAdminTaskIconButton = (action, taskId, title, svgPath, tone = 'slate') => {
-            const toneClass = {
-                slate: 'bg-slate-900 text-white dark:bg-white dark:text-slate-900',
-                blue: 'bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-200',
-                red: 'bg-red-50 text-red-600 dark:bg-red-900/30 dark:text-red-200',
-                amber: 'bg-amber-50 text-amber-700 dark:bg-amber-900/30 dark:text-amber-200'
-            }[tone] || 'bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-200';
-            return `
+    const toneClass = {
+        slate: 'bg-slate-900 text-white dark:bg-white dark:text-slate-900',
+        blue: 'bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-200',
+        red: 'bg-red-50 text-red-600 dark:bg-red-900/30 dark:text-red-200',
+        amber: 'bg-amber-50 text-amber-700 dark:bg-amber-900/30 dark:text-amber-200'
+    }[tone] || 'bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-200';
+    return `
                 <button type="button" data-action="${action}" data-taskid="${taskId}" title="${escapeHtml(title)}" class="inline-flex h-10 w-10 items-center justify-center rounded-xl ${toneClass} transition hover:scale-105 active:scale-95">
                     <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">${svgPath}</svg>
                 </button>`;
-        };
+};
 
 const getAdminTaskIconButtonMini = (action, taskId, title, svgPath, tone = 'slate') => {
-            const toneClass = {
-                slate: 'bg-slate-900 text-white dark:bg-white dark:text-slate-900 hover:bg-slate-800 dark:hover:bg-gray-100',
-                blue: 'bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-200 hover:bg-blue-100 dark:hover:bg-blue-900/50',
-                red: 'bg-red-50 text-red-600 dark:bg-red-900/30 dark:text-red-200 hover:bg-red-100 dark:hover:bg-red-900/50',
-                amber: 'bg-amber-50 text-amber-700 dark:bg-amber-900/30 dark:text-amber-200 hover:bg-amber-100 dark:hover:bg-amber-900/50'
-            }[tone] || 'bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-200 hover:bg-gray-200 dark:hover:bg-gray-600';
-            return `
+    const toneClass = {
+        slate: 'bg-slate-900 text-white dark:bg-white dark:text-slate-900 hover:bg-slate-800 dark:hover:bg-gray-100',
+        blue: 'bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-200 hover:bg-blue-100 dark:hover:bg-blue-900/50',
+        red: 'bg-red-50 text-red-600 dark:bg-red-900/30 dark:text-red-200 hover:bg-red-100 dark:hover:bg-red-900/50',
+        amber: 'bg-amber-50 text-amber-700 dark:bg-amber-900/30 dark:text-amber-200 hover:bg-amber-100 dark:hover:bg-amber-900/50'
+    }[tone] || 'bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-200 hover:bg-gray-200 dark:hover:bg-gray-600';
+    return `
                 <button type="button" data-action="${action}" data-taskid="${taskId}" title="${escapeHtml(title)}" class="inline-flex h-8 w-8 items-center justify-center rounded-lg ${toneClass} transition hover:scale-105 active:scale-95">
                     <svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">${svgPath}</svg>
                 </button>`;
-        };
+};
 
 const setAdminTaskPanel = (panel = 'manage') => {
-            const validPanels = ['manage', 'add', 'ads', 'submissions', 'board_control'];
-            const normalized = validPanels.includes(panel) ? panel : 'manage';
-            window.adminTaskPanel = normalized;
+    const validPanels = ['manage', 'add', 'ads', 'submissions', 'board_control'];
+    const normalized = validPanels.includes(panel) ? panel : 'manage';
+    window.adminTaskPanel = normalized;
 
-            // On mobile click, hide the menu so the chosen panel goes full screen
-            window.adminMobileShowMenu = false;
-            if (typeof window.updateAdminTaskResponsiveLayout === 'function') {
-                window.updateAdminTaskResponsiveLayout();
-            }
+    // On mobile click, hide the menu so the chosen panel goes full screen
+    window.adminMobileShowMenu = false;
+    if (typeof window.updateAdminTaskResponsiveLayout === 'function') {
+        window.updateAdminTaskResponsiveLayout();
+    }
 
-            // Also update the mobile active tab title and icon
-            const mobileTitleEl = document.getElementById('admin-mobile-active-tab-title');
-            const mobileIconEl = document.getElementById('admin-mobile-active-tab-icon');
-            if (mobileTitleEl) {
-                const titles = {
-                    manage: 'Tasks List',
-                    add: 'Add Task',
-                    ads: 'Manage Ads',
-                    submissions: 'Submissions',
-                    board_control: 'Board Control'
-                };
-                mobileTitleEl.textContent = titles[normalized] || 'Manage Task';
-            }
-            if (mobileIconEl) {
-                const icons = {
-                    manage: '📋',
-                    add: '➕',
-                    ads: '📢',
-                    submissions: '📥',
-                    board_control: '⚙️'
-                };
-                mobileIconEl.textContent = icons[normalized] || '📋';
-            }
-            
-            const addSection = document.getElementById('admin-task-add-section');
-            const manageSection = document.getElementById('admin-task-manage-section');
-            const adsSection = document.getElementById('admin-ads-section');
-            const subsSection = document.getElementById('admin-submissions-section');
-            const boardControlSection = document.getElementById('admin-board-control-section');
-            
-            if (addSection) addSection.classList.toggle('hidden', normalized !== 'add');
-            if (manageSection) manageSection.classList.toggle('hidden', normalized !== 'manage');
-            if (adsSection) adsSection.classList.toggle('hidden', normalized !== 'ads');
-            if (subsSection) subsSection.classList.toggle('hidden', normalized !== 'submissions');
-            if (boardControlSection) boardControlSection.classList.toggle('hidden', normalized !== 'board_control');
-
-            // Lazy-load ads when tab is first opened
-            if (normalized === 'ads' && !window._adsTabInitialized) {
-                window._adsTabInitialized = true;
-                document.getElementById('admin-ad-form')?.addEventListener('submit', handleSaveAdminAd);
-                if (typeof renderAdminAdsList === 'function') renderAdminAdsList();
-                getDocs(query(collection(db, `artifacts/${appId}/public/data/ads`), orderBy("createdAt", "desc")))
-                    .then(snapshot => { if (typeof applyAdsSnapshot === 'function') applyAdsSnapshot(snapshot.docs); })
-                    .catch(error => console.warn('Ads refresh skipped:', error));
-            }
-
-            // Lazy-load submissions when tab is first opened
-            if (normalized === 'submissions' && !window._subsTabInitialized) {
-                window._subsTabInitialized = true;
-                const d = new Date();
-                window.adminSubmissionsView = {
-                    selectedDate: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`,
-                    selectedTaskId: '',
-                    selectedDetailTab: 'submissions',
-                    selectedSubFilter: 'all'
-                };
-                loadAdminSubmissions();
-            }
-
-            document.querySelectorAll('[data-admin-task-panel]').forEach(button => {
-                const isActive = button.dataset.adminTaskPanel === normalized;
-                button.classList.toggle('bg-cyan-600', isActive);
-                button.classList.toggle('text-white', isActive);
-                button.classList.toggle('shadow-md', isActive);
-                button.classList.toggle('bg-white', !isActive);
-                button.classList.toggle('text-gray-700', !isActive);
-                button.classList.toggle('dark:bg-gray-800', !isActive);
-                button.classList.toggle('dark:text-gray-200', !isActive);
-            });
+    // Also update the mobile active tab title and icon
+    const mobileTitleEl = document.getElementById('admin-mobile-active-tab-title');
+    const mobileIconEl = document.getElementById('admin-mobile-active-tab-icon');
+    if (mobileTitleEl) {
+        const titles = {
+            manage: 'Tasks List',
+            add: 'Add Task',
+            ads: 'Manage Ads',
+            submissions: 'Submissions',
+            board_control: 'Board Control'
         };
+        mobileTitleEl.textContent = titles[normalized] || 'Manage Task';
+    }
+    if (mobileIconEl) {
+        const icons = {
+            manage: '📋',
+            add: '➕',
+            ads: '📢',
+            submissions: '📥',
+            board_control: '⚙️'
+        };
+        mobileIconEl.textContent = icons[normalized] || '📋';
+    }
+
+    const addSection = document.getElementById('admin-task-add-section');
+    const manageSection = document.getElementById('admin-task-manage-section');
+    const adsSection = document.getElementById('admin-ads-section');
+    const subsSection = document.getElementById('admin-submissions-section');
+    const boardControlSection = document.getElementById('admin-board-control-section');
+
+    if (addSection) addSection.classList.toggle('hidden', normalized !== 'add');
+    if (manageSection) manageSection.classList.toggle('hidden', normalized !== 'manage');
+    if (adsSection) adsSection.classList.toggle('hidden', normalized !== 'ads');
+    if (subsSection) subsSection.classList.toggle('hidden', normalized !== 'submissions');
+    if (boardControlSection) boardControlSection.classList.toggle('hidden', normalized !== 'board_control');
+
+    // Lazy-load ads when tab is first opened
+    if (normalized === 'ads' && !window._adsTabInitialized) {
+        window._adsTabInitialized = true;
+        document.getElementById('admin-ad-form')?.addEventListener('submit', handleSaveAdminAd);
+        if (typeof renderAdminAdsList === 'function') renderAdminAdsList();
+        getDocs(query(collection(db, `artifacts/${appId}/public/data/ads`), orderBy("createdAt", "desc")))
+            .then(snapshot => { if (typeof applyAdsSnapshot === 'function') applyAdsSnapshot(snapshot.docs); })
+            .catch(error => console.warn('Ads refresh skipped:', error));
+    }
+
+    // Lazy-load submissions when tab is first opened
+    if (normalized === 'submissions' && !window._subsTabInitialized) {
+        window._subsTabInitialized = true;
+        const d = new Date();
+        window.adminSubmissionsView = {
+            selectedDate: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`,
+            selectedTaskId: '',
+            selectedDetailTab: 'submissions',
+            selectedSubFilter: 'all'
+        };
+        loadAdminSubmissions();
+    }
+
+    document.querySelectorAll('[data-admin-task-panel]').forEach(button => {
+        const isActive = button.dataset.adminTaskPanel === normalized;
+        button.classList.toggle('bg-cyan-600', isActive);
+        button.classList.toggle('text-white', isActive);
+        button.classList.toggle('shadow-md', isActive);
+        button.classList.toggle('bg-white', !isActive);
+        button.classList.toggle('text-gray-700', !isActive);
+        button.classList.toggle('dark:bg-gray-800', !isActive);
+        button.classList.toggle('dark:text-gray-200', !isActive);
+    });
+};
 
 window.toggleAdminTaskSidebar = () => {
     window.adminSidebarCollapsed = !window.adminSidebarCollapsed;
@@ -297,18 +297,18 @@ window.updateAdminTaskResponsiveLayout = () => {
 
         // Always show labels on mobile menu list
         sidebar.querySelectorAll('.sidebar-label').forEach(el => el.classList.remove('hidden'));
-        
+
         // Hide standard collapse button container on mobile
         const toggleBtnContainer = document.getElementById('admin-sidebar-toggle-btn')?.parentElement;
         if (toggleBtnContainer) {
             toggleBtnContainer.classList.add('hidden');
         }
-        
+
         // Reset button classes to look full width on mobile
         sidebar.querySelectorAll('[data-admin-task-panel]').forEach(btn => {
             btn.classList.remove('w-12', 'h-12', 'justify-center', 'mx-auto');
             btn.classList.add('w-full', 'px-4', 'py-3.5', 'text-left');
-            
+
             // Hide the symbol/emoji icon on mobile menu
             const emojiSpan = btn.querySelector('.text-sm');
             if (emojiSpan) emojiSpan.classList.add('hidden');
@@ -318,12 +318,12 @@ window.updateAdminTaskResponsiveLayout = () => {
         sidebar.classList.remove('-translate-x-full');
         contentArea.classList.remove('hidden');
         if (backdrop) backdrop.classList.add('hidden');
-        
+
         const toggleBtnContainer = document.getElementById('admin-sidebar-toggle-btn')?.parentElement;
         if (toggleBtnContainer) {
             toggleBtnContainer.classList.remove('hidden');
         }
-        
+
         // Restore symbols/emojis for desktop
         sidebar.querySelectorAll('[data-admin-task-panel]').forEach(btn => {
             const emojiSpan = btn.querySelector('.text-sm');
@@ -375,12 +375,12 @@ window.updateAdminTaskSidebar = () => {
 };
 
 const showAdminTaskPage = () => {
-            const isCurrentAdmin = currentUser?.uid === ADMIN_UID || currentUser?.email === 'reviewsworld51@gmail.com' || currentUser?.email === 'reviewsworld01@gmail.com' || currentUserData?.role === 'admin' || currentUserData?.role === 'owner';
-            if (!currentUser || !isCurrentAdmin) return showNotification('Admin access only.', true);
-            currentMainSection = 'admin';
-            const isOwner = currentUser?.uid === ADMIN_UID || currentUser?.email === 'reviewsworld51@gmail.com' || currentUser?.email === 'reviewsworld01@gmail.com' || currentUserData?.role === 'owner';
-            const isTaskPageEnabled = !!appConfigCache?.task_page_enabled;
-            const content = `
+    const isCurrentAdmin = currentUser?.uid === ADMIN_UID || currentUser?.email === 'reviewsworld51@gmail.com' || currentUser?.email === 'reviewsworld01@gmail.com' || currentUserData?.role === 'admin' || currentUserData?.role === 'owner';
+    if (!currentUser || !isCurrentAdmin) return showNotification('Admin access only.', true);
+    currentMainSection = 'admin';
+    const isOwner = currentUser?.uid === ADMIN_UID || currentUser?.email === 'reviewsworld51@gmail.com' || currentUser?.email === 'reviewsworld01@gmail.com' || currentUserData?.role === 'owner';
+    const isTaskPageEnabled = !!appConfigCache?.task_page_enabled;
+    const content = `
                 ${getPageHeader('Manage Task')}
                 <div class="pb-24 max-w-7xl mx-auto p-4 md:p-6">
                     <!-- Responsive Side-by-Side / Full-screen Layout -->
@@ -640,165 +640,165 @@ const showAdminTaskPage = () => {
                 </div>
                 </div>
                 ${getPageFooter()}`;
-            showPage(content, {
-                returnTo: 'admin',
-                keepBottomNav: false,
-                onBack: () => {
-                    if (window.innerWidth < 768 && window.adminMobileShowMenu) {
-                        window.adminMobileShowMenu = false;
-                        if (typeof window.updateAdminTaskResponsiveLayout === 'function') {
-                            window.updateAdminTaskResponsiveLayout();
-                        }
-                    } else {
-                        if (typeof showAdminMainPage === 'function') {
-                            showAdminMainPage();
-                        } else {
-                            hidePage();
-                        }
-                    }
+    showPage(content, {
+        returnTo: 'admin',
+        keepBottomNav: false,
+        onBack: () => {
+            if (window.innerWidth < 768 && window.adminMobileShowMenu) {
+                window.adminMobileShowMenu = false;
+                if (typeof window.updateAdminTaskResponsiveLayout === 'function') {
+                    window.updateAdminTaskResponsiveLayout();
                 }
-            });
-            setBottomNavActive('bottom-admin-btn');
-            window._adsTabInitialized = false;
-            window._subsTabInitialized = false;
-            document.querySelectorAll('[data-admin-task-panel]').forEach(button => {
-                button.addEventListener('click', () => setAdminTaskPanel(button.dataset.adminTaskPanel));
-            });
-            
-            // Set panel first
-            setAdminTaskPanel(window.adminTaskPanel || 'manage');
-            
-            // Call standard update
-            updateAdminTaskSidebar();
-            
-            // Initialize responsive layout on load
-            if (typeof window.updateAdminTaskResponsiveLayout === 'function') {
+            } else {
+                if (typeof showAdminMainPage === 'function') {
+                    showAdminMainPage();
+                } else {
+                    hidePage();
+                }
+            }
+        }
+    });
+    setBottomNavActive('bottom-admin-btn');
+    window._adsTabInitialized = false;
+    window._subsTabInitialized = false;
+    document.querySelectorAll('[data-admin-task-panel]').forEach(button => {
+        button.addEventListener('click', () => setAdminTaskPanel(button.dataset.adminTaskPanel));
+    });
+
+    // Set panel first
+    setAdminTaskPanel(window.adminTaskPanel || 'manage');
+
+    // Call standard update
+    updateAdminTaskSidebar();
+
+    // Initialize responsive layout on load
+    if (typeof window.updateAdminTaskResponsiveLayout === 'function') {
+        window.updateAdminTaskResponsiveLayout();
+    }
+
+    // Bind resize event only once
+    if (!window._adminResizeListenerBound) {
+        window.addEventListener('resize', () => {
+            if (document.getElementById('admin-task-sidebar')) {
                 window.updateAdminTaskResponsiveLayout();
             }
-            
-            // Bind resize event only once
-            if (!window._adminResizeListenerBound) {
-                window.addEventListener('resize', () => {
-                    if (document.getElementById('admin-task-sidebar')) {
-                        window.updateAdminTaskResponsiveLayout();
-                    }
-                });
-                window._adminResizeListenerBound = true;
+        });
+        window._adminResizeListenerBound = true;
+    }
+    const toggleBtn = document.getElementById('admin-toggle-task-page-status');
+    if (toggleBtn) {
+        toggleBtn.addEventListener('click', async () => {
+            const currentVal = !!appConfigCache?.task_page_enabled;
+            const nextVal = !currentVal;
+            toggleBtn.disabled = true;
+            try {
+                const configRef = doc(db, `artifacts/${appId}/settings`, 'app_config');
+                await setDoc(configRef, { task_page_enabled: nextVal }, { merge: true });
+                showNotification(`User task page is now ${nextVal ? 'ON (Real tasks shown)' : 'OFF (Coming Soon shown)'}`);
+                appConfigCache = { ...appConfigCache, task_page_enabled: nextVal };
+                if (typeof rememberAppConfig === 'function') {
+                    rememberAppConfig(appConfigCache);
+                }
+                showAdminTaskPage();
+            } catch (error) {
+                console.error('Failed to toggle task page status:', error);
+                showNotification('Error updating settings.', true);
+                toggleBtn.disabled = false;
             }
-            const toggleBtn = document.getElementById('admin-toggle-task-page-status');
-            if (toggleBtn) {
-                toggleBtn.addEventListener('click', async () => {
-                    const currentVal = !!appConfigCache?.task_page_enabled;
-                    const nextVal = !currentVal;
-                    toggleBtn.disabled = true;
-                    try {
-                        const configRef = doc(db, `artifacts/${appId}/settings`, 'app_config');
-                        await setDoc(configRef, { task_page_enabled: nextVal }, { merge: true });
-                        showNotification(`User task page is now ${nextVal ? 'ON (Real tasks shown)' : 'OFF (Coming Soon shown)'}`);
-                        appConfigCache = { ...appConfigCache, task_page_enabled: nextVal };
-                        if (typeof rememberAppConfig === 'function') {
-                            rememberAppConfig(appConfigCache);
-                        }
-                        showAdminTaskPage();
-                    } catch (error) {
-                        console.error('Failed to toggle task page status:', error);
-                        showNotification('Error updating settings.', true);
-                        toggleBtn.disabled = false;
-                    }
-                });
+        });
+    }
+    document.getElementById('admin-task-form')?.addEventListener('submit', handleSaveAdminTask);
+    document.getElementById('admin-task-add-news-link-btn')?.addEventListener('click', () => {
+        const container = document.getElementById('admin-task-news-links-container');
+        if (!container) return;
+        const rows = Array.from(container.querySelectorAll('.news-link-row'));
+        const currentVals = rows.map(row => row.querySelector('.news-link-input')?.value.trim() || '');
+        currentVals.push('');
+        renderAdminTaskNewsLinkInputs(currentVals);
+    });
+    document.getElementById('admin-task-family')?.addEventListener('change', () => updateAdminTaskDynamicFields());
+    document.getElementById('admin-task-subtype')?.addEventListener('change', () => updateAdminTaskDynamicFields());
+    document.getElementById('admin-task-payment-mode')?.addEventListener('change', () => updateAdminTaskDynamicFields());
+    document.getElementById('admin-task-link')?.addEventListener('input', () => updateAdminTaskLogoPreview());
+    document.getElementById('admin-task-search')?.addEventListener('input', renderAdminTaskList);
+    document.getElementById('admin-task-filter')?.addEventListener('change', renderAdminTaskList);
+
+    document.getElementById('admin-ad-toggle-form-btn')?.addEventListener('click', () => {
+        if (typeof resetAdminAdForm === 'function') resetAdminAdForm();
+        window.showAdminAdForm(true);
+    });
+    document.getElementById('admin-ad-form-back-btn')?.addEventListener('click', () => {
+        window.showAdminAdForm(false);
+    });
+
+    updateAdminTaskDynamicFields();
+    renderAdminTaskList();
+
+    const attachPlayStoreScraper = () => {
+        const linkInput = document.getElementById('admin-task-link');
+        if (!linkInput) return;
+
+        const handleLinkInput = async () => {
+            const link = linkInput.value.trim();
+            if (!link) return;
+
+            const isPlayStoreUrl = link.includes('play.google.com') && link.includes('id=');
+            if (!isPlayStoreUrl) return;
+
+            if (linkInput.dataset.scrapingInProgress === 'true' || linkInput.dataset.scrapedUrl === link) {
+                return;
             }
-            document.getElementById('admin-task-form')?.addEventListener('submit', handleSaveAdminTask);
-            document.getElementById('admin-task-add-news-link-btn')?.addEventListener('click', () => {
-                const container = document.getElementById('admin-task-news-links-container');
-                if (!container) return;
-                const rows = Array.from(container.querySelectorAll('.news-link-row'));
-                const currentVals = rows.map(row => row.querySelector('.news-link-input')?.value.trim() || '');
-                currentVals.push('');
-                renderAdminTaskNewsLinkInputs(currentVals);
-            });
-            document.getElementById('admin-task-family')?.addEventListener('change', () => updateAdminTaskDynamicFields());
-            document.getElementById('admin-task-subtype')?.addEventListener('change', () => updateAdminTaskDynamicFields());
-            document.getElementById('admin-task-payment-mode')?.addEventListener('change', () => updateAdminTaskDynamicFields());
-            document.getElementById('admin-task-link')?.addEventListener('input', () => updateAdminTaskLogoPreview());
-            document.getElementById('admin-task-search')?.addEventListener('input', renderAdminTaskList);
-            document.getElementById('admin-task-filter')?.addEventListener('change', renderAdminTaskList);
 
-            document.getElementById('admin-ad-toggle-form-btn')?.addEventListener('click', () => {
-                if (typeof resetAdminAdForm === 'function') resetAdminAdForm();
-                window.showAdminAdForm(true);
-            });
-            document.getElementById('admin-ad-form-back-btn')?.addEventListener('click', () => {
-                window.showAdminAdForm(false);
-            });
+            try {
+                linkInput.dataset.scrapingInProgress = 'true';
+                const token = await getBackendAuthToken();
+                linkInput.classList.add('border-cyan-500', 'animate-pulse');
+                const response = await fetchWithTimeout(`${BACKEND_BASE_URL}/api/admin/scrape-playstore`, {
+                    method: 'POST',
+                    headers: {
+                        Authorization: `Bearer ${token}`,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ url: link })
+                }, 10000);
 
-            updateAdminTaskDynamicFields();
-            renderAdminTaskList();
-
-            const attachPlayStoreScraper = () => {
-                const linkInput = document.getElementById('admin-task-link');
-                if (!linkInput) return;
-                
-                const handleLinkInput = async () => {
-                    const link = linkInput.value.trim();
-                    if (!link) return;
-
-                    const isPlayStoreUrl = link.includes('play.google.com') && link.includes('id=');
-                    if (!isPlayStoreUrl) return;
-
-                    if (linkInput.dataset.scrapingInProgress === 'true' || linkInput.dataset.scrapedUrl === link) {
-                        return;
+                const data = await response.json();
+                linkInput.classList.remove('border-cyan-500', 'animate-pulse');
+                if (response.ok && data.ok) {
+                    linkInput.dataset.scrapedUrl = link;
+                    if (data.name) {
+                        const titleInput = document.getElementById('admin-task-title');
+                        if (titleInput) titleInput.value = data.name;
                     }
-                    
-                    try {
-                        linkInput.dataset.scrapingInProgress = 'true';
-                        const token = await getBackendAuthToken();
-                        linkInput.classList.add('border-cyan-500', 'animate-pulse');
-                        const response = await fetchWithTimeout(`${BACKEND_BASE_URL}/api/admin/scrape-playstore`, {
-                            method: 'POST',
-                            headers: {
-                                Authorization: `Bearer ${token}`,
-                                'Content-Type': 'application/json'
-                            },
-                            body: JSON.stringify({ url: link })
-                        }, 10000);
-                        
-                        const data = await response.json();
-                        linkInput.classList.remove('border-cyan-500', 'animate-pulse');
-                        if (response.ok && data.ok) {
-                            linkInput.dataset.scrapedUrl = link;
-                            if (data.name) {
-                                const titleInput = document.getElementById('admin-task-title');
-                                if (titleInput) titleInput.value = data.name;
-                            }
-                            if (data.logoUrl) {
-                                linkInput.dataset.scrapedLogoUrl = data.logoUrl;
-                                updateAdminTaskLogoPreview();
-                            }
-                            showNotification('Play Store details fetched successfully.');
-                        }
-                    } catch (err) {
-                        console.error('Play Store scraping failed:', err);
-                        linkInput.classList.remove('border-cyan-500', 'animate-pulse');
-                    } finally {
-                        linkInput.dataset.scrapingInProgress = 'false';
+                    if (data.logoUrl) {
+                        linkInput.dataset.scrapedLogoUrl = data.logoUrl;
+                        updateAdminTaskLogoPreview();
                     }
-                };
+                    showNotification('Play Store details fetched successfully.');
+                }
+            } catch (err) {
+                console.error('Play Store scraping failed:', err);
+                linkInput.classList.remove('border-cyan-500', 'animate-pulse');
+            } finally {
+                linkInput.dataset.scrapingInProgress = 'false';
+            }
+        };
 
-                linkInput.addEventListener('input', handleLinkInput);
-                linkInput.addEventListener('paste', () => {
-                    setTimeout(handleLinkInput, 100);
-                });
-                linkInput.addEventListener('blur', handleLinkInput);
-            };
-            
-            // Dynamically show and populate sub-admin assignment checkboxes
-            const assignmentContainer = document.getElementById('admin-task-assignment-container');
-            const subAdminsListEl = document.getElementById('admin-task-subadmins-list');
-            if (isOwner) {
-                if (assignmentContainer) assignmentContainer.classList.remove('hidden');
-                if (subAdminsListEl) {
-                    const subAdmins = (allUsersCache || []).filter(u => u.role === 'admin' && u.id !== ADMIN_UID);
-                    subAdminsListEl.innerHTML = `
+        linkInput.addEventListener('input', handleLinkInput);
+        linkInput.addEventListener('paste', () => {
+            setTimeout(handleLinkInput, 100);
+        });
+        linkInput.addEventListener('blur', handleLinkInput);
+    };
+
+    // Dynamically show and populate sub-admin assignment checkboxes
+    const assignmentContainer = document.getElementById('admin-task-assignment-container');
+    const subAdminsListEl = document.getElementById('admin-task-subadmins-list');
+    if (isOwner) {
+        if (assignmentContainer) assignmentContainer.classList.remove('hidden');
+        if (subAdminsListEl) {
+            const subAdmins = (allUsersCache || []).filter(u => u.role === 'admin' && u.id !== ADMIN_UID);
+            subAdminsListEl.innerHTML = `
                         <label class="inline-flex items-center gap-1.5 cursor-pointer bg-white dark:bg-gray-800 px-3 py-2 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm">
                             <input type="checkbox" id="assign-all-subadmins" value="all" class="rounded text-cyan-600 focus:ring-cyan-500">
                             All Sub-Admins
@@ -810,45 +810,45 @@ const showAdminTaskPage = () => {
                             </label>
                         `).join('')}
                     `;
-                    // Setup select-all checkbox logic
-                    const selectAllCheckbox = document.getElementById('assign-all-subadmins');
-                    const itemCheckboxes = document.querySelectorAll('.subadmin-assign-checkbox');
-                    if (selectAllCheckbox) {
-                        selectAllCheckbox.addEventListener('change', () => {
-                            itemCheckboxes.forEach(cb => cb.checked = selectAllCheckbox.checked);
-                        });
-                    }
-                }
-            } else {
-                if (assignmentContainer) assignmentContainer.classList.add('hidden');
+            // Setup select-all checkbox logic
+            const selectAllCheckbox = document.getElementById('assign-all-subadmins');
+            const itemCheckboxes = document.querySelectorAll('.subadmin-assign-checkbox');
+            if (selectAllCheckbox) {
+                selectAllCheckbox.addEventListener('change', () => {
+                    itemCheckboxes.forEach(cb => cb.checked = selectAllCheckbox.checked);
+                });
             }
+        }
+    } else {
+        if (assignmentContainer) assignmentContainer.classList.add('hidden');
+    }
 
-            attachPlayStoreScraper();
-            getDocs(query(collection(db, `artifacts/${appId}/public/data/tasks`), orderBy("createdAt", "desc")))
-                .then(snapshot => applyAdminTasksSnapshot(snapshot.docs))
-                .catch(error => console.warn('Task refresh skipped:', error));
-        };
+    attachPlayStoreScraper();
+    getDocs(query(collection(db, `artifacts/${appId}/public/data/tasks`), orderBy("createdAt", "desc")))
+        .then(snapshot => applyAdminTasksSnapshot(snapshot.docs))
+        .catch(error => console.warn('Task refresh skipped:', error));
+};
 
 const updateAdminTaskLogoPreview = () => {
-            const family = document.getElementById('admin-task-family')?.value || 'review';
-            const subtype = document.getElementById('admin-task-subtype')?.value || getAdminTaskTypes(family)[0].value;
-            const link = document.getElementById('admin-task-link')?.value.trim() || '';
-            const scrapedLogoUrl = document.getElementById('admin-task-link')?.dataset.scrapedLogoUrl || '';
-            const preview = document.getElementById('admin-task-logo-preview');
-            if (preview) {
-                preview.src = scrapedLogoUrl || getTaskLogoFromLink(family, subtype, link);
-                preview.onerror = () => {
-                    preview.onerror = null;
-                    preview.src = getAdminTaskSubtypeMeta(family, subtype).logo;
-                };
-            }
+    const family = document.getElementById('admin-task-family')?.value || 'review';
+    const subtype = document.getElementById('admin-task-subtype')?.value || getAdminTaskTypes(family)[0].value;
+    const link = document.getElementById('admin-task-link')?.value.trim() || '';
+    const scrapedLogoUrl = document.getElementById('admin-task-link')?.dataset.scrapedLogoUrl || '';
+    const preview = document.getElementById('admin-task-logo-preview');
+    if (preview) {
+        preview.src = scrapedLogoUrl || getTaskLogoFromLink(family, subtype, link);
+        preview.onerror = () => {
+            preview.onerror = null;
+            preview.src = getAdminTaskSubtypeMeta(family, subtype).logo;
         };
+    }
+};
 
 const renderAdminTaskNewsLinkInputs = (links = []) => {
-            const container = document.getElementById('admin-task-news-links-container');
-            if (!container) return;
-            const items = links.length ? links : [''];
-            container.innerHTML = items.map((val, idx) => `
+    const container = document.getElementById('admin-task-news-links-container');
+    if (!container) return;
+    const items = links.length ? links : [''];
+    container.innerHTML = items.map((val, idx) => `
                 <div class="flex gap-2 items-center news-link-row">
                     <input value="${escapeHtml(val)}" placeholder="News Link ${idx + 1} (https://...)" class="news-link-input w-full px-4 py-3 bg-gray-100 dark:bg-gray-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-cyan-500 text-sm">
                     <button type="button" class="remove-news-link-btn flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-red-50 text-red-600 dark:bg-red-900/30 dark:text-red-200 transition hover:scale-105 active:scale-95" title="Remove Link">
@@ -857,445 +857,445 @@ const renderAdminTaskNewsLinkInputs = (links = []) => {
                 </div>
             `).join('');
 
-            container.querySelectorAll('.remove-news-link-btn').forEach((btn, idx) => {
-                btn.onclick = () => {
-                    const rows = Array.from(container.querySelectorAll('.news-link-row'));
-                    const currentVals = rows.map(row => row.querySelector('.news-link-input')?.value.trim() || '');
-                    currentVals.splice(idx, 1);
-                    renderAdminTaskNewsLinkInputs(currentVals);
-                };
-            });
+    container.querySelectorAll('.remove-news-link-btn').forEach((btn, idx) => {
+        btn.onclick = () => {
+            const rows = Array.from(container.querySelectorAll('.news-link-row'));
+            const currentVals = rows.map(row => row.querySelector('.news-link-input')?.value.trim() || '');
+            currentVals.splice(idx, 1);
+            renderAdminTaskNewsLinkInputs(currentVals);
         };
+    });
+};
 
 const updateAdminTaskDynamicFields = (preferredSubtype = '') => {
-            const familyInput = document.getElementById('admin-task-family');
-            const subtypeInput = document.getElementById('admin-task-subtype');
-            if (!familyInput || !subtypeInput) return;
-            const family = familyInput.value || 'review';
-            const options = getAdminTaskTypes(family);
-            const currentSubtype = preferredSubtype || subtypeInput.value || options[0].value;
-            const selectedSubtype = options.some(item => item.value === currentSubtype) ? currentSubtype : options[0].value;
-            subtypeInput.innerHTML = renderAdminTaskSubtypeOptions(family, selectedSubtype);
-            subtypeInput.value = selectedSubtype;
+    const familyInput = document.getElementById('admin-task-family');
+    const subtypeInput = document.getElementById('admin-task-subtype');
+    if (!familyInput || !subtypeInput) return;
+    const family = familyInput.value || 'review';
+    const options = getAdminTaskTypes(family);
+    const currentSubtype = preferredSubtype || subtypeInput.value || options[0].value;
+    const selectedSubtype = options.some(item => item.value === currentSubtype) ? currentSubtype : options[0].value;
+    subtypeInput.innerHTML = renderAdminTaskSubtypeOptions(family, selectedSubtype);
+    subtypeInput.value = selectedSubtype;
 
-            const newsWrap = document.getElementById('admin-task-news-links-wrap');
-            const linkInput = document.getElementById('admin-task-link');
-            const linkWrap = document.getElementById('admin-task-link-wrapper');
-            if (selectedSubtype === 'read_news') {
-                if (newsWrap) newsWrap.classList.remove('hidden');
-                if (linkWrap) linkWrap.classList.add('hidden');
-                
-                const container = document.getElementById('admin-task-news-links-container');
-                if (container && !container.querySelector('.news-link-row')) {
-                    renderAdminTaskNewsLinkInputs([]);
-                }
-            } else {
-                if (newsWrap) newsWrap.classList.add('hidden');
-                if (linkWrap) linkWrap.classList.remove('hidden');
-            }
+    const newsWrap = document.getElementById('admin-task-news-links-wrap');
+    const linkInput = document.getElementById('admin-task-link');
+    const linkWrap = document.getElementById('admin-task-link-wrapper');
+    if (selectedSubtype === 'read_news') {
+        if (newsWrap) newsWrap.classList.remove('hidden');
+        if (linkWrap) linkWrap.classList.add('hidden');
 
-            const paymentMode = document.getElementById('admin-task-payment-mode')?.value || 'instant';
-            document.getElementById('admin-task-payment-days-wrap')?.classList.toggle('hidden', paymentMode !== 'days');
-            document.getElementById('admin-task-list-time-wrap')?.classList.toggle('hidden', paymentMode !== 'days');
+        const container = document.getElementById('admin-task-news-links-container');
+        if (container && !container.querySelector('.news-link-row')) {
+            renderAdminTaskNewsLinkInputs([]);
+        }
+    } else {
+        if (newsWrap) newsWrap.classList.add('hidden');
+        if (linkWrap) linkWrap.classList.remove('hidden');
+    }
 
-            const limitWrapper = document.getElementById('admin-task-limit-wrapper');
-            if (limitWrapper) {
-                limitWrapper.classList.toggle('hidden', family === 'review');
-            }
+    const paymentMode = document.getElementById('admin-task-payment-mode')?.value || 'instant';
+    document.getElementById('admin-task-payment-days-wrap')?.classList.toggle('hidden', paymentMode !== 'days');
+    document.getElementById('admin-task-list-time-wrap')?.classList.toggle('hidden', paymentMode !== 'days');
 
-            updateAdminTaskLogoPreview();
-            applyDefaultAdminTaskInstructions(false);
-        };
+    const limitWrapper = document.getElementById('admin-task-limit-wrapper');
+    if (limitWrapper) {
+        limitWrapper.classList.toggle('hidden', family === 'review');
+    }
+
+    updateAdminTaskLogoPreview();
+    applyDefaultAdminTaskInstructions(false);
+};
 
 const getAdminTaskFormData = (existingTask = null) => {
-            const title = document.getElementById('admin-task-title')?.value.trim() || '';
-            const family = document.getElementById('admin-task-family')?.value || 'review';
-            const subtype = document.getElementById('admin-task-subtype')?.value || getAdminTaskTypes(family)[0].value;
-            const subtypeMeta = getAdminTaskSubtypeMeta(family, subtype);
-            const rate = Number(document.getElementById('admin-task-rate')?.value || 0);
-            const limitValue = Number(document.getElementById('admin-task-limit')?.value || 0);
-            let taskLink = document.getElementById('admin-task-link')?.value.trim() || '';
-            
-            const newsLinks = [];
-            if (subtype === 'read_news') {
-                const inputs = document.querySelectorAll('.news-link-input');
-                inputs.forEach(input => {
-                    const lnk = input.value.trim();
-                    if (lnk) newsLinks.push(lnk);
-                });
-                if (newsLinks.length > 0) {
-                    taskLink = newsLinks[0];
-                }
-            }
+    const title = document.getElementById('admin-task-title')?.value.trim() || '';
+    const family = document.getElementById('admin-task-family')?.value || 'review';
+    const subtype = document.getElementById('admin-task-subtype')?.value || getAdminTaskTypes(family)[0].value;
+    const subtypeMeta = getAdminTaskSubtypeMeta(family, subtype);
+    const rate = Number(document.getElementById('admin-task-rate')?.value || 0);
+    const limitValue = Number(document.getElementById('admin-task-limit')?.value || 0);
+    let taskLink = document.getElementById('admin-task-link')?.value.trim() || '';
 
-            const paymentMode = document.getElementById('admin-task-payment-mode')?.value || 'instant';
-            const paymentDays = paymentMode === 'days' ? Number(document.getElementById('admin-task-payment-days')?.value || 0) : 0;
-            const scrapedLogoUrl = document.getElementById('admin-task-link')?.dataset.scrapedLogoUrl || '';
-            const logoUrl = scrapedLogoUrl || getTaskLogoFromLink(family, subtype, taskLink);
-            const listTime = document.getElementById('admin-task-list-time')?.value || '20:00';
-            const status = existingTask ? (existingTask.status || 'draft') : 'draft';
-            const preservedReviewComment = family === 'review' && existingTask ? (existingTask.reviewComment || existingTask.commentToCopy || '') : '';
-            
-            let taskIndex = existingTask ? (existingTask.taskIndex || existingTask.task_index) : null;
-            if (!taskIndex) {
-                const indices = allTasksCache.map(t => Number(t.taskIndex || t.task_index || 0)).filter(Boolean);
-                taskIndex = indices.length > 0 ? Math.max(...indices) + 1 : 1;
-            }
+    const newsLinks = [];
+    if (subtype === 'read_news') {
+        const inputs = document.querySelectorAll('.news-link-input');
+        inputs.forEach(input => {
+            const lnk = input.value.trim();
+            if (lnk) newsLinks.push(lnk);
+        });
+        if (newsLinks.length > 0) {
+            taskLink = newsLinks[0];
+        }
+    }
 
-            let taskAppId = existingTask ? (existingTask.appId || existingTask.app_id) : null;
-            if (!taskAppId) {
-                const appIds = allTasksCache.map(t => {
-                    const match = String(t.appId || t.app_id || '').match(/^app_id_(\d+)$/i);
-                    return match ? parseInt(match[1], 10) : 0;
-                }).filter(Boolean);
-                const nextAppIdNum = appIds.length > 0 ? Math.max(...appIds) + 1 : 1;
-                taskAppId = `app_id_${String(nextAppIdNum).padStart(2, '0')}`;
-            }
+    const paymentMode = document.getElementById('admin-task-payment-mode')?.value || 'instant';
+    const paymentDays = paymentMode === 'days' ? Number(document.getElementById('admin-task-payment-days')?.value || 0) : 0;
+    const scrapedLogoUrl = document.getElementById('admin-task-link')?.dataset.scrapedLogoUrl || '';
+    const logoUrl = scrapedLogoUrl || getTaskLogoFromLink(family, subtype, taskLink);
+    const listTime = document.getElementById('admin-task-list-time')?.value || '20:00';
+    const status = existingTask ? (existingTask.status || 'draft') : 'draft';
+    const preservedReviewComment = family === 'review' && existingTask ? (existingTask.reviewComment || existingTask.commentToCopy || '') : '';
 
-            return {
-                title,
-                taskFamily: family,
-                taskType: family,
-                taskSubtype: subtype,
-                taskIndex,
-                task_index: taskIndex,
-                appId: taskAppId,
-                app_id: taskAppId,
-                taskSubtypeLabel: subtypeMeta.label,
-                category: subtypeMeta.label,
-                taskGroup: getAdminTaskFamilyLabel(family),
-                rate,
-                reward: rate,
-                limit: Number.isFinite(limitValue) && limitValue > 0 ? limitValue : null,
-                status,
-                isVisible: status === 'active',
-                proofRequired: 'Screenshot',
-                priority: 'normal',
-                taskLink,
-                newsLinks,
-                logoUrl,
-                imageUrl: logoUrl,
-                iconUrl: logoUrl,
-                reviewComment: preservedReviewComment,
-                commentToCopy: preservedReviewComment,
-                paymentMode,
-                paymentDelayDays: Number.isFinite(paymentDays) && paymentDays > 0 ? paymentDays : 0,
-                paymentLabel: paymentMode === 'days' && paymentDays > 0 ? `${paymentDays} day payment` : 'Instant payment',
-                listDays: Number.isFinite(paymentDays) && paymentDays > 0 ? paymentDays : 7,
-                list_days: Number.isFinite(paymentDays) && paymentDays > 0 ? paymentDays : 7,
-                listDate: existingTask?.listDate || existingTask?.list_date || new Date().toISOString().split('T')[0],
-                list_date: existingTask?.listDate || existingTask?.list_date || new Date().toISOString().split('T')[0],
-                listTime,
-                instructions: document.getElementById('admin-task-instructions')?.value.trim() || getDefaultAdminTaskInstructions(family, subtype),
-                autoCloseDaily: true,
-                expiresAt: existingTask?.expiresAt || null,
-                assignedToSubAdmins: (() => {
-                    let list = [];
-                    const isOwner = currentUser?.uid === ADMIN_UID || currentUser?.email === 'reviewsworld51@gmail.com' || currentUser?.email === 'reviewsworld01@gmail.com' || currentUserData?.role === 'owner';
-                    if (isOwner) {
-                        const selectAllCheckbox = document.getElementById('assign-all-subadmins');
-                        if (selectAllCheckbox && selectAllCheckbox.checked) {
-                            list.push('all');
-                        }
-                        const itemCheckboxes = document.querySelectorAll('.subadmin-assign-checkbox');
-                        itemCheckboxes.forEach(cb => {
-                            if (cb.checked) {
-                                list.push(cb.value);
-                            }
-                        });
-                    } else {
-                        list.push(currentUser.uid);
-                    }
-                    return list;
-                })()
-            };
-        };
+    let taskIndex = existingTask ? (existingTask.taskIndex || existingTask.task_index) : null;
+    if (!taskIndex) {
+        const indices = allTasksCache.map(t => Number(t.taskIndex || t.task_index || 0)).filter(Boolean);
+        taskIndex = indices.length > 0 ? Math.max(...indices) + 1 : 1;
+    }
 
-const resetAdminTaskForm = () => {
-            document.getElementById('admin-task-form')?.reset();
-            const editId = document.getElementById('admin-task-edit-id');
-            if (editId) editId.value = '';
-            const linkInput = document.getElementById('admin-task-link');
-            if (linkInput) delete linkInput.dataset.scrapedLogoUrl;
-            const listTimeInput = document.getElementById('admin-task-list-time');
-            if (listTimeInput) listTimeInput.value = '20:00';
-            const saveBtn = document.getElementById('admin-task-save-btn');
-            if (saveBtn) saveBtn.textContent = 'Add Task';
-            
-            renderAdminTaskNewsLinkInputs([]);
+    let taskAppId = existingTask ? (existingTask.appId || existingTask.app_id) : null;
+    if (!taskAppId) {
+        const appIds = allTasksCache.map(t => {
+            const match = String(t.appId || t.app_id || '').match(/^app_id_(\d+)$/i);
+            return match ? parseInt(match[1], 10) : 0;
+        }).filter(Boolean);
+        const nextAppIdNum = appIds.length > 0 ? Math.max(...appIds) + 1 : 1;
+        taskAppId = `app_id_${String(nextAppIdNum).padStart(2, '0')}`;
+    }
 
-            updateAdminTaskDynamicFields('app_review');
-            applyDefaultAdminTaskInstructions(true);
-        };
-
-const generateNextTaskId = () => {
-            let maxNum = 0;
-            if (Array.isArray(allTasksCache)) {
-                allTasksCache.forEach(t => {
-                    const match = String(t.id || '').match(/^RW(\d+)$/i);
-                    if (match) {
-                        const num = parseInt(match[1], 10);
-                        if (num > maxNum) {
-                            maxNum = num;
-                        }
-                    }
-                });
-            }
-            return `RW${String(maxNum + 1).padStart(2, '0')}`;
-        };
-
-const handleSaveAdminTask = async (event) => {
-            event.preventDefault();
-            const isCurrentAdmin = currentUser?.uid === ADMIN_UID || currentUser?.email === 'reviewsworld51@gmail.com' || currentUser?.email === 'reviewsworld01@gmail.com' || currentUserData?.role === 'admin' || currentUserData?.role === 'owner';
-            if (!currentUser || !isCurrentAdmin) return showNotification('Admin access only.', true);
-            const saveBtn = document.getElementById('admin-task-save-btn');
-            const editId = document.getElementById('admin-task-edit-id')?.value || '';
-            const existingTask = editId ? allTasksCache.find(task => task.id === editId) : null;
-            if (existingTask && !canAdminManageTask(existingTask)) {
-                return showNotification('You do not have permission to manage owner tasks.', true);
-            }
-            const payload = getAdminTaskFormData(existingTask);
-            if (!payload.title) return showNotification('Please enter task title.', true);
-            if (!Number.isFinite(payload.rate) || payload.rate <= 0) return showNotification('Please enter a valid task rate.', true);
-            
-            if (payload.taskSubtype === 'read_news') {
-                if (!payload.newsLinks || payload.newsLinks.length === 0) {
-                    return showNotification('Please add at least one news link.', true);
-                }
-                for (const link of payload.newsLinks) {
-                    if (!/^https?:\/\//i.test(link)) {
-                        return showNotification('All news links must start with http:// or https://', true);
-                    }
-                }
-            } else {
-                if (!payload.taskLink) return showNotification('Please add task link.', true);
-                if (payload.taskLink && !/^https?:\/\//i.test(payload.taskLink)) return showNotification('Task link must start with http:// or https://', true);
-            }
-            
-            if (payload.paymentMode === 'days' && (!Number.isFinite(payload.paymentDelayDays) || payload.paymentDelayDays <= 0)) return showNotification('Please enter payment day.', true);
-            // instructions are auto-filled from defaults, no need to block
-
-            if (saveBtn) {
-                saveBtn.disabled = true;
-                saveBtn.textContent = editId ? 'Updating...' : 'Adding...';
-            }
-            try {
-                if (editId) {
-                    await updateDoc(doc(db, `artifacts/${appId}/public/data/tasks`, editId), {
-                        ...payload,
-                        updatedAt: serverTimestamp(),
-                        updatedBy: currentUser.uid
-                    });
-                    allTasksCache = allTasksCache.map(task => task.id === editId ? { ...task, ...payload, updatedAt: Date.now() } : task);
-                    showNotification('Task updated.');
-                } else {
-                    const nextId = generateNextTaskId();
-                    const taskRef = doc(db, `artifacts/${appId}/public/data/tasks`, nextId);
-                    const task = {
-                        id: nextId,
-                        ...payload,
-                        submissions: 0,
-                        completed: 0,
-                        createdAt: Date.now(),
-                        createdBy: currentUser.uid
-                    };
-                    allTasksCache = [task, ...allTasksCache];
-                    renderAdminTaskList();
-                    await setDoc(taskRef, {
-                        id: nextId,
-                        ...payload,
-                        submissions: 0,
-                        completed: 0,
-                        createdAt: serverTimestamp(),
-                        createdBy: currentUser.uid
-                    });
-                    showNotification('Task added.');
-                }
-                resetAdminTaskForm();
-                renderAdminTaskList();
-                setAdminTaskPanel('manage');
-            } catch (error) {
-                console.error('Task save failed:', error);
-                showNotification(`Could not save task: ${error.message}`, true);
-            } finally {
-                if (saveBtn) {
-                    saveBtn.disabled = false;
-                    saveBtn.textContent = document.getElementById('admin-task-edit-id')?.value ? 'Update Task' : 'Add Task';
-                }
-            }
-        };
-
-const editAdminTask = (taskId) => {
-            const task = allTasksCache.find(item => item.id === taskId);
-            if (!task) return;
-            if (!canAdminManageTask(task)) return showNotification('You do not have permission to manage owner tasks.', true);
-            const family = getAdminTaskFamily(task);
-            const subtype = getAdminTaskSubtype(task);
-            document.getElementById('admin-task-edit-id').value = task.id;
-            document.getElementById('admin-task-title').value = task.title || '';
-            document.getElementById('admin-task-family').value = family;
-            updateAdminTaskDynamicFields(subtype);
-            if (subtype === 'read_news' && Array.isArray(task.newsLinks)) {
-                renderAdminTaskNewsLinkInputs(task.newsLinks);
-            } else {
-                renderAdminTaskNewsLinkInputs([]);
-            }
-            document.getElementById('admin-task-rate').value = task.rate || task.reward || '';
-            document.getElementById('admin-task-limit').value = task.limit || '';
-            const linkInput = document.getElementById('admin-task-link');
-            if (linkInput) {
-                linkInput.value = task.taskLink || '';
-                if (task.logoUrl) {
-                    linkInput.dataset.scrapedLogoUrl = task.logoUrl;
-                } else {
-                    delete linkInput.dataset.scrapedLogoUrl;
-                }
-            }
-            const listTimeInput = document.getElementById('admin-task-list-time');
-            if (listTimeInput) {
-                listTimeInput.value = task.listTime || task.list_time || '20:00';
-            }
-            document.getElementById('admin-task-payment-mode').value = (task.paymentMode || (Number(task.paymentDelayDays || 0) > 0 ? 'days' : 'instant')) === 'days' ? 'days' : 'instant';
-            document.getElementById('admin-task-payment-days').value = task.paymentDelayDays || task.paymentDays || '';
-            const instructionsInput = document.getElementById('admin-task-instructions');
-            if (instructionsInput) {
-                instructionsInput.value = task.instructions || '';
-                instructionsInput.dataset.autoDefault = task.instructions ? 'false' : 'true';
-            }
+    return {
+        title,
+        taskFamily: family,
+        taskType: family,
+        taskSubtype: subtype,
+        taskIndex,
+        task_index: taskIndex,
+        appId: taskAppId,
+        app_id: taskAppId,
+        taskSubtypeLabel: subtypeMeta.label,
+        category: subtypeMeta.label,
+        taskGroup: getAdminTaskFamilyLabel(family),
+        rate,
+        reward: rate,
+        limit: Number.isFinite(limitValue) && limitValue > 0 ? limitValue : null,
+        status,
+        isVisible: status === 'active',
+        proofRequired: 'Screenshot',
+        priority: 'normal',
+        taskLink,
+        newsLinks,
+        logoUrl,
+        imageUrl: logoUrl,
+        iconUrl: logoUrl,
+        reviewComment: preservedReviewComment,
+        commentToCopy: preservedReviewComment,
+        paymentMode,
+        paymentDelayDays: Number.isFinite(paymentDays) && paymentDays > 0 ? paymentDays : 0,
+        paymentLabel: paymentMode === 'days' && paymentDays > 0 ? `${paymentDays} day payment` : 'Instant payment',
+        listDays: Number.isFinite(paymentDays) && paymentDays > 0 ? paymentDays : 7,
+        list_days: Number.isFinite(paymentDays) && paymentDays > 0 ? paymentDays : 7,
+        listDate: existingTask?.listDate || existingTask?.list_date || new Date().toISOString().split('T')[0],
+        list_date: existingTask?.listDate || existingTask?.list_date || new Date().toISOString().split('T')[0],
+        listTime,
+        instructions: document.getElementById('admin-task-instructions')?.value.trim() || getDefaultAdminTaskInstructions(family, subtype),
+        autoCloseDaily: true,
+        expiresAt: existingTask?.expiresAt || null,
+        assignedToSubAdmins: (() => {
+            let list = [];
             const isOwner = currentUser?.uid === ADMIN_UID || currentUser?.email === 'reviewsworld51@gmail.com' || currentUser?.email === 'reviewsworld01@gmail.com' || currentUserData?.role === 'owner';
             if (isOwner) {
-                const assigned = task.assignedToSubAdmins || [];
                 const selectAllCheckbox = document.getElementById('assign-all-subadmins');
-                if (selectAllCheckbox) {
-                    selectAllCheckbox.checked = assigned.includes('all');
+                if (selectAllCheckbox && selectAllCheckbox.checked) {
+                    list.push('all');
                 }
                 const itemCheckboxes = document.querySelectorAll('.subadmin-assign-checkbox');
                 itemCheckboxes.forEach(cb => {
-                    cb.checked = assigned.includes(cb.value) || assigned.includes('all');
+                    if (cb.checked) {
+                        list.push(cb.value);
+                    }
                 });
+            } else {
+                list.push(currentUser.uid);
             }
+            return list;
+        })()
+    };
+};
 
-            document.getElementById('admin-task-save-btn').textContent = 'Update Task';
-            updateAdminTaskDynamicFields(subtype);
-            setAdminTaskPanel('add');
-            document.getElementById('admin-task-title')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        };
+const resetAdminTaskForm = () => {
+    document.getElementById('admin-task-form')?.reset();
+    const editId = document.getElementById('admin-task-edit-id');
+    if (editId) editId.value = '';
+    const linkInput = document.getElementById('admin-task-link');
+    if (linkInput) delete linkInput.dataset.scrapedLogoUrl;
+    const listTimeInput = document.getElementById('admin-task-list-time');
+    if (listTimeInput) listTimeInput.value = '20:00';
+    const saveBtn = document.getElementById('admin-task-save-btn');
+    if (saveBtn) saveBtn.textContent = 'Add Task';
+
+    renderAdminTaskNewsLinkInputs([]);
+
+    updateAdminTaskDynamicFields('app_review');
+    applyDefaultAdminTaskInstructions(true);
+};
+
+const generateNextTaskId = () => {
+    let maxNum = 0;
+    if (Array.isArray(allTasksCache)) {
+        allTasksCache.forEach(t => {
+            const match = String(t.id || '').match(/^RW(\d+)$/i);
+            if (match) {
+                const num = parseInt(match[1], 10);
+                if (num > maxNum) {
+                    maxNum = num;
+                }
+            }
+        });
+    }
+    return `RW${String(maxNum + 1).padStart(2, '0')}`;
+};
+
+const handleSaveAdminTask = async (event) => {
+    event.preventDefault();
+    const isCurrentAdmin = currentUser?.uid === ADMIN_UID || currentUser?.email === 'reviewsworld51@gmail.com' || currentUser?.email === 'reviewsworld01@gmail.com' || currentUserData?.role === 'admin' || currentUserData?.role === 'owner';
+    if (!currentUser || !isCurrentAdmin) return showNotification('Admin access only.', true);
+    const saveBtn = document.getElementById('admin-task-save-btn');
+    const editId = document.getElementById('admin-task-edit-id')?.value || '';
+    const existingTask = editId ? allTasksCache.find(task => task.id === editId) : null;
+    if (existingTask && !canAdminManageTask(existingTask)) {
+        return showNotification('You do not have permission to manage owner tasks.', true);
+    }
+    const payload = getAdminTaskFormData(existingTask);
+    if (!payload.title) return showNotification('Please enter task title.', true);
+    if (!Number.isFinite(payload.rate) || payload.rate <= 0) return showNotification('Please enter a valid task rate.', true);
+
+    if (payload.taskSubtype === 'read_news') {
+        if (!payload.newsLinks || payload.newsLinks.length === 0) {
+            return showNotification('Please add at least one news link.', true);
+        }
+        for (const link of payload.newsLinks) {
+            if (!/^https?:\/\//i.test(link)) {
+                return showNotification('All news links must start with http:// or https://', true);
+            }
+        }
+    } else {
+        if (!payload.taskLink) return showNotification('Please add task link.', true);
+        if (payload.taskLink && !/^https?:\/\//i.test(payload.taskLink)) return showNotification('Task link must start with http:// or https://', true);
+    }
+
+    if (payload.paymentMode === 'days' && (!Number.isFinite(payload.paymentDelayDays) || payload.paymentDelayDays <= 0)) return showNotification('Please enter payment day.', true);
+    // instructions are auto-filled from defaults, no need to block
+
+    if (saveBtn) {
+        saveBtn.disabled = true;
+        saveBtn.textContent = editId ? 'Updating...' : 'Adding...';
+    }
+    try {
+        if (editId) {
+            await updateDoc(doc(db, `artifacts/${appId}/public/data/tasks`, editId), {
+                ...payload,
+                updatedAt: serverTimestamp(),
+                updatedBy: currentUser.uid
+            });
+            allTasksCache = allTasksCache.map(task => task.id === editId ? { ...task, ...payload, updatedAt: Date.now() } : task);
+            showNotification('Task updated.');
+        } else {
+            const nextId = generateNextTaskId();
+            const taskRef = doc(db, `artifacts/${appId}/public/data/tasks`, nextId);
+            const task = {
+                id: nextId,
+                ...payload,
+                submissions: 0,
+                completed: 0,
+                createdAt: Date.now(),
+                createdBy: currentUser.uid
+            };
+            allTasksCache = [task, ...allTasksCache];
+            renderAdminTaskList();
+            await setDoc(taskRef, {
+                id: nextId,
+                ...payload,
+                submissions: 0,
+                completed: 0,
+                createdAt: serverTimestamp(),
+                createdBy: currentUser.uid
+            });
+            showNotification('Task added.');
+        }
+        resetAdminTaskForm();
+        renderAdminTaskList();
+        setAdminTaskPanel('manage');
+    } catch (error) {
+        console.error('Task save failed:', error);
+        showNotification(`Could not save task: ${error.message}`, true);
+    } finally {
+        if (saveBtn) {
+            saveBtn.disabled = false;
+            saveBtn.textContent = document.getElementById('admin-task-edit-id')?.value ? 'Update Task' : 'Add Task';
+        }
+    }
+};
+
+const editAdminTask = (taskId) => {
+    const task = allTasksCache.find(item => item.id === taskId);
+    if (!task) return;
+    if (!canAdminManageTask(task)) return showNotification('You do not have permission to manage owner tasks.', true);
+    const family = getAdminTaskFamily(task);
+    const subtype = getAdminTaskSubtype(task);
+    document.getElementById('admin-task-edit-id').value = task.id;
+    document.getElementById('admin-task-title').value = task.title || '';
+    document.getElementById('admin-task-family').value = family;
+    updateAdminTaskDynamicFields(subtype);
+    if (subtype === 'read_news' && Array.isArray(task.newsLinks)) {
+        renderAdminTaskNewsLinkInputs(task.newsLinks);
+    } else {
+        renderAdminTaskNewsLinkInputs([]);
+    }
+    document.getElementById('admin-task-rate').value = task.rate || task.reward || '';
+    document.getElementById('admin-task-limit').value = task.limit || '';
+    const linkInput = document.getElementById('admin-task-link');
+    if (linkInput) {
+        linkInput.value = task.taskLink || '';
+        if (task.logoUrl) {
+            linkInput.dataset.scrapedLogoUrl = task.logoUrl;
+        } else {
+            delete linkInput.dataset.scrapedLogoUrl;
+        }
+    }
+    const listTimeInput = document.getElementById('admin-task-list-time');
+    if (listTimeInput) {
+        listTimeInput.value = task.listTime || task.list_time || '20:00';
+    }
+    document.getElementById('admin-task-payment-mode').value = (task.paymentMode || (Number(task.paymentDelayDays || 0) > 0 ? 'days' : 'instant')) === 'days' ? 'days' : 'instant';
+    document.getElementById('admin-task-payment-days').value = task.paymentDelayDays || task.paymentDays || '';
+    const instructionsInput = document.getElementById('admin-task-instructions');
+    if (instructionsInput) {
+        instructionsInput.value = task.instructions || '';
+        instructionsInput.dataset.autoDefault = task.instructions ? 'false' : 'true';
+    }
+    const isOwner = currentUser?.uid === ADMIN_UID || currentUser?.email === 'reviewsworld51@gmail.com' || currentUser?.email === 'reviewsworld01@gmail.com' || currentUserData?.role === 'owner';
+    if (isOwner) {
+        const assigned = task.assignedToSubAdmins || [];
+        const selectAllCheckbox = document.getElementById('assign-all-subadmins');
+        if (selectAllCheckbox) {
+            selectAllCheckbox.checked = assigned.includes('all');
+        }
+        const itemCheckboxes = document.querySelectorAll('.subadmin-assign-checkbox');
+        itemCheckboxes.forEach(cb => {
+            cb.checked = assigned.includes(cb.value) || assigned.includes('all');
+        });
+    }
+
+    document.getElementById('admin-task-save-btn').textContent = 'Update Task';
+    updateAdminTaskDynamicFields(subtype);
+    setAdminTaskPanel('add');
+    document.getElementById('admin-task-title')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+};
 
 const handleToggleAdminTaskStatus = async (taskId) => {
-            const task = allTasksCache.find(item => item.id === taskId);
-            if (!task) return;
-            if (!canAdminManageTask(task)) return showNotification('You do not have permission to manage owner tasks.', true);
-            const currentStatus = getAdminTaskEffectiveStatus(task);
-            const nextStatus = currentStatus === 'active' ? 'draft' : 'active';
-            const nextExpiresAt = nextStatus === 'active' ? getNextTaskMidnightMillis() : null;
-            allTasksCache = allTasksCache.map(item => item.id === taskId ? { ...item, status: nextStatus, isVisible: nextStatus === 'active', expiresAt: nextExpiresAt } : item);
-            renderAdminTaskList();
-            try {
-                await updateDoc(doc(db, `artifacts/${appId}/public/data/tasks`, taskId), {
-                    status: nextStatus,
-                    isVisible: nextStatus === 'active',
-                    expiresAt: nextExpiresAt,
-                    autoCloseDaily: true,
-                    updatedAt: serverTimestamp(),
-                    updatedBy: currentUser.uid
-                });
-                showNotification(nextStatus === 'active' ? 'Task is live until 12 AM.' : 'Task turned off.');
-            } catch (error) {
-                console.error('Task status update failed:', error);
-                showNotification(`Could not update task: ${error.message}`, true);
-            }
-        };
+    const task = allTasksCache.find(item => item.id === taskId);
+    if (!task) return;
+    if (!canAdminManageTask(task)) return showNotification('You do not have permission to manage owner tasks.', true);
+    const currentStatus = getAdminTaskEffectiveStatus(task);
+    const nextStatus = currentStatus === 'active' ? 'draft' : 'active';
+    const nextExpiresAt = nextStatus === 'active' ? getNextTaskMidnightMillis() : null;
+    allTasksCache = allTasksCache.map(item => item.id === taskId ? { ...item, status: nextStatus, isVisible: nextStatus === 'active', expiresAt: nextExpiresAt } : item);
+    renderAdminTaskList();
+    try {
+        await updateDoc(doc(db, `artifacts/${appId}/public/data/tasks`, taskId), {
+            status: nextStatus,
+            isVisible: nextStatus === 'active',
+            expiresAt: nextExpiresAt,
+            autoCloseDaily: true,
+            updatedAt: serverTimestamp(),
+            updatedBy: currentUser.uid
+        });
+        showNotification(nextStatus === 'active' ? 'Task is live until 12 AM.' : 'Task turned off.');
+    } catch (error) {
+        console.error('Task status update failed:', error);
+        showNotification(`Could not update task: ${error.message}`, true);
+    }
+};
 
 const handleDeleteAdminTask = async (taskId) => {
-            const task = allTasksCache.find(item => item.id === taskId);
-            if (!task) return;
-            if (!canAdminManageTask(task)) return showNotification('You do not have permission to manage owner tasks.', true);
-            renderModal('Delete Task',
-                `<p class="text-sm text-gray-600 dark:text-gray-300">Delete <strong>${escapeHtml(task.title || 'this task')}</strong>? This removes it from the manage task list.</p>`,
-                `<button onclick="window.closeModal()" class="px-4 py-2 text-sm bg-gray-200 dark:bg-gray-600 rounded-lg">Cancel</button>
+    const task = allTasksCache.find(item => item.id === taskId);
+    if (!task) return;
+    if (!canAdminManageTask(task)) return showNotification('You do not have permission to manage owner tasks.', true);
+    renderModal('Delete Task',
+        `<p class="text-sm text-gray-600 dark:text-gray-300">Delete <strong>${escapeHtml(task.title || 'this task')}</strong>? This removes it from the manage task list.</p>`,
+        `<button onclick="window.closeModal()" class="px-4 py-2 text-sm bg-gray-200 dark:bg-gray-600 rounded-lg">Cancel</button>
                  <button id="confirm-delete-admin-task-btn" class="px-4 py-2 text-sm bg-red-600 text-white rounded-lg">Delete</button>`);
-            document.getElementById('confirm-delete-admin-task-btn').onclick = async () => {
-                try {
-                    allTasksCache = allTasksCache.filter(item => item.id !== taskId);
-                    renderAdminTaskList();
-                    window.closeModal();
-                    await deleteDoc(doc(db, `artifacts/${appId}/public/data/tasks`, taskId));
-                    showNotification('Task deleted.');
-                } catch (error) {
-                    console.error('Task delete failed:', error);
-                    showNotification(`Could not delete task: ${error.message}`, true);
-                }
-            };
-        };
+    document.getElementById('confirm-delete-admin-task-btn').onclick = async () => {
+        try {
+            allTasksCache = allTasksCache.filter(item => item.id !== taskId);
+            renderAdminTaskList();
+            window.closeModal();
+            await deleteDoc(doc(db, `artifacts/${appId}/public/data/tasks`, taskId));
+            showNotification('Task deleted.');
+        } catch (error) {
+            console.error('Task delete failed:', error);
+            showNotification(`Could not delete task: ${error.message}`, true);
+        }
+    };
+};
 
 const handleEditAdminTaskComment = (taskId) => {
-            const task = allTasksCache.find(item => item.id === taskId);
-            if (!task || !isAdminReviewTask(task)) return;
-            if (!canAdminManageTask(task)) return showNotification('You do not have permission to manage owner tasks.', true);
-            const existingComments = getTaskCommentPool(task).join('\n');
-            renderModal('Review Comment',
-                `<div class="space-y-3">
+    const task = allTasksCache.find(item => item.id === taskId);
+    if (!task || !isAdminReviewTask(task)) return;
+    if (!canAdminManageTask(task)) return showNotification('You do not have permission to manage owner tasks.', true);
+    const existingComments = getTaskCommentPool(task).join('\n');
+    renderModal('Review Comment',
+        `<div class="space-y-3">
                     <p class="text-sm font-semibold text-gray-600 dark:text-gray-300">Add one review comment per line. A copied comment is reserved for one user for 5 minutes.</p>
                     <textarea id="admin-task-comment-modal-input" rows="7" class="w-full rounded-xl bg-gray-100 px-4 py-3 text-sm font-semibold text-gray-900 outline-none focus:ring-2 focus:ring-cyan-500 dark:bg-gray-700 dark:text-white">${escapeHtml(existingComments)}</textarea>
                 </div>`,
-                `<button onclick="window.closeModal()" class="px-4 py-2 text-sm bg-gray-200 dark:bg-gray-600 rounded-lg">Cancel</button>
+        `<button onclick="window.closeModal()" class="px-4 py-2 text-sm bg-gray-200 dark:bg-gray-600 rounded-lg">Cancel</button>
                  <button id="save-admin-task-comment-btn" class="px-4 py-2 text-sm bg-cyan-600 text-white rounded-lg">Save</button>`);
-            document.getElementById('save-admin-task-comment-btn').onclick = async () => {
-                const comment = document.getElementById('admin-task-comment-modal-input')?.value.trim() || '';
-                const comments = comment.split(/\r?\n/).map(item => item.trim()).filter(Boolean);
-                if (!comments.length) return showNotification('Please add review comment.', true);
-                try {
-                    allTasksCache = allTasksCache.map(item => item.id === taskId ? { ...item, reviewComments: comments, reviewComment: comments[0], commentToCopy: comments[0] } : item);
-                    renderAdminTaskList();
-                    window.closeModal();
-                    await updateDoc(doc(db, `artifacts/${appId}/public/data/tasks`, taskId), {
-                        reviewComments: comments,
-                        reviewComment: comments[0],
-                        commentToCopy: comments[0],
-                        updatedAt: serverTimestamp(),
-                        updatedBy: currentUser.uid
-                    });
-                    showNotification('Review comment updated.');
-                } catch (error) {
-                    console.error('Review comment update failed:', error);
-                    showNotification(`Could not update comment: ${error.message}`, true);
-                }
-            };
-        };
+    document.getElementById('save-admin-task-comment-btn').onclick = async () => {
+        const comment = document.getElementById('admin-task-comment-modal-input')?.value.trim() || '';
+        const comments = comment.split(/\r?\n/).map(item => item.trim()).filter(Boolean);
+        if (!comments.length) return showNotification('Please add review comment.', true);
+        try {
+            allTasksCache = allTasksCache.map(item => item.id === taskId ? { ...item, reviewComments: comments, reviewComment: comments[0], commentToCopy: comments[0] } : item);
+            renderAdminTaskList();
+            window.closeModal();
+            await updateDoc(doc(db, `artifacts/${appId}/public/data/tasks`, taskId), {
+                reviewComments: comments,
+                reviewComment: comments[0],
+                commentToCopy: comments[0],
+                updatedAt: serverTimestamp(),
+                updatedBy: currentUser.uid
+            });
+            showNotification('Review comment updated.');
+        } catch (error) {
+            console.error('Review comment update failed:', error);
+            showNotification(`Could not update comment: ${error.message}`, true);
+        }
+    };
+};
 
 const renderAdminTaskList = () => {
-            const listEl = document.getElementById('admin-task-list');
-            if (!listEl) return;
-            const search = (document.getElementById('admin-task-search')?.value || '').trim().toLowerCase();
-            const filter = document.getElementById('admin-task-filter')?.value || 'active';
-            const tasks = [...allTasksCache]
-                .filter(isTaskVisibleToAdmin)
-                .filter(task => {
-                    const status = getAdminTaskEffectiveStatus(task);
-                if (filter !== 'all' && status !== filter) return false;
-                if (!search) return true;
-                return [task.title, task.category, task.instructions, task.taskGroup, task.taskSubtypeLabel, status]
-                    .some(value => String(value || '').toLowerCase().includes(search));
-            });
-            const activeCount = allTasksCache.filter(task => getAdminTaskEffectiveStatus(task) === 'active').length;
-            const draftCount = allTasksCache.filter(task => getAdminTaskEffectiveStatus(task) !== 'active').length;
-            const totalEl = document.getElementById('admin-task-total-count');
-            const activeEl = document.getElementById('admin-task-active-count');
-            const draftEl = document.getElementById('admin-task-draft-count');
-            if (totalEl) totalEl.textContent = allTasksCache.length;
-            if (activeEl) activeEl.textContent = activeCount;
-            if (draftEl) draftEl.textContent = draftCount;
+    const listEl = document.getElementById('admin-task-list');
+    if (!listEl) return;
+    const search = (document.getElementById('admin-task-search')?.value || '').trim().toLowerCase();
+    const filter = document.getElementById('admin-task-filter')?.value || 'active';
+    const tasks = [...allTasksCache]
+        .filter(isTaskVisibleToAdmin)
+        .filter(task => {
+            const status = getAdminTaskEffectiveStatus(task);
+            if (filter !== 'all' && status !== filter) return false;
+            if (!search) return true;
+            return [task.title, task.category, task.instructions, task.taskGroup, task.taskSubtypeLabel, status]
+                .some(value => String(value || '').toLowerCase().includes(search));
+        });
+    const activeCount = allTasksCache.filter(task => getAdminTaskEffectiveStatus(task) === 'active').length;
+    const draftCount = allTasksCache.filter(task => getAdminTaskEffectiveStatus(task) !== 'active').length;
+    const totalEl = document.getElementById('admin-task-total-count');
+    const activeEl = document.getElementById('admin-task-active-count');
+    const draftEl = document.getElementById('admin-task-draft-count');
+    if (totalEl) totalEl.textContent = allTasksCache.length;
+    if (activeEl) activeEl.textContent = activeCount;
+    if (draftEl) draftEl.textContent = draftCount;
 
-            if (!tasks.length && !allTasksCache.length) {
-                listEl.innerHTML = `
+    if (!tasks.length && !allTasksCache.length) {
+        listEl.innerHTML = `
                     <div class="md:col-span-2 rounded-2xl border border-blue-100 bg-blue-50 px-4 py-3 text-sm font-semibold text-blue-700 dark:border-blue-900/40 dark:bg-blue-900/20 dark:text-blue-100">
                         No task added yet. The faded missions below are preview only and are not clickable.
                     </div>
                     ${[
-                        { title: 'PopClub', category: 'Active App Review', rate: '₹8', image: 'Pop' },
-                        { title: 'Map Review Work', category: 'Review Task', rate: '₹12', image: 'Map' },
-                        { title: 'App Install Mission', category: 'Instant Payment Task', rate: '₹10', image: 'App' }
-                    ].map(item => `
+                { title: 'PopClub', category: 'Active App Review', rate: '₹8', image: 'Pop' },
+                { title: 'Map Review Work', category: 'Review Task', rate: '₹12', image: 'Map' },
+                { title: 'App Install Mission', category: 'Instant Payment Task', rate: '₹10', image: 'App' }
+            ].map(item => `
                         <div class="pointer-events-none rounded-xl border border-slate-100 bg-slate-50 p-3 opacity-55 dark:border-slate-700 dark:bg-gray-900 flex flex-col justify-between">
                             <div class="flex items-start gap-2.5 min-w-0">
                                 <span class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-white text-xs font-bold text-slate-400 dark:border-slate-700 dark:bg-gray-800">${item.image}</span>
@@ -1309,26 +1309,26 @@ const renderAdminTaskList = () => {
                             </div>
                         </div>
                     `).join('')}`;
-                return;
-            }
+        return;
+    }
 
-            listEl.innerHTML = tasks.length ? tasks.map(task => {
-                const family = getAdminTaskFamily(task);
-                const subtype = getAdminTaskSubtype(task);
-                const subtypeMeta = getAdminTaskSubtypeMeta(family, subtype);
-                const status = getAdminTaskEffectiveStatus(task);
-                const isLive = status === 'active';
-                const logo = task.logoUrl || task.imageUrl || task.iconUrl || getTaskLogoFromLink(family, subtype, task.taskLink);
-                const expiresAt = timestampToMillis(task.expiresAt || task.autoCloseAt || task.closeAt);
-                const closesText = isLive && expiresAt ? new Date(expiresAt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }) : 'Off';
-                const statusClass = {
-                    active: 'bg-emerald-50 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-200',
-                    draft: 'bg-amber-50 text-amber-700 dark:bg-amber-900/30 dark:text-amber-200',
-                    paused: 'bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-200',
-                    closed: 'bg-red-50 text-red-700 dark:bg-red-900/30 dark:text-red-200',
-                    over: 'bg-rose-50 text-rose-700 dark:bg-rose-900/30 dark:text-rose-200'
-                }[status] || 'bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-200';
-                return `
+    listEl.innerHTML = tasks.length ? tasks.map(task => {
+        const family = getAdminTaskFamily(task);
+        const subtype = getAdminTaskSubtype(task);
+        const subtypeMeta = getAdminTaskSubtypeMeta(family, subtype);
+        const status = getAdminTaskEffectiveStatus(task);
+        const isLive = status === 'active';
+        const logo = task.logoUrl || task.imageUrl || task.iconUrl || getTaskLogoFromLink(family, subtype, task.taskLink);
+        const expiresAt = timestampToMillis(task.expiresAt || task.autoCloseAt || task.closeAt);
+        const closesText = isLive && expiresAt ? new Date(expiresAt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }) : 'Off';
+        const statusClass = {
+            active: 'bg-emerald-50 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-200',
+            draft: 'bg-amber-50 text-amber-700 dark:bg-amber-900/30 dark:text-amber-200',
+            paused: 'bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-200',
+            closed: 'bg-red-50 text-red-700 dark:bg-red-900/30 dark:text-red-200',
+            over: 'bg-rose-50 text-rose-700 dark:bg-rose-900/30 dark:text-rose-200'
+        }[status] || 'bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-200';
+        return `
                     <div class="rounded-xl border border-gray-100 dark:border-gray-700 bg-white dark:bg-gray-800 p-3 shadow-sm hover:shadow-md transition flex flex-col justify-between min-h-[145px]">
                         <div class="flex items-start gap-2.5 min-w-0">
                             <span class="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-gray-100 bg-gray-50 p-1.5 dark:border-gray-700 dark:bg-gray-900">
@@ -1373,14 +1373,14 @@ const renderAdminTaskList = () => {
                             `}
                         </div>
                     </div>`;
-            }).join('') : '<p class="md:col-span-2 rounded-2xl border border-dashed border-gray-200 py-8 text-center text-sm font-semibold text-gray-500 dark:border-gray-700 dark:text-gray-400">No matching task found.</p>';
-        };
+    }).join('') : '<p class="md:col-span-2 rounded-2xl border border-dashed border-gray-200 py-8 text-center text-sm font-semibold text-gray-500 dark:border-gray-700 dark:text-gray-400">No matching task found.</p>';
+};
 
 const showAdminTaskCommentsPage = async (taskId) => {
-            const task = allTasksCache.find(item => item.id === taskId);
-            if (!task) return showNotification('Task not found.', true);
-            
-            const content = `
+    const task = allTasksCache.find(item => item.id === taskId);
+    if (!task) return showNotification('Task not found.', true);
+
+    const content = `
                 ${getPageHeader(`Comments - ${escapeHtml(task.title || 'Task')}`)}
                 <div class="max-w-2xl mx-auto space-y-6 pb-24 px-4">
                     <!-- Add Comment Form -->
@@ -1402,48 +1402,48 @@ const showAdminTaskCommentsPage = async (taskId) => {
                 </div>
                 ${getPageFooter()}`;
 
-            showPage(content, { onBack: showAdminTaskPage, returnTo: 'admin', keepBottomNav: false });
-            
-            let reservations = [];
-            try {
-                const token = await getBackendAuthToken();
-                const resp = await fetchWithTimeout(`${BACKEND_BASE_URL}/api/admin/task-reservations/${encodeURIComponent(taskId)}`, {
-                    headers: { Authorization: `Bearer ${token}` }
-                }, 8000);
-                const data = await resp.json().catch(() => ({}));
-                if (data.ok && Array.isArray(data.reservations)) {
-                    reservations = data.reservations;
-                }
-            } catch (err) {
-                console.error('Failed to load active reservations:', err);
-            }
+    showPage(content, { onBack: showAdminTaskPage, returnTo: 'admin', keepBottomNav: false });
 
-            const renderComments = () => {
-                const container = document.getElementById('admin-comments-container');
-                if (!container) return;
-                
-                const comments = getTaskCommentPool(task);
-                if (comments.length === 0) {
-                    container.innerHTML = `<p class="py-6 text-center text-sm text-gray-400 italic">No comments added yet.</p>`;
-                    return;
-                }
+    let reservations = [];
+    try {
+        const token = await getBackendAuthToken();
+        const resp = await fetchWithTimeout(`${BACKEND_BASE_URL}/api/admin/task-reservations/${encodeURIComponent(taskId)}`, {
+            headers: { Authorization: `Bearer ${token}` }
+        }, 8000);
+        const data = await resp.json().catch(() => ({}));
+        if (data.ok && Array.isArray(data.reservations)) {
+            reservations = data.reservations;
+        }
+    } catch (err) {
+        console.error('Failed to load active reservations:', err);
+    }
 
-                container.innerHTML = comments.map((comment, index) => {
-                    const reservation = reservations.find(r => r.comment === comment);
-                    let resInfo = '';
-                    if (reservation) {
-                        const remaining = Math.max(0, reservation.expiresAt - Date.now());
-                        const mins = Math.floor(remaining / 60000);
-                        const secs = Math.floor((remaining % 60000) / 1000);
-                        const timeStr = remaining > 0 ? `${mins}m ${secs}s` : 'Expired';
-                        resInfo = `
+    const renderComments = () => {
+        const container = document.getElementById('admin-comments-container');
+        if (!container) return;
+
+        const comments = getTaskCommentPool(task);
+        if (comments.length === 0) {
+            container.innerHTML = `<p class="py-6 text-center text-sm text-gray-400 italic">No comments added yet.</p>`;
+            return;
+        }
+
+        container.innerHTML = comments.map((comment, index) => {
+            const reservation = reservations.find(r => r.comment === comment);
+            let resInfo = '';
+            if (reservation) {
+                const remaining = Math.max(0, reservation.expiresAt - Date.now());
+                const mins = Math.floor(remaining / 60000);
+                const secs = Math.floor((remaining % 60000) / 1000);
+                const timeStr = remaining > 0 ? `${mins}m ${secs}s` : 'Expired';
+                resInfo = `
                             <div class="mt-1.5 flex items-center gap-1.5 text-[10px] font-bold text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/20 px-2.5 py-1 rounded-lg w-fit">
                                 <span class="h-1.5 w-1.5 rounded-full bg-amber-500 animate-pulse"></span>
                                 Reserved by: ${escapeHtml(reservation.userName)} (${escapeHtml(reservation.userEmail)}) · Expires: ${timeStr}
                             </div>`;
-                    }
+            }
 
-                    return `
+            return `
                         <div class="py-4 flex flex-col gap-1.5">
                             <div class="flex justify-between items-start gap-4">
                                 <p class="text-sm font-semibold text-gray-800 dark:text-gray-200 flex-1">${index + 1}. "${escapeHtml(comment)}"</p>
@@ -1458,89 +1458,89 @@ const showAdminTaskCommentsPage = async (taskId) => {
                             </div>
                             ${resInfo}
                         </div>`;
-                }).join('');
+        }).join('');
 
-                container.querySelectorAll('[data-action="delete-comment-item"]').forEach(btn => {
-                    btn.onclick = async (e) => {
-                        const index = Number(e.currentTarget.dataset.index);
-                        if (!confirm('Are you sure you want to delete this comment?')) return;
-                        
-                        const currentComments = getTaskCommentPool(task);
-                        currentComments.splice(index, 1);
-                        await saveTaskComments(taskId, currentComments);
-                        renderComments();
-                    };
-                });
+        container.querySelectorAll('[data-action="delete-comment-item"]').forEach(btn => {
+            btn.onclick = async (e) => {
+                const index = Number(e.currentTarget.dataset.index);
+                if (!confirm('Are you sure you want to delete this comment?')) return;
 
-                container.querySelectorAll('[data-action="edit-comment-item"]').forEach(btn => {
-                    btn.onclick = async (e) => {
-                        const index = Number(e.currentTarget.dataset.index);
-                        const currentComments = getTaskCommentPool(task);
-                        const original = currentComments[index];
-                        const updated = prompt('Edit review comment:', original);
-                        if (updated === null) return;
-                        const clean = updated.trim();
-                        if (!clean) return showNotification('Comment cannot be empty.', true);
-                        
-                        currentComments[index] = clean;
-                        await saveTaskComments(taskId, currentComments);
-                        renderComments();
-                    };
-                });
-            };
-
-            const saveTaskComments = async (taskId, comments) => {
-                try {
-                    showLoading();
-                    task.reviewComments = comments;
-                    task.reviewComment = comments[0] || '';
-                    task.commentToCopy = comments[0] || '';
-                    
-                    await updateDoc(doc(db, `artifacts/${appId}/public/data/tasks`, taskId), {
-                        reviewComments: comments,
-                        reviewComment: comments[0] || '',
-                        commentToCopy: comments[0] || '',
-                        updatedAt: serverTimestamp(),
-                        updatedBy: currentUser.uid
-                    });
-                    hideLoading();
-                    showNotification('Comments updated successfully.');
-                } catch (err) {
-                    hideLoading();
-                    console.error('Failed to save comments:', err);
-                    showNotification('Failed to save comments.', true);
-                }
-            };
-
-            renderComments();
-
-            document.getElementById('admin-comment-add-btn').onclick = async () => {
-                const input = document.getElementById('admin-comment-input');
-                const text = input.value.trim();
-                if (!text) return showNotification('Please enter comment text.', true);
-                
                 const currentComments = getTaskCommentPool(task);
-                currentComments.push(text);
-                input.value = '';
+                currentComments.splice(index, 1);
                 await saveTaskComments(taskId, currentComments);
                 renderComments();
             };
-        };
+        });
+
+        container.querySelectorAll('[data-action="edit-comment-item"]').forEach(btn => {
+            btn.onclick = async (e) => {
+                const index = Number(e.currentTarget.dataset.index);
+                const currentComments = getTaskCommentPool(task);
+                const original = currentComments[index];
+                const updated = prompt('Edit review comment:', original);
+                if (updated === null) return;
+                const clean = updated.trim();
+                if (!clean) return showNotification('Comment cannot be empty.', true);
+
+                currentComments[index] = clean;
+                await saveTaskComments(taskId, currentComments);
+                renderComments();
+            };
+        });
+    };
+
+    const saveTaskComments = async (taskId, comments) => {
+        try {
+            showLoading();
+            task.reviewComments = comments;
+            task.reviewComment = comments[0] || '';
+            task.commentToCopy = comments[0] || '';
+
+            await updateDoc(doc(db, `artifacts/${appId}/public/data/tasks`, taskId), {
+                reviewComments: comments,
+                reviewComment: comments[0] || '',
+                commentToCopy: comments[0] || '',
+                updatedAt: serverTimestamp(),
+                updatedBy: currentUser.uid
+            });
+            hideLoading();
+            showNotification('Comments updated successfully.');
+        } catch (err) {
+            hideLoading();
+            console.error('Failed to save comments:', err);
+            showNotification('Failed to save comments.', true);
+        }
+    };
+
+    renderComments();
+
+    document.getElementById('admin-comment-add-btn').onclick = async () => {
+        const input = document.getElementById('admin-comment-input');
+        const text = input.value.trim();
+        if (!text) return showNotification('Please enter comment text.', true);
+
+        const currentComments = getTaskCommentPool(task);
+        currentComments.push(text);
+        input.value = '';
+        await saveTaskComments(taskId, currentComments);
+        renderComments();
+    };
+};
 
 const showAdminTaskSubmissionsPage = async () => {
-            if (!currentUser || currentUser.uid !== ADMIN_UID) return showNotification('Admin access only.', true);
-            currentMainSection = 'admin';
-            
-            const d = new Date();
-            adminSubmissionsView = {
-                view: 'overview',
-                selectedDate: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`,
-                selectedTaskId: '',
-                selectedDetailTab: 'submissions',
-                selectedSubFilter: 'all'
-            };
+    if (!currentUser || currentUser.uid !== ADMIN_UID) return showNotification('Admin access only.', true);
+    currentMainSection = 'admin';
 
-            const content = `
+    const d = new Date();
+    adminSubmissionsView = {
+        view: 'overview',
+        selectedDate: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`,
+        selectedTaskId: '',
+        selectedDetailTab: 'submissions',
+        selectedSubFilter: 'all'
+    };
+
+    const content = `
                 ${getPageHeader('Task Submissions')}
                 <div class="max-w-5xl mx-auto space-y-4 pb-24">
                     <div id="admin-submissions-page-shell" class="min-h-screen bg-slate-50 dark:bg-slate-950 pb-28">
@@ -1548,10 +1548,10 @@ const showAdminTaskSubmissionsPage = async () => {
                     </div>
                 </div>`;
 
-            showPage(content, { returnTo: 'admin', keepBottomNav: false });
-            setBottomNavActive('bottom-admin-btn');
-            loadAdminSubmissions();
-        };
+    showPage(content, { returnTo: 'admin', keepBottomNav: false });
+    setBottomNavActive('bottom-admin-btn');
+    loadAdminSubmissions();
+};
 
 // Expose functions to window for global access
 window.applyAdminTasksSnapshot = applyAdminTasksSnapshot;

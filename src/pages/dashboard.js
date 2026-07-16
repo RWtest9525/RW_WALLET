@@ -3360,7 +3360,8 @@ const showUserTaskPage = () => {
 
                 const payoutVal = getPayoutCleanVal(task);
                 const approvalVal = payoutVal === 'Instant' ? 'Instant' : `${payoutVal} Later`;
-                const limitVal = task.limit || 300;
+                const isReview = subtype === 'app_review' || subtype === 'map_review' || subtype === 'trustpilot_review' || subtype === 'website_review';
+                const totalSlots = isReview ? ((task.reviewComments || []).length || 1) : (task.limit || 300);
                 const submissionsCount = task.timesUsed ?? task.submissionsCount ?? 0;
 
                 if (isLive) {
@@ -3426,7 +3427,7 @@ const showUserTaskPage = () => {
                                     </span>
                                     <div class="min-w-0">
                                         <p class="text-[8px] font-black text-gray-400 uppercase tracking-wider leading-none">Used</p>
-                                        <p class="text-[11px] font-bold text-slate-800 dark:text-slate-200 mt-1 truncate">${submissionsCount}/${limitVal}</p>
+                                        <p class="text-[11px] font-bold text-slate-800 dark:text-slate-200 mt-1 truncate">${submissionsCount}/${totalSlots}</p>
                                     </div>
                                 </div>
                             </div>
@@ -3465,6 +3466,21 @@ const showUserTaskPage = () => {
             // Fetch live data silently in the background
             if (isTaskPageEnabled) {
                 (async () => {
+                    // 1. Fetch live tasks from Firestore
+                    if (typeof db !== 'undefined' && typeof appId !== 'undefined' && typeof collection === 'function' && typeof getDocs === 'function') {
+                        try {
+                            const snapshot = await getDocs(collection(db, `artifacts/${appId}/public/data/tasks`));
+                            const docs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                            allTasksCache = docs.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+                            if (currentMainSection === 'task') {
+                                renderUI(window.lastTakenCommentsMap || {});
+                            }
+                        } catch (taskErr) {
+                            console.warn('Failed to refresh tasks silently:', taskErr);
+                        }
+                    }
+
+                    // 2. Fetch availability
                     try {
                         const token = await getBackendAuthToken();
                         const resp = await fetchWithTimeout(`${BACKEND_BASE_URL}/api/tasks/availability`, {
@@ -4450,6 +4466,7 @@ const showUserTaskDetailsPage = async (taskId) => {
             const payoutDelayText = getPayoutDelayText(task);
             const subtype = task.subtype || task.taskSubtype || '';
             const acc = getTaskAccent(subtype);
+            const isReviewTask = subtype === 'app_review' || subtype === 'map_review' || subtype === 'trustpilot_review' || subtype === 'website_review';
 
             const taskTypeLabel = (subtype === 'app_review' || subtype === 'app_download_task') ? 'Play Store Review' : (subtype === 'map_review' ? 'Map Review' : 'Screenshot Task');
             const platformLabel = (subtype === 'app_review' || subtype === 'app_download_task') ? 'Play Store App Review' : (subtype === 'map_review' ? 'Google Maps Place Review' : 'Screenshot + Review');
@@ -4572,21 +4589,10 @@ const showUserTaskDetailsPage = async (taskId) => {
                                 </div>
                             </div>
 
-                            <!-- Metrics Grid (3 Columns) -->
-                            <div class="grid grid-cols-3 gap-2 px-5 py-2 text-left">
-                                <!-- Payout Column -->
-                                <div class="flex items-center gap-2">
-                                    <span class="p-2 rounded-xl ${acc.iconBg} shrink-0">
-                                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 0 0 2 2z"></path></svg>
-                                    </span>
-                                    <div class="min-w-0">
-                                        <p class="text-[8px] font-black text-gray-400 uppercase tracking-wider leading-none">Payout</p>
-                                        <p class="text-[11px] font-bold text-slate-800 dark:text-slate-200 mt-1 truncate">${escapeHtml(payoutVal)}</p>
-                                    </div>
-                                </div>
-
+                            <!-- Metrics Grid (2 Columns) -->
+                            <div class="grid grid-cols-2 gap-2 px-5 py-2 text-left">
                                 <!-- Approval Column -->
-                                <div class="flex items-center gap-2 border-l border-slate-100 dark:border-slate-800/80 pl-2">
+                                <div class="flex items-center gap-2">
                                     <span class="p-2 rounded-xl ${acc.iconBg} shrink-0">
                                         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
                                     </span>
@@ -4597,13 +4603,13 @@ const showUserTaskDetailsPage = async (taskId) => {
                                 </div>
 
                                 <!-- Remaining Time Column (Timer) -->
-                                <div class="flex items-center gap-2 border-l border-slate-100 dark:border-slate-800/80 pl-2">
+                                <div class="flex items-center justify-end gap-2 border-l border-slate-100 dark:border-slate-800/80 pl-2">
                                     <!-- Ticking Glowing Timer Badge -->
-                                    <div id="task-card-timer-container" class="timer-pulse-glow bg-amber-500/10 dark:bg-amber-500/20 border border-amber-500/30 rounded-xl px-2 py-1 flex items-center gap-1.5 text-[10px] font-black text-amber-600 dark:text-amber-400 shadow-sm shrink-0">
+                                    <div id="task-card-timer-container" class="timer-pulse-glow bg-amber-500/10 dark:bg-amber-500/20 border border-amber-500/30 rounded-xl px-2.5 py-1.5 flex items-center gap-1 text-[11px] font-black text-amber-600 dark:text-amber-400 shadow-sm shrink-0">
                                         <span class="h-2 w-2 rounded-full bg-amber-500 blink-indicator shrink-0"></span>
-                                        <span id="task-card-timer" class="font-mono text-[11px] tracking-wide">--:--</span>
+                                        <span id="task-card-timer" class="font-mono text-xs md:text-sm tracking-wide">--:--</span>
                                     </div>
-                                    <div class="min-w-0">
+                                    <div class="min-w-0 font-sans">
                                         <p class="text-[8px] font-black text-gray-400 uppercase tracking-wider leading-none">Time Left</p>
                                         <p class="text-[9px] font-bold text-slate-500 dark:text-slate-400 mt-0.5 truncate leading-none">To Complete</p>
                                     </div>
@@ -4621,19 +4627,21 @@ const showUserTaskDetailsPage = async (taskId) => {
 
                         <!-- Main Sections -->
                         <div class="space-y-4">
+                            ${(isReviewTask && initialComment) ? `
                             <!-- Step 1: Copy Review -->
                             <div class="bg-white dark:bg-gray-800 rounded-3xl p-5 border border-gray-150 dark:border-gray-700/80 shadow-md">
                                 <div class="flex items-center gap-2.5 text-left mb-2">
-                                    <span class="flex h-6 w-6 items-center justify-center rounded-full bg-indigo-600 text-white text-[11px] font-black shrink-0">1</span>
+                                    <span class="flex items-center justify-center bg-indigo-600 text-white text-[11px] font-black shrink-0" style="width: 24px; height: 24px; min-width: 24px; min-height: 24px; border-radius: 50%;">1</span>
                                     <p class="text-xs font-black uppercase tracking-wider text-slate-900 dark:text-white">Copy Review</p>
                                 </div>
                                 ${step2Html}
                             </div>
+                            ` : ''}
 
-                            <!-- Step 2: Upload Screenshot -->
+                            <!-- Step: Upload Screenshot -->
                             <div class="bg-white dark:bg-gray-800 rounded-3xl p-5 border border-gray-150 dark:border-gray-700/80 shadow-md">
                                 <div class="flex items-center gap-2.5 text-left mb-2">
-                                    <span class="flex h-6 w-6 items-center justify-center rounded-full bg-indigo-600 text-white text-[11px] font-black shrink-0">2</span>
+                                    <span class="flex items-center justify-center bg-indigo-600 text-white text-[11px] font-black shrink-0" style="width: 24px; height: 24px; min-width: 24px; min-height: 24px; border-radius: 50%;">${(isReviewTask && initialComment) ? '2' : '1'}</span>
                                     <p class="text-xs font-black uppercase tracking-wider text-slate-900 dark:text-white">Upload Screenshot</p>
                                 </div>
                                 
@@ -4836,19 +4844,7 @@ const showUserTaskDetailsPage = async (taskId) => {
                         return;
                     }
                     
-                    let targetUrl = taskLink;
-                    if (taskLink.includes('play.google.com/store/apps/details') || taskLink.includes('market.android.com/details')) {
-                        try {
-                            const urlObj = new URL(taskLink);
-                            const id = urlObj.searchParams.get('id');
-                            if (id) {
-                                targetUrl = `market://details?id=${id}`;
-                            }
-                        } catch (e) {
-                            console.warn('URL parsing failed:', e);
-                        }
-                    }
-
+                    const targetUrl = taskLink;
                     try {
                         window.open(targetUrl, '_system');
                     } catch (e) {
@@ -5005,6 +5001,14 @@ const showUserTaskDetailsPage = async (taskId) => {
                     try {
                         await navigator.clipboard.writeText(targetComment);
                         showNotification('Assigned review comment copied!');
+                        
+                        if (!isBulk && taskLink) {
+                            try {
+                                window.open(taskLink, '_system');
+                            } catch (e) {
+                                window.open(taskLink, '_blank', 'noopener');
+                            }
+                        }
                     } catch (err) {
                         showNotification('Copy failed. Copy manually.', true);
                     }
