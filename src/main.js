@@ -62,7 +62,11 @@ onAuthStateChanged(auth, async (user) => {
             const pageContainerAtAuth = document.getElementById('page-container');
             const mainContentAtAuth = document.getElementById('main-content');
             const dashboardAtAuth = document.getElementById('dashboard-content');
-            const shouldPreserveOpenPage = !!(
+            const lastActiveTaskId = localStorage.getItem('last_active_task_id');
+            const lastActiveTaskData = localStorage.getItem('last_active_task_data');
+            const forceRecoverTask = !!(user && lastActiveTaskId && lastActiveTaskData);
+
+            const shouldPreserveOpenPage = forceRecoverTask || !!(
                 user &&
                 pageContainerAtAuth &&
                 !pageContainerAtAuth.classList.contains('hidden') &&
@@ -91,6 +95,16 @@ onAuthStateChanged(auth, async (user) => {
             allLoansCache = [];
             allInvestmentsCache = [];
             allTasksCache = [];
+            if (forceRecoverTask) {
+                try {
+                    const restoredTask = JSON.parse(lastActiveTaskData);
+                    if (restoredTask && restoredTask.id === lastActiveTaskId) {
+                        allTasksCache = [restoredTask];
+                    }
+                } catch (e) {
+                    console.warn('Restoring task cache failed:', e);
+                }
+            }
             userTaskSubmissionIds = new Set();
             userTaskTodaySubmissionIds = new Set();
             userTaskParticipationLoadedFor = '';
@@ -280,6 +294,15 @@ onAuthStateChanged(auth, async (user) => {
                 }
                 document.getElementById('app-footer')?.classList.add('app-footer-hidden');
 
+                if (forceRecoverTask) {
+                    currentMainSection = 'task';
+                    setBottomNavActive('bottom-task-btn');
+                    setMainChrome(true);
+                    if (typeof window.showUserTaskDetailsPage === 'function') {
+                        window.showUserTaskDetailsPage(lastActiveTaskId).catch(e => console.warn('Instant task restore failed:', e));
+                    }
+                }
+
                 // Initialize user listeners (non-blocking)
                 setTimeout(() => {
                     try {
@@ -290,14 +313,6 @@ onAuthStateChanged(auth, async (user) => {
                         // Silent prefetch of user task history for instant loading
                         if (typeof window.loadUserTaskHistory === 'function') {
                             window.loadUserTaskHistory().catch(e => console.warn('Silent prefetch of task history skipped:', e));
-                        }
-
-                        // Restore last active task page if app redirected/reloaded
-                        const lastActiveTaskId = localStorage.getItem('last_active_task_id');
-                        if (lastActiveTaskId && typeof window.showUserTaskDetailsPage === 'function') {
-                            setTimeout(() => {
-                                window.showUserTaskDetailsPage(lastActiveTaskId).catch(e => console.warn('Recovering active task failed:', e));
-                            }, 150);
                         }
                     } catch (err) {
                         console.error("Error initializing user listeners:", err);

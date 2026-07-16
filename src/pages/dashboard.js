@@ -4347,6 +4347,7 @@ class TaskUploadQueueManager {
             userTaskSubmissionIds.add(item.task.id);
             userTaskTodaySubmissionIds.add(item.task.id);
             localStorage.removeItem('last_active_task_id');
+            localStorage.removeItem('last_active_task_data');
 
         } catch (err) {
             console.error(`Upload failed for ${item.fileName}:`, err);
@@ -4391,6 +4392,7 @@ const showUserTaskDetailsPage = async (taskId) => {
                 }
             }
             if (!task) return showNotification('Task not found. Please refresh tasks.', true);
+            localStorage.setItem('last_active_task_data', JSON.stringify(task));
             if (getAdminTaskEffectiveStatus(task) !== 'active') return showNotification('This task is closed.', true);
             
             if (task.taskSubtype === 'read_news') {
@@ -4772,6 +4774,7 @@ const showUserTaskDetailsPage = async (taskId) => {
                 keepBottomNav: false, 
                 onBack: () => {
                     localStorage.removeItem('last_active_task_id');
+                    localStorage.removeItem('last_active_task_data');
                     window.TaskUploadQueueManager.unregisterCallback(task.id);
                     showUserTaskPage();
                 } 
