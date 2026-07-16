@@ -3197,7 +3197,7 @@ const showUserTaskPage = () => {
             currentMainSection = 'task';
             const isTaskPageEnabled = true;
 
-            const renderUI = (takenCommentsMap = {}) => {
+            const renderUI = (takenCommentsMap = {}, isBackground = false) => {
                 if (currentMainSection !== 'task') return;
                 
                 let taskCategories = [];
@@ -3306,7 +3306,7 @@ const showUserTaskPage = () => {
                 const shellContainer = document.querySelector('.task-page-shell .max-w-xl');
                 if (shellContainer && currentMainSection === 'task') {
                     shellContainer.innerHTML = bodyContent;
-                } else {
+                } else if (!isBackground) {
                     const content = `
                         <header class="mb-4 bg-white/95 px-4 py-3 shadow-sm backdrop-blur page-header-fixed dark:bg-gray-900/95">
                             <div class="flex items-center justify-between gap-3">
@@ -3466,7 +3466,7 @@ const showUserTaskPage = () => {
             };
 
             // Render UI immediately
-            renderUI(window.lastTakenCommentsMap || {});
+            renderUI(window.lastTakenCommentsMap || {}, false);
 
             // Fetch live data silently in the background
             if (isTaskPageEnabled) {
@@ -3478,7 +3478,7 @@ const showUserTaskPage = () => {
                             const docs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
                             allTasksCache = docs.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
                             if (currentMainSection === 'task') {
-                                renderUI(window.lastTakenCommentsMap || {});
+                                renderUI(window.lastTakenCommentsMap || {}, true);
                             }
                         } catch (taskErr) {
                             console.warn('Failed to refresh tasks silently:', taskErr);
@@ -3495,7 +3495,7 @@ const showUserTaskPage = () => {
                         if (d.ok && d.takenComments) {
                             window.lastTakenCommentsMap = d.takenComments;
                             if (currentMainSection === 'task') {
-                                renderUI(d.takenComments);
+                                renderUI(d.takenComments, true);
                             }
                         }
                     } catch (e) {
