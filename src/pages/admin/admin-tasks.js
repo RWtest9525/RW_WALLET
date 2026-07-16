@@ -794,7 +794,6 @@ const showAdminTaskPage = () => {
             // Dynamically show and populate sub-admin assignment checkboxes
             const assignmentContainer = document.getElementById('admin-task-assignment-container');
             const subAdminsListEl = document.getElementById('admin-task-subadmins-list');
-            const isOwner = currentUser?.uid === ADMIN_UID || currentUser?.email === 'reviewsworld51@gmail.com' || currentUser?.email === 'reviewsworld01@gmail.com' || currentUserData?.role === 'owner';
             if (isOwner) {
                 if (assignmentContainer) assignmentContainer.classList.remove('hidden');
                 if (subAdminsListEl) {
