@@ -986,7 +986,7 @@ const getAdminTaskFormData = (existingTask = null) => {
                 listDate: existingTask?.listDate || existingTask?.list_date || new Date().toISOString().split('T')[0],
                 list_date: existingTask?.listDate || existingTask?.list_date || new Date().toISOString().split('T')[0],
                 listTime,
-                instructions: document.getElementById('admin-task-instructions')?.value.trim() || '',
+                instructions: document.getElementById('admin-task-instructions')?.value.trim() || getDefaultAdminTaskInstructions(family, subtype),
                 autoCloseDaily: true,
                 expiresAt: existingTask?.expiresAt || null,
                 assignedToSubAdmins: (() => {
@@ -1073,7 +1073,7 @@ const handleSaveAdminTask = async (event) => {
             }
             
             if (payload.paymentMode === 'days' && (!Number.isFinite(payload.paymentDelayDays) || payload.paymentDelayDays <= 0)) return showNotification('Please enter payment day.', true);
-            if (!payload.instructions) return showNotification('Please add task instructions.', true);
+            // instructions are auto-filled from defaults, no need to block
 
             if (saveBtn) {
                 saveBtn.disabled = true;
