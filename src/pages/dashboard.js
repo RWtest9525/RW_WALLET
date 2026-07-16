@@ -3209,12 +3209,17 @@ const showUserTaskPage = () => {
                     const isTaskVisibleToUser = (task) => {
                         const parentAdminId = currentUserData?.parentAdmin || currentUserData?.parent_admin || ADMIN_UID;
                         const isOwnerTask = !task.createdBy || task.createdBy === ADMIN_UID || task.createdBy === 'owner';
-                        if (parentAdminId === ADMIN_UID) {
-                            return isOwnerTask;
+                        if (isOwnerTask) {
+                            const assigned = task.assignedToSubAdmins || [];
+                            const hasAssignments = assigned.length > 0;
+                            if (parentAdminId === ADMIN_UID) {
+                                return !hasAssignments;
+                            } else {
+                                return assigned.includes(parentAdminId) || assigned.includes('all');
+                            }
+                        } else {
+                            return task.createdBy === parentAdminId;
                         }
-                        if (task.createdBy === parentAdminId) return true;
-                        if (isOwnerTask && (task.assignedToSubAdmins?.includes(parentAdminId) || task.assignedToSubAdmins?.includes('all'))) return true;
-                        return false;
                     };
 
                     const isBulker = isBulkTaskUser();

@@ -137,14 +137,7 @@ const getDefaultAdminTaskInstructions = (family = 'review', subtype = 'app_revie
         };
 
 const applyDefaultAdminTaskInstructions = (force = false) => {
-            const instructionsInput = document.getElementById('admin-task-instructions');
-            if (!instructionsInput) return;
-            const family = document.getElementById('admin-task-family')?.value || 'review';
-            const subtype = document.getElementById('admin-task-subtype')?.value || getAdminTaskTypes(family)[0].value;
-            if (force || !instructionsInput.value.trim() || instructionsInput.dataset.autoDefault === 'true') {
-                instructionsInput.value = getDefaultAdminTaskInstructions(family, subtype);
-                instructionsInput.dataset.autoDefault = 'true';
-            }
+            // User requested to disable autofilled instructions. Keeping it empty.
         };
 
 const renderAdminTaskSubtypeOptions = (family = 'review', selected = '') => getAdminTaskTypes(family).map(item => `
@@ -473,10 +466,6 @@ const showAdminTaskPage = () => {
                                     ${renderAdminTaskSubtypeOptions('review', 'app_review')}
                                 </select>
                             </div>
-                            <div class="sm:col-span-2">
-                                <label class="text-xs font-black uppercase text-gray-400">Task Title</label>
-                                <input id="admin-task-title" placeholder="Example: PopClub app review" class="mt-1 w-full px-4 py-3 bg-gray-100 dark:bg-gray-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-cyan-500">
-                            </div>
                             <div id="admin-task-link-wrapper" class="sm:col-span-2">
                                 <label class="text-xs font-black uppercase text-gray-400">Task Link</label>
                                 <div class="mt-1 flex gap-2">
@@ -485,6 +474,10 @@ const showAdminTaskPage = () => {
                                         <img id="admin-task-logo-preview" src="${ADMIN_TASK_REVIEW_TYPES[0].logo}" alt="Task logo" class="h-full w-full object-contain" loading="eager" decoding="async">
                                     </span>
                                 </div>
+                            </div>
+                            <div class="sm:col-span-2">
+                                <label class="text-xs font-black uppercase text-gray-400">Task Title</label>
+                                <input id="admin-task-title" placeholder="Example: PopClub app review" class="mt-1 w-full px-4 py-3 bg-gray-100 dark:bg-gray-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-cyan-500">
                             </div>
                             <div id="admin-task-news-links-wrap" class="hidden sm:col-span-2 space-y-2">
                                 <div class="flex items-center justify-between">
@@ -502,7 +495,7 @@ const showAdminTaskPage = () => {
                                 <label class="text-xs font-black uppercase text-gray-400">Rate / Reward</label>
                                 <input id="admin-task-rate" type="number" min="0" step="1" placeholder="Amount in rupees" class="mt-1 w-full px-4 py-3 bg-gray-100 dark:bg-gray-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-cyan-500">
                             </div>
-                            <div>
+                            <div id="admin-task-limit-wrapper" class="hidden">
                                 <label class="text-xs font-black uppercase text-gray-400">Task Limit</label>
                                 <input id="admin-task-limit" type="number" min="1" step="1" placeholder="Total slots" class="mt-1 w-full px-4 py-3 bg-gray-100 dark:bg-gray-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-cyan-500">
                             </div>
@@ -522,12 +515,12 @@ const showAdminTaskPage = () => {
                                     <option value="7" selected>7th Day (Default)</option>
                                 </select>
                             </div>
-                            <div>
+                            <div id="admin-task-list-time-wrap" class="hidden">
                                 <label class="text-xs font-black uppercase text-gray-400">List Compile Time (IST)</label>
                                 <input id="admin-task-list-time" type="time" value="20:00" class="mt-1 w-full px-4 py-3 bg-gray-100 dark:bg-gray-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-cyan-500">
                             </div>
                             <div id="admin-task-assignment-container" class="sm:col-span-2 hidden bg-slate-50 dark:bg-slate-900/50 p-4 rounded-2xl border border-gray-100 dark:border-gray-700">
-                                <label class="text-xs font-black uppercase text-gray-405 dark:text-gray-400 block mb-2">Assign to Sub-Admins (Only Owner can assign)</label>
+                                <label class="text-xs font-black uppercase text-gray-455 dark:text-gray-400 block mb-2">Assign to Sub-Admins (Only Owner can assign)</label>
                                 <div id="admin-task-subadmins-list" class="flex flex-wrap gap-3 text-xs font-bold text-gray-700 dark:text-gray-300">
                                     <!-- Populated dynamically -->
                                 </div>
@@ -538,7 +531,6 @@ const showAdminTaskPage = () => {
                             </div>
                             <div class="sm:col-span-2 flex flex-col sm:flex-row gap-2">
                                 <button type="submit" id="admin-task-save-btn" class="flex-1 rounded-xl bg-cyan-600 px-4 py-3 text-sm font-black text-white hover:bg-cyan-700 transition">Add Task</button>
-                                <button type="button" id="admin-task-reset-btn" class="rounded-xl bg-gray-100 dark:bg-gray-700 px-4 py-3 text-sm font-black text-gray-700 dark:text-gray-200">Clear</button>
                             </div>
                         </form>
                     </section>
@@ -695,7 +687,6 @@ const showAdminTaskPage = () => {
                 });
             }
             document.getElementById('admin-task-form')?.addEventListener('submit', handleSaveAdminTask);
-            document.getElementById('admin-task-reset-btn')?.addEventListener('click', resetAdminTaskForm);
             document.getElementById('admin-task-add-news-link-btn')?.addEventListener('click', () => {
                 const container = document.getElementById('admin-task-news-links-container');
                 if (!container) return;
@@ -879,6 +870,13 @@ const updateAdminTaskDynamicFields = (preferredSubtype = '') => {
 
             const paymentMode = document.getElementById('admin-task-payment-mode')?.value || 'instant';
             document.getElementById('admin-task-payment-days-wrap')?.classList.toggle('hidden', paymentMode !== 'days');
+            document.getElementById('admin-task-list-time-wrap')?.classList.toggle('hidden', paymentMode !== 'days');
+
+            const limitWrapper = document.getElementById('admin-task-limit-wrapper');
+            if (limitWrapper) {
+                limitWrapper.classList.toggle('hidden', family === 'review');
+            }
+
             updateAdminTaskLogoPreview();
             applyDefaultAdminTaskInstructions(false);
         };
