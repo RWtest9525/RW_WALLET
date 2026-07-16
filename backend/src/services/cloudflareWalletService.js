@@ -4391,7 +4391,6 @@ async function fetchPlayStoreReviewsForDate(packageId, targetDateMs) {
         }
       }
 
-      const db = admin.firestore();
       if (isLive) {
         // Automatically confirm and approve submission
         const scraperResult = {
