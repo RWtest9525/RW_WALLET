@@ -1310,16 +1310,23 @@ const openAdminInspectDetailsModal = async (chatUserId, messageText) => {
         
         if (typeof hideLoading === 'function') hideLoading();
         
+        const getSubDisplayId = (sub) => {
+            const taskIndexVal = sub.task_index || sub.taskIndex || 1;
+            const commentIndexVal = sub.comment_index !== undefined ? sub.comment_index : (sub.commentIndex ?? sub.assignedCommentIndex ?? 0);
+            return `#${String(taskIndexVal).padStart(2, '0')}_${String(commentIndexVal + 1).padStart(2, '0')}`;
+        };
+
         const getPrefilledReply = (sub) => {
+            const displayIdVal = getSubDisplayId(sub);
             if (sub.manual_status === 'approved') {
-                return `Hello! We inspected your task submission for "${sub.app_name || 'Task'}". It is already approved and paid. Your reward of ₹${sub.reward} has been credited. Please verify your balance. Thank you!`;
+                return `Hello! We inspected your task submission for "${sub.app_name || 'Task'}" (${displayIdVal}). It is already approved and paid. Your reward of ₹${sub.reward || 0} has been credited. Please verify your balance. Thank you!`;
             } else if (sub.manual_status === 'pending') {
-                return `Hello! We inspected your task submission for "${sub.app_name || 'Task'}". It is currently under review (Pending). Our quality team is verifying that your review comment is active on the Play Store. It will be verified within 1-7 working days. Thanks for your patience!`;
+                return `Hello! We inspected your task submission for "${sub.app_name || 'Task'}" (${displayIdVal}). It is currently under review (Pending). Our quality team is verifying that your review comment is active on the Play Store. It will be verified within 1-7 working days. Thanks for your patience!`;
             } else if (sub.manual_status === 'rejected') {
                 const reason = sub.reject_reason || (sub.ocr_status === 'failed' ? 'Verification check failed' : 'Review comment not found on Play Store');
-                return `Hello! We inspected your task submission for "${sub.app_name || 'Task'}". The verification team rejected it for the following reason: "${reason}". Please verify the steps and submit again if correct. Thank you!`;
+                return `Hello! We inspected your task submission for "${sub.app_name || 'Task'}" (${displayIdVal}). The verification team rejected it for the following reason: "${reason}". Please verify the steps and submit again if correct. Thank you!`;
             } else {
-                return `Hello! Regarding your task submission for "${sub.app_name || 'Task'}", we have checked the details. Our team is looking into it and will update you shortly. Thank you!`;
+                return `Hello! Regarding your task submission for "${sub.app_name || 'Task'}" (${displayIdVal}), we have checked the details. Our team is looking into it and will update you shortly. Thank you!`;
             }
         };
 
@@ -1448,7 +1455,8 @@ const openAdminInspectDetailsModal = async (chatUserId, messageText) => {
             if (solveBtn) {
                 solveBtn.onclick = () => {
                     const textarea = modal.querySelector('#inspect-reply-textarea');
-                    const resolvedMsg = `Hello! We checked your task submission. The issue is resolved now. Thank you for your support!`;
+                    const displayIdVal = getSubDisplayId(s);
+                    const resolvedMsg = `Hello! We checked your task submission for "${s.app_name || 'Task'}" (${displayIdVal}). The issue is resolved now. Thank you for your support!`;
                     if (textarea) {
                         textarea.value = resolvedMsg;
                         currentReplyText = resolvedMsg;
