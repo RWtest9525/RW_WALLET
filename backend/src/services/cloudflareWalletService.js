@@ -4276,6 +4276,49 @@ async function fetchPlayStoreReviewsForDate(packageId, targetDateMs) {
       const sub = await d1.first('SELECT * FROM task_submissions WHERE id = ? LIMIT 1', [submissionId]);
       if (!sub) return res.status(404).json({ ok: false, error: 'SUBMISSION_NOT_FOUND' });
 
+      // Fetch task details from Firestore to verify compile date/time constraints
+      const db = admin.firestore();
+      const taskDoc = await db.doc(`artifacts/digital-wallet-prod/public/data/tasks/${sub.task_id}`).get();
+      if (taskDoc.exists) {
+        const taskData = taskDoc.data();
+        const submittedAt = sub.submitted_at;
+        const subDate = new Date(submittedAt);
+
+        let releaseTime = 0;
+        const paymentMode = taskData.paymentMode || (Number(taskData.paymentDelayDays || 0) > 0 ? 'days' : 'instant');
+        if (paymentMode === 'instant') {
+          const nextDay = new Date(subDate.getFullYear(), subDate.getMonth(), subDate.getDate() + 1, 0, 0, 0);
+          releaseTime = nextDay.getTime();
+        } else {
+          const delayDays = Number(taskData.paymentDelayDays || taskData.listDays || taskData.list_days || 7);
+          const listTimeStr = taskData.listTime || "20:00";
+          const [hours, minutes] = listTimeStr.split(':').map(Number);
+          const releaseDate = new Date(subDate.getFullYear(), subDate.getMonth(), subDate.getDate() + delayDays, hours, minutes, 0);
+          releaseTime = releaseDate.getTime();
+        }
+
+        if (nowMs() < releaseTime) {
+          const formattedRelease = new Date(releaseTime).toLocaleString('en-IN', {
+            day: '2-digit',
+            month: 'short',
+            year: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit',
+            hour12: true
+          });
+          return res.json({
+            ok: true,
+            result: {
+              checked: true,
+              isPlayStore: String(sub.task_link || taskLink || '').includes('play.google.com'),
+              found: false,
+              message: `Verification release time not reached. Submission will verify after ${formattedRelease}.`,
+              checkedAt: nowMs()
+            }
+          });
+        }
+      }
+
       const appNameLower = String(sub.app_name || appName || '').trim().toLowerCase();
       const liveList = await d1.first(
         'SELECT * FROM live_lists WHERE LOWER(app_name) = ? ORDER BY date DESC LIMIT 1',
