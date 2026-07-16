@@ -2692,7 +2692,7 @@ window.showBulkerSubmissionDetail = (submissionId) => {
                             </button>
                         </div>
                         <p class="mt-1 text-xs font-semibold text-gray-855 dark:text-gray-255 italic bg-gray-50 dark:bg-gray-900/50 p-3 rounded-xl border border-gray-100 dark:border-gray-755 leading-relaxed font-mono">
-                            "${escapeHtml(s.assigned_comment)}"
+                            ${escapeHtml(s.assigned_comment)}
                         </p>
                     </div>
                     ` : ''}
@@ -3303,33 +3303,38 @@ const showUserTaskPage = () => {
                     bodyContent = taskCategories.map(renderCategory).join('');
                 }
 
-                const content = `
-                    <header class="mb-4 bg-white/95 px-4 py-3 shadow-sm backdrop-blur page-header-fixed dark:bg-gray-900/95">
-                        <div class="flex items-center justify-between gap-3">
-                            <div class="min-w-0">
-                                <p class="text-lg font-black uppercase text-slate-950 dark:text-white">RW TASK</p>
+                const shellContainer = document.querySelector('.task-page-shell .max-w-xl');
+                if (shellContainer && currentMainSection === 'task') {
+                    shellContainer.innerHTML = bodyContent;
+                } else {
+                    const content = `
+                        <header class="mb-4 bg-white/95 px-4 py-3 shadow-sm backdrop-blur page-header-fixed dark:bg-gray-900/95">
+                            <div class="flex items-center justify-between gap-3">
+                                <div class="min-w-0">
+                                    <p class="text-lg font-black uppercase text-slate-950 dark:text-white">RW TASK</p>
+                                </div>
+                                <div class="task-header-actions">
+                                    <button type="button" data-action="open-task-ads-page" class="task-mini-action">
+                                        <img src="https://cdn-icons-png.flaticon.com/512/2659/2659360.png" alt="Ads" loading="eager" decoding="async">
+                                        <span>Ads</span>
+                                    </button>
+                                    <button type="button" data-action="open-task-bonus-page" class="task-mini-action">
+                                        <img src="https://cdn-icons-png.flaticon.com/512/2611/2611152.png" alt="Bonus" loading="eager" decoding="async">
+                                        <span>Bonus</span>
+                                    </button>
+                                </div>
                             </div>
-                            <div class="task-header-actions">
-                                <button type="button" data-action="open-task-ads-page" class="task-mini-action">
-                                    <img src="https://cdn-icons-png.flaticon.com/512/2659/2659360.png" alt="Ads" loading="eager" decoding="async">
-                                    <span>Ads</span>
-                                </button>
-                                <button type="button" data-action="open-task-bonus-page" class="task-mini-action">
-                                    <img src="https://cdn-icons-png.flaticon.com/512/2611/2611152.png" alt="Bonus" loading="eager" decoding="async">
-                                    <span>Bonus</span>
-                                </button>
+                        </header>
+                        <div class="task-page-shell px-4 pt-1 pb-28">
+                            <div class="mx-auto max-w-xl space-y-4">
+                                ${bodyContent}
                             </div>
                         </div>
-                    </header>
-                    <div class="task-page-shell px-4 pt-1 pb-28">
-                        <div class="mx-auto max-w-xl space-y-4">
-                            ${bodyContent}
-                        </div>
-                    </div>
-                    ${getPageFooter()}`;
-                
-                showPage(content, { returnTo: currentUser?.uid === ADMIN_UID ? 'admin' : 'home', keepBottomNav: true });
-                setBottomNavActive('bottom-task-btn');
+                        ${getPageFooter()}`;
+                    
+                    showPage(content, { returnTo: currentUser?.uid === ADMIN_UID ? 'admin' : 'home', keepBottomNav: true });
+                    setBottomNavActive('bottom-task-btn');
+                }
             };
 
             const renderCategory = (category) => `
@@ -4378,25 +4383,29 @@ const showUserTaskDetailsPage = async (taskId) => {
                 return;
             }
 
-            showLoading();
             const isBulk = isBulkTaskUser();
+            if (isBulk) {
+                showLoading();
+            }
             const reward = task.rate || task.reward || 0;
             const taskTitle = task.title || 'Task Mission';
             const appName = task.appName || taskTitle;
 
             // Fetch D1 availability to get active available comments
             let availability = { totalCount: 0, availableCount: 0, availableComments: [] };
-            try {
-                const token = await getBackendAuthToken();
-                const response = await fetchWithTimeout(`${BACKEND_BASE_URL}/api/tasks/${task.id}/availability`, {
-                    headers: { Authorization: `Bearer ${token}` }
-                }, 8000);
-                const resData = await response.json();
-                if (resData.ok) {
-                    availability = resData;
+            if (isBulk) {
+                try {
+                    const token = await getBackendAuthToken();
+                    const response = await fetchWithTimeout(`${BACKEND_BASE_URL}/api/tasks/${task.id}/availability`, {
+                        headers: { Authorization: `Bearer ${token}` }
+                    }, 8000);
+                    const resData = await response.json();
+                    if (resData.ok) {
+                        availability = resData;
+                    }
+                } catch (e) {
+                    console.error('Failed to load task availability:', e);
                 }
-            } catch (e) {
-                console.error('Failed to load task availability:', e);
             }
 
             // Fetch existing reservations for the bulker (so they don't lose previously generated comments on refresh!)
@@ -4442,7 +4451,9 @@ const showUserTaskDetailsPage = async (taskId) => {
                     console.warn('Failed to load submitted comments:', err);
                 }
             }
-            hideLoading();
+            if (isBulk) {
+                hideLoading();
+            }
 
             const selectDeterministicComment = (pool, userId, taskId) => {
                 let hash = 0;
@@ -4589,10 +4600,10 @@ const showUserTaskDetailsPage = async (taskId) => {
                                 </div>
                             </div>
 
-                            <!-- Metrics Grid (2 Columns) -->
-                            <div class="grid grid-cols-2 gap-2 px-5 py-2 text-left">
+                            <!-- Metrics Flex Row -->
+                            <div class="flex items-center px-5 py-2 text-left">
                                 <!-- Approval Column -->
-                                <div class="flex items-center gap-2">
+                                <div class="w-[35%] shrink-0 flex items-center gap-2">
                                     <span class="p-2 rounded-xl ${acc.iconBg} shrink-0">
                                         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
                                     </span>
@@ -4603,15 +4614,15 @@ const showUserTaskDetailsPage = async (taskId) => {
                                 </div>
 
                                 <!-- Remaining Time Column (Timer) -->
-                                <div class="flex items-center justify-end gap-2 border-l border-slate-100 dark:border-slate-800/80 pl-2">
-                                    <!-- Ticking Glowing Timer Badge -->
-                                    <div id="task-card-timer-container" class="timer-pulse-glow bg-amber-500/10 dark:bg-amber-500/20 border border-amber-500/30 rounded-xl px-2.5 py-1.5 flex items-center gap-1 text-[11px] font-black text-amber-600 dark:text-amber-400 shadow-sm shrink-0">
-                                        <span class="h-2 w-2 rounded-full bg-amber-500 blink-indicator shrink-0"></span>
-                                        <span id="task-card-timer" class="font-mono text-xs md:text-sm tracking-wide">--:--</span>
-                                    </div>
+                                <div class="flex-1 flex items-center justify-between border-l border-slate-150 dark:border-slate-800/80 pl-4 min-w-0">
                                     <div class="min-w-0 font-sans">
                                         <p class="text-[8px] font-black text-gray-400 uppercase tracking-wider leading-none">Time Left</p>
                                         <p class="text-[9px] font-bold text-slate-500 dark:text-slate-400 mt-0.5 truncate leading-none">To Complete</p>
+                                    </div>
+                                    <!-- Ticking Glowing Timer Badge -->
+                                    <div id="task-card-timer-container" class="timer-pulse-glow bg-amber-500/10 dark:bg-amber-500/20 border border-amber-500/30 rounded-2xl px-4 py-2.5 flex items-center gap-2 text-amber-600 dark:text-amber-400 shadow-sm shrink-0">
+                                        <span class="h-2.5 w-2.5 rounded-full bg-amber-500 blink-indicator shrink-0"></span>
+                                        <span id="task-card-timer" class="font-mono text-base md:text-lg font-black tracking-widest leading-none">--:--</span>
                                     </div>
                                 </div>
                             </div>
@@ -4822,7 +4833,7 @@ const showUserTaskDetailsPage = async (taskId) => {
                 activeTaskReservation = reservation;
                 window.activeTaskReservation = reservation;
                 const commentEl = document.getElementById('task-assigned-review-text');
-                if (commentEl) commentEl.textContent = `"${reservation.comment}"`;
+                if (commentEl) commentEl.textContent = reservation.comment;
                 const reviewIdEl = document.getElementById('task-assigned-review-id');
                 if (reviewIdEl) {
                     const cIdx = reservation.commentIndex !== undefined ? reservation.commentIndex : (reservation.comment_index ?? 0);
@@ -4830,7 +4841,7 @@ const showUserTaskDetailsPage = async (taskId) => {
                 }
                 
                 if (timerContainerEl) {
-                    timerContainerEl.className = 'timer-pulse-glow bg-amber-500/10 dark:bg-amber-500/20 border border-amber-500/30 rounded-xl px-2 py-1 flex items-center gap-1.5 text-[10px] font-black text-amber-600 dark:text-amber-400 shadow-sm shrink-0';
+                    timerContainerEl.className = 'timer-pulse-glow bg-amber-500/10 dark:bg-amber-500/20 border border-amber-500/30 rounded-2xl px-4 py-2.5 flex items-center gap-2 text-amber-600 dark:text-amber-400 shadow-sm shrink-0';
                 }
                 startLocalTimer();
             };
@@ -4845,11 +4856,13 @@ const showUserTaskDetailsPage = async (taskId) => {
                     }
                     
                     const targetUrl = taskLink;
-                    try {
-                        window.open(targetUrl, '_system');
-                    } catch (e) {
-                        window.open(targetUrl, '_blank', 'noopener');
-                    }
+                    const a = document.createElement('a');
+                    a.href = targetUrl;
+                    a.target = '_blank';
+                    a.rel = 'noopener noreferrer';
+                    document.body.appendChild(a);
+                    a.click();
+                    document.body.removeChild(a);
                 };
             }
 
@@ -5003,11 +5016,13 @@ const showUserTaskDetailsPage = async (taskId) => {
                         showNotification('Assigned review comment copied!');
                         
                         if (!isBulk && taskLink) {
-                            try {
-                                window.open(taskLink, '_system');
-                            } catch (e) {
-                                window.open(taskLink, '_blank', 'noopener');
-                            }
+                            const a = document.createElement('a');
+                            a.href = taskLink;
+                            a.target = '_blank';
+                            a.rel = 'noopener noreferrer';
+                            document.body.appendChild(a);
+                            a.click();
+                            document.body.removeChild(a);
                         }
                     } catch (err) {
                         showNotification('Copy failed. Copy manually.', true);

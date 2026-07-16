@@ -91,7 +91,7 @@ window.showAdminSubmissionDetailModal = function(index) {
                             <!-- Comment -->
                             <div class="rounded-2xl bg-white dark:bg-gray-855 p-3 md:p-4 border border-gray-150 dark:border-gray-800 shadow-sm text-left">
                                 <p class="text-[9px] font-black uppercase text-gray-400 tracking-wider">Assigned Comment</p>
-                                <p class="mt-1.5 text-xs font-bold text-gray-800 dark:text-gray-255 italic">"${escapeHtml(s.assigned_comment || '')}"</p>
+                                <p class="mt-1.5 text-xs font-bold text-gray-800 dark:text-gray-255 italic">${escapeHtml(s.assigned_comment || '')}</p>
                             </div>
                             <!-- Screenshot Review Text -->
                             <div class="rounded-2xl bg-white dark:bg-gray-855 p-3 md:p-4 border border-gray-150 dark:border-gray-800 shadow-sm text-left">
