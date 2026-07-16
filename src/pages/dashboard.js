@@ -736,27 +736,31 @@ const getSubmissionAppLogo = (s) => {
     const taskId = s.task_id || s.taskId;
     if (!taskId) return 'https://cdn-icons-png.flaticon.com/512/3176/3176366.png';
 
+    const defaultPlaceholder = 'https://cdn-icons-png.flaticon.com/512/3176/3176366.png';
+
+    // Find task fallback image from cache
+    let taskFallbackLogo = '';
+    if (typeof allTasksCache !== 'undefined' && Array.isArray(allTasksCache)) {
+        const task = allTasksCache.find(t => t && t.id === taskId);
+        if (task) {
+            taskFallbackLogo = task.imageUrl || task.logoUrl || task.iconUrl || '';
+            if (taskFallbackLogo.includes('play.google.com') || taskFallbackLogo.includes('play-store')) {
+                taskFallbackLogo = '';
+            }
+        }
+    }
+
     // 1. Get taskAppId from submission or cached task
     let taskAppId = s.appId || s.app_id || '';
-    
     if (typeof allTasksCache !== 'undefined' && Array.isArray(allTasksCache)) {
         const task = allTasksCache.find(t => t && t.id === taskId);
         if (task) {
             taskAppId = task.appId || task.app_id || taskAppId;
         }
     }
-    
-    const defaultPlaceholder = 'https://cdn-icons-png.flaticon.com/512/3176/3176366.png';
-    
-    // If we have no taskAppId, try to check if task document itself has a logoUrl as fallback (if not play store url)
+
     if (!taskAppId) {
-        if (typeof allTasksCache !== 'undefined' && Array.isArray(allTasksCache)) {
-            const task = allTasksCache.find(t => t && t.id === taskId);
-            if (task?.logoUrl && typeof task.logoUrl === 'string' && !task.logoUrl.includes('play.google.com') && !task.logoUrl.includes('play-store')) {
-                return task.logoUrl;
-            }
-        }
-        return defaultPlaceholder;
+        return taskFallbackLogo || defaultPlaceholder;
     }
 
     // 2. Check in-memory logo cache
@@ -787,7 +791,7 @@ const getSubmissionAppLogo = (s) => {
         }
     }
 
-    return defaultPlaceholder;
+    return taskFallbackLogo || defaultPlaceholder;
 };
 
 const getSubmissionDateText = (submittedAt) => {
