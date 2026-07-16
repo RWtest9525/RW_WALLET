@@ -4346,6 +4346,7 @@ class TaskUploadQueueManager {
 
             userTaskSubmissionIds.add(item.task.id);
             userTaskTodaySubmissionIds.add(item.task.id);
+            localStorage.removeItem('last_active_task_id');
 
         } catch (err) {
             console.error(`Upload failed for ${item.fileName}:`, err);
@@ -4374,7 +4375,21 @@ class TaskUploadQueueManager {
 window.TaskUploadQueueManager = new TaskUploadQueueManager();
 
 const showUserTaskDetailsPage = async (taskId) => {
-            const task = allTasksCache.find(item => item.id === taskId);
+            localStorage.setItem('last_active_task_id', taskId);
+            let task = allTasksCache.find(item => item.id === taskId);
+            if (!task) {
+                if (typeof db !== 'undefined' && typeof appId !== 'undefined' && typeof doc === 'function' && typeof getDoc === 'function') {
+                    try {
+                        const docSnap = await getDoc(doc(db, `artifacts/${appId}/public/data/tasks`, taskId));
+                        if (docSnap.exists()) {
+                            task = { id: docSnap.id, ...docSnap.data() };
+                            allTasksCache.push(task);
+                        }
+                    } catch (e) {
+                        console.warn('Failed to recover task details on boot:', e);
+                    }
+                }
+            }
             if (!task) return showNotification('Task not found. Please refresh tasks.', true);
             if (getAdminTaskEffectiveStatus(task) !== 'active') return showNotification('This task is closed.', true);
             
@@ -4756,6 +4771,7 @@ const showUserTaskDetailsPage = async (taskId) => {
                 returnTo: 'task', 
                 keepBottomNav: false, 
                 onBack: () => {
+                    localStorage.removeItem('last_active_task_id');
                     window.TaskUploadQueueManager.unregisterCallback(task.id);
                     showUserTaskPage();
                 } 

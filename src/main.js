@@ -291,6 +291,14 @@ onAuthStateChanged(auth, async (user) => {
                         if (typeof window.loadUserTaskHistory === 'function') {
                             window.loadUserTaskHistory().catch(e => console.warn('Silent prefetch of task history skipped:', e));
                         }
+
+                        // Restore last active task page if app redirected/reloaded
+                        const lastActiveTaskId = localStorage.getItem('last_active_task_id');
+                        if (lastActiveTaskId && typeof window.showUserTaskDetailsPage === 'function') {
+                            setTimeout(() => {
+                                window.showUserTaskDetailsPage(lastActiveTaskId).catch(e => console.warn('Recovering active task failed:', e));
+                            }, 150);
+                        }
                     } catch (err) {
                         console.error("Error initializing user listeners:", err);
                     }
