@@ -523,6 +523,77 @@ const drawCalendarGrid = (availableDates, dateCounts, selectedDate) => {
     });
 };
 
+const renderSubmittedNamesTabContent = (taskSubs) => {
+    const getCompareName = (s) => String(s.ocr_extracted_name || s.user_name || s.user_email || '').toLowerCase().trim();
+    const sortedSubs = [...taskSubs].sort((a, b) => getCompareName(a).localeCompare(getCompareName(b)));
+
+    window.currentActiveSubmissions = sortedSubs; // Cache sorted list for detail modal usage
+
+    const rowsHtml = sortedSubs.length === 0 ? `
+        <div class="py-12 text-center text-sm text-gray-455 border border-dashed border-gray-200 dark:border-gray-700 rounded-2xl">
+            No submissions found.
+        </div>
+    ` : sortedSubs.map((s, idx) => {
+        const revName = s.ocr_extracted_name || 'No OCR Name';
+        const userName = s.user_name || 'Unknown User';
+        const userMobile = s.user_mobile || 'No Mobile';
+        const assignedComment = s.assigned_comment || '';
+        const isApproved = s.manual_status === 'approved';
+        const isRejected = s.manual_status === 'rejected';
+
+        let statusBadgeHtml = '';
+        if (isApproved) {
+            statusBadgeHtml = `<span class="rounded-full bg-emerald-50 dark:bg-emerald-950/30 px-2.5 py-0.5 text-[9px] font-black text-emerald-700 dark:text-emerald-300 border border-emerald-100 dark:border-emerald-800">✅ APPROVED</span>`;
+        } else if (isRejected) {
+            statusBadgeHtml = `<span class="rounded-full bg-rose-50 dark:bg-rose-950/30 px-2.5 py-0.5 text-[9px] font-black text-rose-700 dark:text-rose-300 border border-rose-100 dark:border-rose-800">❌ REJECTED</span>`;
+        } else {
+            statusBadgeHtml = `<span class="rounded-full bg-amber-50 dark:bg-amber-955/30 px-2.5 py-0.5 text-[9px] font-black text-amber-700 dark:text-amber-300 border border-amber-100 dark:border-amber-800">⏳ PENDING</span>`;
+        }
+
+        return `
+            <div class="names-list-row bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 p-3.5 rounded-2xl flex items-center justify-between gap-4 hover:shadow-sm transition" data-name="${escapeHtml(revName.toLowerCase())}" data-mobile="${escapeHtml(userMobile.toLowerCase())}">
+                <div class="min-w-0 flex-1 space-y-1.5">
+                    <div class="flex items-center gap-2 flex-wrap">
+                        <span class="font-extrabold text-sm text-gray-900 dark:text-white truncate">${escapeHtml(revName)}</span>
+                        ${statusBadgeHtml}
+                    </div>
+                    <div class="flex items-center gap-3 text-[10px] text-gray-400 dark:text-gray-500 font-semibold">
+                        <span>👤 ${escapeHtml(userName)}</span>
+                        <span>📱 ${escapeHtml(userMobile)}</span>
+                    </div>
+                    ${assignedComment ? `
+                    <div class="text-xs text-gray-500 dark:text-gray-400 italic bg-gray-50 dark:bg-gray-850/50 p-2 rounded-xl border border-gray-100 dark:border-gray-800">
+                        "${escapeHtml(assignedComment)}"
+                    </div>
+                    ` : ''}
+                </div>
+                
+                <div class="flex items-center gap-1.5 shrink-0">
+                    <button type="button" data-action="quick-approve" data-subid="${s.id}" class="h-8 w-8 rounded-full bg-green-50 hover:bg-green-100 text-green-600 border border-green-150 flex items-center justify-center transition active:scale-95 shadow-sm text-sm font-black" style="outline: none;" title="Quick Approve">✓</button>
+                    <button type="button" data-action="quick-reject" data-subid="${s.id}" class="h-8 w-8 rounded-full bg-red-50 hover:bg-red-100 text-red-600 border border-red-150 flex items-center justify-center transition active:scale-95 shadow-sm text-sm font-black" style="outline: none;" title="Quick Reject">✕</button>
+                    <button type="button" data-action="quick-details" data-subid="${s.id}" class="h-8 w-8 rounded-full bg-slate-50 hover:bg-slate-100 text-slate-650 border border-slate-200 flex items-center justify-center transition active:scale-95 shadow-sm text-xs font-black" style="outline: none;" title="Inspect">🔍</button>
+                </div>
+            </div>
+        `;
+    }).join('');
+
+    return `
+        <div class="space-y-4">
+            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div class="relative flex-1">
+                    <input type="text" id="names-list-search" placeholder="🔍 Search reviewer name or mobile..." class="w-full px-4 py-2.5 bg-gray-50 dark:bg-gray-750 border border-gray-150 dark:border-gray-700 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none text-xs">
+                </div>
+                <button type="button" id="copy-names-list-btn" class="shrink-0 px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-black text-xs uppercase transition active:scale-95 shadow-md flex items-center justify-center gap-1.5" style="outline: none;">
+                    📋 Copy Names
+                </button>
+            </div>
+            <div id="names-list-container" class="space-y-2.5 max-h-[50vh] overflow-y-auto pr-1">
+                ${rowsHtml}
+            </div>
+        </div>
+    `;
+};
+
 const renderAdminSubmissions = () => {
     const shellEl = document.getElementById('admin-submissions-page-shell');
     if (!shellEl) return;
@@ -694,11 +765,12 @@ const renderAdminSubmissions = () => {
 
                 <!-- Detail Tabs -->
                 <div class="flex items-center gap-6 border-b border-gray-100 dark:border-gray-700 pb-2 overflow-x-auto scrollbar-none text-xs">
-                    ${['overview', 'submissions', 'failed', 'play_store_verify', 'payments'].map(tab => {
+                    ${['overview', 'submissions', 'names_list', 'failed', 'play_store_verify', 'payments'].map(tab => {
                         const isActive = window.adminSubmissionsView.selectedDetailTab === tab;
                         const labels = {
                             overview: 'Overview',
                             submissions: 'Submissions',
+                            names_list: 'Submitted Names',
                             failed: 'Failed',
                             play_store_verify: 'Play Store Verify',
                             payments: 'Payments'
@@ -713,7 +785,9 @@ const renderAdminSubmissions = () => {
                 </div>
 
                 <!-- Tab Contents -->
-                ${window.adminSubmissionsView.selectedDetailTab !== 'submissions' ? `
+                ${window.adminSubmissionsView.selectedDetailTab === 'names_list' ? `
+                    ${renderSubmittedNamesTabContent(taskSubs)}
+                ` : window.adminSubmissionsView.selectedDetailTab !== 'submissions' ? `
                     <div class="py-12 text-center text-sm text-gray-455">
                         <p class="font-extrabold uppercase tracking-wide text-gray-400 dark:text-gray-500">${escapeHtml(window.adminSubmissionsView.selectedDetailTab)} Panel</p>
                         <p class="text-xs text-gray-500 mt-1">This section is configured to run automatically.</p>
@@ -1065,7 +1139,143 @@ const renderAdminSubmissions = () => {
             window.showAdminSubmissionDetailModal(idx);
         };
     });
-};
+
+    // --- Submitted Names list event bindings ---
+    if (window.adminSubmissionsView.selectedDetailTab === 'names_list') {
+        const taskSubs = dateSubs.filter(s => s.task_id === selectedTaskId || s.taskId === selectedTaskId);
+        
+        // 1. Copy Names functionality
+        const copyNamesBtn = document.getElementById('copy-names-list-btn');
+        if (copyNamesBtn) {
+            copyNamesBtn.onclick = () => {
+                const searchInput = document.getElementById('names-list-search');
+                const searchQuery = (searchInput?.value || '').trim().toLowerCase();
+                
+                let subsToCopy = [...taskSubs];
+                if (searchQuery) {
+                    subsToCopy = subsToCopy.filter(s => {
+                        const name = String(s.ocr_extracted_name || s.user_name || '').toLowerCase();
+                        const mob = String(s.user_mobile || '').toLowerCase();
+                        return name.includes(searchQuery) || mob.includes(searchQuery);
+                    });
+                }
+                
+                const names = subsToCopy
+                    .map(s => s.ocr_extracted_name || s.user_name || '')
+                    .map(name => name.trim())
+                    .filter(Boolean)
+                    .sort((a, b) => a.localeCompare(b));
+                
+                if (!names.length) {
+                    showNotification('No names to copy.', true);
+                    return;
+                }
+                
+                navigator.clipboard.writeText(names.join('\n'));
+                showNotification(`Copied ${names.length} reviewer name(s) to clipboard!`);
+            };
+        }
+
+        // 2. Search input filtering
+        const namesSearch = document.getElementById('names-list-search');
+        if (namesSearch) {
+            namesSearch.oninput = function() {
+                const queryVal = this.value.trim().toLowerCase();
+                const rows = document.querySelectorAll('.names-list-row');
+                rows.forEach(row => {
+                    const name = row.dataset.name || '';
+                    const mobile = row.dataset.mobile || '';
+                    if (!queryVal || name.includes(queryVal) || mobile.includes(queryVal)) {
+                        row.classList.remove('hidden');
+                    } else {
+                        row.classList.add('hidden');
+                    }
+                });
+            };
+        }
+
+        // 3. Quick actions bindings
+        shellEl.querySelectorAll('[data-action="quick-approve"]').forEach(btn => {
+            btn.onclick = async (e) => {
+                e.stopPropagation();
+                const subId = e.currentTarget.dataset.subid;
+                const originalContent = e.currentTarget.innerHTML;
+                e.currentTarget.disabled = true;
+                e.currentTarget.innerHTML = '⏳';
+                try {
+                    const token = await getBackendAuthToken();
+                    const resp = await fetchWithTimeout(`${BACKEND_BASE_URL}/api/admin/task-submissions/${encodeURIComponent(subId)}`, {
+                        method: 'PATCH',
+                        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ manualStatus: 'approved', verifiedAt: Date.now() })
+                    }, 8000);
+                    const data = await resp.json().catch(() => ({}));
+                    if (data.ok) {
+                        const subIdx = adminSubmissionsCache.findIndex(s => s.id === subId);
+                        if (subIdx !== -1) {
+                            adminSubmissionsCache[subIdx].manual_status = 'approved';
+                        }
+                        showNotification('Approved successfully.');
+                        renderAdminSubmissions();
+                    } else {
+                        throw new Error(data.error || 'API error');
+                    }
+                } catch (err) {
+                    console.error('Quick approve failed:', err);
+                    showNotification('Approval failed. Please try again.', true);
+                    e.currentTarget.disabled = false;
+                    e.currentTarget.innerHTML = originalContent;
+                }
+            };
+        });
+
+        shellEl.querySelectorAll('[data-action="quick-reject"]').forEach(btn => {
+            btn.onclick = async (e) => {
+                e.stopPropagation();
+                const subId = e.currentTarget.dataset.subid;
+                const originalContent = e.currentTarget.innerHTML;
+                e.currentTarget.disabled = true;
+                e.currentTarget.innerHTML = '⏳';
+                try {
+                    const token = await getBackendAuthToken();
+                    const resp = await fetchWithTimeout(`${BACKEND_BASE_URL}/api/admin/task-submissions/${encodeURIComponent(subId)}`, {
+                        method: 'PATCH',
+                        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ manualStatus: 'rejected' })
+                    }, 8000);
+                    const data = await resp.json().catch(() => ({}));
+                    if (data.ok) {
+                        const subIdx = adminSubmissionsCache.findIndex(s => s.id === subId);
+                        if (subIdx !== -1) {
+                            adminSubmissionsCache[subIdx].manual_status = 'rejected';
+                        }
+                        showNotification('Rejected successfully.');
+                        renderAdminSubmissions();
+                    } else {
+                        throw new Error(data.error || 'API error');
+                    }
+                } catch (err) {
+                    console.error('Quick reject failed:', err);
+                    showNotification('Rejection failed. Please try again.', true);
+                    e.currentTarget.disabled = false;
+                    e.currentTarget.innerHTML = originalContent;
+                }
+            };
+        });
+
+        shellEl.querySelectorAll('[data-action="quick-details"]').forEach(btn => {
+            btn.onclick = (e) => {
+                e.stopPropagation();
+                const subId = e.currentTarget.dataset.subid;
+                const list = window.currentActiveSubmissions || [];
+                const idx = list.findIndex(s => s.id === subId);
+                if (idx !== -1) {
+                    window.showAdminSubmissionDetailModal(idx);
+                }
+            };
+        });
+    }
+}
 
 window.loadAdminSubmissions = loadAdminSubmissions;
 window.renderAdminSubmissions = renderAdminSubmissions;

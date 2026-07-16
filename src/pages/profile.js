@@ -1,31 +1,21 @@
 // File: src/pages/profile.js
 
 const applyTheme = (theme) => {
-            if (theme === 'dark') {
-                document.documentElement.classList.add('dark');
-            } else {
-                document.documentElement.classList.remove('dark');
-            }
-            localStorage.setItem('theme', theme);
+            // Force light theme
+            document.documentElement.classList.remove('dark');
+            localStorage.setItem('theme', 'light');
 
             const lightIcon = document.getElementById('settings-theme-icon-light');
             const darkIcon = document.getElementById('settings-theme-icon-dark');
 
             if (lightIcon && darkIcon) {
-                if (theme === 'dark') {
-                    lightIcon.classList.add('hidden');
-                    darkIcon.classList.remove('hidden');
-                } else {
-                    lightIcon.classList.remove('hidden');
-                    darkIcon.classList.add('hidden');
-                }
+                lightIcon.classList.remove('hidden');
+                darkIcon.classList.add('hidden');
             }
         };
 
 const toggleTheme = () => {
-            const currentTheme = localStorage.getItem('theme') || 'light';
-            const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
-            applyTheme(newTheme);
+            applyTheme('light');
         };
 
 const getProfileAvatarUrl = (user) => {
@@ -166,6 +156,228 @@ const getProfilePaymentMethodLabel = (method, data = currentUserData || {}) => (
             crypto: 'Crypto Currency'
         }[method] || toTitleText(getRawProfilePaymentMethod(data)) || 'Payment Method');
 
+const syncProfilePhotoToDatabase = async (chosenUrl) => {
+    showNotification('Updating profile photo...', false);
+    try {
+        localStorage.setItem(`rw_profile_avatar_${currentUser.uid}`, chosenUrl);
+        currentUserData = { ...(currentUserData || {}), profilePhoto: chosenUrl };
+        writeJsonCache(getUserCacheKey(currentUser.uid), sanitizeUserForCache(currentUserData, currentUser.uid));
+
+        const userRef = doc(db, `artifacts/${appId}/public/data/users`, currentUser.uid);
+        await updateDoc(userRef, { profilePhoto: chosenUrl });
+
+        // Update settings preview if open
+        const settingsPreview = document.getElementById('settings-avatar-preview');
+        if (settingsPreview) settingsPreview.src = chosenUrl;
+
+        // Update profile preview if open
+        const profilePreview = document.getElementById('profile-avatar-preview');
+        if (profilePreview) {
+            profilePreview.src = chosenUrl;
+            const urlInput = document.getElementById('profile-avatar-url');
+            if (urlInput) urlInput.value = chosenUrl;
+        }
+
+        showNotification('Profile photo updated successfully!');
+    } catch (e) {
+        console.error('Update photo failed:', e);
+        const errMsg = String(e?.message || '');
+        if (/resource-exhausted|quota exceeded/i.test(errMsg)) {
+            showNotification('Database daily quota exceeded. Please try again later.', true);
+        } else {
+            showNotification('Failed to update profile photo.', true);
+        }
+    }
+};
+
+const showCropperModal = (imageSrc, onSelect) => {
+    const cropperHtml = `
+        <div class="space-y-4 text-left">
+            <p class="text-xs font-semibold text-gray-500">Drag image to position, use slider to zoom.</p>
+            <div class="relative w-full aspect-square bg-slate-950 overflow-hidden rounded-2xl flex items-center justify-center select-none" id="cropper-container" style="height: 280px;">
+                <img id="cropper-img" src="${imageSrc}" class="absolute max-w-none origin-center cursor-move" style="transform: translate(0px, 0px) scale(1);" draggable="false">
+                <div class="absolute pointer-events-none inset-0 border-[40px] border-black/60 flex items-center justify-center">
+                    <div class="w-[200px] h-[200px] rounded-full border border-dashed border-white shadow-[0_0_0_9999px_rgba(0,0,0,0.65)]" id="cropper-circle"></div>
+                </div>
+            </div>
+            <div class="space-y-1">
+                <div class="flex justify-between text-[11px] font-black text-gray-400 uppercase">
+                    <span>Zoom</span>
+                    <span id="zoom-value">100%</span>
+                </div>
+                <input type="range" id="cropper-zoom" min="0.5" max="3" step="0.05" value="1" class="w-full h-1.5 bg-gray-200 dark:bg-gray-700 rounded-lg appearance-none cursor-pointer accent-indigo-600">
+            </div>
+        </div>
+    `;
+
+    renderModal('Crop Profile Photo', cropperHtml, `
+        <div class="flex gap-2 w-full">
+            <button id="cropper-cancel-btn" class="flex-1 rounded-xl bg-gray-100 dark:bg-gray-700 py-3 text-sm font-extrabold text-gray-700 dark:text-gray-200">Cancel</button>
+            <button id="cropper-save-btn" class="flex-1 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white py-3 text-sm font-black shadow-md">Crop & Save</button>
+        </div>
+    `, 'max-w-md');
+
+    const img = document.getElementById('cropper-img');
+    const container = document.getElementById('cropper-container');
+    const zoomInput = document.getElementById('cropper-zoom');
+    const zoomValText = document.getElementById('zoom-value');
+    const circle = document.getElementById('cropper-circle');
+
+    let currentX = 0;
+    let currentY = 0;
+    let scale = 1;
+    let isDragging = false;
+    let startX = 0;
+    let startY = 0;
+
+    img.onload = () => {
+        const minDim = Math.min(img.naturalWidth, img.naturalHeight);
+        if (minDim > 0) {
+            const initialScale = 240 / minDim;
+            scale = Math.max(0.5, Math.min(3, initialScale));
+            zoomInput.value = scale;
+            zoomValText.textContent = Math.round(scale * 100) + '%';
+        }
+        currentX = 0;
+        currentY = 0;
+        img.style.transform = `translate(${currentX}px, ${currentY}px) scale(${scale})`;
+    };
+
+    zoomInput.oninput = function() {
+        scale = Number(this.value);
+        zoomValText.textContent = Math.round(scale * 100) + '%';
+        img.style.transform = `translate(${currentX}px, ${currentY}px) scale(${scale})`;
+    };
+
+    const startDrag = (clientX, clientY) => {
+        isDragging = true;
+        startX = clientX - currentX;
+        startY = clientY - currentY;
+    };
+
+    const doDrag = (clientX, clientY) => {
+        if (!isDragging) return;
+        currentX = clientX - startX;
+        currentY = clientY - startY;
+        img.style.transform = `translate(${currentX}px, ${currentY}px) scale(${scale})`;
+    };
+
+    const stopDrag = () => {
+        isDragging = false;
+    };
+
+    container.onmousedown = (e) => startDrag(e.clientX, e.clientY);
+    window.onmousemove = (e) => doDrag(e.clientX, e.clientY);
+    window.onmouseup = () => stopDrag();
+
+    container.ontouchstart = (e) => {
+        if (e.touches.length === 1) {
+            startDrag(e.touches[0].clientX, e.touches[0].clientY);
+        }
+    };
+    window.ontouchmove = (e) => {
+        if (isDragging && e.touches.length === 1) {
+            doDrag(e.touches[0].clientX, e.touches[0].clientY);
+        }
+    };
+    window.ontouchend = () => stopDrag();
+
+    document.getElementById('cropper-cancel-btn').onclick = () => {
+        window.closeModal();
+    };
+
+    document.getElementById('cropper-save-btn').onclick = () => {
+        showNotification('Cropping image...', false);
+        try {
+            const cropRect = circle.getBoundingClientRect();
+            const imgRect = img.getBoundingClientRect();
+
+            const scaleX = img.naturalWidth / imgRect.width;
+            const scaleY = img.naturalHeight / imgRect.height;
+
+            const sx = (cropRect.left - imgRect.left) * scaleX;
+            const sy = (cropRect.top - imgRect.top) * scaleY;
+            const sWidth = cropRect.width * scaleX;
+            const sHeight = cropRect.height * scaleY;
+
+            const canvas = document.createElement('canvas');
+            canvas.width = 256;
+            canvas.height = 256;
+            const ctx = canvas.getContext('2d');
+
+            ctx.beginPath();
+            ctx.arc(128, 128, 128, 0, Math.PI * 2);
+            ctx.clip();
+
+            ctx.drawImage(img, sx, sy, sWidth, sHeight, 0, 0, 256, 256);
+
+            const croppedUrl = canvas.toDataURL('image/jpeg', 0.88);
+            window.closeModal();
+            onSelect(croppedUrl);
+        } catch (e) {
+            console.error('Crop failed:', e);
+            showNotification('Could not crop image. Make sure it is fully loaded.', true);
+        }
+    };
+};
+
+window.showProfilePhotoSelectionModal = (currentAvatar, onSelect) => {
+    const modalGridHtml = `
+        <div class="space-y-4 text-left">
+            <p class="text-xs font-black uppercase text-gray-400 tracking-wider">Select Premium Avatar</p>
+            <div class="grid grid-cols-5 gap-2.5">
+                ${PREMIUM_AVATARS.map((url, idx) => {
+                    const isSelected = url === currentAvatar;
+                    return `
+                    <div class="avatar-modal-option relative cursor-pointer aspect-square rounded-2xl overflow-hidden border-2 ${isSelected ? 'border-orange-500 ring-2 ring-orange-500/20 bg-orange-50 dark:bg-orange-950/20' : 'border-gray-200 dark:border-gray-700 hover:border-gray-400'} p-0.5 transition duration-200" data-avatar-url="${escapeHtml(url)}">
+                        <img src="${escapeHtml(url)}" alt="Avatar ${idx + 1}" class="w-full h-full object-cover rounded-xl bg-gray-50">
+                        ${isSelected ? '<div class="absolute bottom-1 right-1 h-4 w-4 bg-orange-500 rounded-full flex items-center justify-center text-[9px] font-black text-white">✓</div>' : ''}
+                    </div>`;
+                }).join('')}
+            </div>
+            
+            <div class="mt-4 pt-4 border-t border-gray-100 dark:border-gray-700 flex flex-col gap-2">
+                <button type="button" id="upload-custom-avatar-btn" class="w-full flex items-center justify-center gap-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white py-3 text-sm font-black transition shadow-md active:scale-98">
+                    📁 Upload Custom Photo
+                </button>
+                <input type="file" id="custom-avatar-file-input" accept="image/*" class="hidden">
+            </div>
+        </div>
+    `;
+
+    renderModal('Choose Avatar', modalGridHtml, `
+        <button onclick="window.closeModal()" class="w-full rounded-xl bg-gray-100 dark:bg-gray-700 py-3 text-sm font-extrabold text-gray-700 dark:text-gray-200">Cancel</button>
+    `, 'max-w-md');
+
+    document.querySelectorAll('.avatar-modal-option').forEach(opt => {
+        opt.onclick = () => {
+            const chosenUrl = opt.getAttribute('data-avatar-url');
+            window.closeModal();
+            onSelect(chosenUrl);
+        };
+    });
+
+    const uploadBtn = document.getElementById('upload-custom-avatar-btn');
+    const fileInput = document.getElementById('custom-avatar-file-input');
+    if (uploadBtn && fileInput) {
+        uploadBtn.onclick = () => fileInput.click();
+        fileInput.onchange = (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+            if (!file.type.startsWith('image/')) {
+                showNotification('Please select an image file.', true);
+                return;
+            }
+            const reader = new FileReader();
+            reader.onload = (event) => {
+                window.closeModal();
+                showCropperModal(event.target.result, onSelect);
+            };
+            reader.readAsDataURL(file);
+        };
+    }
+};
+
 const showProfilePage = (focusMethod = '') => {
             if (!currentUserData) return showNotification('User data not loaded. Please wait.', true);
             const isAdminProfile = currentUser?.uid === ADMIN_UID || currentUserData?.role === 'admin' || currentUserData?.role === 'owner';
@@ -295,34 +507,8 @@ const showProfilePage = (focusMethod = '') => {
                 if (triggerBtn) {
                     triggerBtn.onclick = () => {
                         const activeAvatar = document.getElementById('profile-avatar-url').value;
-                        const modalGridHtml = `
-                            <div class="space-y-4">
-                                <p class="text-xs font-black uppercase text-gray-400 tracking-wider">Select Profile Photo</p>
-                                <div class="grid grid-cols-5 gap-2.5">
-                                    ${PREMIUM_AVATARS.map((url, idx) => {
-                                        const isSelected = url === activeAvatar;
-                                        return `
-                                        <div class="avatar-modal-option relative cursor-pointer aspect-square rounded-2xl overflow-hidden border-2 ${isSelected ? 'border-orange-500 ring-2 ring-orange-500/20 bg-orange-50 dark:bg-orange-950/20' : 'border-gray-200 dark:border-gray-700 hover:border-gray-400'} p-0.5 transition duration-200" data-avatar-url="${escapeHtml(url)}">
-                                            <img src="${escapeHtml(url)}" alt="Avatar ${idx + 1}" class="w-full h-full object-cover rounded-xl bg-gray-50">
-                                            ${isSelected ? '<div class="absolute bottom-1 right-1 h-4 w-4 bg-orange-500 rounded-full flex items-center justify-center text-[9px] font-black text-white">✓</div>' : ''}
-                                        </div>`;
-                                    }).join('')}
-                                </div>
-                            </div>
-                        `;
-                        renderModal('Choose Avatar', modalGridHtml, `
-                            <button onclick="window.closeModal()" class="w-full rounded-xl bg-gray-100 dark:bg-gray-700 py-3 text-sm font-extrabold text-gray-700 dark:text-gray-200">Cancel</button>
-                        `, 'max-w-md');
-
-                        document.querySelectorAll('.avatar-modal-option').forEach(opt => {
-                            opt.onclick = () => {
-                                const chosenUrl = opt.getAttribute('data-avatar-url');
-                                const urlInput = document.getElementById('profile-avatar-url');
-                                const previewImg = document.getElementById('profile-avatar-preview');
-                                if (urlInput) urlInput.value = chosenUrl;
-                                if (previewImg) previewImg.src = chosenUrl;
-                                window.closeModal();
-                            };
+                        window.showProfilePhotoSelectionModal(activeAvatar, async (chosenUrl) => {
+                            await syncProfilePhotoToDatabase(chosenUrl);
                         });
                     };
                 }
@@ -396,13 +582,6 @@ const showSettingsPage = () => {
                         ${renderSettingAction('settings-invoice-btn', 'Invoice', 'https://cdn-icons-png.flaticon.com/512/337/337946.png', 'yellow')}
                         ${renderSettingAction('settings-task-history-btn', 'Task History', TASK_ICON_URL, 'purple')}
                         ${renderSettingAction('settings-live-lists-btn', 'Live Lists Verification', 'https://cdn-icons-png.flaticon.com/512/2620/2620743.png', 'indigo')}
-                        <button id="settings-theme-btn" class="flex items-center justify-between w-full text-left p-4 bg-gray-100 dark:bg-gray-700 rounded-xl hover:bg-gray-200 dark:hover:bg-gray-600 transition font-medium">
-                            <span>Toggle Light/Dark Mode</span>
-                        <div class="relative w-5 h-5">
-                            <svg id="settings-theme-icon-light" class="w-5 h-5 ${currentTheme === 'dark' ? 'hidden' : ''}" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"></circle><path d="M12 2v2"></path><path d="M12 20v2"></path><path d="m4.93 4.93 1.41 1.41"></path><path d="m18.66 18.66 1.41 1.41"></path><path d="M2 12h2"></path><path d="M20 12h2"></path><path d="m6.34 17.66-1.41 1.41"></path><path d="m19.07 4.93-1.41 1.41"></path></svg>
-                            <svg id="settings-theme-icon-dark" class="w-5 h-5 ${currentTheme === 'light' ? 'hidden' : ''}" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"></path></svg>
-                        </div>
-                        </button>
                     </div>
                     ${isAdmin ? `
                     <div class="bg-white dark:bg-gray-800 p-5 rounded-2xl shadow-md border border-gray-100 dark:border-gray-700 space-y-3">
@@ -427,7 +606,6 @@ const showSettingsPage = () => {
             document.getElementById('settings-invoice-btn').onclick = showWithdrawalInvoicesPage;
             document.getElementById('settings-task-history-btn').onclick = showUserTaskHistoryPage;
             document.getElementById('settings-live-lists-btn').onclick = showUserLiveListsPage;
-            document.getElementById('settings-theme-btn').onclick = toggleTheme;
             document.getElementById('settings-logout-btn').onclick = () => signOut(auth);
             if (isAdmin) {
                 document.getElementById('settings-admin-withdrawals').onclick = showAdminWithdrawalsPage;
@@ -445,50 +623,8 @@ const showSettingsPage = () => {
                 if (settingsAvatarTrigger) {
                     settingsAvatarTrigger.onclick = () => {
                         const currentAvatar = getProfileAvatarUrl(currentUserData);
-                        const modalGridHtml = `
-                            <div class="space-y-4">
-                                <p class="text-xs font-black uppercase text-gray-400 tracking-wider">Select Profile Photo</p>
-                                <div class="grid grid-cols-5 gap-2.5">
-                                    ${PREMIUM_AVATARS.map((url, idx) => {
-                                        const isSelected = url === currentAvatar;
-                                        return `
-                                        <div class="avatar-modal-option relative cursor-pointer aspect-square rounded-2xl overflow-hidden border-2 ${isSelected ? 'border-orange-500 ring-2 ring-orange-500/20 bg-orange-50 dark:bg-orange-950/20' : 'border-gray-200 dark:border-gray-700 hover:border-gray-400'} p-0.5 transition duration-200" data-avatar-url="${escapeHtml(url)}">
-                                            <img src="${escapeHtml(url)}" alt="Avatar ${idx + 1}" class="w-full h-full object-cover rounded-xl bg-gray-50">
-                                            ${isSelected ? '<div class="absolute bottom-1 right-1 h-4 w-4 bg-orange-500 rounded-full flex items-center justify-center text-[9px] font-black text-white">✓</div>' : ''}
-                                        </div>`;
-                                    }).join('')}
-                                </div>
-                            </div>
-                        `;
-                        renderModal('Choose Avatar', modalGridHtml, `
-                            <button onclick="window.closeModal()" class="w-full rounded-xl bg-gray-100 dark:bg-gray-700 py-3 text-sm font-extrabold text-gray-700 dark:text-gray-200">Cancel</button>
-                        `, 'max-w-md');
-
-                        document.querySelectorAll('.avatar-modal-option').forEach(opt => {
-                            opt.onclick = async () => {
-                                const chosenUrl = opt.getAttribute('data-avatar-url');
-                                window.closeModal();
-                                
-                                showNotification('Updating profile photo...', false);
-                                try {
-                                    localStorage.setItem(`rw_profile_avatar_${currentUser.uid}`, chosenUrl);
-                                    currentUserData = { ...(currentUserData || {}), profilePhoto: chosenUrl };
-                                    writeJsonCache(getUserCacheKey(currentUser.uid), sanitizeUserForCache(currentUserData, currentUser.uid));
-                                    
-                                    const previewImg = document.getElementById('settings-avatar-preview');
-                                    if (previewImg) previewImg.src = chosenUrl;
-                                    
-                                    showNotification('Profile photo updated successfully!');
-                                } catch (e) {
-                                    console.error('Update photo failed:', e);
-                                    const errMsg = String(e?.message || '');
-                                    if (/resource-exhausted|quota exceeded/i.test(errMsg)) {
-                                        showNotification('Database daily quota exceeded. Please try again later.', true);
-                                    } else {
-                                        showNotification('Failed to update profile photo.', true);
-                                    }
-                                }
-                            };
+                        window.showProfilePhotoSelectionModal(currentAvatar, async (chosenUrl) => {
+                            await syncProfilePhotoToDatabase(chosenUrl);
                         });
                     };
                 }

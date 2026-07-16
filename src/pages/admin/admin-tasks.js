@@ -379,10 +379,6 @@ const showAdminTaskPage = () => {
                                     <span class="text-sm">📋</span>
                                     <span class="sidebar-label">Tasks List</span>
                                 </button>
-                                <button type="button" data-admin-task-panel="add" class="w-full flex items-center gap-3 rounded-2xl px-4 py-3.5 text-xs font-black uppercase tracking-wider text-left transition select-none" style="outline: none;">
-                                    <span class="text-sm">➕</span>
-                                    <span class="sidebar-label">Add Task</span>
-                                </button>
                                 <button type="button" data-admin-task-panel="ads" class="w-full flex items-center gap-3 rounded-2xl px-4 py-3.5 text-xs font-black uppercase tracking-wider text-left transition select-none" style="outline: none;">
                                     <span class="text-sm">📢</span>
                                     <span class="sidebar-label">Manage Ads</span>
@@ -390,10 +386,6 @@ const showAdminTaskPage = () => {
                                 <button type="button" data-admin-task-panel="submissions" class="w-full flex items-center gap-3 rounded-2xl px-4 py-3.5 text-xs font-black uppercase tracking-wider text-left transition select-none" style="outline: none;">
                                     <span class="text-sm">📥</span>
                                     <span class="sidebar-label">Submissions</span>
-                                </button>
-                                <button type="button" data-admin-task-panel="board_control" class="w-full flex items-center gap-3 rounded-2xl px-4 py-3.5 text-xs font-black uppercase tracking-wider text-left transition select-none" style="outline: none;">
-                                    <span class="text-sm">⚙️</span>
-                                    <span class="sidebar-label">Board Control</span>
                                 </button>
                             </div>
 
@@ -410,13 +402,13 @@ const showAdminTaskPage = () => {
                         <div id="admin-task-content-area" class="flex-1 w-full min-w-0 space-y-4">
                             <!-- Mobile Navigation Header Bar -->
                             <div class="md:hidden flex items-center justify-between p-3.5 bg-slate-50 dark:bg-slate-900/50 rounded-3xl border border-slate-100 dark:border-slate-800/80 mb-2">
+                                <button type="button" onclick="window.showAdminTaskMobileMenu()" class="rounded-xl bg-cyan-600 px-4 py-2 text-xs font-black text-white hover:bg-cyan-700 transition active:scale-95 shadow-sm" style="outline: none;">
+                                    ☰ Menu
+                                </button>
                                 <div class="flex items-center gap-2">
                                     <span id="admin-mobile-active-tab-icon" class="text-sm">📋</span>
                                     <span id="admin-mobile-active-tab-title" class="text-xs font-black uppercase tracking-wider text-slate-700 dark:text-slate-200">Tasks List</span>
                                 </div>
-                                <button type="button" onclick="window.showAdminTaskMobileMenu()" class="rounded-xl bg-cyan-600 px-4 py-2 text-xs font-black text-white hover:bg-cyan-700 transition active:scale-95 shadow-sm" style="outline: none;">
-                                    ☰ Menu
-                                </button>
                             </div>
                             <!-- Board Control Panel -->
                             <section id="admin-board-control-section" class="hidden bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 p-4 sm:p-5">
@@ -553,14 +545,15 @@ const showAdminTaskPage = () => {
 
                     <section id="admin-task-manage-section" class="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 p-4 sm:p-5">
                         <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
-                            <h3 class="text-lg font-black text-gray-900 dark:text-white">Managing Tasks</h3>
+                            <div class="flex items-center gap-2.5">
+                                <h3 class="text-lg font-black text-gray-900 dark:text-white">Managing Tasks</h3>
+                                <button type="button" onclick="window.setAdminTaskPanel('add')" class="h-6 w-6 rounded-full bg-cyan-600 hover:bg-cyan-700 text-white font-black text-sm flex items-center justify-center transition active:scale-95 shadow-sm" style="outline: none;" title="Add New Task">+</button>
+                            </div>
                             <div class="flex gap-2">
                                 <input id="admin-task-search" placeholder="Search task..." class="min-w-0 flex-1 sm:w-64 px-3 py-2 bg-gray-100 dark:bg-gray-700 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500">
                                 <select id="admin-task-filter" class="px-3 py-2 bg-gray-100 dark:bg-gray-700 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500">
-                                    <option value="all">All</option>
-                                    <option value="active">Live</option>
+                                    <option value="active" selected>Live</option>
                                     <option value="draft">Off</option>
-                                    <option value="closed">Closed</option>
                                     <option value="over">Over</option>
                                 </select>
                             </div>
@@ -634,7 +627,24 @@ const showAdminTaskPage = () => {
                 </div>
                 </div>
                 ${getPageFooter()}`;
-            showPage(content, { returnTo: 'admin', keepBottomNav: false });
+            showPage(content, {
+                returnTo: 'admin',
+                keepBottomNav: false,
+                onBack: () => {
+                    if (window.innerWidth < 768 && window.adminMobileShowMenu) {
+                        window.adminMobileShowMenu = false;
+                        if (typeof window.updateAdminTaskResponsiveLayout === 'function') {
+                            window.updateAdminTaskResponsiveLayout();
+                        }
+                    } else {
+                        if (typeof showAdminMainPage === 'function') {
+                            showAdminMainPage();
+                        } else {
+                            hidePage();
+                        }
+                    }
+                }
+            });
             setBottomNavActive('bottom-admin-btn');
             window._adsTabInitialized = false;
             window._subsTabInitialized = false;
@@ -1233,7 +1243,7 @@ const renderAdminTaskList = () => {
             const listEl = document.getElementById('admin-task-list');
             if (!listEl) return;
             const search = (document.getElementById('admin-task-search')?.value || '').trim().toLowerCase();
-            const filter = document.getElementById('admin-task-filter')?.value || 'all';
+            const filter = document.getElementById('admin-task-filter')?.value || 'active';
             const tasks = [...allTasksCache]
                 .filter(isTaskVisibleToAdmin)
                 .filter(task => {

@@ -2726,16 +2726,212 @@ window.showBulkerSubmissionDetail = (submissionId) => {
                     window.showScreenshotLightbox(s.screenshot_url, s.screenshot_view_url || '');
                 };
             }
-        };const showUserLiveListsPage = () => {
+        };window.verifyUserTaskLiveList = async () => {
+    const btn = document.getElementById('user-live-lists-verify-btn');
+    const taskIdInput = document.getElementById('user-live-lists-task-id');
+    const resultEl = document.getElementById('user-live-lists-result');
+    if (!taskIdInput || !resultEl || !btn) return;
+
+    const taskId = taskIdInput.value.trim();
+    if (!taskId) {
+        showNotification('Please enter a Task ID.', true);
+        return;
+    }
+
+    btn.disabled = true;
+    const originalBtnText = btn.textContent;
+    btn.textContent = '⏳';
+    resultEl.classList.remove('hidden');
+    resultEl.innerHTML = `<div class="text-center text-xs font-semibold text-gray-400 py-3">Fetching task and submission details...</div>`;
+
+    try {
+        const taskRef = doc(db, `artifacts/${appId}/public/data/tasks`, taskId);
+        const taskSnap = await getDoc(taskRef);
+        if (!taskSnap.exists()) {
+            resultEl.innerHTML = `<div class="text-center text-xs font-bold text-red-500 py-2">⚠️ Task not found. Please double-check the Task ID.</div>`;
+            btn.disabled = false;
+            btn.textContent = originalBtnText;
+            return;
+        }
+        const taskData = taskSnap.data();
+
+        const subQuery = query(
+            collection(db, `artifacts/${appId}/public/data/task_submissions`),
+            where("taskId", "==", taskId),
+            where("userId", "==", currentUser.uid)
+        );
+        const subSnap = await getDocs(subQuery);
+        if (subSnap.empty) {
+            resultEl.innerHTML = `<div class="text-center text-xs font-bold text-amber-500 py-2">⚠️ No submission found for this Task ID from your account. Make sure you have submitted the screenshot for this task first.</div>`;
+            btn.disabled = false;
+            btn.textContent = originalBtnText;
+            return;
+        }
+
+        const subData = subSnap.docs[0].data();
+        const submittedAt = timestampToMillis(subData.submittedAt || subData.submitted_at);
+        const subDate = new Date(submittedAt);
+
+        let releaseTime = 0;
+        const paymentMode = taskData.paymentMode || (Number(taskData.paymentDelayDays || 0) > 0 ? 'days' : 'instant');
+        if (paymentMode === 'instant') {
+            const nextDay = new Date(subDate.getFullYear(), subDate.getMonth(), subDate.getDate() + 1, 0, 0, 0);
+            releaseTime = nextDay.getTime();
+        } else {
+            const delayDays = Number(taskData.paymentDelayDays || taskData.listDays || taskData.list_days || 7);
+            const listTimeStr = taskData.listTime || "20:00";
+            const [hours, minutes] = listTimeStr.split(':').map(Number);
+            const releaseDate = new Date(subDate.getFullYear(), subDate.getMonth(), subDate.getDate() + delayDays, hours, minutes, 0);
+            releaseTime = releaseDate.getTime();
+        }
+
+        if (Date.now() < releaseTime) {
+            const formattedRelease = new Date(releaseTime).toLocaleString('en-IN', {
+                day: '2-digit',
+                month: 'short',
+                year: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit',
+                hour12: true
+            });
+            resultEl.innerHTML = `
+                <div class="space-y-2 text-center py-2">
+                    <p class="text-xs font-extrabold text-amber-500">⏳ Live List Verification Not Released Yet</p>
+                    <p class="text-[11px] text-gray-500 dark:text-gray-400">As per app rules, the verification live list for this task releases after the payment given time is complete.</p>
+                    <p class="text-xs font-bold text-gray-800 dark:text-gray-255 bg-amber-505/10 dark:bg-amber-950/20 p-2.5 rounded-xl border border-amber-500/20">
+                        Estimated Release: <span class="text-indigo-650 dark:text-indigo-400">${formattedRelease}</span>
+                    </p>
+                </div>
+            `;
+            btn.disabled = false;
+            btn.textContent = originalBtnText;
+            return;
+        }
+
+        const appName = taskData.appName || taskData.title || '';
+        const targetUrl = `${BACKEND_BASE_URL}/api/lists?appName=${encodeURIComponent(appName)}`;
+        const resp = await fetchWithTimeout(targetUrl, {}, 10000);
+        const listData = await resp.json().catch(() => ({}));
+
+        if (!listData.ok || !Array.isArray(listData.lists) || !listData.lists.length) {
+            resultEl.innerHTML = `
+                <div class="space-y-2">
+                    <div class="flex items-center gap-2 text-emerald-600 font-extrabold text-xs">
+                        <span>✅ Release Time Completed</span>
+                    </div>
+                    <p class="text-[11px] text-gray-500 dark:text-gray-400">No live lists have been uploaded by the admin for "${escapeHtml(appName)}" yet. Please wait for the admin to compile and upload the list.</p>
+                </div>
+            `;
+            btn.disabled = false;
+            btn.textContent = originalBtnText;
+            return;
+        }
+
+        const reviewerName = String(subData.ocrExtractedName || subData.ocr_extracted_name || '').trim().toLowerCase();
+        
+        let matchedListHtml = '';
+        let isUserFound = false;
+
+        listData.lists.forEach(item => {
+            const lines = item.content.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+            const foundInThis = reviewerName && lines.some(l => l.toLowerCase() === reviewerName);
+            if (foundInThis) {
+                isUserFound = true;
+            }
+
+            const formattedListDate = item.date ? new Date(item.date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : 'Unknown';
+
+            matchedListHtml += `
+                <div class="border border-gray-100 dark:border-gray-750 rounded-2xl p-4 space-y-3 bg-white dark:bg-gray-800 shadow-sm text-left">
+                    <div class="flex items-center justify-between gap-2">
+                        <div>
+                            <h4 class="text-xs font-black text-gray-900 dark:text-white truncate">${escapeHtml(item.appName)}</h4>
+                            <p class="text-[9px] text-gray-400 dark:text-gray-500 font-bold mt-0.5">Target Date: ${escapeHtml(formattedListDate)}</p>
+                        </div>
+                        <span class="rounded-full bg-indigo-55 dark:bg-indigo-900/30 px-2.5 py-0.5 text-[9px] font-black text-indigo-600 dark:text-indigo-300">
+                            👥 ${lines.length} Reviewers
+                        </span>
+                    </div>
+                    
+                    <details class="group rounded-xl border border-gray-100 dark:border-gray-750 bg-gray-50/50 dark:bg-gray-900/10 overflow-hidden" open>
+                        <summary class="flex items-center justify-between p-3 cursor-pointer text-xs font-bold text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 select-none">
+                            <span>Reviewer Names List</span>
+                            <svg class="h-3 w-3 transition-transform duration-200 group-open:rotate-180" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M19 9l-7 7-7-7"></path></svg>
+                        </summary>
+                        <div class="px-4 pb-4 pt-2 border-t border-gray-100 dark:border-gray-750 max-h-48 overflow-y-auto space-y-1 font-mono text-[11px] text-gray-755 dark:text-gray-300">
+                            ${lines.map(line => {
+                                const isMatch = reviewerName && line.toLowerCase() === reviewerName;
+                                return `<p class="py-0.5 px-2 rounded-lg ${isMatch ? 'bg-emerald-500/20 text-emerald-600 font-black border border-emerald-500/30 animate-pulse' : ''}">${escapeHtml(line)}</p>`;
+                            }).join('')}
+                        </div>
+                    </details>
+                </div>
+            `;
+        });
+
+        let statusHeaderHtml = '';
+        if (isUserFound) {
+            statusHeaderHtml = `
+                <div class="flex items-center gap-2 bg-emerald-500/10 text-emerald-600 p-3 rounded-xl border border-emerald-500/20 mb-3">
+                    <span class="text-lg">✅</span>
+                    <div>
+                         <p class="text-xs font-extrabold">VERIFIED IN LIVE LIST</p>
+                         <p class="text-[10px] opacity-80 mt-0.5">Your reviewer name "${escapeHtml(subData.ocrExtractedName || subData.ocr_extracted_name)}" is successfully verified!</p>
+                    </div>
+                </div>
+            `;
+        } else {
+            statusHeaderHtml = `
+                <div class="flex items-center gap-2 bg-rose-500/10 text-rose-600 p-3 rounded-xl border border-rose-500/20 mb-3">
+                    <span class="text-lg">⏳</span>
+                    <div>
+                         <p class="text-xs font-extrabold">NOT FOUND IN LIVE LIST YET</p>
+                         <p class="text-[10px] opacity-80 mt-0.5">Your reviewer name "${escapeHtml(subData.ocrExtractedName || subData.ocr_extracted_name || 'unknown')}" is not in the live list yet.</p>
+                    </div>
+                </div>
+            `;
+        }
+
+        resultEl.innerHTML = `
+            <div class="space-y-3">
+                ${statusHeaderHtml}
+                <div class="space-y-3.5">
+                    ${matchedListHtml}
+                </div>
+            </div>
+        `;
+
+    } catch (err) {
+        console.error('Verification failed:', err);
+        resultEl.innerHTML = `<div class="text-center text-xs font-bold text-red-500 py-2">⚠️ Error verifying task. Please try again later.</div>`;
+    } finally {
+        btn.disabled = false;
+        btn.textContent = originalBtnText;
+    }
+};
+
+const showUserLiveListsPage = () => {
             if (!ensureUserSessionReady()) return;
             const content = `
                 ${getPageHeader('Live Lists Verification')}
                 <div class="max-w-xl mx-auto space-y-4 pb-24 px-4">
-                    <div class="bg-white dark:bg-gray-800 p-5 rounded-2xl shadow-md border border-gray-100 dark:border-gray-700">
+                    <!-- Task ID Verification Panel -->
+                    <div class="bg-white dark:bg-gray-800 p-5 rounded-2xl shadow-md border border-gray-100 dark:border-gray-700 space-y-4 text-left">
+                        <p class="text-xs font-black uppercase text-gray-400 tracking-wider">Verify by Task ID</p>
+                        <p class="text-xs text-gray-500 dark:text-gray-400">Enter your Task ID to verify your reviewer name in the live list after the task release time.</p>
+                        <div class="flex gap-2">
+                            <input type="text" id="user-live-lists-task-id" placeholder="Enter Task ID (e.g. task_abc123)" class="flex-1 px-4 py-2.5 bg-gray-50 dark:bg-gray-750 border border-gray-150 dark:border-gray-700 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none text-xs text-gray-900 dark:text-white">
+                            <button type="button" id="user-live-lists-verify-btn" onclick="window.verifyUserTaskLiveList()" class="shrink-0 px-4 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-black text-xs uppercase transition active:scale-95 shadow-md flex items-center justify-center" style="outline: none;">Verify</button>
+                        </div>
+                        <div id="user-live-lists-result" class="hidden rounded-2xl border p-4 space-y-3.5 text-left bg-gray-50/40 dark:bg-gray-900/10 border-gray-150 dark:border-gray-800"></div>
+                    </div>
+
+                    <!-- Search Existing Lists -->
+                    <div class="bg-white dark:bg-gray-800 p-5 rounded-2xl shadow-md border border-gray-100 dark:border-gray-700 text-left">
                         <p class="text-xs font-semibold text-gray-500 dark:text-gray-400">
-                            Here you can verify if your reviewer name is listed in the live lists uploaded by the admin for different apps.
+                            Or browse and search through all uploaded live lists.
                         </p>
-                        <input type="text" id="user-live-lists-search" placeholder="🔍 Search app name or reviewer name..." class="mt-3 w-full px-4 py-2.5 bg-gray-50 dark:bg-gray-750 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none text-sm border border-gray-100 dark:border-gray-700">
+                        <input type="text" id="user-live-lists-search" placeholder="🔍 Search app name or reviewer name..." class="mt-3 w-full px-4 py-2.5 bg-gray-50 dark:bg-gray-750 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none text-sm border border-gray-100 dark:border-gray-700 text-gray-900 dark:text-white">
                     </div>
                     <div id="user-live-lists-container" class="space-y-4">
                         <div class="py-8 text-center text-sm text-gray-400">Loading lists...</div>
@@ -2999,7 +3195,7 @@ const getTaskAccent = (subtype) => {
 const showUserTaskPage = () => {
             if (!ensureUserSessionReady()) return;
             currentMainSection = 'task';
-            const isTaskPageEnabled = !!appConfigCache?.task_page_enabled;
+            const isTaskPageEnabled = true;
 
             const renderUI = (takenCommentsMap = {}) => {
                 if (currentMainSection !== 'task') return;
@@ -3089,7 +3285,7 @@ const showUserTaskPage = () => {
                 }
 
                 let bodyContent = '';
-                if (!isTaskPageEnabled) {
+                if (taskCategories.length === 0) {
                     bodyContent = `
                         <div class="rounded-3xl border border-dashed border-gray-200 dark:border-gray-700 p-8 text-center bg-white dark:bg-gray-800 shadow-sm">
                             <div class="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-indigo-50 dark:bg-indigo-900/20 mb-4">
@@ -3097,15 +3293,6 @@ const showUserTaskPage = () => {
                             </div>
                             <h3 class="text-lg font-black text-gray-900 dark:text-white">Missions Coming Soon</h3>
                             <p class="mt-2 text-sm text-gray-500 dark:text-gray-400">New activities and updates are coming soon. Keep the app updated for future releases.</p>
-                        </div>`;
-                } else if (taskCategories.length === 0) {
-                    bodyContent = `
-                        <div class="rounded-3xl border border-dashed border-gray-200 dark:border-gray-700 p-8 text-center bg-white dark:bg-gray-800 shadow-sm">
-                            <div class="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-cyan-50 dark:bg-cyan-900/20 mb-4">
-                                <img src="https://cdn-icons-png.flaticon.com/512/3176/3176366.png" alt="No tasks" class="h-8 w-8 object-contain">
-                            </div>
-                            <h3 class="text-lg font-black text-gray-900 dark:text-white">No Live Missions</h3>
-                            <p class="mt-2 text-sm text-gray-500 dark:text-gray-400">Real tasks are currently not available. Please check back later.</p>
                         </div>`;
                 } else {
                     bodyContent = taskCategories.map(renderCategory).join('');
