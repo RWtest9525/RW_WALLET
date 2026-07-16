@@ -1113,11 +1113,14 @@ async function uploadToGoogleDrive(buffer, fileName, mimeType, rootFolderId, { a
   const safeAppName = String(appName || 'Unknown App').replace(/[<>:"/\\|?*]+/g, '_').trim().slice(0, 100) || 'Unknown App';
   const appFolderId = await findOrCreateDriveFolder(drive, dateFolderId, safeAppName);
 
-  // Step 3: Upload file into app folder
+  // Step 2.5: Find or create "images" subfolder inside app name folder
+  const imagesFolderId = await findOrCreateDriveFolder(drive, appFolderId, 'images');
+
+  // Step 3: Upload file into images folder
   const response = await drive.files.create({
     requestBody: {
       name: fileName,
-      parents: [appFolderId]
+      parents: [imagesFolderId]
     },
     media: {
       mimeType: mimeType || 'image/jpeg',
@@ -4471,7 +4474,7 @@ async function fetchPlayStoreReviewsForDate(packageId, targetDateMs) {
   app.post('/api/admin/scraper/fetch-reviews', requireHttpAuth, async (req, res) => {
     if (!req.auth.isAdmin) return res.status(403).json({ ok: false, error: 'ADMIN_REQUIRED' });
     try {
-      const { url, packageId: packageIdInput } = req.body;
+      const { url, packageId: packageIdInput, taskId, selectedDate } = req.body;
       const packageId = extractPackageId(url || packageIdInput || '');
       if (!packageId) return res.status(400).json({ ok: false, error: 'PACKAGE_ID_REQUIRED' });
 
@@ -4485,6 +4488,164 @@ async function fetchPlayStoreReviewsForDate(packageId, targetDateMs) {
       });
 
       const list = Array.isArray(reviews) ? reviews : (reviews.data || []);
+
+      // If taskId is provided, generate and upload Excel to Google Drive!
+      if (taskId) {
+        try {
+          const db = admin.firestore();
+          const taskDoc = await db.doc(`artifacts/digital-wallet-prod/public/data/tasks/${taskId}`).get();
+          if (taskDoc.exists) {
+            const taskData = taskDoc.data();
+            const appName = taskData.appName || taskData.title || 'App';
+            const safeAppName = String(appName).replace(/[<>:"/\\|?*]+/g, '_').trim().slice(0, 100) || 'Unknown App';
+            
+            const dateStr = selectedDate || new Date().toISOString().slice(0, 10);
+            
+            // Fetch submissions from D1
+            const taskSubs = await d1.all(
+              `SELECT * FROM task_submissions WHERE task_id = ?`,
+              [taskId]
+            );
+
+            const getSubmissionLocalDateStr = (submittedAt) => {
+              if (!submittedAt) return '';
+              const d = new Date(Number(submittedAt));
+              return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+            };
+
+            const dateSubs = taskSubs.filter(s => getSubmissionLocalDateStr(s.submitted_at) === dateStr);
+
+            const taskSubsMap = new Map();
+            dateSubs.forEach(s => {
+              const ocr = String(s.ocr_extracted_name || '').trim().toLowerCase();
+              const usr = String(s.user_name || '').trim().toLowerCase();
+              if (ocr && ocr !== 'unknown user') taskSubsMap.set(ocr, s);
+              if (usr) taskSubsMap.set(usr, s);
+            });
+
+            const getMatchedSub = (review) => {
+              const rName = String(review.userName || review.user || '').trim().toLowerCase();
+              if (!rName) return null;
+              for (const [key, sub] of taskSubsMap.entries()) {
+                if (key.includes(rName) || rName.includes(key)) {
+                  return sub;
+                }
+              }
+              return null;
+            };
+
+            const headers = ['Reviewer Name', 'Rating (Stars)', 'Review Comment', 'Status', 'User Mobile', 'Review Date', 'Helpful Count'];
+            
+            const rows = list.map(r => {
+              const matched = getMatchedSub(r);
+              const reviewDate = r.date || r.time ? new Date(r.date || r.time).toLocaleDateString('en-GB') : '';
+              return [
+                r.userName || r.user || 'User',
+                Math.round(Number(r.score || r.rating || 5)),
+                r.text || r.content || '',
+                matched ? 'Matched' : 'Not Matched',
+                matched ? (matched.user_mobile || '') : '',
+                reviewDate,
+                r.thumbsUpCount || 0
+              ];
+            });
+
+            let xml = `<?xml version="1.0"?><Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet" xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet"><Worksheet ss:Name="Sheet1"><Table>`;
+            
+            xml += '<Row>';
+            headers.forEach(h => {
+              xml += `<Cell><Data ss:Type="String">${h.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')}</Data></Cell>`;
+            });
+            xml += '</Row>';
+            
+            rows.forEach(row => {
+              xml += '<Row>';
+              row.forEach(val => {
+                const cleanVal = String(val === null || val === undefined ? '' : val)
+                  .replace(/&/g, '&amp;')
+                  .replace(/</g, '&lt;')
+                  .replace(/>/g, '&gt;');
+                xml += `<Cell><Data ss:Type="String">${cleanVal}</Data></Cell>`;
+              });
+              xml += '</Row>';
+            });
+            
+            xml += '</Table></Worksheet></Workbook>';
+
+            // Upload Excel file to Google Drive
+            const drive = getGoogleDriveClient();
+            if (drive) {
+              const rootFolderId = process.env.GOOGLE_DRIVE_FOLDER_ID || 'root';
+              
+              // 1. Create or Find Date Folder (DD-MM-YYYY)
+              const [y, m, dVal] = dateStr.split('-');
+              const folderDateStr = `${dVal}-${m}-${y}`;
+              const dateFolderId = await findOrCreateDriveFolder(drive, rootFolderId, folderDateStr);
+
+              // 2. Create or Find App Name Folder
+              const appFolderId = await findOrCreateDriveFolder(drive, dateFolderId, safeAppName);
+
+              // 3. Determine Filename based on release constraints
+              let excelFilename = '';
+              const submittedAt = dateSubs.length > 0 ? dateSubs[0].submitted_at : Date.now();
+              const subDate = new Date(submittedAt);
+
+              let releaseTime = 0;
+              const paymentMode = taskData.paymentMode || (Number(taskData.paymentDelayDays || 0) > 0 ? 'days' : 'instant');
+              const delayDays = Number(taskData.paymentDelayDays || taskData.listDays || taskData.list_days || 7);
+              
+              if (paymentMode === 'instant') {
+                const nextDay = new Date(subDate.getFullYear(), subDate.getMonth(), subDate.getDate() + 1, 0, 0, 0);
+                releaseTime = nextDay.getTime();
+              } else {
+                const listTimeStr = taskData.listTime || "20:00";
+                const [hours, minutes] = listTimeStr.split(':').map(Number);
+                const releaseDate = new Date(subDate.getFullYear(), subDate.getMonth(), subDate.getDate() + delayDays, hours, minutes, 0);
+                releaseTime = releaseDate.getTime();
+              }
+
+              const dObj = new Date();
+              const dDay = String(dObj.getDate()).padStart(2, '0');
+              const dMonth = String(dObj.getMonth() + 1).padStart(2, '0');
+              const dYear = dObj.getFullYear();
+              const dDateStr = `${dDay}_${dMonth}_${dYear}`;
+
+              if (Date.now() < releaseTime) {
+                // Testing / early fetch: [AppName]_[Date]_[DayNo].xlsx
+                const dayLabel = paymentMode === 'instant' ? 'Instant' : `Day${delayDays}`;
+                excelFilename = `${appName}_${dDateStr}_${dayLabel}.xlsx`;
+              } else {
+                // On/after release: [AppName]_[Date].xlsx
+                excelFilename = `${appName}_${dDateStr}.xlsx`;
+              }
+
+              // 4. Upload file to App Name Folder
+              const response = await drive.files.create({
+                requestBody: {
+                  name: excelFilename,
+                  parents: [appFolderId]
+                },
+                media: {
+                  mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                  body: Readable.from([xml])
+                },
+                fields: 'id, name, webViewLink'
+              });
+
+              // Make the file publicly viewable
+              await drive.permissions.create({
+                fileId: response.data.id,
+                requestBody: { role: 'reader', type: 'anyone' }
+              });
+
+              console.log(`[Manual Scraper] Uploaded Excel file ${excelFilename} to Drive: ${response.data.webViewLink}`);
+            }
+          }
+        } catch (driveErr) {
+          console.error('[Manual Scraper] Google Drive Excel upload failed:', driveErr);
+        }
+      }
+
       res.json({ ok: true, reviews: list });
     } catch (error) {
       console.error('Manual reviews fetch failed:', error);

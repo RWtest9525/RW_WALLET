@@ -1,5 +1,10 @@
 // File: src/pages/admin/admin-submissions.js
 
+const getCleanAppName = (fullName = '') => {
+    const clean = fullName.split(':')[0].trim();
+    return clean || fullName;
+};
+
 window.showAdminSubmissionDetailModal = function(index) {
             const list = window.currentActiveSubmissions || [];
             if (!list || index < 0 || index >= list.length) return;
@@ -776,10 +781,7 @@ const renderAdminSubmissions = () => {
     const activeTaskIds = new Set(dateSubs.map(s => s.task_id || s.taskId).filter(Boolean));
     const totalTasksCount = activeTaskIds.size;
 
-    const getCleanAppName = (fullName = '') => {
-        const clean = fullName.split(':')[0].trim();
-        return clean || fullName;
-    };
+
 
     // Group rows by EVERY task in our cache so that OFF tasks also show up!
     let filteredTasks = [...allTasksCache];
@@ -1302,7 +1304,11 @@ const renderAdminSubmissions = () => {
                     const resp = await fetchWithTimeout(`${BACKEND_BASE_URL}/api/admin/scraper/fetch-reviews`, {
                         method: 'POST',
                         headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ url: taskLink })
+                        body: JSON.stringify({
+                            url: taskLink,
+                            taskId: selectedTaskId,
+                            selectedDate: window.adminSubmissionsView.selectedDate
+                        })
                     }, 15000);
                     
                     const data = await resp.json().catch(() => ({}));
