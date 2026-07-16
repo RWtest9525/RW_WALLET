@@ -31,6 +31,31 @@ import './core/firebase.js';
 // Setup Event listeners and routing at DOM load
 applyTheme(initialTheme);
 
+// Check and apply instant recovery layout before Auth fires to prevent dashboard flickering
+try {
+    const isRecovering = localStorage.getItem('last_active_task_id');
+    if (isRecovering) {
+        const dash = document.getElementById('dashboard-content');
+        const pageCont = document.getElementById('page-container');
+        const mainCont = document.getElementById('main-content');
+        const authScr = document.getElementById('auth-screen');
+        if (dash) dash.classList.add('hidden');
+        if (pageCont) {
+            pageCont.classList.remove('hidden');
+            pageCont.innerHTML = `
+                <div class="flex flex-col items-center justify-center min-h-[85vh] px-6 text-center bg-slate-50 dark:bg-slate-900">
+                    <div class="h-10 w-10 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin mb-4"></div>
+                    <p class="text-xs font-black text-slate-800 dark:text-slate-200 tracking-wide uppercase">Restoring Mission Details...</p>
+                </div>
+            `;
+        }
+        if (mainCont) mainCont.classList.remove('hidden');
+        if (authScr) authScr.classList.add('hidden');
+    }
+} catch (e) {
+    console.warn('Boot restore layout setup failed:', e);
+}
+
 setPersistence(auth, browserLocalPersistence).catch(error => {
             console.warn('Could not enable local auth persistence:', error);
         });
