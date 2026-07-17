@@ -1004,7 +1004,7 @@ const renderAdminSubmissions = () => {
                             <span>📅 ${formatDatePickerDate(selectedDate)}</span>
                             <span class="text-gray-400 dark:text-gray-500 text-[10px]">▼</span>
                         </button>
-                        <div id="admin-sub-calendar-popup" class="hidden absolute right-0 md:right-0 left-1/2 md:left-auto -translate-x-1/2 md:translate-x-0 top-full mt-2 z-[9995] w-[90vw] max-w-[288px] bg-white dark:bg-gray-950 rounded-3xl border border-gray-150 dark:border-gray-850 shadow-2xl p-4 space-y-3">
+                        <div id="admin-sub-calendar-popup" class="hidden fixed md:absolute left-1/2 -translate-x-1/2 md:left-auto md:right-0 md:translate-x-0 top-[30%] md:top-full mt-2 z-[9995] w-[90vw] max-w-[288px] bg-white dark:bg-gray-950 rounded-3xl border border-gray-150 dark:border-gray-850 shadow-2xl p-4 space-y-3">
                             <div class="flex items-center justify-between">
                                 <button id="cal-prev-month" type="button" class="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg text-sm font-bold text-gray-700 dark:text-gray-300" style="outline: none;">&lt;</button>
                                 <span id="cal-month-year" class="text-sm font-black text-gray-905 dark:text-white"></span>
