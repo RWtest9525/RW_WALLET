@@ -262,14 +262,40 @@ const setAdminTaskPanel = (panel = 'manage') => {
     }
 
     document.querySelectorAll('[data-admin-task-panel]').forEach(button => {
-        const isActive = button.dataset.adminTaskPanel === normalized;
-        button.classList.toggle('bg-cyan-600', isActive);
-        button.classList.toggle('text-white', isActive);
-        button.classList.toggle('shadow-md', isActive);
-        button.classList.toggle('bg-white', !isActive);
-        button.classList.toggle('text-gray-700', !isActive);
-        button.classList.toggle('dark:bg-gray-800', !isActive);
-        button.classList.toggle('dark:text-gray-200', !isActive);
+        const panelType = button.dataset.adminTaskPanel;
+        const isActive = panelType === normalized;
+        
+        if (isActive) {
+            button.className = "w-full flex items-center justify-between rounded-2xl px-3 py-2.5 text-xs font-black uppercase tracking-wider text-left transition select-none bg-blue-600 text-white shadow-lg shadow-blue-500/10 dark:shadow-none";
+        } else {
+            button.className = "w-full flex items-center justify-between rounded-2xl px-3 py-2.5 text-xs font-black uppercase tracking-wider text-left transition select-none bg-transparent text-slate-700 dark:text-slate-350 hover:bg-slate-100/50 dark:hover:bg-slate-800/40";
+        }
+
+        const iconBox = button.querySelector('.menu-icon-box');
+        if (iconBox) {
+            if (isActive) {
+                iconBox.className = "menu-icon-box w-10 h-10 rounded-xl flex items-center justify-center text-lg shrink-0 transition-colors bg-white/20 text-white";
+            } else {
+                let bgClass = "bg-blue-500/10 text-blue-600 dark:bg-blue-950/50 dark:text-blue-400";
+                if (panelType === 'ads') {
+                    bgClass = "bg-emerald-500/10 text-emerald-600 dark:bg-emerald-950/50 dark:text-emerald-400";
+                } else if (panelType === 'submissions') {
+                    bgClass = "bg-amber-500/10 text-amber-600 dark:bg-amber-950/50 dark:text-amber-400";
+                }
+                iconBox.className = `menu-icon-box w-10 h-10 rounded-xl flex items-center justify-center text-lg shrink-0 transition-colors ${bgClass}`;
+            }
+        }
+
+        const chevron = button.querySelector('.menu-chevron');
+        if (chevron) {
+            if (isActive) {
+                chevron.classList.remove('opacity-0');
+                chevron.classList.add('opacity-100');
+            } else {
+                chevron.classList.remove('opacity-100');
+                chevron.classList.add('opacity-0');
+            }
+        }
     });
 };
 
@@ -328,11 +354,11 @@ window.updateAdminTaskResponsiveLayout = () => {
         // Reset button classes to look full width on mobile
         sidebar.querySelectorAll('[data-admin-task-panel]').forEach(btn => {
             btn.classList.remove('w-12', 'h-12', 'justify-center', 'mx-auto');
-            btn.classList.add('w-full', 'px-4', 'py-3.5', 'text-left');
-
-            // Hide the symbol/emoji icon on mobile menu
-            const emojiSpan = btn.querySelector('.text-sm');
-            if (emojiSpan) emojiSpan.classList.add('hidden');
+            btn.classList.add('w-full', 'px-3', 'py-2.5', 'justify-between');
+            const iconBox = btn.querySelector('.menu-icon-box');
+            if (iconBox) iconBox.classList.remove('hidden');
+            const chevron = btn.querySelector('.menu-chevron');
+            if (chevron) chevron.classList.remove('hidden');
         });
     } else {
         // Desktop view - restore normal behavior
@@ -347,8 +373,8 @@ window.updateAdminTaskResponsiveLayout = () => {
 
         // Restore symbols/emojis for desktop
         sidebar.querySelectorAll('[data-admin-task-panel]').forEach(btn => {
-            const emojiSpan = btn.querySelector('.text-sm');
-            if (emojiSpan) emojiSpan.classList.remove('hidden');
+            const iconBox = btn.querySelector('.menu-icon-box');
+            if (iconBox) iconBox.classList.remove('hidden');
         });
 
         window.updateAdminTaskSidebar();
@@ -368,6 +394,7 @@ window.updateAdminTaskSidebar = () => {
         sidebar.classList.remove('w-64');
         sidebar.classList.add('w-20');
         sidebar.querySelectorAll('.sidebar-label').forEach(el => el.classList.add('hidden'));
+        sidebar.querySelectorAll('.sidebar-header-label').forEach(el => el.classList.add('hidden'));
         if (toggleIcon) toggleIcon.textContent = '>';
         if (toggleBtnLabel) toggleBtnLabel.textContent = '';
         if (toggleBtn) {
@@ -375,13 +402,16 @@ window.updateAdminTaskSidebar = () => {
             toggleBtn.classList.add('w-12', 'h-12', 'mx-auto');
         }
         sidebar.querySelectorAll('[data-admin-task-panel]').forEach(btn => {
-            btn.classList.remove('w-full', 'px-4', 'py-3.5', 'text-left');
+            btn.classList.remove('w-full', 'px-3', 'py-2.5', 'text-left', 'justify-between');
             btn.classList.add('w-12', 'h-12', 'justify-center', 'rounded-2xl', 'mx-auto');
+            const chevron = btn.querySelector('.menu-chevron');
+            if (chevron) chevron.classList.add('hidden');
         });
     } else {
         sidebar.classList.remove('w-20');
         sidebar.classList.add('w-64');
         sidebar.querySelectorAll('.sidebar-label').forEach(el => el.classList.remove('hidden'));
+        sidebar.querySelectorAll('.sidebar-header-label').forEach(el => el.classList.remove('hidden'));
         if (toggleIcon) toggleIcon.textContent = '<';
         if (toggleBtnLabel) toggleBtnLabel.textContent = 'Collapse';
         if (toggleBtn) {
@@ -390,7 +420,14 @@ window.updateAdminTaskSidebar = () => {
         }
         sidebar.querySelectorAll('[data-admin-task-panel]').forEach(btn => {
             btn.classList.remove('w-12', 'h-12', 'justify-center', 'mx-auto');
-            btn.classList.add('w-full', 'px-4', 'py-3.5', 'text-left');
+            btn.classList.add('w-full', 'px-3', 'py-2.5', 'justify-between');
+            const chevron = btn.querySelector('.menu-chevron');
+            if (chevron) {
+                const isActive = btn.dataset.adminTaskPanel === window.adminTaskPanel;
+                chevron.classList.toggle('opacity-100', isActive);
+                chevron.classList.toggle('opacity-0', !isActive);
+                chevron.classList.remove('hidden');
+            }
         });
     }
 };
@@ -418,19 +455,37 @@ const showAdminTaskPage = () => {
                                     <span class="text-xs font-black uppercase tracking-wider text-slate-400">Admin Menu</span>
                                     <button type="button" onclick="window.closeAdminTaskMobileMenu()" class="h-8 w-8 rounded-full bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 text-slate-700 dark:text-gray-200 flex items-center justify-center transition font-black text-base" style="outline: none;">✕</button>
                                 </div>
-                                <button type="button" data-admin-task-panel="manage" class="w-full flex items-center gap-3 rounded-2xl px-4 py-3.5 text-xs font-black uppercase tracking-wider text-left transition select-none" style="outline: none;">
-                                    <span class="text-sm">📋</span>
-                                    <span class="sidebar-label">Tasks List</span>
+                                <div class="sidebar-header-label px-3 py-2 text-[9px] font-black uppercase tracking-wider text-slate-400 dark:text-slate-500">
+                                    Core Features
+                                </div>
+                                <button type="button" data-admin-task-panel="manage" class="w-full flex items-center justify-between rounded-2xl px-3 py-2.5 text-xs font-black uppercase tracking-wider text-left transition select-none bg-transparent text-slate-700 dark:text-slate-350 hover:bg-slate-100/50 dark:hover:bg-slate-800/40" style="outline: none;">
+                                    <div class="flex items-center gap-3">
+                                        <div class="menu-icon-box w-10 h-10 rounded-xl flex items-center justify-center text-lg shrink-0 transition-colors bg-blue-500/10 text-blue-600 dark:bg-blue-950/50 dark:text-blue-400">
+                                            📋
+                                        </div>
+                                        <span class="sidebar-label">Tasks List</span>
+                                    </div>
+                                    <svg class="menu-chevron w-4 h-4 text-white opacity-0 transition-opacity" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M9 5l7 7-7 7"></path></svg>
                                 </button>
                                 ${isOwner ? `
-                                <button type="button" data-admin-task-panel="ads" class="w-full flex items-center gap-3 rounded-2xl px-4 py-3.5 text-xs font-black uppercase tracking-wider text-left transition select-none" style="outline: none;">
-                                    <span class="text-sm">📢</span>
-                                    <span class="sidebar-label">Manage Ads</span>
+                                <button type="button" data-admin-task-panel="ads" class="w-full flex items-center justify-between rounded-2xl px-3 py-2.5 text-xs font-black uppercase tracking-wider text-left transition select-none bg-transparent text-slate-700 dark:text-slate-350 hover:bg-slate-100/50 dark:hover:bg-slate-800/40" style="outline: none;">
+                                    <div class="flex items-center gap-3">
+                                        <div class="menu-icon-box w-10 h-10 rounded-xl flex items-center justify-center text-lg shrink-0 transition-colors bg-emerald-500/10 text-emerald-600 dark:bg-emerald-950/50 dark:text-emerald-400">
+                                            📢
+                                        </div>
+                                        <span class="sidebar-label">Manage Ads</span>
+                                    </div>
+                                    <svg class="menu-chevron w-4 h-4 text-white opacity-0 transition-opacity" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M9 5l7 7-7 7"></path></svg>
                                 </button>
                                 ` : ''}
-                                <button type="button" data-admin-task-panel="submissions" class="w-full flex items-center gap-3 rounded-2xl px-4 py-3.5 text-xs font-black uppercase tracking-wider text-left transition select-none" style="outline: none;">
-                                    <span class="text-sm">📥</span>
-                                    <span class="sidebar-label">Submissions</span>
+                                <button type="button" data-admin-task-panel="submissions" class="w-full flex items-center justify-between rounded-2xl px-3 py-2.5 text-xs font-black uppercase tracking-wider text-left transition select-none bg-transparent text-slate-700 dark:text-slate-350 hover:bg-slate-100/50 dark:hover:bg-slate-800/40" style="outline: none;">
+                                    <div class="flex items-center gap-3">
+                                        <div class="menu-icon-box w-10 h-10 rounded-xl flex items-center justify-center text-lg shrink-0 transition-colors bg-amber-500/10 text-amber-600 dark:bg-amber-950/50 dark:text-amber-400">
+                                            📥
+                                        </div>
+                                        <span class="sidebar-label">Submissions</span>
+                                    </div>
+                                    <svg class="menu-chevron w-4 h-4 text-white opacity-0 transition-opacity" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M9 5l7 7-7 7"></path></svg>
                                 </button>
                             </div>
 
