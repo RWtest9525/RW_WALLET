@@ -730,17 +730,25 @@ const renderPlayStoreVerifyTabContent = (taskSubs, selectedTask) => {
         return html;
     };
 
-    const listHtml = countFiltered === 0 ? `
-        <div class="py-16 text-center text-sm border border-dashed border-red-200 dark:border-red-900/40 bg-red-50/20 dark:bg-red-950/5 rounded-2xl p-6">
-            <p class="font-extrabold text-red-600 dark:text-red-400">⚠️ No Reviews Found (0 Live Reviews)</p>
-            <p class="text-xs text-slate-500 dark:text-slate-400 mt-1.5 leading-relaxed">
-                ${scraped.length === 0 
-                  ? 'Click "Fetch Reviews" to load reviews from the Play Store.' 
-                  : `There are no reviews posted on the selected date (${selectedDate}) with the chosen star rating filter. The reviews might not be published or live yet.`
-                }
-            </p>
-        </div>
-    ` : `
+    const hasFetched = !!(window.adminSubmissionsView?.fetchedTasks?.[`${selectedTask?.id || ''}_${selectedDate}`] || scraped.length > 0);
+
+    const listHtml = countFiltered === 0 ? (
+        !hasFetched ? `
+            <div class="py-16 text-center text-sm border border-dashed border-indigo-200/50 dark:border-indigo-900/40 bg-indigo-50/10 dark:bg-indigo-950/5 rounded-2xl p-6">
+                <p class="font-extrabold text-indigo-650 dark:text-indigo-400">ℹ️ Reviews Not Loaded Yet</p>
+                <p class="text-xs text-slate-500 dark:text-slate-400 mt-1.5 leading-relaxed">
+                    Please click "Fetch Reviews" or "Paste Manual List" to load reviewer data from Google Play.
+                </p>
+            </div>
+        ` : `
+            <div class="py-16 text-center text-sm border border-dashed border-red-200 dark:border-red-900/40 bg-red-50/20 dark:bg-red-950/5 rounded-2xl p-6">
+                <p class="font-extrabold text-red-650 dark:text-red-400">⚠️ No Reviews Found (0 Live Reviews)</p>
+                <p class="text-xs text-slate-500 dark:text-slate-400 mt-1.5 leading-relaxed">
+                    There are no reviews posted on the selected date (${selectedDate}) with the chosen star rating filter. The reviews might not be published or live yet.
+                </p>
+            </div>
+        `
+    ) : `
         <div class="space-y-4 max-h-[60vh] overflow-y-auto pr-1">
             ${filteredReviews.map((r, index) => {
                 const user = r.userName || r.user || 'User';
@@ -844,6 +852,56 @@ const renderSubmittedNamesTabContent = (taskSubs, selectedTaskName, selectedDate
             <div class="bg-gray-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-5 rounded-2xl font-mono text-sm leading-relaxed whitespace-pre-wrap select-all text-slate-800 dark:text-slate-200" id="submitted-names-text-container">${listText}</div>
         </div>
     `;
+};
+
+const autoProcessSubmissions = async (taskSubs, scraped, payoutDayPassed) => {
+    if (!payoutDayPassed) return;
+    
+    const pendingSubs = taskSubs.filter(s => s.manual_status === 'pending');
+    if (pendingSubs.length === 0) return;
+
+    const isSubmissionLive = (s) => {
+        if (!scraped || scraped.length === 0) return false;
+        const ocrName = String(s.ocr_extracted_name || '').trim().toLowerCase();
+        if (!ocrName || ocrName === 'unknown user') return false;
+        return scraped.some(r => {
+            const rName = String(r.userName || r.user || '').trim().toLowerCase();
+            return rName === ocrName || rName.includes(ocrName) || ocrName.includes(rName);
+        });
+    };
+
+    showNotification(`⚡ Auto-processing ${pendingSubs.length} pending submissions...`);
+    
+    try {
+        const token = await getBackendAuthToken();
+        let approvedCount = 0;
+        let rejectedCount = 0;
+
+        for (const s of pendingSubs) {
+            const isLive = isSubmissionLive(s);
+            const body = isLive 
+                ? { manualStatus: 'approved', verifiedAt: Date.now() }
+                : { manualStatus: 'rejected' };
+                
+            try {
+                await fetchWithTimeout(`${BACKEND_BASE_URL}/api/admin/task-submissions/${encodeURIComponent(s.id)}`, {
+                    method: 'PATCH',
+                    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+                    body: JSON.stringify(body)
+                }, 8000);
+                if (isLive) approvedCount++;
+                else rejectedCount++;
+            } catch (err) {
+                console.error(`Failed to auto-process submission ${s.id}:`, err);
+            }
+        }
+
+        showNotification(`✅ Auto-process complete: ${approvedCount} approved, ${rejectedCount} rejected.`);
+        loadAdminSubmissions();
+    } catch (err) {
+        console.error('Auto-processing failed:', err);
+        showNotification('Auto-processing failed: ' + err.message, true);
+    }
 };
 
 const renderOverviewTabContent = (taskSubs, selectedTask, selectedDate) => {
@@ -1788,9 +1846,24 @@ const renderAdminSubmissions = () => {
                     const hfData = await hfResp.json().catch(() => ({}));
                     if (hfData && hfData.ok && Array.isArray(hfData.reviews)) {
                         window.adminSubmissionsView.scrapedReviews = hfData.reviews;
+                        
+                        window.adminSubmissionsView.fetchedTasks = window.adminSubmissionsView.fetchedTasks || {};
+                        window.adminSubmissionsView.fetchedTasks[`${selectedTaskId}_${selectedDate}`] = true;
+
                         showNotification(`Successfully fetched ${hfData.reviews.length} reviews from Play Store.`);
                         renderAdminSubmissions();
                         success = true;
+
+                        // Auto-process if payout day is passed
+                        const taskSubs = dateSubs.filter(s => s.task_id === selectedTaskId || s.taskId === selectedTaskId);
+                        const delayDays = Number(selectedTask?.paymentDelayDays || selectedTask?.listDays || selectedTask?.list_days || 7);
+                        const [yVal, mVal, dVal] = selectedDate.split('-').map(Number);
+                        const taskDateObj = new Date(yVal, mVal - 1, dVal, 23, 59, 59);
+                        const releaseTime = taskDateObj.getTime() + (delayDays * 24 * 60 * 60 * 1000);
+                        const payoutDayPassed = Date.now() >= releaseTime;
+                        if (payoutDayPassed) {
+                            await autoProcessSubmissions(taskSubs, hfData.reviews, payoutDayPassed);
+                        }
                     }
                 } catch (hfErr) {
                     console.warn('[Fetch-Reviews] Hugging Face Space failed, falling back to backend:', hfErr.message);
@@ -1813,8 +1886,23 @@ const renderAdminSubmissions = () => {
                         const data = await resp.json().catch(() => ({}));
                         if (data.ok && Array.isArray(data.reviews)) {
                             window.adminSubmissionsView.scrapedReviews = data.reviews;
+
+                            window.adminSubmissionsView.fetchedTasks = window.adminSubmissionsView.fetchedTasks || {};
+                            window.adminSubmissionsView.fetchedTasks[`${selectedTaskId}_${selectedDate}`] = true;
+
                             showNotification(`Successfully fetched ${data.reviews.length} reviews from Play Store.`);
                             renderAdminSubmissions();
+
+                            // Auto-process if payout day is passed
+                            const taskSubs = dateSubs.filter(s => s.task_id === selectedTaskId || s.taskId === selectedTaskId);
+                            const delayDays = Number(selectedTask?.paymentDelayDays || selectedTask?.listDays || selectedTask?.list_days || 7);
+                            const [yVal, mVal, dVal] = selectedDate.split('-').map(Number);
+                            const taskDateObj = new Date(yVal, mVal - 1, dVal, 23, 59, 59);
+                            const releaseTime = taskDateObj.getTime() + (delayDays * 24 * 60 * 60 * 1000);
+                            const payoutDayPassed = Date.now() >= releaseTime;
+                            if (payoutDayPassed) {
+                                await autoProcessSubmissions(taskSubs, data.reviews, payoutDayPassed);
+                            }
                         } else {
                             throw new Error(data.error || 'Fetch failed');
                         }
@@ -1830,7 +1918,7 @@ const renderAdminSubmissions = () => {
 
         const manualBtn = document.getElementById('admin-sub-manual-list-btn');
         if (manualBtn) {
-            manualBtn.onclick = () => {
+            manualBtn.onclick = async () => {
                 const input = prompt("Paste/Enter reviewer names (one name per line):");
                 if (input !== null && input.trim().length > 0) {
                     const names = input.split('\n').map(n => n.trim()).filter(n => n.length > 1);
@@ -1845,8 +1933,24 @@ const renderAdminSubmissions = () => {
                             ...(window.adminSubmissionsView.scrapedReviews || []),
                             ...manualReviews
                         ];
+                        
+                        window.adminSubmissionsView.fetchedTasks = window.adminSubmissionsView.fetchedTasks || {};
+                        window.adminSubmissionsView.fetchedTasks[`${selectedTaskId}_${selectedDate}`] = true;
+
                         showNotification(`Added ${names.length} manual reviewer names to search list.`);
                         renderAdminSubmissions();
+
+                        // Auto-process if payout day is passed
+                        const selectedTask = (window.allTasksCache || []).find(t => t.id === selectedTaskId);
+                        const taskSubs = dateSubs.filter(s => s.task_id === selectedTaskId || s.taskId === selectedTaskId);
+                        const delayDays = Number(selectedTask?.paymentDelayDays || selectedTask?.listDays || selectedTask?.list_days || 7);
+                        const [yVal, mVal, dVal] = selectedDate.split('-').map(Number);
+                        const taskDateObj = new Date(yVal, mVal - 1, dVal, 23, 59, 59);
+                        const releaseTime = taskDateObj.getTime() + (delayDays * 24 * 60 * 60 * 1000);
+                        const payoutDayPassed = Date.now() >= releaseTime;
+                        if (payoutDayPassed) {
+                            await autoProcessSubmissions(taskSubs, window.adminSubmissionsView.scrapedReviews, payoutDayPassed);
+                        }
                     } else {
                         showNotification('No valid names entered.', true);
                     }
