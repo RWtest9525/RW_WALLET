@@ -1382,79 +1382,95 @@ const renderAdminSubmissions = () => {
         html = `
             <div class="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 p-4 sm:p-5 space-y-6 text-left">
                 <!-- Top Detail Toolbar Header -->
-                <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-gray-100 dark:border-gray-700">
-                    <div class="flex items-center gap-3 min-w-0 w-full sm:w-auto">
-                        <button id="admin-sub-back-btn" class="p-2 rounded-xl bg-gray-100 hover:bg-gray-200 dark:bg-gray-700 dark:hover:bg-gray-650 text-gray-700 dark:text-gray-200 transition active:scale-95 shadow-sm border border-gray-200/20" title="Back" style="outline: none;">
-                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M10 19l-7-7m0 0l7-7m-7 7h18"></path></svg>
-                        </button>
-                        <div class="min-w-0 flex-1">
-                            <h3 class="text-base sm:text-lg font-black text-gray-900 dark:text-white truncate">${escapeHtml(getCleanAppName(selectedTaskName))}</h3>
-                            <p class="text-[9px] text-indigo-500 font-extrabold uppercase tracking-wider mt-0.5">Task ID: ${escapeHtml(selectedTaskId)}</p>
-                        </div>
-                    </div>
-                    <span class="rounded-full bg-gray-100 dark:bg-gray-700 px-3 py-1.5 text-xs font-black text-gray-700 dark:text-gray-350 border border-gray-200/20 shadow-sm w-fit shrink-0 sm:ml-auto">
-                        Date: ${formatDatePickerDate(selectedDate)}
-                    </span>
-                </div>
+                 <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-gray-100 dark:border-gray-700">
+                     <div class="flex items-center gap-3 min-w-0 w-full sm:w-auto">
+                         <button id="admin-sub-back-btn" class="p-2 rounded-xl bg-gray-100 hover:bg-gray-200 dark:bg-gray-700 dark:hover:bg-gray-650 text-gray-700 dark:text-gray-200 transition active:scale-95 shadow-sm border border-gray-200/20" title="Back" style="outline: none;">
+                             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M10 19l-7-7m0 0l7-7m-7 7h18"></path></svg>
+                         </button>
+                         <div class="min-w-0 flex-1">
+                             <h3 class="text-base sm:text-lg font-black text-gray-900 dark:text-white truncate">${escapeHtml(getCleanAppName(selectedTaskName))}</h3>
+                             <p class="text-[9px] text-indigo-500 font-extrabold uppercase tracking-wider mt-0.5">Task ID: ${escapeHtml(selectedTaskId)}</p>
+                         </div>
+                     </div>
+                     <div class="flex items-center gap-2 w-fit shrink-0 sm:ml-auto">
+                         <span class="rounded-full bg-gray-100 dark:bg-gray-700 px-3 py-1.5 text-xs font-black text-gray-700 dark:text-gray-350 border border-gray-200/20 shadow-sm shrink-0">
+                             Date: ${formatDatePickerDate(selectedDate)}
+                         </span>
+                         ${window.adminSubmissionsView.selectedDetailTab === 'submissions' && countAll > 0 ? `
+                             <button type="button" id="admin-sub-download-zip-btn" class="rounded-full h-8 w-8 sm:w-auto sm:h-auto sm:px-3.5 sm:py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-black text-[10px] uppercase tracking-wider transition active:scale-95 shadow-sm flex items-center justify-center gap-1 cursor-pointer shrink-0" style="outline: none;" title="Download Screenshots ZIP">
+                                 📥 <span class="hidden sm:inline">Download ZIP</span>
+                             </button>
+                         ` : ''}
+                     </div>
+                 </div>
 
-                <!-- Detail Tabs -->
-                <div class="flex items-center gap-6 border-b border-gray-100 dark:border-gray-700 pb-2 overflow-x-auto scrollbar-none text-xs">
-                    ${['overview', 'submissions', 'names_list', 'play_store_verify', 'payments'].map(tab => {
-                        const isActive = window.adminSubmissionsView.selectedDetailTab === tab;
-                        const labels = {
-                            overview: 'Overview',
-                            submissions: 'Submissions',
-                            names_list: 'Submitted Names',
-                            play_store_verify: 'Play Store Verify',
-                            payments: 'Payments'
-                        };
-                        return `
-                            <button type="button" data-action="select-detail-tab" data-tab="${tab}" class="py-2 font-bold uppercase tracking-wider relative shrink-0 transition-colors ${isActive ? 'text-indigo-600 dark:text-indigo-400 font-extrabold' : 'text-gray-400 hover:text-gray-650 dark:hover:text-gray-300'}" style="outline: none;">
-                                ${labels[tab]}
-                                ${isActive ? '<span class="absolute bottom-0 left-0 right-0 h-0.5 bg-indigo-600 dark:bg-indigo-400 rounded-full"></span>' : ''}
-                            </button>
-                        `;
-                    }).join('')}
-                </div>
+                 <!-- Detail Tabs -->
+                 <div class="flex items-center gap-6 border-b border-gray-100 dark:border-gray-700 pb-2 overflow-x-auto scrollbar-none text-xs">
+                     ${['overview', 'submissions', 'names_list', 'play_store_verify', 'payments'].map(tab => {
+                         const isActive = window.adminSubmissionsView.selectedDetailTab === tab;
+                         const labels = {
+                             overview: 'Overview',
+                             submissions: 'Submissions',
+                             names_list: 'Submitted Names',
+                             play_store_verify: 'Play Store Verify',
+                             payments: 'Payments'
+                         };
+                         return `
+                             <button type="button" data-action="select-detail-tab" data-tab="${tab}" class="py-2 font-bold uppercase tracking-wider relative shrink-0 transition-colors ${isActive ? 'text-indigo-600 dark:text-indigo-400 font-extrabold' : 'text-gray-400 hover:text-gray-650 dark:hover:text-gray-300'}" style="outline: none;">
+                                 ${labels[tab]}
+                                 ${isActive ? '<span class="absolute bottom-0 left-0 right-0 h-0.5 bg-indigo-600 dark:bg-indigo-400 rounded-full"></span>' : ''}
+                             </button>
+                         `;
+                     }).join('')}
+                 </div>
 
-                <!-- Tab Contents -->
-                ${window.adminSubmissionsView.selectedDetailTab === 'names_list' ? `
-                    ${renderSubmittedNamesTabContent(taskSubs, selectedTaskName, selectedDate)}
-                ` : window.adminSubmissionsView.selectedDetailTab === 'play_store_verify' ? `
-                    ${renderPlayStoreVerifyTabContent(taskSubs, selectedTask)}
-                ` : window.adminSubmissionsView.selectedDetailTab === 'overview' ? `
-                    ${renderOverviewTabContent(taskSubs, selectedTask, selectedDate)}
-                ` : window.adminSubmissionsView.selectedDetailTab === 'payments' ? `
-                    ${renderPaymentsTabContent(taskSubs)}
-                ` : window.adminSubmissionsView.selectedDetailTab !== 'submissions' ? `
-                    <div class="py-12 text-center text-sm text-gray-455">
-                        <p class="font-extrabold uppercase tracking-wide text-gray-400 dark:text-gray-500">${escapeHtml(window.adminSubmissionsView.selectedDetailTab)} Panel</p>
-                        <p class="text-xs text-gray-500 mt-1">This section is configured to run automatically.</p>
-                    </div>
-                ` : `
-                    <!-- Submissions Filter Chips -->
-                    <div class="flex flex-wrap items-center gap-2 mb-4 w-full">
-                        ${[
-                            { value: 'all', label: `All (${countAll})` },
-                            { value: 'ocr_passed', label: `OCR Passed (${countOcr})` },
-                            { value: 'pending', label: `Pending (${countPending})` },
-                            { value: 'rejected', label: `Rejected (${countRejected})` },
-                            { value: 'same_username', label: `Same User Name (${countSameUsername})` }
-                        ].map(chip => {
-                            const isActive = window.adminSubmissionsView.selectedSubFilter === chip.value;
-                            return `
-                                <button type="button" data-action="select-sub-filter" data-filter="${chip.value}" class="rounded-xl px-3 py-2 text-[10px] font-black uppercase tracking-wider transition-all duration-200 border ${isActive ? 'bg-indigo-600 border-indigo-600 text-white shadow-md' : 'bg-white dark:bg-slate-900 border-slate-200/60 dark:border-slate-800 text-slate-650 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-850/80 shadow-sm'}" style="outline: none;">
-                                    ${chip.label}
-                                </button>
-                            `;
-                        }).join('')}
-                        
-                        ${window.adminSubmissionsView.selectedSubFilter === 'all' && countAll > 0 ? `
-                            <button type="button" id="admin-sub-download-zip-btn" class="rounded-xl px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-black text-[10px] uppercase tracking-wider transition active:scale-95 shadow-md flex items-center gap-1.5 sm:ml-auto cursor-pointer w-full sm:w-auto justify-center" style="outline: none;">
-                                📥 Download ZIP
-                            </button>
-                        ` : ''}
-                    </div>
+                 <!-- Tab Contents -->
+                 ${window.adminSubmissionsView.selectedDetailTab === 'names_list' ? `
+                     ${renderSubmittedNamesTabContent(taskSubs, selectedTaskName, selectedDate)}
+                 ` : window.adminSubmissionsView.selectedDetailTab === 'play_store_verify' ? `
+                     ${renderPlayStoreVerifyTabContent(taskSubs, selectedTask)}
+                 ` : window.adminSubmissionsView.selectedDetailTab === 'overview' ? `
+                     ${renderOverviewTabContent(taskSubs, selectedTask, selectedDate)}
+                 ` : window.adminSubmissionsView.selectedDetailTab === 'payments' ? `
+                     ${renderPaymentsTabContent(taskSubs)}
+                 ` : window.adminSubmissionsView.selectedDetailTab !== 'submissions' ? `
+                     <div class="py-12 text-center text-sm text-gray-455">
+                         <p class="font-extrabold uppercase tracking-wide text-gray-400 dark:text-gray-500">${escapeHtml(window.adminSubmissionsView.selectedDetailTab)} Panel</p>
+                         <p class="text-xs text-gray-500 mt-1">This section is configured to run automatically.</p>
+                     </div>
+                 ` : `
+                     <!-- Submissions Filter (Dropdown on Mobile, Chips on Desktop) -->
+                     <div class="w-full mb-4">
+                         <!-- Mobile dropdown filter -->
+                         <div class="sm:hidden w-full">
+                             <label class="text-[9px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-wider block mb-1">Filter Submissions</label>
+                             <select id="mobile-sub-filter-select" class="w-full px-3.5 py-3 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl text-xs font-black uppercase text-slate-750 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500/50" style="outline: none;">
+                                 <option value="all" ${window.adminSubmissionsView.selectedSubFilter === 'all' ? 'selected' : ''}>All Submissions (${countAll})</option>
+                                 <option value="ocr_passed" ${window.adminSubmissionsView.selectedSubFilter === 'ocr_passed' ? 'selected' : ''}>OCR Passed (${countOcr})</option>
+                                 <option value="pending" ${window.adminSubmissionsView.selectedSubFilter === 'pending' ? 'selected' : ''}>Pending (${countPending})</option>
+                                 <option value="rejected" ${window.adminSubmissionsView.selectedSubFilter === 'rejected' ? 'selected' : ''}>Rejected (${countRejected})</option>
+                                 <option value="same_username" ${window.adminSubmissionsView.selectedSubFilter === 'same_username' ? 'selected' : ''}>Same User Name (${countSameUsername})</option>
+                             </select>
+                         </div>
+                         
+                         <!-- Desktop horizontal chips filter -->
+                         <div class="hidden sm:flex flex-wrap items-center gap-2 w-full">
+                             ${[
+                                 { value: 'all', label: `All (${countAll})` },
+                                 { value: 'ocr_passed', label: `OCR Passed (${countOcr})` },
+                                 { value: 'pending', label: `Pending (${countPending})` },
+                                 { value: 'rejected', label: `Rejected (${countRejected})` },
+                                 { value: 'same_username', label: `Same User Name (${countSameUsername})` }
+                             ].map(chip => {
+                                 const isActive = window.adminSubmissionsView.selectedSubFilter === chip.value;
+                                 return `
+                                     <button type="button" data-action="select-sub-filter" data-filter="${chip.value}" class="rounded-xl px-3 py-2 text-[10px] font-black uppercase tracking-wider transition-all duration-200 border ${isActive ? 'bg-indigo-600 border-indigo-600 text-white shadow-md' : 'bg-white dark:bg-slate-900 border-slate-200/60 dark:border-slate-800 text-slate-650 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-850/80 shadow-sm'}" style="outline: none;">
+                                         ${chip.label}
+                                     </button>
+                                 `;
+                             }).join('')}
+                         </div>
+                     </div>
 
                     <!-- Screenshot Grid or Duplicate Group View -->
                     ${filteredSubs.length === 0 ? `
@@ -1863,6 +1879,14 @@ const renderAdminSubmissions = () => {
             renderAdminSubmissions();
         };
     });
+
+    const mobileFilterSelect = document.getElementById('mobile-sub-filter-select');
+    if (mobileFilterSelect) {
+        mobileFilterSelect.onchange = (e) => {
+            window.adminSubmissionsView.selectedSubFilter = e.target.value;
+            renderAdminSubmissions();
+        };
+    }
 
     shellEl.querySelectorAll('[data-action="open-detail-modal"]').forEach(card => {
         card.onclick = (e) => {
