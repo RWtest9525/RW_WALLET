@@ -389,7 +389,7 @@ const showAdminTaskPage = () => {
                         <div id="admin-task-sidebar-backdrop" onclick="window.closeAdminTaskMobileMenu()" class="fixed inset-0 bg-black/40 z-40 hidden transition-opacity duration-300"></div>
 
                         <!-- Left Sidebar Panel -->
-                        <div id="admin-task-sidebar" class="fixed md:static top-0 left-0 h-full md:h-auto z-50 md:z-auto shadow-2xl md:shadow-sm rounded-r-3xl rounded-l-none md:rounded-3xl w-64 max-w-[70vw] md:max-w-none shrink-0 transform transition-transform duration-300 flex flex-col justify-between border-y-0 border-l-0 border-r md:border border-slate-100 dark:border-slate-800 bg-white dark:bg-gray-900 p-3 sticky md:top-6 min-h-[350px] -translate-x-full md:translate-x-0">
+                        <div id="admin-task-sidebar" class="fixed md:sticky md:top-6 top-0 left-0 h-full md:h-auto z-50 md:z-auto shadow-2xl md:shadow-sm rounded-r-3xl rounded-l-none md:rounded-3xl w-64 max-w-[70vw] md:max-w-none shrink-0 transform transition-transform duration-300 flex flex-col justify-between border-y-0 border-l-0 border-r md:border border-slate-100 dark:border-slate-800 bg-white dark:bg-gray-900 p-3 min-h-[350px] -translate-x-full md:translate-x-0">
                             <!-- Top Navigation List -->
                             <div class="space-y-1.5 flex flex-col w-full">
                                 <!-- Mobile Only Sidebar Header with Close Button -->
