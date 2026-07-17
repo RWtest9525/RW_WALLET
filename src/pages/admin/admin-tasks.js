@@ -101,6 +101,27 @@ const getAdminTaskSubtype = (task = {}) => {
 const getAdminTaskEffectiveStatus = (task = {}) => {
     const status = String(task.status || 'draft').toLowerCase();
     const expiresAt = timestampToMillis(task.expiresAt || task.autoCloseAt || task.closeAt);
+    
+    // Check if the scheduled date has passed (for both active and draft/off tasks)
+    const listDateStr = task.listDate || task.list_date;
+    if (listDateStr) {
+        const todayStr = new Date().toLocaleDateString('en-CA'); // 'YYYY-MM-DD'
+        if (listDateStr < todayStr) {
+            return 'over';
+        }
+    } else {
+        const createdAtMillis = timestampToMillis(task.createdAt);
+        if (createdAtMillis) {
+            const createdDate = new Date(createdAtMillis);
+            const today = new Date();
+            const createdDay = new Date(createdDate.getFullYear(), createdDate.getMonth(), createdDate.getDate()).getTime();
+            const todayDay = new Date(today.getFullYear(), today.getMonth(), today.getDate()).getTime();
+            if (createdDay < todayDay) {
+                return 'over';
+            }
+        }
+    }
+
     if (status === 'active' && expiresAt && expiresAt <= Date.now()) {
         const createdAtMillis = timestampToMillis(task.createdAt);
         if (createdAtMillis) {
@@ -1192,17 +1213,39 @@ const handleToggleAdminTaskStatus = async (taskId) => {
     const currentStatus = getAdminTaskEffectiveStatus(task);
     const nextStatus = currentStatus === 'active' ? 'draft' : 'active';
     const nextExpiresAt = nextStatus === 'active' ? getNextTaskMidnightMillis() : null;
-    allTasksCache = allTasksCache.map(item => item.id === taskId ? { ...item, status: nextStatus, isVisible: nextStatus === 'active', expiresAt: nextExpiresAt } : item);
+    const todayStr = new Date().toLocaleDateString('en-CA'); // 'YYYY-MM-DD'
+    
+    allTasksCache = allTasksCache.map(item => {
+        if (item.id === taskId) {
+            const updated = {
+                ...item,
+                status: nextStatus,
+                isVisible: nextStatus === 'active',
+                expiresAt: nextExpiresAt
+            };
+            if (nextStatus === 'active') {
+                updated.listDate = todayStr;
+                updated.list_date = todayStr;
+            }
+            return updated;
+        }
+        return item;
+    });
     renderAdminTaskList();
     try {
-        await updateDoc(doc(db, `artifacts/${appId}/public/data/tasks`, taskId), {
+        const updateData = {
             status: nextStatus,
             isVisible: nextStatus === 'active',
             expiresAt: nextExpiresAt,
             autoCloseDaily: true,
             updatedAt: serverTimestamp(),
             updatedBy: currentUser.uid
-        });
+        };
+        if (nextStatus === 'active') {
+            updateData.listDate = todayStr;
+            updateData.list_date = todayStr;
+        }
+        await updateDoc(doc(db, `artifacts/${appId}/public/data/tasks`, taskId), updateData);
         showNotification(nextStatus === 'active' ? 'Task is live until 12 AM.' : 'Task turned off.');
     } catch (error) {
         console.error('Task status update failed:', error);
