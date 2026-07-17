@@ -8,7 +8,8 @@ const Tesseract = require('tesseract.js');
 const Jimp = require('jimp');
 const { google } = require('googleapis');
 const { Readable } = require('stream');
-const gplay = require('google-play-scraper');
+const gplayRaw = require('google-play-scraper');
+const gplay = gplayRaw.default || gplayRaw;
 
 const REQUIRED_ENV = [
   'APP_JWT_SECRET',
