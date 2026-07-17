@@ -966,7 +966,7 @@ const renderAdminSubmissions = () => {
                                 }
                                 
                                 return `
-                                    <div class="relative w-16 xs:w-20 sm:w-24 md:w-28 aspect-[9/16] rounded-xl overflow-hidden border border-gray-150 dark:border-gray-755 bg-gray-900 shadow-sm cursor-pointer hover:scale-[1.02] active:scale-[0.98] transition-all duration-200 flex items-center justify-center shrink-0" data-action="open-detail-modal" data-index="${idx}">
+                                    <div class="relative w-16 xs:w-20 sm:w-24 md:w-28 aspect-square rounded-xl overflow-hidden border border-gray-150 dark:border-gray-755 bg-gray-900 shadow-sm cursor-pointer hover:scale-[1.02] active:scale-[0.98] transition-all duration-200 flex items-center justify-center shrink-0" data-action="open-detail-modal" data-index="${idx}">
                                         <img src="${escapeHtml(s.screenshot_url)}" alt="Screenshot" class="h-full w-full object-cover" loading="lazy">
                                         
                                         <!-- Overlay Mini Status Badge -->
