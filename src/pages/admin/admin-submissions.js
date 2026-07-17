@@ -679,10 +679,15 @@ const renderPlayStoreVerifyTabContent = (taskSubs, selectedTask) => {
 
     const actionHtml = `
         <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-slate-50 dark:bg-slate-900/60 p-3 sm:p-4 rounded-2xl border border-slate-100 dark:border-slate-800">
-            <div class="flex flex-col xs:flex-row items-stretch xs:items-center gap-3 w-full sm:w-auto">
-                <button type="button" id="fetch-playstore-reviews-btn" class="rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-black px-4 py-2.5 text-xs transition active:scale-95 shadow-sm uppercase tracking-wider text-center">
+            <div class="flex flex-wrap items-center gap-3 w-full sm:w-auto">
+                <button type="button" id="fetch-playstore-reviews-btn" class="rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-black px-4 py-2.5 text-xs transition active:scale-95 shadow-sm uppercase tracking-wider text-center cursor-pointer">
                     🔄 Fetch Reviews
                 </button>
+                
+                <button type="button" id="admin-sub-manual-list-btn" class="rounded-xl bg-purple-600 hover:bg-purple-700 text-white font-black px-4 py-2.5 text-xs transition active:scale-95 shadow-sm uppercase tracking-wider text-center flex items-center justify-center gap-1.5 cursor-pointer">
+                    ✍️ Paste Manual List
+                </button>
+
                 <div class="flex items-center justify-between xs:justify-start gap-2 bg-white dark:bg-slate-850 border border-slate-200/50 dark:border-slate-700 rounded-xl px-3 py-2">
                     <label for="playstore-star-filter" class="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-wider">Rating:</label>
                     <select id="playstore-star-filter" class="bg-transparent text-xs font-bold text-slate-750 dark:text-slate-200 focus:outline-none cursor-pointer" style="outline: none;">
@@ -696,7 +701,7 @@ const renderPlayStoreVerifyTabContent = (taskSubs, selectedTask) => {
                 </div>
             </div>
             ${countFiltered > 0 ? `
-                <button type="button" id="download-playstore-excel-btn" class="w-full sm:w-auto rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-black px-4 py-2.5 text-xs transition active:scale-95 shadow-sm uppercase tracking-wider flex items-center justify-center gap-1.5">
+                <button type="button" id="download-playstore-excel-btn" class="w-full sm:w-auto rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-black px-4 py-2.5 text-xs transition active:scale-95 shadow-sm uppercase tracking-wider flex items-center justify-center gap-1.5 cursor-pointer">
                     📥 Download Excel
                 </button>
             ` : ''}
@@ -837,6 +842,178 @@ const renderSubmittedNamesTabContent = (taskSubs, selectedTaskName, selectedDate
                 </button>
             </div>
             <div class="bg-gray-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-5 rounded-2xl font-mono text-sm leading-relaxed whitespace-pre-wrap select-all text-slate-800 dark:text-slate-200" id="submitted-names-text-container">${listText}</div>
+        </div>
+    `;
+};
+
+const renderOverviewTabContent = (taskSubs, selectedTask, selectedDate) => {
+    const total = taskSubs.length;
+    const reward = Number(selectedTask?.reward || selectedTask?.ratePerReview || selectedTask?.rate_per_review || 0);
+
+    if (total === 0) {
+        return `
+            <div class="grid grid-cols-1 md:grid-cols-12 gap-6 items-stretch">
+                <div class="bg-slate-50 dark:bg-slate-900/60 border border-slate-100 dark:border-slate-800 p-5 sm:p-6 rounded-2xl md:col-span-5 flex flex-col items-center justify-center shadow-sm py-12">
+                    <p class="font-extrabold text-slate-400 dark:text-slate-500 uppercase tracking-wide">No Screenshots</p>
+                    <p class="text-xs text-slate-450 dark:text-slate-550 text-center mt-1">No screenshots received for this task on this date.</p>
+                </div>
+                <div class="bg-slate-50 dark:bg-slate-900/60 border border-slate-100 dark:border-slate-800 p-5 sm:p-6 rounded-2xl md:col-span-7 flex flex-col justify-between shadow-sm space-y-4">
+                    <div>
+                        <h4 class="text-xs font-black text-slate-500 dark:text-slate-400 uppercase tracking-widest mb-4">Task Details & Summary</h4>
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            <div class="bg-white dark:bg-slate-950/40 p-3.5 rounded-xl border border-slate-150/40 dark:border-slate-850 shadow-sm flex flex-col">
+                                <span class="text-[9px] font-black text-slate-400 uppercase tracking-wider">Target Date</span>
+                                <span class="text-xs font-bold text-slate-800 dark:text-slate-200 mt-1">${formatDatePickerDate(selectedDate)}</span>
+                            </div>
+                            <div class="bg-white dark:bg-slate-950/40 p-3.5 rounded-xl border border-slate-150/40 dark:border-slate-850 shadow-sm flex flex-col">
+                                <span class="text-[9px] font-black text-slate-400 uppercase tracking-wider">Review Payout Rate</span>
+                                <span class="text-xs font-bold text-indigo-600 dark:text-indigo-400 mt-1">₹${reward} per review</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+    }
+
+    const approvedCount = taskSubs.filter(s => s.manual_status === 'approved').length;
+    const pendingCount = taskSubs.filter(s => s.manual_status === 'pending').length;
+    const rejectedCount = taskSubs.filter(s => s.manual_status === 'rejected').length;
+
+    const approvedPercent = Math.round((approvedCount / total) * 100);
+    const pendingPercent = Math.round((pendingCount / total) * 100);
+    const rejectedPercent = Math.max(0, 100 - (approvedPercent + pendingPercent)); // Ensure sum is 100
+
+    const totalRevenueSpent = approvedCount * reward;
+
+    const val1 = approvedPercent;
+    const val2 = val1 + pendingPercent;
+    const gradientStyle = `background: conic-gradient(
+        #10b981 0% ${val1}%, 
+        #f59e0b ${val1}% ${val2}%, 
+        #ef4444 ${val2}% 100%
+    );`;
+
+    return `
+        <div class="grid grid-cols-1 md:grid-cols-12 gap-6 items-stretch">
+            <!-- Left Card: Circular Chart -->
+            <div class="bg-slate-50 dark:bg-slate-900/60 border border-slate-100 dark:border-slate-800 p-5 sm:p-6 rounded-2xl flex flex-col items-center justify-center md:col-span-5 shadow-sm">
+                <h4 class="text-xs font-black text-slate-500 dark:text-slate-400 uppercase tracking-widest mb-6">Submission Breakdown</h4>
+                
+                <div class="relative w-44 h-44 sm:w-48 sm:h-48 rounded-full shadow-lg flex items-center justify-center" style="${gradientStyle}">
+                    <div class="w-32 h-32 sm:w-36 sm:h-36 rounded-full bg-white dark:bg-slate-950 flex flex-col items-center justify-center shadow-inner">
+                        <span class="text-[9px] font-black text-slate-400 uppercase tracking-wider">Total Received</span>
+                        <span class="text-3xl font-black text-slate-850 dark:text-white mt-1">${total}</span>
+                        <span class="text-[8px] font-black text-indigo-500 uppercase tracking-widest mt-1.5">Screenshots</span>
+                    </div>
+                </div>
+
+                <!-- Small labels inside the card -->
+                <div class="flex flex-wrap items-center justify-center gap-4 mt-6 text-[10px] font-extrabold tracking-wide uppercase">
+                    <span class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-full bg-emerald-500"></span> Approved (${approvedPercent}%)</span>
+                    <span class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-full bg-amber-500"></span> Pending (${pendingPercent}%)</span>
+                    <span class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-full bg-rose-500"></span> Rejected (${rejectedPercent}%)</span>
+                </div>
+            </div>
+
+            <!-- Right Card: Stats & Financials -->
+            <div class="bg-slate-50 dark:bg-slate-900/60 border border-slate-100 dark:border-slate-800 p-5 sm:p-6 rounded-2xl md:col-span-7 flex flex-col justify-between shadow-sm space-y-4">
+                <div>
+                    <h4 class="text-xs font-black text-slate-500 dark:text-slate-400 uppercase tracking-widest mb-4">Task Details & Summary</h4>
+                    
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div class="bg-white dark:bg-slate-950/40 p-3.5 rounded-xl border border-slate-150/40 dark:border-slate-850 shadow-sm flex flex-col">
+                            <span class="text-[9px] font-black text-slate-400 uppercase tracking-wider">Target Date</span>
+                            <span class="text-xs font-bold text-slate-800 dark:text-slate-200 mt-1">${formatDatePickerDate(selectedDate)}</span>
+                        </div>
+                        <div class="bg-white dark:bg-slate-950/40 p-3.5 rounded-xl border border-slate-150/40 dark:border-slate-850 shadow-sm flex flex-col">
+                            <span class="text-[9px] font-black text-slate-400 uppercase tracking-wider">Review Payout Rate</span>
+                            <span class="text-xs font-bold text-indigo-600 dark:text-indigo-400 mt-1">₹${reward} per review</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="border-t border-dashed border-slate-200 dark:border-slate-700/60 pt-4">
+                    <h4 class="text-xs font-black text-slate-500 dark:text-slate-400 uppercase tracking-widest mb-3">Financial Overview</h4>
+                    <div class="bg-emerald-500/[0.04] dark:bg-emerald-950/[0.08] p-4 rounded-2xl border border-emerald-500/10 dark:border-emerald-900/20 flex items-center justify-between">
+                        <div>
+                            <span class="text-[10px] font-black text-emerald-600/80 dark:text-emerald-400/80 uppercase tracking-wider">Total Revenue Spent</span>
+                            <p class="text-2xl font-black text-emerald-600 dark:text-emerald-400 mt-1">₹${totalRevenueSpent}</p>
+                            <p class="text-[9px] font-bold text-slate-400 mt-0.5">${approvedCount} approved submissions paid out</p>
+                        </div>
+                        <div class="h-10 w-10 rounded-full bg-emerald-500/10 dark:bg-emerald-950 flex items-center justify-center text-emerald-600 dark:text-emerald-400 font-bold text-lg">
+                            ₹
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    `;
+};
+
+const renderPaymentsTabContent = (taskSubs) => {
+    const paidSubs = taskSubs.filter(s => s.manual_status === 'approved');
+
+    if (paidSubs.length === 0) {
+        return `
+            <div class="py-16 text-center text-sm border border-dashed border-slate-200 dark:border-slate-800 bg-slate-50/30 dark:bg-slate-900/10 rounded-2xl p-6">
+                <p class="font-extrabold text-slate-400 dark:text-slate-500 uppercase tracking-wide">No Approved Submissions</p>
+                <p class="text-xs text-slate-450 dark:text-slate-550 mt-1">Once you approve user submissions, their payment status will be recorded here.</p>
+            </div>
+        `;
+    }
+
+    return `
+        <div class="space-y-4">
+            <div class="text-[10px] font-extrabold text-slate-400 dark:text-slate-500 uppercase tracking-wider pl-1">
+                Showing Payments for ${paidSubs.length} Approved Submissions
+            </div>
+            
+            <div class="border border-slate-100 dark:border-slate-800 rounded-2xl overflow-hidden bg-white dark:bg-slate-900 shadow-sm overflow-x-auto">
+                <table class="w-full text-left text-xs border-collapse">
+                    <thead>
+                        <tr class="bg-slate-50/50 dark:bg-slate-850/40 border-b border-slate-100 dark:border-slate-800 text-slate-400 dark:text-slate-500 uppercase font-black text-[9px] tracking-wider">
+                            <th class="py-3 px-4">User Name</th>
+                            <th class="py-3 px-3">Mobile No.</th>
+                            <th class="py-3 px-3 text-center">Amount</th>
+                            <th class="py-3 px-3 text-center">Status</th>
+                            <th class="py-3 px-4 text-right">Payment Time</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-slate-100 dark:divide-slate-800/80">
+                        ${paidSubs.map((s, idx) => {
+                            const user = s.user_name || 'No Name';
+                            const mobile = s.user_mobile || 'No Mobile';
+                            const amt = s.reward || 0;
+                            const isPaid = s.payout_status === 'paid';
+                            const statusColor = isPaid ? 'bg-cyan-500' : 'bg-amber-500';
+                            const statusText = isPaid ? 'PAID' : 'PENDING';
+                            
+                            const paymentTime = s.paidAt || s.paid_at || s.verifiedAt || s.verified_at || s.submitted_at || s.submittedAt;
+                            const formattedTime = paymentTime ? new Date(paymentTime).toLocaleDateString('en-IN', {
+                                day: '2-digit',
+                                month: 'short',
+                                hour: '2-digit',
+                                minute: '2-digit'
+                            }) : 'Pending';
+
+                            return `
+                                <tr class="hover:bg-slate-50/40 dark:hover:bg-slate-800/10 transition">
+                                    <td class="py-3.5 px-4 font-extrabold text-slate-800 dark:text-slate-200">${escapeHtml(user)}</td>
+                                    <td class="py-3.5 px-3 font-mono font-bold text-slate-500 dark:text-slate-400">${escapeHtml(mobile)}</td>
+                                    <td class="py-3.5 px-3 text-center font-black text-emerald-600 dark:text-emerald-400">₹${amt}</td>
+                                    <td class="py-3.5 px-3 text-center">
+                                        <span class="inline-block rounded-full ${statusColor} text-white px-2 py-0.5 text-[8px] font-black tracking-wider uppercase shadow-sm">
+                                            ${statusText}
+                                        </span>
+                                    </td>
+                                    <td class="py-3.5 px-4 text-right font-bold text-slate-450 dark:text-slate-500">${formattedTime}</td>
+                                </tr>
+                            `;
+                        }).join('')}
+                    </tbody>
+                </table>
+            </div>
         </div>
     `;
 };
@@ -983,20 +1160,44 @@ const renderAdminSubmissions = () => {
             });
         };
 
+        // Determine if payout day (delay) is passed
+        const delayDays = Number(selectedTask?.paymentDelayDays || selectedTask?.listDays || selectedTask?.list_days || 7);
+        const [yVal, mVal, dVal] = selectedDate.split('-').map(Number);
+        const taskDateObj = new Date(yVal, mVal - 1, dVal, 23, 59, 59);
+        const releaseTime = taskDateObj.getTime() + (delayDays * 24 * 60 * 60 * 1000);
+        const payoutDayPassed = Date.now() >= releaseTime;
+
         // Chips counts
         const countAll = taskSubs.length;
         const countOcr = taskSubs.filter(s => s.ocr_status === 'completed').length;
-        const countPending = taskSubs.filter(s => s.manual_status === 'pending' && isSubmissionLive(s)).length;
-        const countRejected = taskSubs.filter(s => s.manual_status === 'rejected' || (s.manual_status === 'pending' && !isSubmissionLive(s))).length;
+        
+        let countPending = 0;
+        let countRejected = 0;
+        
+        if (payoutDayPassed) {
+            countPending = taskSubs.filter(s => s.manual_status === 'pending' && isSubmissionLive(s)).length;
+            countRejected = taskSubs.filter(s => s.manual_status === 'rejected' || (s.manual_status === 'pending' && !isSubmissionLive(s))).length;
+        } else {
+            countPending = taskSubs.filter(s => s.manual_status === 'pending').length;
+            countRejected = taskSubs.filter(s => s.manual_status === 'rejected').length;
+        }
 
         // Apply active filter
         let filteredSubs = [...taskSubs];
         if (window.adminSubmissionsView.selectedSubFilter === 'ocr_passed') {
             filteredSubs = filteredSubs.filter(s => s.ocr_status === 'completed');
         } else if (window.adminSubmissionsView.selectedSubFilter === 'pending') {
-            filteredSubs = filteredSubs.filter(s => s.manual_status === 'pending' && isSubmissionLive(s));
+            if (payoutDayPassed) {
+                filteredSubs = filteredSubs.filter(s => s.manual_status === 'pending' && isSubmissionLive(s));
+            } else {
+                filteredSubs = filteredSubs.filter(s => s.manual_status === 'pending');
+            }
         } else if (window.adminSubmissionsView.selectedSubFilter === 'rejected') {
-            filteredSubs = filteredSubs.filter(s => s.manual_status === 'rejected' || (s.manual_status === 'pending' && !isSubmissionLive(s)));
+            if (payoutDayPassed) {
+                filteredSubs = filteredSubs.filter(s => s.manual_status === 'rejected' || (s.manual_status === 'pending' && !isSubmissionLive(s)));
+            } else {
+                filteredSubs = filteredSubs.filter(s => s.manual_status === 'rejected');
+            }
         }
 
         window.currentActiveSubmissions = filteredSubs; // Cache list for detail modal
@@ -1021,13 +1222,12 @@ const renderAdminSubmissions = () => {
 
                 <!-- Detail Tabs -->
                 <div class="flex items-center gap-6 border-b border-gray-100 dark:border-gray-700 pb-2 overflow-x-auto scrollbar-none text-xs">
-                    ${['overview', 'submissions', 'names_list', 'failed', 'play_store_verify', 'payments'].map(tab => {
+                    ${['overview', 'submissions', 'names_list', 'play_store_verify', 'payments'].map(tab => {
                         const isActive = window.adminSubmissionsView.selectedDetailTab === tab;
                         const labels = {
                             overview: 'Overview',
                             submissions: 'Submissions',
                             names_list: 'Submitted Names',
-                            failed: 'Failed',
                             play_store_verify: 'Play Store Verify',
                             payments: 'Payments'
                         };
@@ -1045,6 +1245,10 @@ const renderAdminSubmissions = () => {
                     ${renderSubmittedNamesTabContent(taskSubs, selectedTaskName, selectedDate)}
                 ` : window.adminSubmissionsView.selectedDetailTab === 'play_store_verify' ? `
                     ${renderPlayStoreVerifyTabContent(taskSubs, selectedTask)}
+                ` : window.adminSubmissionsView.selectedDetailTab === 'overview' ? `
+                    ${renderOverviewTabContent(taskSubs, selectedTask, selectedDate)}
+                ` : window.adminSubmissionsView.selectedDetailTab === 'payments' ? `
+                    ${renderPaymentsTabContent(taskSubs)}
                 ` : window.adminSubmissionsView.selectedDetailTab !== 'submissions' ? `
                     <div class="py-12 text-center text-sm text-gray-455">
                         <p class="font-extrabold uppercase tracking-wide text-gray-400 dark:text-gray-500">${escapeHtml(window.adminSubmissionsView.selectedDetailTab)} Panel</p>
@@ -1452,32 +1656,100 @@ const renderAdminSubmissions = () => {
                     fetchBtn.innerHTML = originalText;
                     return;
                 }
+
+                // Helper to extract package ID
+                const extractPkgId = (val) => {
+                    const raw = String(val || '').trim();
+                    if (raw.includes('id=')) {
+                        try {
+                            const url = new URL(raw);
+                            const pkg = url.searchParams.get('id');
+                            return pkg ? pkg.trim() : raw;
+                        } catch {
+                            const match = raw.match(/[?&]id=([^&#]+)/);
+                            return match ? match[1] : raw;
+                        }
+                    }
+                    return raw;
+                };
+
+                const packageId = extractPkgId(taskLink);
+                const selectedDate = window.adminSubmissionsView.selectedDate || '';
                 
+                let success = false;
+                
+                // Try Hugging Face Space first (good IP addresses, CORS enabled)
                 try {
-                    const token = await getBackendAuthToken();
-                    const resp = await fetchWithTimeout(`${BACKEND_BASE_URL}/api/admin/scraper/fetch-reviews`, {
-                        method: 'POST',
-                        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                            url: taskLink,
-                            taskId: selectedTaskId,
-                            selectedDate: window.adminSubmissionsView.selectedDate
-                        })
-                    }, 15000);
+                    console.log(`[Fetch-Reviews] Trying Hugging Face Space for ${packageId} on ${selectedDate}`);
+                    const hfResp = await fetchWithTimeout(`https://yash9525-rw-live-checker.hf.space/api/public-reviews?packageId=${encodeURIComponent(packageId)}&date=${encodeURIComponent(selectedDate)}`, {
+                        method: 'GET'
+                    }, 12000);
                     
-                    const data = await resp.json().catch(() => ({}));
-                    if (data.ok && Array.isArray(data.reviews)) {
-                        window.adminSubmissionsView.scrapedReviews = data.reviews;
-                        showNotification(`Successfully fetched ${data.reviews.length} reviews from Play Store.`);
+                    const hfData = await hfResp.json().catch(() => ({}));
+                    if (hfData && hfData.ok && Array.isArray(hfData.reviews)) {
+                        window.adminSubmissionsView.scrapedReviews = hfData.reviews;
+                        showNotification(`Successfully fetched ${hfData.reviews.length} reviews from Play Store.`);
+                        renderAdminSubmissions();
+                        success = true;
+                    }
+                } catch (hfErr) {
+                    console.warn('[Fetch-Reviews] Hugging Face Space failed, falling back to backend:', hfErr.message);
+                }
+
+                // Fallback to Render backend scraper if Hugging Face failed
+                if (!success) {
+                    try {
+                        const token = await getBackendAuthToken();
+                        const resp = await fetchWithTimeout(`${BACKEND_BASE_URL}/api/admin/scraper/fetch-reviews`, {
+                            method: 'POST',
+                            headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                url: taskLink,
+                                taskId: selectedTaskId,
+                                selectedDate: selectedDate
+                            })
+                        }, 15000);
+                        
+                        const data = await resp.json().catch(() => ({}));
+                        if (data.ok && Array.isArray(data.reviews)) {
+                            window.adminSubmissionsView.scrapedReviews = data.reviews;
+                            showNotification(`Successfully fetched ${data.reviews.length} reviews from Play Store.`);
+                            renderAdminSubmissions();
+                        } else {
+                            throw new Error(data.error || 'Fetch failed');
+                        }
+                    } catch (err) {
+                        console.error('[Fetch-Reviews] Fallback backend fetch failed:', err);
+                        showNotification(`Failed to fetch reviews: ${err.message || 'Server error'}`, true);
+                        fetchBtn.disabled = false;
+                        fetchBtn.innerHTML = originalText;
+                    }
+                }
+            };
+        }
+
+        const manualBtn = document.getElementById('admin-sub-manual-list-btn');
+        if (manualBtn) {
+            manualBtn.onclick = () => {
+                const input = prompt("Paste/Enter reviewer names (one name per line):");
+                if (input !== null && input.trim().length > 0) {
+                    const names = input.split('\n').map(n => n.trim()).filter(n => n.length > 1);
+                    if (names.length > 0) {
+                        const manualReviews = names.map(name => ({
+                            userName: name,
+                            score: 5,
+                            text: 'Manually entered reviewer name',
+                            date: new Date().toISOString()
+                        }));
+                        window.adminSubmissionsView.scrapedReviews = [
+                            ...(window.adminSubmissionsView.scrapedReviews || []),
+                            ...manualReviews
+                        ];
+                        showNotification(`Added ${names.length} manual reviewer names to search list.`);
                         renderAdminSubmissions();
                     } else {
-                        throw new Error(data.error || 'Fetch failed');
+                        showNotification('No valid names entered.', true);
                     }
-                } catch (err) {
-                    console.error('Fetch reviews failed:', err);
-                    showNotification(`Failed to fetch reviews: ${err.message || 'Server error'}`, true);
-                    fetchBtn.disabled = false;
-                    fetchBtn.innerHTML = originalText;
                 }
             };
         }
