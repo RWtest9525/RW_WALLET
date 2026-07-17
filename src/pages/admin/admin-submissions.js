@@ -854,6 +854,104 @@ const renderSubmittedNamesTabContent = (taskSubs, selectedTaskName, selectedDate
     `;
 };
 
+const showAdminManualNamesModal = () => {
+    let modal = document.getElementById('admin-manual-names-modal');
+    if (!modal) {
+        modal = document.createElement('div');
+        modal.id = 'admin-manual-names-modal';
+        modal.className = 'fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm hidden';
+        document.body.appendChild(modal);
+    }
+
+    const currentNames = (window.adminSubmissionsView.scrapedReviews || [])
+        .filter(r => r.text === 'Manually entered reviewer name')
+        .map(r => r.userName)
+        .join('\n');
+
+    modal.innerHTML = `
+        <div class="bg-white dark:bg-slate-950 rounded-3xl border border-slate-155 dark:border-slate-850 shadow-2xl w-full max-w-lg p-5 sm:p-6 space-y-4 animate-in fade-in zoom-in-95 duration-200 text-left">
+            <div class="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
+                <h3 class="text-sm sm:text-base font-black text-slate-850 dark:text-white flex items-center gap-2">
+                    ✍️ Paste Manual Reviewer Names
+                </h3>
+                <button type="button" id="close-manual-names-modal-btn" class="p-1 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg text-slate-400 hover:text-slate-650 transition cursor-pointer" style="outline: none;">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                </button>
+            </div>
+
+            <div class="space-y-1">
+                <label class="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-wider">Reviewer Names List</label>
+                <textarea id="manual-names-textarea" class="w-full h-56 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-3.5 font-mono text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500/50 dark:text-white dark:focus:ring-indigo-400/50 placeholder-slate-450" placeholder="Paste reviewer names here (one name per line)...">${escapeHtml(currentNames)}</textarea>
+            </div>
+
+            <div class="flex items-center justify-end gap-3 pt-2 border-t border-slate-100 dark:border-slate-850">
+                <button type="button" id="cancel-manual-names-btn" class="rounded-xl px-4 py-2.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-850 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-250 font-black text-xs uppercase transition active:scale-95 shadow-sm cursor-pointer" style="outline: none;">
+                    Cancel
+                </button>
+                <button type="button" id="submit-manual-names-btn" class="rounded-xl px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-black text-xs uppercase transition active:scale-95 shadow-md flex items-center gap-1.5 cursor-pointer" style="outline: none;">
+                    ⚡ Verify & Match
+                </button>
+            </div>
+        </div>
+    `;
+
+    modal.classList.remove('hidden');
+
+    const closeModal = () => modal.classList.add('hidden');
+    
+    document.getElementById('close-manual-names-modal-btn').onclick = closeModal;
+    document.getElementById('cancel-manual-names-btn').onclick = closeModal;
+    
+    document.getElementById('submit-manual-names-btn').onclick = async () => {
+        const input = document.getElementById('manual-names-textarea').value;
+        const names = input.split('\n').map(n => n.trim()).filter(n => n.length > 1);
+        
+        const scrapedOnly = (window.adminSubmissionsView.scrapedReviews || [])
+            .filter(r => r.text !== 'Manually entered reviewer name');
+
+        const selectedTaskId = window.adminSubmissionsView.selectedTaskId;
+        const selectedDate = window.adminSubmissionsView.selectedDate;
+
+        if (names.length > 0) {
+            const manualReviews = names.map(name => ({
+                userName: name,
+                score: 5,
+                text: 'Manually entered reviewer name',
+                date: new Date().toISOString()
+            }));
+            window.adminSubmissionsView.scrapedReviews = [
+                ...scrapedOnly,
+                ...manualReviews
+            ];
+            
+            window.adminSubmissionsView.fetchedTasks = window.adminSubmissionsView.fetchedTasks || {};
+            window.adminSubmissionsView.fetchedTasks[`${selectedTaskId}_${selectedDate}`] = true;
+
+            showNotification(`Added ${names.length} manual reviewer names to search list.`);
+            closeModal();
+            renderAdminSubmissions();
+
+            // Auto-process if payout day is passed
+            const selectedTask = (window.allTasksCache || []).find(t => t.id === selectedTaskId);
+            const dateSubs = (adminSubmissionsCache || []).filter(s => getSubmissionLocalDateStr(s.submitted_at || s.submittedAt) === selectedDate);
+            const taskSubs = dateSubs.filter(s => s.task_id === selectedTaskId || s.taskId === selectedTaskId);
+            const delayDays = Number(selectedTask?.paymentDelayDays || selectedTask?.listDays || selectedTask?.list_days || 7);
+            const [yVal, mVal, dVal] = selectedDate.split('-').map(Number);
+            const taskDateObj = new Date(yVal, mVal - 1, dVal, 23, 59, 59);
+            const releaseTime = taskDateObj.getTime() + (delayDays * 24 * 60 * 60 * 1000);
+            const payoutDayPassed = Date.now() >= releaseTime;
+            if (payoutDayPassed) {
+                await autoProcessSubmissions(taskSubs, window.adminSubmissionsView.scrapedReviews, payoutDayPassed);
+            }
+        } else {
+            window.adminSubmissionsView.scrapedReviews = scrapedOnly;
+            showNotification('Cleared all manual reviewer names.');
+            closeModal();
+            renderAdminSubmissions();
+        }
+    };
+};
+
 const autoProcessSubmissions = async (taskSubs, scraped, payoutDayPassed) => {
     if (!payoutDayPassed) return;
     
@@ -1918,43 +2016,8 @@ const renderAdminSubmissions = () => {
 
         const manualBtn = document.getElementById('admin-sub-manual-list-btn');
         if (manualBtn) {
-            manualBtn.onclick = async () => {
-                const input = prompt("Paste/Enter reviewer names (one name per line):");
-                if (input !== null && input.trim().length > 0) {
-                    const names = input.split('\n').map(n => n.trim()).filter(n => n.length > 1);
-                    if (names.length > 0) {
-                        const manualReviews = names.map(name => ({
-                            userName: name,
-                            score: 5,
-                            text: 'Manually entered reviewer name',
-                            date: new Date().toISOString()
-                        }));
-                        window.adminSubmissionsView.scrapedReviews = [
-                            ...(window.adminSubmissionsView.scrapedReviews || []),
-                            ...manualReviews
-                        ];
-                        
-                        window.adminSubmissionsView.fetchedTasks = window.adminSubmissionsView.fetchedTasks || {};
-                        window.adminSubmissionsView.fetchedTasks[`${selectedTaskId}_${selectedDate}`] = true;
-
-                        showNotification(`Added ${names.length} manual reviewer names to search list.`);
-                        renderAdminSubmissions();
-
-                        // Auto-process if payout day is passed
-                        const selectedTask = (window.allTasksCache || []).find(t => t.id === selectedTaskId);
-                        const taskSubs = dateSubs.filter(s => s.task_id === selectedTaskId || s.taskId === selectedTaskId);
-                        const delayDays = Number(selectedTask?.paymentDelayDays || selectedTask?.listDays || selectedTask?.list_days || 7);
-                        const [yVal, mVal, dVal] = selectedDate.split('-').map(Number);
-                        const taskDateObj = new Date(yVal, mVal - 1, dVal, 23, 59, 59);
-                        const releaseTime = taskDateObj.getTime() + (delayDays * 24 * 60 * 60 * 1000);
-                        const payoutDayPassed = Date.now() >= releaseTime;
-                        if (payoutDayPassed) {
-                            await autoProcessSubmissions(taskSubs, window.adminSubmissionsView.scrapedReviews, payoutDayPassed);
-                        }
-                    } else {
-                        showNotification('No valid names entered.', true);
-                    }
-                }
+            manualBtn.onclick = () => {
+                showAdminManualNamesModal();
             };
         }
 
