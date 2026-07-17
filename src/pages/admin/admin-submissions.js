@@ -936,11 +936,9 @@ const showAdminManualNamesModal = () => {
             const dateSubs = (adminSubmissionsCache || []).filter(s => getSubmissionLocalDateStr(s.submitted_at || s.submittedAt) === selectedDate);
             const taskSubs = dateSubs.filter(s => s.task_id === selectedTaskId || s.taskId === selectedTaskId);
             const delayDays = Number(selectedTask?.paymentDelayDays || selectedTask?.listDays || selectedTask?.list_days || 7);
-            const [yVal, mVal, dVal] = selectedDate.split('-').map(Number);
-            const taskDateObj = new Date(yVal, mVal - 1, dVal, 23, 59, 59);
-            const releaseTime = taskDateObj.getTime() + (delayDays * 24 * 60 * 60 * 1000);
-            const payoutDayPassed = Date.now() >= releaseTime;
+            const payoutDayPassed = isPayoutDayPassed(selectedDate, delayDays);
             if (payoutDayPassed) {
+                await saveReviewsToFirestore(selectedTaskId, selectedDate, window.adminSubmissionsView.scrapedReviews);
                 await autoProcessSubmissions(taskSubs, window.adminSubmissionsView.scrapedReviews, payoutDayPassed);
             }
         } else {
@@ -951,6 +949,186 @@ const showAdminManualNamesModal = () => {
         }
     };
 };
+
+const isPayoutDayPassed = (selectedDate, delayDays) => {
+    const today = new Date();
+    const todayIstDateStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+
+    const [yVal, mVal, dVal] = selectedDate.split('-').map(Number);
+    const releaseDateObj = new Date(yVal, mVal - 1, dVal);
+    releaseDateObj.setDate(releaseDateObj.getDate() + delayDays);
+    const releaseDateStr = `${releaseDateObj.getFullYear()}-${String(releaseDateObj.getMonth() + 1).padStart(2, '0')}-${String(releaseDateObj.getDate()).padStart(2, '0')}`;
+
+    return todayIstDateStr >= releaseDateStr;
+};
+
+const saveReviewsToFirestore = async (taskId, dateVal, reviewsList) => {
+    try {
+        console.log(`[Permanent-Reviews] Saving ${reviewsList.length} reviews to Firestore for ${taskId} on ${dateVal}`);
+        const scrapedDocRef = window.doc(window.db, `artifacts/${appId}/public/data/tasks/${taskId}/scraped_reviews`, dateVal);
+        await window.setDoc(scrapedDocRef, {
+            reviews: reviewsList,
+            savedAt: Date.now()
+        }, { merge: true });
+        console.log('[Permanent-Reviews] Successfully saved reviews to Firestore.');
+    } catch (err) {
+        console.error('[Permanent-Reviews] Failed to save reviews to Firestore:', err);
+    }
+};
+
+const fetchPlayStoreReviewsDirectly = async (taskId, dateVal) => {
+    const selectedTask = (window.allTasksCache || []).find(t => t.id === taskId);
+    const taskLink = selectedTask?.taskLink || selectedTask?.task_link || selectedTask?.link || '';
+    if (!taskLink) {
+        console.warn('No task link found to fetch reviews.');
+        return false;
+    }
+
+    // Helper to extract package ID
+    const extractPkgId = (val) => {
+        const raw = String(val || '').trim();
+        if (raw.includes('id=')) {
+            try {
+                const url = new URL(raw);
+                const pkg = url.searchParams.get('id');
+                return pkg ? pkg.trim() : raw;
+            } catch {
+                const match = raw.match(/[?&]id=([^&#]+)/);
+                return match ? match[1] : raw;
+            }
+        }
+        return raw;
+    };
+
+    const packageId = extractPkgId(taskLink);
+    const dateSubs = (adminSubmissionsCache || []).filter(s => getSubmissionLocalDateStr(s.submitted_at || s.submittedAt) === dateVal);
+    const taskSubs = dateSubs.filter(s => s.task_id === taskId || s.taskId === taskId);
+    
+    let success = false;
+    let fetchedReviews = [];
+
+    // Try Hugging Face Space first (good IP addresses, CORS enabled)
+    try {
+        console.log(`[Fetch-Reviews] Trying Hugging Face Space for ${packageId} on ${dateVal}`);
+        const hfResp = await fetchWithTimeout(`https://yash9525-rw-live-checker.hf.space/api/public-reviews?packageId=${encodeURIComponent(packageId)}&date=${encodeURIComponent(dateVal)}`, {
+            method: 'GET'
+        }, 12000);
+        
+        const hfData = await hfResp.json().catch(() => ({}));
+        if (hfData && hfData.ok && Array.isArray(hfData.reviews)) {
+            fetchedReviews = hfData.reviews;
+            success = true;
+        }
+    } catch (hfErr) {
+        console.warn('[Fetch-Reviews] Hugging Face Space failed, falling back to backend:', hfErr.message);
+    }
+
+    // Fallback to Render backend scraper if Hugging Face failed
+    if (!success) {
+        try {
+            const token = await getBackendAuthToken();
+            const resp = await fetchWithTimeout(`${BACKEND_BASE_URL}/api/admin/scraper/fetch-reviews`, {
+                method: 'POST',
+                headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    url: taskLink,
+                    taskId: taskId,
+                    selectedDate: dateVal
+                })
+            }, 15000);
+            
+            const data = await resp.json().catch(() => ({}));
+            if (data.ok && Array.isArray(data.reviews)) {
+                fetchedReviews = data.reviews;
+                success = true;
+            }
+        } catch (err) {
+            console.error('[Fetch-Reviews] Fallback backend fetch failed:', err);
+        }
+    }
+
+    if (success && fetchedReviews.length >= 0) {
+        window.adminSubmissionsView.scrapedReviews = fetchedReviews;
+        
+        window.adminSubmissionsView.fetchedTasks = window.adminSubmissionsView.fetchedTasks || {};
+        window.adminSubmissionsView.fetchedTasks[`${taskId}_${dateVal}`] = true;
+
+        showNotification(`Successfully fetched ${fetchedReviews.length} reviews from Play Store.`);
+        renderAdminSubmissions();
+
+        // Determine if today is on or after the payout day
+        const delayDays = Number(selectedTask?.paymentDelayDays || selectedTask?.listDays || selectedTask?.list_days || 7);
+        const payoutDayPassed = isPayoutDayPassed(dateVal, delayDays);
+
+        // Auto-process if payout day is passed
+        if (payoutDayPassed) {
+            // Save permanently in Firestore
+            await saveReviewsToFirestore(taskId, dateVal, fetchedReviews);
+            
+            // Auto approve/reject pending submissions
+            await autoProcessSubmissions(taskSubs, fetchedReviews, payoutDayPassed);
+        }
+        return true;
+    }
+    return false;
+};
+
+const loadPermanentScrapedReviews = async (taskId, dateVal) => {
+    if (!taskId || !dateVal) return;
+    
+    // Guard: already fetched or loading in this session
+    window.adminSubmissionsView.fetchedTasks = window.adminSubmissionsView.fetchedTasks || {};
+    if (window.adminSubmissionsView.fetchedTasks[`${taskId}_${dateVal}`]) {
+        return;
+    }
+    
+    const selectedTask = (window.allTasksCache || []).find(t => t.id === taskId);
+    if (!selectedTask) return;
+    
+    const delayDays = Number(selectedTask.paymentDelayDays || selectedTask.listDays || selectedTask.list_days || 7);
+    const payoutDayPassed = isPayoutDayPassed(dateVal, delayDays);
+    
+    if (!payoutDayPassed) {
+        // If before payout day, we don't load from Firestore
+        return;
+    }
+
+    // Mark as loaded to prevent multiple requests
+    window.adminSubmissionsView.fetchedTasks[`${taskId}_${dateVal}`] = true;
+
+    try {
+        console.log(`[Permanent-Reviews] Checking Firestore for saved reviews of task ${taskId} on ${dateVal}`);
+        const scrapedDocRef = window.doc(window.db, `artifacts/${appId}/public/data/tasks/${taskId}/scraped_reviews`, dateVal);
+        const scrapedDocSnap = await window.getDoc(scrapedDocRef);
+        
+        if (scrapedDocSnap.exists()) {
+            const data = scrapedDocSnap.data();
+            if (data && Array.isArray(data.reviews)) {
+                console.log(`[Permanent-Reviews] Loaded ${data.reviews.length} reviews from Firestore.`);
+                window.adminSubmissionsView.scrapedReviews = data.reviews;
+                renderAdminSubmissions();
+                return;
+            }
+        }
+        
+        // If document doesn't exist, we auto-run the fetch!
+        // But check if there are pending submissions first.
+        const dateSubs = (adminSubmissionsCache || []).filter(s => getSubmissionLocalDateStr(s.submitted_at || s.submittedAt) === dateVal);
+        const taskSubs = dateSubs.filter(s => s.task_id === taskId || s.taskId === taskId);
+        const pendingSubs = taskSubs.filter(s => s.manual_status === 'pending');
+        
+        if (pendingSubs.length === 0) {
+            console.log('[Permanent-Reviews] No pending submissions left, skipping auto-fetch.');
+            return;
+        }
+        
+        console.log('[Permanent-Reviews] No saved reviews found, auto-triggering fetch...');
+        await fetchPlayStoreReviewsDirectly(taskId, dateVal);
+    } catch (err) {
+        console.error('[Permanent-Reviews] Error loading reviews:', err);
+    }
+};
+
 
 const autoProcessSubmissions = async (taskSubs, scraped, payoutDayPassed) => {
     if (!payoutDayPassed) return;
@@ -1297,6 +1475,9 @@ const renderAdminSubmissions = () => {
     let html = '';
 
     if (isDetailView && selectedTaskId) {
+        // Automatically check/load permanent reviews if on or after payout day
+        loadPermanentScrapedReviews(selectedTaskId, selectedDate);
+
         // --- DETAIL VIEW PANEL ---
         const selectedTask = (window.allTasksCache || []).find(t => t.id === selectedTaskId);
         const selectedTaskName = selectedTask ? (selectedTask.appName || selectedTask.title) : 'Task Detail';
@@ -1318,10 +1499,7 @@ const renderAdminSubmissions = () => {
 
         // Determine if payout day (delay) is passed
         const delayDays = Number(selectedTask?.paymentDelayDays || selectedTask?.listDays || selectedTask?.list_days || 7);
-        const [yVal, mVal, dVal] = selectedDate.split('-').map(Number);
-        const taskDateObj = new Date(yVal, mVal - 1, dVal, 23, 59, 59);
-        const releaseTime = taskDateObj.getTime() + (delayDays * 24 * 60 * 60 * 1000);
-        const payoutDayPassed = Date.now() >= releaseTime;
+        const payoutDayPassed = isPayoutDayPassed(selectedDate, delayDays);
 
         // Calculate duplicate usernames
         const ocrNamesMap = {};
@@ -2013,114 +2191,13 @@ const renderAdminSubmissions = () => {
                 fetchBtn.disabled = true;
                 fetchBtn.innerHTML = '⏳ Fetching...';
                 
-                const selectedTask = (window.allTasksCache || []).find(t => t.id === selectedTaskId);
-                const taskLink = selectedTask?.taskLink || selectedTask?.task_link || selectedTask?.link || '';
-                if (!taskLink) {
-                    showNotification('No task link found to fetch reviews.', true);
-                    fetchBtn.disabled = false;
-                    fetchBtn.innerHTML = originalText;
-                    return;
+                const ok = await fetchPlayStoreReviewsDirectly(selectedTaskId, selectedDate);
+                if (!ok) {
+                    showNotification('Failed to fetch reviews from Play Store. Please try again.', true);
                 }
-
-                // Helper to extract package ID
-                const extractPkgId = (val) => {
-                    const raw = String(val || '').trim();
-                    if (raw.includes('id=')) {
-                        try {
-                            const url = new URL(raw);
-                            const pkg = url.searchParams.get('id');
-                            return pkg ? pkg.trim() : raw;
-                        } catch {
-                            const match = raw.match(/[?&]id=([^&#]+)/);
-                            return match ? match[1] : raw;
-                        }
-                    }
-                    return raw;
-                };
-
-                const packageId = extractPkgId(taskLink);
-                const selectedDate = window.adminSubmissionsView.selectedDate || '';
-                const dateSubs = (adminSubmissionsCache || []).filter(s => getSubmissionLocalDateStr(s.submitted_at || s.submittedAt) === selectedDate);
                 
-                let success = false;
-                
-                // Try Hugging Face Space first (good IP addresses, CORS enabled)
-                try {
-                    console.log(`[Fetch-Reviews] Trying Hugging Face Space for ${packageId} on ${selectedDate}`);
-                    const hfResp = await fetchWithTimeout(`https://yash9525-rw-live-checker.hf.space/api/public-reviews?packageId=${encodeURIComponent(packageId)}&date=${encodeURIComponent(selectedDate)}`, {
-                        method: 'GET'
-                    }, 12000);
-                    
-                    const hfData = await hfResp.json().catch(() => ({}));
-                    if (hfData && hfData.ok && Array.isArray(hfData.reviews)) {
-                        window.adminSubmissionsView.scrapedReviews = hfData.reviews;
-                        
-                        window.adminSubmissionsView.fetchedTasks = window.adminSubmissionsView.fetchedTasks || {};
-                        window.adminSubmissionsView.fetchedTasks[`${selectedTaskId}_${selectedDate}`] = true;
-
-                        showNotification(`Successfully fetched ${hfData.reviews.length} reviews from Play Store.`);
-                        renderAdminSubmissions();
-                        success = true;
-
-                        // Auto-process if payout day is passed
-                        const taskSubs = dateSubs.filter(s => s.task_id === selectedTaskId || s.taskId === selectedTaskId);
-                        const delayDays = Number(selectedTask?.paymentDelayDays || selectedTask?.listDays || selectedTask?.list_days || 7);
-                        const [yVal, mVal, dVal] = selectedDate.split('-').map(Number);
-                        const taskDateObj = new Date(yVal, mVal - 1, dVal, 23, 59, 59);
-                        const releaseTime = taskDateObj.getTime() + (delayDays * 24 * 60 * 60 * 1000);
-                        const payoutDayPassed = Date.now() >= releaseTime;
-                        if (payoutDayPassed) {
-                            await autoProcessSubmissions(taskSubs, hfData.reviews, payoutDayPassed);
-                        }
-                    }
-                } catch (hfErr) {
-                    console.warn('[Fetch-Reviews] Hugging Face Space failed, falling back to backend:', hfErr.message);
-                }
-
-                // Fallback to Render backend scraper if Hugging Face failed
-                if (!success) {
-                    try {
-                        const token = await getBackendAuthToken();
-                        const resp = await fetchWithTimeout(`${BACKEND_BASE_URL}/api/admin/scraper/fetch-reviews`, {
-                            method: 'POST',
-                            headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-                            body: JSON.stringify({
-                                url: taskLink,
-                                taskId: selectedTaskId,
-                                selectedDate: selectedDate
-                            })
-                        }, 15000);
-                        
-                        const data = await resp.json().catch(() => ({}));
-                        if (data.ok && Array.isArray(data.reviews)) {
-                            window.adminSubmissionsView.scrapedReviews = data.reviews;
-
-                            window.adminSubmissionsView.fetchedTasks = window.adminSubmissionsView.fetchedTasks || {};
-                            window.adminSubmissionsView.fetchedTasks[`${selectedTaskId}_${selectedDate}`] = true;
-
-                            showNotification(`Successfully fetched ${data.reviews.length} reviews from Play Store.`);
-                            renderAdminSubmissions();
-
-                            // Auto-process if payout day is passed
-                            const taskSubs = dateSubs.filter(s => s.task_id === selectedTaskId || s.taskId === selectedTaskId);
-                            const delayDays = Number(selectedTask?.paymentDelayDays || selectedTask?.listDays || selectedTask?.list_days || 7);
-                            const [yVal, mVal, dVal] = selectedDate.split('-').map(Number);
-                            const taskDateObj = new Date(yVal, mVal - 1, dVal, 23, 59, 59);
-                            const releaseTime = taskDateObj.getTime() + (delayDays * 24 * 60 * 60 * 1000);
-                            const payoutDayPassed = Date.now() >= releaseTime;
-                            if (payoutDayPassed) {
-                                await autoProcessSubmissions(taskSubs, data.reviews, payoutDayPassed);
-                            }
-                        } else {
-                            throw new Error(data.error || 'Fetch failed');
-                        }
-                    } catch (err) {
-                        console.error('[Fetch-Reviews] Fallback backend fetch failed:', err);
-                        showNotification(`Failed to fetch reviews: ${err.message || 'Server error'}`, true);
-                        fetchBtn.disabled = false;
-                        fetchBtn.innerHTML = originalText;
-                    }
-                }
+                fetchBtn.disabled = false;
+                fetchBtn.innerHTML = originalText;
             };
         }
 
