@@ -2040,6 +2040,7 @@ const renderAdminSubmissions = () => {
 
                 const packageId = extractPkgId(taskLink);
                 const selectedDate = window.adminSubmissionsView.selectedDate || '';
+                const dateSubs = (adminSubmissionsCache || []).filter(s => getSubmissionLocalDateStr(s.submitted_at || s.submittedAt) === selectedDate);
                 
                 let success = false;
                 
@@ -2175,6 +2176,7 @@ const renderAdminSubmissions = () => {
                 
                 const headers = ['Reviewer Name', 'Rating (Stars)', 'Review Comment', 'Status', 'User Mobile', 'Review Date', 'Helpful Count'];
                 
+                const dateSubs = (adminSubmissionsCache || []).filter(s => getSubmissionLocalDateStr(s.submitted_at || s.submittedAt) === selectedDate);
                 const taskSubs = dateSubs.filter(s => s.task_id === selectedTaskId || s.taskId === selectedTaskId);
                 const taskSubsMap = new Map();
                 taskSubs.forEach(s => {
