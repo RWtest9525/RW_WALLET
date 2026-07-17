@@ -569,14 +569,14 @@ const renderPlayStoreVerifyTabContent = (taskSubs, selectedTask) => {
     const countFiltered = filteredReviews.length;
 
     const actionHtml = `
-        <div class="flex flex-wrap items-center justify-between gap-4 bg-slate-50 dark:bg-slate-900/60 p-4 rounded-2xl border border-slate-100 dark:border-slate-800">
-            <div class="flex items-center gap-3">
-                <button type="button" id="fetch-playstore-reviews-btn" class="rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-black px-4 py-2.5 text-xs transition active:scale-95 shadow-sm uppercase tracking-wider">
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-slate-50 dark:bg-slate-900/60 p-3 sm:p-4 rounded-2xl border border-slate-100 dark:border-slate-800">
+            <div class="flex flex-col xs:flex-row items-stretch xs:items-center gap-3 w-full sm:w-auto">
+                <button type="button" id="fetch-playstore-reviews-btn" class="rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-black px-4 py-2.5 text-xs transition active:scale-95 shadow-sm uppercase tracking-wider text-center">
                     🔄 Fetch Reviews
                 </button>
-                <div class="flex items-center gap-2">
-                    <label for="playstore-star-filter" class="text-xs font-extrabold text-slate-500 uppercase">Rating:</label>
-                    <select id="playstore-star-filter" class="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-850 px-2.5 py-1.5 text-xs font-bold text-slate-750 dark:text-slate-200 focus:outline-none focus:ring-1 focus:ring-indigo-500" style="outline: none;">
+                <div class="flex items-center justify-between xs:justify-start gap-2 bg-white dark:bg-slate-850 border border-slate-200/50 dark:border-slate-700 rounded-xl px-3 py-2">
+                    <label for="playstore-star-filter" class="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-wider">Rating:</label>
+                    <select id="playstore-star-filter" class="bg-transparent text-xs font-bold text-slate-750 dark:text-slate-200 focus:outline-none cursor-pointer" style="outline: none;">
                         <option value="all" ${starFilter === 'all' ? 'selected' : ''}>All Stars</option>
                         <option value="5" ${starFilter === '5' ? 'selected' : ''}>5 Stars</option>
                         <option value="4" ${starFilter === '4' ? 'selected' : ''}>4 Stars</option>
@@ -587,7 +587,7 @@ const renderPlayStoreVerifyTabContent = (taskSubs, selectedTask) => {
                 </div>
             </div>
             ${countFiltered > 0 ? `
-                <button type="button" id="download-playstore-excel-btn" class="rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-black px-4 py-2.5 text-xs transition active:scale-95 shadow-sm uppercase tracking-wider flex items-center gap-1.5">
+                <button type="button" id="download-playstore-excel-btn" class="w-full sm:w-auto rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-black px-4 py-2.5 text-xs transition active:scale-95 shadow-sm uppercase tracking-wider flex items-center justify-center gap-1.5">
                     📥 Download Excel
                 </button>
             ` : ''}
@@ -641,8 +641,8 @@ const renderPlayStoreVerifyTabContent = (taskSubs, selectedTask) => {
 
                 return `
                     <div class="bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 p-4 rounded-2xl space-y-3 shadow-sm hover:shadow transition">
-                        <div class="flex items-start justify-between gap-3">
-                            <div class="flex items-center gap-3">
+                        <div class="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
+                            <div class="flex items-center gap-3 min-w-0">
                                 ${userImage ? `
                                     <img src="${escapeHtml(userImage)}" alt="${escapeHtml(user)}" class="h-9 w-9 shrink-0 rounded-full bg-slate-200 object-cover" referrerPolicy="no-referrer" loading="lazy" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
                                 ` : ''}
@@ -650,21 +650,21 @@ const renderPlayStoreVerifyTabContent = (taskSubs, selectedTask) => {
                                     ${initial}
                                 </div>
                                 <div class="min-w-0">
-                                    <h4 class="text-xs font-black text-slate-800 dark:text-slate-200 truncate">${escapeHtml(user)}</h4>
+                                    <h4 class="text-xs font-black text-slate-800 dark:text-slate-200 truncate max-w-[150px] sm:max-w-none">${escapeHtml(user)}</h4>
                                     <div class="flex items-center gap-2 mt-0.5">
                                         ${starRow(rating)}
                                         <span class="text-[9px] font-bold text-slate-400">${escapeHtml(formattedDate)}</span>
                                     </div>
                                 </div>
                             </div>
-                            ${matched ? `
-                                <div class="shrink-0 flex flex-col items-end gap-1">
+                            <div class="flex sm:flex-col items-center sm:items-end gap-1.5 mt-2 sm:mt-0 shrink-0">
+                                ${matched ? `
                                     <span class="rounded-full bg-emerald-50 dark:bg-emerald-950/30 px-2 py-0.5 text-[8px] font-black text-emerald-700 dark:text-emerald-300 border border-emerald-100 dark:border-emerald-800">✅ MATCHED</span>
                                     <span class="text-[8px] font-bold text-slate-400 font-mono">${escapeHtml(matched.user_mobile || matched.userMobile || '')}</span>
-                                </div>
-                            ` : `
-                                <span class="rounded-full bg-slate-50 dark:bg-slate-800/40 px-2 py-0.5 text-[8px] font-black text-slate-500 border border-slate-150 dark:border-slate-700 shrink-0">NOT MATCHED</span>
-                            `}
+                                ` : `
+                                    <span class="rounded-full bg-slate-50 dark:bg-slate-800/40 px-2 py-0.5 text-[8px] font-black text-slate-500 border border-slate-150 dark:border-slate-700 shrink-0">NOT MATCHED</span>
+                                `}
+                            </div>
                         </div>
                         <p class="text-xs text-slate-650 dark:text-slate-350 leading-relaxed font-medium pl-12 whitespace-pre-wrap">${escapeHtml(comment)}</p>
                         ${thumbs > 0 ? `
@@ -883,17 +883,17 @@ const renderAdminSubmissions = () => {
         html = `
             <div class="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 p-4 sm:p-5 space-y-6 text-left">
                 <!-- Top Detail Toolbar Header -->
-                <div class="flex items-center justify-between gap-4 pb-4 border-b border-gray-100 dark:border-gray-700">
-                    <div class="flex items-center gap-3">
+                <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-gray-100 dark:border-gray-700">
+                    <div class="flex items-center gap-3 min-w-0 w-full sm:w-auto">
                         <button id="admin-sub-back-btn" class="p-2 rounded-xl bg-gray-100 hover:bg-gray-200 dark:bg-gray-700 dark:hover:bg-gray-650 text-gray-700 dark:text-gray-200 transition active:scale-95 shadow-sm border border-gray-200/20" title="Back" style="outline: none;">
                             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M10 19l-7-7m0 0l7-7m-7 7h18"></path></svg>
                         </button>
-                        <div class="min-w-0">
-                            <h3 class="text-lg font-black text-gray-900 dark:text-white truncate">${escapeHtml(getCleanAppName(selectedTaskName))}</h3>
+                        <div class="min-w-0 flex-1">
+                            <h3 class="text-base sm:text-lg font-black text-gray-900 dark:text-white truncate">${escapeHtml(getCleanAppName(selectedTaskName))}</h3>
                             <p class="text-[9px] text-indigo-500 font-extrabold uppercase tracking-wider mt-0.5">Task ID: ${escapeHtml(selectedTaskId)}</p>
                         </div>
                     </div>
-                    <span class="rounded-full bg-gray-100 dark:bg-gray-700 px-3 py-1.5 text-xs font-black text-gray-700 dark:text-gray-350 border border-gray-200/20 shadow-sm">
+                    <span class="rounded-full bg-gray-100 dark:bg-gray-700 px-3 py-1.5 text-xs font-black text-gray-700 dark:text-gray-350 border border-gray-200/20 shadow-sm w-fit shrink-0 sm:ml-auto">
                         Date: ${formatDatePickerDate(selectedDate)}
                     </span>
                 </div>
@@ -994,17 +994,17 @@ const renderAdminSubmissions = () => {
             </style>
             <div class="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 p-4 sm:p-5 space-y-6 text-left">
                 <!-- Top Toolbar Header -->
-                <div class="flex items-center justify-between gap-4 pb-4 border-b border-gray-100 dark:border-gray-700">
+                <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-gray-100 dark:border-gray-700">
                     <div>
-                        <h3 class="text-lg font-black text-gray-900 dark:text-white">Submissions Overview</h3>
+                        <h3 class="text-base sm:text-lg font-black text-gray-900 dark:text-white">Submissions Overview</h3>
                         <p class="text-xs text-gray-500 dark:text-gray-400">Track and manage task submissions by date.</p>
                     </div>
-                    <div class="relative">
+                    <div class="relative w-fit sm:w-auto mt-1 sm:mt-0">
                         <button id="admin-sub-date-picker-btn" class="flex items-center gap-2 rounded-xl bg-gray-100 hover:bg-gray-200 dark:bg-gray-750 dark:hover:bg-gray-700 px-3.5 py-2 text-xs font-black text-gray-850 dark:text-gray-200 border border-gray-200/40 dark:border-gray-700/50 shadow-sm focus:outline-none cursor-pointer" type="button" style="outline: none;">
                             <span>📅 ${formatDatePickerDate(selectedDate)}</span>
                             <span class="text-gray-400 dark:text-gray-500 text-[10px]">▼</span>
                         </button>
-                        <div id="admin-sub-calendar-popup" class="hidden absolute right-0 top-full mt-2 z-[9995] w-72 bg-white dark:bg-gray-950 rounded-3xl border border-gray-150 dark:border-gray-850 shadow-2xl p-4 space-y-3">
+                        <div id="admin-sub-calendar-popup" class="hidden absolute right-0 md:right-0 left-1/2 md:left-auto -translate-x-1/2 md:translate-x-0 top-full mt-2 z-[9995] w-[90vw] max-w-[288px] bg-white dark:bg-gray-950 rounded-3xl border border-gray-150 dark:border-gray-850 shadow-2xl p-4 space-y-3">
                             <div class="flex items-center justify-between">
                                 <button id="cal-prev-month" type="button" class="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg text-sm font-bold text-gray-700 dark:text-gray-300" style="outline: none;">&lt;</button>
                                 <span id="cal-month-year" class="text-sm font-black text-gray-905 dark:text-white"></span>
@@ -1136,26 +1136,26 @@ const renderAdminSubmissions = () => {
                                                 View
                                             </button>
                                         </div>
-                                        <div class="grid grid-cols-5 gap-1.5 text-center text-[10px]">
-                                            <div class="bg-gray-50 dark:bg-gray-900/50 p-1.5 rounded-lg border border-gray-100 dark:border-gray-800">
-                                                <span class="block font-black text-gray-850 dark:text-gray-200 text-xs">${r.total}</span>
-                                                <span class="text-[8px] font-bold text-gray-400 uppercase tracking-wide">Total</span>
+                                        <div class="grid grid-cols-5 gap-1.5 text-center">
+                                            <div class="bg-gray-50 dark:bg-gray-900/50 p-1.5 rounded-lg border border-gray-100 dark:border-gray-800 min-w-0">
+                                                <span class="block font-black text-gray-850 dark:text-gray-200 text-xs truncate tracking-tight">${r.total}</span>
+                                                <span class="text-[7.5px] sm:text-[8px] font-bold text-gray-400 uppercase tracking-tight block truncate">Total</span>
                                             </div>
-                                            <div class="bg-emerald-50/50 dark:bg-emerald-950/20 p-1.5 rounded-lg border border-emerald-100/10 dark:border-emerald-900/10">
-                                                <span class="block font-black text-emerald-600 dark:text-emerald-400 text-xs">${r.ocrPassed}</span>
-                                                <span class="text-[8px] font-bold text-emerald-500/70 uppercase tracking-wide">OCR</span>
+                                            <div class="bg-emerald-50/50 dark:bg-emerald-950/20 p-1.5 rounded-lg border border-emerald-100/10 dark:border-emerald-900/10 min-w-0">
+                                                <span class="block font-black text-emerald-600 dark:text-emerald-400 text-xs truncate tracking-tight">${r.ocrPassed}</span>
+                                                <span class="text-[7.5px] sm:text-[8px] font-bold text-emerald-500/70 uppercase tracking-tight block truncate">OCR</span>
                                             </div>
-                                            <div class="bg-amber-50/50 dark:bg-amber-950/20 p-1.5 rounded-lg border border-amber-100/10 dark:border-amber-900/10">
-                                                <span class="block font-black text-amber-600 dark:text-amber-400 text-xs">${r.pending}</span>
-                                                <span class="text-[8px] font-bold text-amber-500/70 uppercase tracking-wide">Pend</span>
+                                            <div class="bg-amber-50/50 dark:bg-amber-950/20 p-1.5 rounded-lg border border-amber-100/10 dark:border-amber-900/10 min-w-0">
+                                                <span class="block font-black text-amber-600 dark:text-amber-400 text-xs truncate tracking-tight">${r.pending}</span>
+                                                <span class="text-[7.5px] sm:text-[8px] font-bold text-amber-500/70 uppercase tracking-tight block truncate">Pend</span>
                                             </div>
-                                            <div class="bg-green-50/50 dark:bg-green-950/20 p-1.5 rounded-lg border border-green-100/10 dark:border-green-900/10">
-                                                <span class="block font-black text-green-600 dark:text-green-400 text-xs">${r.approved}</span>
-                                                <span class="text-[8px] font-bold text-green-500/70 uppercase tracking-wide">Appr</span>
+                                            <div class="bg-green-50/50 dark:bg-green-950/20 p-1.5 rounded-lg border border-green-100/10 dark:border-green-900/10 min-w-0">
+                                                <span class="block font-black text-green-600 dark:text-green-400 text-xs truncate tracking-tight">${r.approved}</span>
+                                                <span class="text-[7.5px] sm:text-[8px] font-bold text-green-500/70 uppercase tracking-tight block truncate">Appr</span>
                                             </div>
-                                            <div class="bg-red-50/50 dark:bg-red-950/20 p-1.5 rounded-lg border border-red-100/10 dark:border-red-900/10">
-                                                <span class="block font-black text-red-600 dark:text-red-400 text-xs">${r.rejected}</span>
-                                                <span class="text-[8px] font-bold text-red-500/70 uppercase tracking-wide">Rej</span>
+                                            <div class="bg-red-50/50 dark:bg-red-950/20 p-1.5 rounded-lg border border-red-100/10 dark:border-red-900/10 min-w-0">
+                                                <span class="block font-black text-red-600 dark:text-red-400 text-xs truncate tracking-tight">${r.rejected}</span>
+                                                <span class="text-[7.5px] sm:text-[8px] font-bold text-red-500/70 uppercase tracking-tight block truncate">Rej</span>
                                             </div>
                                         </div>
                                     </div>

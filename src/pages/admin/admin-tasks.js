@@ -385,14 +385,18 @@ const showAdminTaskPage = () => {
                 <div class="pb-24 max-w-7xl mx-auto p-4 md:p-6">
                     <!-- Responsive Side-by-Side / Full-screen Layout -->
                     <div class="flex flex-col md:flex-row gap-6 items-start w-full">
-                        
                         <!-- Mobile Sidebar Backdrop -->
                         <div id="admin-task-sidebar-backdrop" onclick="window.closeAdminTaskMobileMenu()" class="fixed inset-0 bg-black/40 z-40 hidden transition-opacity duration-300"></div>
 
                         <!-- Left Sidebar Panel -->
-                        <div id="admin-task-sidebar" class="fixed md:static top-0 left-0 h-full md:h-auto z-50 md:z-auto shadow-2xl md:shadow-sm rounded-r-3xl rounded-l-none md:rounded-3xl w-64 max-w-[70vw] md:max-w-none shrink-0 transition-transform duration-300 flex flex-col justify-between border-y-0 border-l-0 border-r md:border border-slate-100 dark:border-slate-800 bg-white dark:bg-gray-900 p-3 sticky md:top-6 min-h-[350px] -translate-x-full md:translate-x-0">
+                        <div id="admin-task-sidebar" class="fixed md:static top-0 left-0 h-full md:h-auto z-50 md:z-auto shadow-2xl md:shadow-sm rounded-r-3xl rounded-l-none md:rounded-3xl w-64 max-w-[70vw] md:max-w-none shrink-0 transform transition-transform duration-300 flex flex-col justify-between border-y-0 border-l-0 border-r md:border border-slate-100 dark:border-slate-800 bg-white dark:bg-gray-900 p-3 sticky md:top-6 min-h-[350px] -translate-x-full md:translate-x-0">
                             <!-- Top Navigation List -->
-                            <div class="space-y-1.5 flex flex-col">
+                            <div class="space-y-1.5 flex flex-col w-full">
+                                <!-- Mobile Only Sidebar Header with Close Button -->
+                                <div class="flex items-center justify-between p-2 md:hidden mb-2 border-b border-gray-100 dark:border-gray-800 pb-3">
+                                    <span class="text-xs font-black uppercase tracking-wider text-slate-400">Admin Menu</span>
+                                    <button type="button" onclick="window.closeAdminTaskMobileMenu()" class="h-8 w-8 rounded-full bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 text-slate-700 dark:text-gray-200 flex items-center justify-center transition font-black text-base" style="outline: none;">✕</button>
+                                </div>
                                 <button type="button" data-admin-task-panel="manage" class="w-full flex items-center gap-3 rounded-2xl px-4 py-3.5 text-xs font-black uppercase tracking-wider text-left transition select-none" style="outline: none;">
                                     <span class="text-sm">📋</span>
                                     <span class="sidebar-label">Tasks List</span>
@@ -445,18 +449,18 @@ const showAdminTaskPage = () => {
                                     <h3 class="text-2xl font-black mt-1">Manage Task Board</h3>
                                     <p class="mt-2 text-sm font-semibold leading-normal text-white/70">Create review or social tasks here. New tasks stay OFF until you turn them ON.</p>
                                     
-                                    <div class="grid grid-cols-3 gap-3 text-center text-sm mt-6">
-                                        <div class="rounded-2xl bg-white/12 px-4 py-4">
-                                            <p class="text-2xl font-black text-white" id="admin-task-total-count">0</p>
-                                            <p class="text-xs text-white/60 uppercase font-black mt-1">Total</p>
+                                    <div class="grid grid-cols-3 gap-2 text-center text-xs sm:text-sm mt-6">
+                                        <div class="rounded-2xl bg-white/12 p-2 sm:px-4 sm:py-4">
+                                            <p class="text-xl sm:text-2xl font-black text-white" id="admin-task-total-count">0</p>
+                                            <p class="text-[9px] sm:text-xs text-white/60 uppercase font-black mt-1">Total</p>
                                         </div>
-                                        <div class="rounded-2xl bg-white/12 px-4 py-4">
-                                            <p class="text-2xl font-black text-emerald-200" id="admin-task-active-count">0</p>
-                                            <p class="text-xs text-white/60 uppercase font-black mt-1">Live</p>
+                                        <div class="rounded-2xl bg-white/12 p-2 sm:px-4 sm:py-4">
+                                            <p class="text-xl sm:text-2xl font-black text-emerald-200" id="admin-task-active-count">0</p>
+                                            <p class="text-[9px] sm:text-xs text-white/60 uppercase font-black mt-1">Live</p>
                                         </div>
-                                        <div class="rounded-2xl bg-white/12 px-4 py-4">
-                                            <p class="text-2xl font-black text-amber-200" id="admin-task-draft-count">0</p>
-                                            <p class="text-xs text-white/60 uppercase font-black mt-1">Off</p>
+                                        <div class="rounded-2xl bg-white/12 p-2 sm:px-4 sm:py-4">
+                                            <p class="text-xl sm:text-2xl font-black text-amber-200" id="admin-task-draft-count">0</p>
+                                            <p class="text-[9px] sm:text-xs text-white/60 uppercase font-black mt-1">Off</p>
                                         </div>
                                     </div>
                                     <div class="mt-6 pt-4 border-t border-white/10 flex items-center justify-between">

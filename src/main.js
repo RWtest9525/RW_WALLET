@@ -247,6 +247,15 @@ onAuthStateChanged(auth, async (user) => {
                 };
 
                 localStorage.setItem('lastLoggedInUser', user.uid);
+
+                // OneSignal user identification
+                if (window.OneSignalManager) {
+                    window.OneSignalManager.login(user.uid);
+                    if (user.email) {
+                        window.OneSignalManager.setEmail(user.email);
+                    }
+                }
+
                 if (currentUser.uid !== ADMIN_UID && localSignupApprovalInProgress) return;
 
                 const isAdmin = currentUser.uid === ADMIN_UID || isImpersonating;
@@ -389,6 +398,11 @@ onAuthStateChanged(auth, async (user) => {
                     console.warn('Saved login was found but Firebase session is not active. Showing login again.');
                 }
                 localStorage.removeItem('lastLoggedInUser');
+
+                // OneSignal logout
+                if (window.OneSignalManager) {
+                    window.OneSignalManager.logout();
+                }
 
                 // Show auth screen immediately
                 document.getElementById('auth-screen').classList.remove('hidden');
@@ -768,6 +782,28 @@ document.addEventListener('DOMContentLoaded', function () {
                 console.log('Found saved user, waiting for Firebase auth...');
                 // Firebase will handle auto-login via onAuthStateChanged
             }
+
+            // Safety startup timeout fallback
+            setTimeout(() => {
+                if (!window.__appLoaded) {
+                    console.warn('Firebase Auth startup timed out after 8 seconds. Resetting loading state.');
+                    if (typeof hideLoading === 'function') hideLoading();
+                    window.__appLoaded = true;
+
+                    // Hide restoring overlay if visible
+                    const pageCont = document.getElementById('page-container');
+                    if (pageCont && pageCont.innerHTML.includes('Restoring Mission Details...')) {
+                        pageCont.classList.add('hidden');
+                        pageCont.innerHTML = '';
+                    }
+
+                    // Force show login screen so user is not stuck on a blank/spinner screen
+                    const authScr = document.getElementById('auth-screen');
+                    const mainCont = document.getElementById('main-content');
+                    if (authScr) authScr.classList.remove('hidden');
+                    if (mainCont) mainCont.classList.add('hidden');
+                }
+            }, 8000);
         });
 
 document.addEventListener('click', (e) => {

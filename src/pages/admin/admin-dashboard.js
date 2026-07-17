@@ -489,6 +489,12 @@ const showAdminMainPage = () => {
                 activeChatUnsubscribe();
                 activeChatUnsubscribe = null;
             }
+            if (activeTaskReservationTimer) {
+                clearInterval(activeTaskReservationTimer);
+                activeTaskReservationTimer = null;
+            }
+            activeTaskReservation = null;
+            window.activeTaskReservation = null;
             document.getElementById('dashboard-content').classList.remove('hidden');
             document.getElementById('page-container').classList.add('hidden');
             document.getElementById('page-container').innerHTML = '';

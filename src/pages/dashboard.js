@@ -489,6 +489,14 @@ const showPage = (content, options = {}) => {
                 clearInterval(adminMaintenanceInterval);
                 adminMaintenanceInterval = null;
             }
+            if (!options.keepTaskReservation && activeTaskReservationTimer) {
+                clearInterval(activeTaskReservationTimer);
+                activeTaskReservationTimer = null;
+            }
+            if (!options.keepTaskReservation) {
+                activeTaskReservation = null;
+                window.activeTaskReservation = null;
+            }
             lastManualPageOpenAt = Date.now();
             document.getElementById('dashboard-content').classList.add('hidden');
             const pageContainer = document.getElementById('page-container');
@@ -527,6 +535,12 @@ const hidePage = () => {
                 activeChatUnsubscribe();
                 activeChatUnsubscribe = null;
             }
+            if (activeTaskReservationTimer) {
+                clearInterval(activeTaskReservationTimer);
+                activeTaskReservationTimer = null;
+            }
+            activeTaskReservation = null;
+            window.activeTaskReservation = null;
             document.getElementById('dashboard-content').classList.remove('hidden');
             document.getElementById('page-container').classList.add('hidden');
             document.getElementById('page-container').innerHTML = '';
@@ -2985,6 +2999,12 @@ const showHomeMainPage = () => {
                 activeChatUnsubscribe();
                 activeChatUnsubscribe = null;
             }
+            if (activeTaskReservationTimer) {
+                clearInterval(activeTaskReservationTimer);
+                activeTaskReservationTimer = null;
+            }
+            activeTaskReservation = null;
+            window.activeTaskReservation = null;
             document.getElementById('dashboard-content').classList.remove('hidden');
             document.getElementById('page-container').classList.add('hidden');
             document.getElementById('page-container').innerHTML = '';
@@ -4397,9 +4417,27 @@ const showUserTaskDetailsPage = async (taskId) => {
                     }
                 }
             }
-            if (!task) return showNotification('Task not found. Please refresh tasks.', true);
+            if (!task) {
+                localStorage.removeItem('last_active_task_id');
+                localStorage.removeItem('last_active_task_data');
+                if (typeof showUserTaskPage === 'function') {
+                    showUserTaskPage();
+                } else if (typeof hidePage === 'function') {
+                    hidePage();
+                }
+                return showNotification('Task not found. Please refresh tasks.', true);
+            }
             localStorage.setItem('last_active_task_data', JSON.stringify(task));
-            if (getAdminTaskEffectiveStatus(task) !== 'active') return showNotification('This task is closed.', true);
+            if (getAdminTaskEffectiveStatus(task) !== 'active') {
+                localStorage.removeItem('last_active_task_id');
+                localStorage.removeItem('last_active_task_data');
+                if (typeof showUserTaskPage === 'function') {
+                    showUserTaskPage();
+                } else if (typeof hidePage === 'function') {
+                    hidePage();
+                }
+                return showNotification('This task is closed.', true);
+            }
             
             if (task.taskSubtype === 'read_news') {
                 showUserReadNewsTaskPage(task);
