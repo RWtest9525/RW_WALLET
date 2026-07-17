@@ -953,7 +953,7 @@ const renderAdminSubmissions = () => {
                             No screenshots found matching this filter.
                         </div>
                     ` : `
-                        <div class="grid grid-cols-3 xs:grid-cols-4 sm:grid-cols-6 md:grid-cols-8 lg:grid-cols-10 gap-2">
+                        <div class="flex flex-wrap gap-2 justify-start items-start">
                             ${filteredSubs.map((s, idx) => {
                                 let badgeBg = 'bg-amber-500';
                                 let icon = '⏳';
@@ -966,11 +966,11 @@ const renderAdminSubmissions = () => {
                                 }
                                 
                                 return `
-                                    <div class="relative aspect-[9/16] rounded-xl overflow-hidden border border-gray-150 dark:border-gray-755 bg-gray-900 shadow-sm cursor-pointer hover:scale-[1.02] active:scale-[0.98] transition-all duration-200 flex items-center justify-center" data-action="open-detail-modal" data-index="${idx}">
+                                    <div class="relative w-16 xs:w-20 sm:w-24 md:w-28 aspect-[9/16] rounded-xl overflow-hidden border border-gray-150 dark:border-gray-755 bg-gray-900 shadow-sm cursor-pointer hover:scale-[1.02] active:scale-[0.98] transition-all duration-200 flex items-center justify-center shrink-0" data-action="open-detail-modal" data-index="${idx}">
                                         <img src="${escapeHtml(s.screenshot_url)}" alt="Screenshot" class="h-full w-full object-cover" loading="lazy">
                                         
                                         <!-- Overlay Mini Status Badge -->
-                                        <div class="absolute top-1 right-1 flex items-center justify-center h-5 w-5 rounded-full shadow text-[9px] font-black ${badgeBg} text-white border border-white/20 select-none">
+                                        <div class="absolute top-1 right-1 flex items-center justify-center h-4 w-4 rounded-full shadow text-[8px] font-black ${badgeBg} text-white border border-white/20 select-none">
                                             ${icon}
                                         </div>
                                     </div>
