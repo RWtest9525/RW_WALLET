@@ -1167,9 +1167,25 @@ const renderAdminSubmissions = () => {
         const releaseTime = taskDateObj.getTime() + (delayDays * 24 * 60 * 60 * 1000);
         const payoutDayPassed = Date.now() >= releaseTime;
 
+        // Calculate duplicate usernames
+        const ocrNamesMap = {};
+        taskSubs.forEach(s => {
+            const name = String(s.ocr_extracted_name || '').trim().toLowerCase();
+            if (name && name !== 'unknown user' && name !== 'no review name found' && name !== 'failed') {
+                ocrNamesMap[name] = (ocrNamesMap[name] || 0) + 1;
+            }
+        });
+        const duplicateNames = new Set(
+            Object.keys(ocrNamesMap).filter(name => ocrNamesMap[name] > 1)
+        );
+
         // Chips counts
         const countAll = taskSubs.length;
         const countOcr = taskSubs.filter(s => s.ocr_status === 'completed').length;
+        const countSameUsername = taskSubs.filter(s => {
+            const name = String(s.ocr_extracted_name || '').trim().toLowerCase();
+            return duplicateNames.has(name);
+        }).length;
         
         let countPending = 0;
         let countRejected = 0;
@@ -1198,6 +1214,11 @@ const renderAdminSubmissions = () => {
             } else {
                 filteredSubs = filteredSubs.filter(s => s.manual_status === 'rejected');
             }
+        } else if (window.adminSubmissionsView.selectedSubFilter === 'same_username') {
+            filteredSubs = filteredSubs.filter(s => {
+                const name = String(s.ocr_extracted_name || '').trim().toLowerCase();
+                return duplicateNames.has(name);
+            });
         }
 
         window.currentActiveSubmissions = filteredSubs; // Cache list for detail modal
@@ -1261,7 +1282,8 @@ const renderAdminSubmissions = () => {
                             { value: 'all', label: `All (${countAll})` },
                             { value: 'ocr_passed', label: `OCR Passed (${countOcr})` },
                             { value: 'pending', label: `Pending (${countPending})` },
-                            { value: 'rejected', label: `Rejected (${countRejected})` }
+                            { value: 'rejected', label: `Rejected (${countRejected})` },
+                            { value: 'same_username', label: `Same User Name (${countSameUsername})` }
                         ].map(chip => {
                             const isActive = window.adminSubmissionsView.selectedSubFilter === chip.value;
                             return `
@@ -1278,10 +1300,88 @@ const renderAdminSubmissions = () => {
                         ` : ''}
                     </div>
 
-                    <!-- Screenshot Grid -->
+                    <!-- Screenshot Grid or Duplicate Group View -->
                     ${filteredSubs.length === 0 ? `
                         <div class="py-12 text-center text-sm text-gray-455 border border-dashed border-gray-200 dark:border-gray-700 rounded-2xl">
                             No screenshots found matching this filter.
+                        </div>
+                    ` : window.adminSubmissionsView.selectedSubFilter === 'same_username' ? `
+                        <!-- Grouped by OCR name with connector thread -->
+                        <div class="space-y-6">
+                            ${(() => {
+                                const grouped = {};
+                                filteredSubs.forEach(s => {
+                                    const name = String(s.ocr_extracted_name || 'Unrecognized OCR').trim();
+                                    if (!grouped[name]) grouped[name] = [];
+                                    grouped[name].push(s);
+                                });
+                                return Object.keys(grouped).map((name) => {
+                                    const items = grouped[name];
+                                    return `
+                                        <div class="bg-rose-500/[0.02] dark:bg-rose-950/[0.04] border border-rose-200/60 dark:border-rose-900/40 rounded-2xl p-4 space-y-3.5">
+                                            <!-- Group Header -->
+                                            <div class="flex flex-col xs:flex-row xs:items-center justify-between gap-2 border-b border-rose-100/50 dark:border-rose-900/20 pb-2">
+                                                <div class="flex items-center gap-2">
+                                                    <span class="text-xs font-black text-rose-650 dark:text-rose-400 uppercase tracking-wider bg-rose-100 dark:bg-rose-950 px-2 py-0.5 rounded-md">
+                                                        ⚠️ Duplicate User Name
+                                                    </span>
+                                                    <span class="text-sm font-black text-slate-800 dark:text-slate-100">${escapeHtml(name)}</span>
+                                                </div>
+                                                <span class="text-[10px] font-extrabold text-slate-400 dark:text-slate-500 uppercase">
+                                                    ${items.length} Submissions Matched
+                                                </span>
+                                            </div>
+                                            
+                                            <!-- Connecting Thread & Screenshot Cards -->
+                                            <div class="flex flex-wrap items-center gap-3">
+                                                ${items.map((s, idx) => {
+                                                    let showBadge = false;
+                                                    let badgeBg = '';
+                                                    let icon = '';
+                                                    if (s.manual_status === 'approved') {
+                                                        showBadge = true;
+                                                        badgeBg = 'bg-emerald-500';
+                                                        icon = '✓';
+                                                    } else if (s.manual_status === 'rejected') {
+                                                        showBadge = true;
+                                                        badgeBg = 'bg-rose-500';
+                                                        icon = '✕';
+                                                    }
+
+                                                    // Find absolute index in the parent taskSubs list to open modal correctly
+                                                    const originalIndex = taskSubs.findIndex(item => item.id === s.id);
+
+                                                    // Connection line between items
+                                                    const connectionLine = idx > 0 ? `
+                                                        <div class="hidden sm:flex items-center justify-center text-rose-400 dark:text-rose-800 font-black select-none h-4 px-1">
+                                                            ◀─────────▶
+                                                        </div>
+                                                    ` : '';
+
+                                                    return `
+                                                        ${connectionLine}
+                                                        <div class="relative w-16 xs:w-20 sm:w-24 md:w-28 aspect-square rounded-xl overflow-hidden border border-rose-200 dark:border-rose-900/60 bg-gray-900 shadow-sm cursor-pointer hover:scale-[1.02] active:scale-[0.98] transition-all duration-200 flex items-center justify-center shrink-0" data-action="open-detail-modal" data-index="${originalIndex}">
+                                                            <img src="${escapeHtml(s.screenshot_url)}" alt="Screenshot" class="h-full w-full object-cover" loading="lazy">
+                                                            
+                                                            ${showBadge ? `
+                                                            <!-- Overlay Mini Status Badge -->
+                                                            <div class="absolute top-1 right-1 flex items-center justify-center h-4 w-4 rounded-full shadow text-[8px] font-black ${badgeBg} text-white border border-white/20 select-none">
+                                                                ${icon}
+                                                            </div>
+                                                            ` : ''}
+                                                            
+                                                            <!-- Mini Tag with user initials/short name -->
+                                                            <div class="absolute bottom-0 left-0 right-0 bg-black/60 text-white text-[7px] font-black text-center py-0.5 truncate uppercase">
+                                                                ${escapeHtml(s.user_name || 'User')}
+                                                            </div>
+                                                        </div>
+                                                    `;
+                                                }).join('')}
+                                            </div>
+                                        </div>
+                                    `;
+                                }).join('');
+                            })()}
                         </div>
                     ` : `
                         <div class="flex flex-wrap gap-2 justify-start items-start">
