@@ -5,6 +5,101 @@ const getCleanAppName = (fullName = '') => {
     return clean || fullName;
 };
 
+const loadJSZip = () => {
+    return new Promise((resolve, reject) => {
+        if (window.JSZip) return resolve(window.JSZip);
+        const script = document.createElement('script');
+        script.src = 'https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js';
+        script.onload = () => resolve(window.JSZip);
+        script.onerror = () => reject(new Error('Failed to load JSZip library.'));
+        document.head.appendChild(script);
+    });
+};
+
+const downloadAllSubmissionsZip = async (subs, appName, selectedDate) => {
+    const zipBtn = document.getElementById('admin-sub-download-zip-btn');
+    const originalHtml = zipBtn ? zipBtn.innerHTML : '📥 Download ZIP';
+    if (zipBtn) {
+        zipBtn.disabled = true;
+        zipBtn.innerHTML = '⏳ Initializing ZIP...';
+    }
+    
+    try {
+        const JSZip = await loadJSZip();
+        const zip = new JSZip();
+        
+        // Split by ":" and take the part before it as clean app name
+        const cleanAppName = appName.split(':')[0].trim().replace(/[^a-zA-Z0-9\s-_]/g, '');
+        
+        // Format YYYY-MM-DD to DD-MM-YYYY
+        const formatDateStr = (dateStr) => {
+            if (!dateStr) return '';
+            const parts = dateStr.split('-');
+            return parts.length === 3 ? `${parts[2]}-${parts[1]}-${parts[0]}` : dateStr;
+        };
+        const formattedDate = formatDateStr(selectedDate);
+        
+        // zip filename format: cleanAppName + " ss " + formattedDate + ".zip"
+        const zipFilename = `${cleanAppName} ss ${formattedDate}.zip`;
+        
+        let downloaded = 0;
+        const fetchPromises = subs.map(async (s, idx) => {
+            try {
+                const url = s.screenshot_url;
+                if (!url) return;
+                
+                const response = await fetch(url);
+                const blob = await response.blob();
+                
+                const revName = (s.ocr_extracted_name || s.user_name || s.user_mobile || `user_${idx}`).replace(/[^a-zA-Z0-9\s-_]/g, '');
+                const imgFilename = `${revName}_ss_${idx + 1}.jpg`;
+                
+                zip.file(imgFilename, blob);
+                downloaded++;
+                if (zipBtn) {
+                    zipBtn.innerHTML = `⏳ Downloading (${downloaded}/${subs.length})...`;
+                }
+            } catch (e) {
+                console.error('Failed to download screenshot for ZIP:', e);
+            }
+        });
+        
+        await Promise.all(fetchPromises);
+        
+        if (downloaded === 0) {
+            showNotification('Could not download any screenshots. Please verify connection.', true);
+            if (zipBtn) {
+                zipBtn.disabled = false;
+                zipBtn.innerHTML = originalHtml;
+            }
+            return;
+        }
+        
+        if (zipBtn) zipBtn.innerHTML = '⚡ Generating ZIP...';
+        const content = await zip.generateAsync({ type: 'blob' });
+        
+        const link = document.createElement('a');
+        link.href = URL.createObjectURL(content);
+        link.download = zipFilename;
+        link.click();
+        
+        showNotification(`Downloaded ZIP: ${zipFilename}`);
+        if (zipBtn) {
+            zipBtn.disabled = false;
+            zipBtn.innerHTML = originalHtml;
+        }
+    } catch (err) {
+        console.error('ZIP generation failed:', err);
+        showNotification(`ZIP Generation Failed: ${err.message}`, true);
+        if (zipBtn) {
+            zipBtn.disabled = false;
+            zipBtn.innerHTML = originalHtml;
+        }
+    }
+};
+
+window.downloadAllSubmissionsZip = downloadAllSubmissionsZip;
+
 window.showAdminSubmissionDetailModal = function(index) {
             const list = window.currentActiveSubmissions || [];
             if (!list || index < 0 || index >= list.length) return;
@@ -81,9 +176,23 @@ window.showAdminSubmissionDetailModal = function(index) {
                                 </div>
                                 `}
 
-                                <div class="mt-3 pt-3 border-t border-gray-100 dark:border-gray-755 flex items-center justify-between text-[11px]">
-                                    <span class="font-bold text-orange-500">📱 ${escapeHtml(s.user_mobile || 'No mobile registered')}</span>
-                                    <span class="text-gray-450 font-semibold">${timeStr}</span>
+                                <div class="mt-3 pt-3 border-t border-gray-100 dark:border-gray-755 flex flex-col gap-1.5 text-[11px] text-left">
+                                    <div class="flex items-center justify-between">
+                                        <span class="font-black text-gray-400 dark:text-gray-500 uppercase tracking-wider text-[9px]">Submitted By:</span>
+                                        <span class="font-extrabold text-indigo-600 dark:text-indigo-400">${escapeHtml(s.user_name || 'No Name')}</span>
+                                    </div>
+                                    <div class="flex items-center justify-between">
+                                        <span class="font-black text-gray-400 dark:text-gray-500 uppercase tracking-wider text-[9px]">User Email:</span>
+                                        <span class="font-bold text-gray-700 dark:text-gray-300">${escapeHtml(s.user_email || 'No Email')}</span>
+                                    </div>
+                                    <div class="flex items-center justify-between">
+                                        <span class="font-black text-gray-400 dark:text-gray-500 uppercase tracking-wider text-[9px]">Mobile:</span>
+                                        <span class="font-extrabold text-orange-500">📱 ${escapeHtml(s.user_mobile || 'No mobile registered')}</span>
+                                    </div>
+                                    <div class="flex items-center justify-between">
+                                        <span class="font-black text-gray-400 dark:text-gray-500 uppercase tracking-wider text-[9px]">Submitted At:</span>
+                                        <span class="text-gray-450 font-semibold">${timeStr}</span>
+                                    </div>
                                 </div>
                             </div>
 
@@ -862,20 +971,32 @@ const renderAdminSubmissions = () => {
         // Filter right-side details list
         const taskSubs = dateSubs.filter(s => s.task_id === selectedTaskId || s.taskId === selectedTaskId);
         
+        // Check if a reviewer name has appeared in the live scraped reviews list
+        const scraped = window.adminSubmissionsView.scrapedReviews || [];
+        const isSubmissionLive = (s) => {
+            if (!scraped || scraped.length === 0) return false;
+            const ocrName = String(s.ocr_extracted_name || '').trim().toLowerCase();
+            if (!ocrName || ocrName === 'unknown user') return false;
+            return scraped.some(r => {
+                const rName = String(r.userName || r.user || '').trim().toLowerCase();
+                return rName === ocrName || rName.includes(ocrName) || ocrName.includes(rName);
+            });
+        };
+
         // Chips counts
         const countAll = taskSubs.length;
         const countOcr = taskSubs.filter(s => s.ocr_status === 'completed').length;
-        const countPending = taskSubs.filter(s => s.manual_status === 'pending').length;
-        const countRejected = taskSubs.filter(s => s.manual_status === 'rejected').length;
+        const countPending = taskSubs.filter(s => s.manual_status === 'pending' && isSubmissionLive(s)).length;
+        const countRejected = taskSubs.filter(s => s.manual_status === 'rejected' || (s.manual_status === 'pending' && !isSubmissionLive(s))).length;
 
         // Apply active filter
         let filteredSubs = [...taskSubs];
         if (window.adminSubmissionsView.selectedSubFilter === 'ocr_passed') {
             filteredSubs = filteredSubs.filter(s => s.ocr_status === 'completed');
         } else if (window.adminSubmissionsView.selectedSubFilter === 'pending') {
-            filteredSubs = filteredSubs.filter(s => s.manual_status === 'pending');
+            filteredSubs = filteredSubs.filter(s => s.manual_status === 'pending' && isSubmissionLive(s));
         } else if (window.adminSubmissionsView.selectedSubFilter === 'rejected') {
-            filteredSubs = filteredSubs.filter(s => s.manual_status === 'rejected');
+            filteredSubs = filteredSubs.filter(s => s.manual_status === 'rejected' || (s.manual_status === 'pending' && !isSubmissionLive(s)));
         }
 
         window.currentActiveSubmissions = filteredSubs; // Cache list for detail modal
@@ -931,7 +1052,7 @@ const renderAdminSubmissions = () => {
                     </div>
                 ` : `
                     <!-- Submissions Filter Chips -->
-                    <div class="flex flex-wrap items-center gap-2 mb-4">
+                    <div class="flex flex-wrap items-center gap-2 mb-4 w-full">
                         ${[
                             { value: 'all', label: `All (${countAll})` },
                             { value: 'ocr_passed', label: `OCR Passed (${countOcr})` },
@@ -945,6 +1066,12 @@ const renderAdminSubmissions = () => {
                                 </button>
                             `;
                         }).join('')}
+                        
+                        ${window.adminSubmissionsView.selectedSubFilter === 'all' && countAll > 0 ? `
+                            <button type="button" id="admin-sub-download-zip-btn" class="rounded-xl px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-black text-[10px] uppercase tracking-wider transition active:scale-95 shadow-md flex items-center gap-1.5 sm:ml-auto cursor-pointer w-full sm:w-auto justify-center" style="outline: none;">
+                                📥 Download ZIP
+                            </button>
+                        ` : ''}
                     </div>
 
                     <!-- Screenshot Grid -->
@@ -955,12 +1082,15 @@ const renderAdminSubmissions = () => {
                     ` : `
                         <div class="flex flex-wrap gap-2 justify-start items-start">
                             ${filteredSubs.map((s, idx) => {
-                                let badgeBg = 'bg-amber-500';
-                                let icon = '⏳';
+                                let showBadge = false;
+                                let badgeBg = '';
+                                let icon = '';
                                 if (s.manual_status === 'approved') {
+                                    showBadge = true;
                                     badgeBg = 'bg-emerald-500';
                                     icon = '✓';
                                 } else if (s.manual_status === 'rejected') {
+                                    showBadge = true;
                                     badgeBg = 'bg-rose-500';
                                     icon = '✕';
                                 }
@@ -969,10 +1099,12 @@ const renderAdminSubmissions = () => {
                                     <div class="relative w-16 xs:w-20 sm:w-24 md:w-28 aspect-square rounded-xl overflow-hidden border border-gray-150 dark:border-gray-755 bg-gray-900 shadow-sm cursor-pointer hover:scale-[1.02] active:scale-[0.98] transition-all duration-200 flex items-center justify-center shrink-0" data-action="open-detail-modal" data-index="${idx}">
                                         <img src="${escapeHtml(s.screenshot_url)}" alt="Screenshot" class="h-full w-full object-cover" loading="lazy">
                                         
+                                        ${showBadge ? `
                                         <!-- Overlay Mini Status Badge -->
                                         <div class="absolute top-1 right-1 flex items-center justify-center h-4 w-4 rounded-full shadow text-[8px] font-black ${badgeBg} text-white border border-white/20 select-none">
                                             ${icon}
                                         </div>
+                                        ` : ''}
                                     </div>
                                 `;
                             }).join('')}
@@ -1278,6 +1410,15 @@ const renderAdminSubmissions = () => {
             window.showAdminSubmissionDetailModal(idx);
         };
     });
+
+    const zipBtn = document.getElementById('admin-sub-download-zip-btn');
+    if (zipBtn) {
+        zipBtn.onclick = () => {
+            const selectedTask = (window.allTasksCache || []).find(t => t.id === selectedTaskId);
+            const taskName = selectedTask ? (selectedTask.appName || selectedTask.title) : 'Task';
+            window.downloadAllSubmissionsZip(taskSubs, taskName, selectedDate);
+        };
+    }
 
     // --- Submitted Names list event bindings ---
     if (window.adminSubmissionsView.selectedDetailTab === 'names_list') {
