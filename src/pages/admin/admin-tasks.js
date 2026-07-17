@@ -202,9 +202,8 @@ const setAdminTaskPanel = (panel = 'manage') => {
         window.updateAdminTaskResponsiveLayout();
     }
 
-    // Also update the mobile active tab title and icon
+    // Also update the mobile active tab title
     const mobileTitleEl = document.getElementById('admin-mobile-active-tab-title');
-    const mobileIconEl = document.getElementById('admin-mobile-active-tab-icon');
     if (mobileTitleEl) {
         const titles = {
             manage: 'Tasks List',
@@ -215,16 +214,7 @@ const setAdminTaskPanel = (panel = 'manage') => {
         };
         mobileTitleEl.textContent = titles[normalized] || 'Manage Task';
     }
-    if (mobileIconEl) {
-        const icons = {
-            manage: '📋',
-            add: '➕',
-            ads: '📢',
-            submissions: '📥',
-            board_control: '⚙️'
-        };
-        mobileIconEl.textContent = icons[normalized] || '📋';
-    }
+
 
     const addSection = document.getElementById('admin-task-add-section');
     const manageSection = document.getElementById('admin-task-manage-section');
@@ -509,10 +499,7 @@ const showAdminTaskPage = () => {
                                 <button type="button" onclick="window.showAdminTaskMobileMenu()" class="h-8 w-8 shrink-0 rounded-full bg-cyan-600 hover:bg-cyan-700 text-white flex items-center justify-center transition active:scale-95 shadow-sm text-sm" style="outline: none;">
                                     ☰
                                 </button>
-                                <div class="flex items-center gap-1.5 min-w-0">
-                                    <span id="admin-mobile-active-tab-icon" class="text-sm shrink-0">📋</span>
-                                    <span id="admin-mobile-active-tab-title" class="text-[11px] font-black uppercase tracking-wider text-slate-700 dark:text-slate-200 truncate">Tasks List</span>
-                                </div>
+                                <span id="admin-mobile-active-tab-title" class="text-[11px] font-black uppercase tracking-wider text-slate-700 dark:text-slate-200 truncate flex-1 min-w-0">Tasks List</span>
                             </div>
                             <!-- Board Control Panel -->
                             <section id="admin-board-control-section" class="hidden bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 p-4 sm:p-5">

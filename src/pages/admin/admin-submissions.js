@@ -1380,9 +1380,79 @@ const renderAdminSubmissions = () => {
         window.currentActiveSubmissions = filteredSubs; // Cache list for detail modal
 
         html = `
+            <style>
+                /* Thin scrollbar for mobile */
+                @media (max-width: 639px) {
+                    .mobile-thin-scroll::-webkit-scrollbar { height: 2px !important; }
+                    .mobile-thin-scroll::-webkit-scrollbar-track { background: transparent; }
+                    .mobile-thin-scroll::-webkit-scrollbar-thumb { background: rgba(148,163,184,0.25); border-radius: 999px; }
+                    .mobile-thin-scroll { scrollbar-width: thin; scrollbar-color: rgba(148,163,184,0.25) transparent; }
+                    @keyframes mobileFilterBlink { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:.5;transform:scale(1.3)} }
+                    .mobile-filter-blink { animation: mobileFilterBlink 1.2s ease-in-out infinite; }
+                }
+            </style>
+
+            <!-- Mobile Compact Header (replaces detail toolbar on small screens) -->
+            <div class="sm:hidden bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 p-2.5 mb-1.5 flex items-center gap-2">
+                <button id="admin-sub-back-btn-mobile" class="h-8 w-8 shrink-0 rounded-full bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200 flex items-center justify-center transition active:scale-95 shadow-sm" style="outline: none;" title="Back">
+                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M10 19l-7-7m0 0l7-7m-7 7h18"></path></svg>
+                </button>
+                <div class="min-w-0 flex-1">
+                    <h3 class="text-[11px] font-black text-gray-900 dark:text-white truncate leading-tight">${escapeHtml(getCleanAppName(selectedTaskName))}</h3>
+                    <p class="text-[8px] text-slate-400 dark:text-slate-500 font-bold">${formatDatePickerDate(selectedDate)}</p>
+                </div>
+                ${window.adminSubmissionsView.selectedDetailTab === 'submissions' ? `
+                    <!-- Filter Icon Button -->
+                    <div class="relative">
+                        <button type="button" id="mobile-filter-icon-btn" class="h-8 w-8 shrink-0 rounded-full bg-indigo-50 dark:bg-indigo-950 border border-indigo-200/50 dark:border-indigo-800/50 text-indigo-600 dark:text-indigo-400 flex items-center justify-center transition active:scale-95 shadow-sm" style="outline: none;" title="Filter">
+                            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z"></path></svg>
+                        </button>
+                        ${countSameUsername > 0 ? '<span class="mobile-filter-blink absolute -top-0.5 -right-0.5 h-2.5 w-2.5 rounded-full bg-red-500 border-2 border-white dark:border-gray-800"></span>' : ''}
+                    </div>
+                ` : ''}
+                ${window.adminSubmissionsView.selectedDetailTab === 'submissions' && countAll > 0 ? `
+                    <button type="button" id="admin-sub-download-zip-btn" class="h-8 shrink-0 rounded-full bg-emerald-600 hover:bg-emerald-700 text-white flex items-center justify-center gap-1 transition active:scale-95 shadow-sm px-2.5 cursor-pointer" style="outline: none;" title="Download ZIP">
+                        <span class="text-xs">📥</span>
+                        <span class="text-[9px] font-black uppercase tracking-wider">ZIP</span>
+                    </button>
+                ` : ''}
+            </div>
+
+            <!-- Mobile Filter Dropdown Popup (hidden by default) -->
+            ${window.adminSubmissionsView.selectedDetailTab === 'submissions' ? `
+                <div id="mobile-filter-popup" class="sm:hidden hidden fixed inset-0 z-[9999]" style="pointer-events: none;">
+                    <div id="mobile-filter-popup-overlay" class="absolute inset-0 bg-black/20" style="pointer-events: auto;"></div>
+                    <div id="mobile-filter-popup-menu" class="absolute bg-white dark:bg-gray-800 rounded-2xl shadow-2xl border border-gray-200 dark:border-gray-700 py-2 w-56" style="pointer-events: auto; top: 64px; right: 60px;">
+                        <div class="px-3 py-1.5 text-[8px] font-black text-slate-400 uppercase tracking-widest">Filter By</div>
+            ${(() => {
+                const filterOpts = [
+                    { value: 'all', label: 'All Submissions', count: countAll, icon: '📋' },
+                    { value: 'ocr_passed', label: 'OCR Passed', count: countOcr, icon: '✅' },
+                    { value: 'pending', label: 'Pending', count: countPending, icon: '⏳' },
+                    { value: 'rejected', label: 'Rejected', count: countRejected, icon: '❌' },
+                    { value: 'same_username', label: 'Same User Name', count: countSameUsername, icon: '⚠️' }
+                ];
+                return filterOpts.map(opt => {
+                    const isActive = window.adminSubmissionsView.selectedSubFilter === opt.value;
+                    const activeCls = isActive ? 'bg-indigo-50 dark:bg-indigo-950/50' : 'hover:bg-slate-50 dark:hover:bg-slate-800/50';
+                    const labelCls = isActive ? 'text-indigo-600 dark:text-indigo-400' : 'text-slate-700 dark:text-slate-300';
+                    const countCls = isActive ? 'text-indigo-600 dark:text-indigo-400 bg-indigo-100 dark:bg-indigo-900' : 'text-slate-400 bg-slate-100 dark:bg-slate-800';
+                    const checkSvg = isActive ? '<svg class="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"></path></svg>' : '';
+                    return '<button type="button" data-action="mobile-popup-filter" data-filter="' + opt.value + '" class="w-full flex items-center gap-2.5 px-3 py-2 text-left transition ' + activeCls + '" style="outline: none;">'
+                        + '<span class="text-sm">' + opt.icon + '</span>'
+                        + '<span class="text-[11px] font-bold ' + labelCls + ' flex-1">' + opt.label + '</span>'
+                        + '<span class="text-[10px] font-black ' + countCls + ' rounded-full px-1.5 py-0.5">' + opt.count + '</span>'
+                        + checkSvg
+                        + '</button>';
+                }).join('');
+            })()}
+                    </div>
+                </div>
+            ` : ''}
+
             <div class="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 p-4 sm:p-5 space-y-6 text-left">
-                <!-- Top Detail Toolbar Header -->
-                 <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-gray-100 dark:border-gray-700">
+                <!-- Top Detail Toolbar Header (Desktop Only) -->
+                 <div class="hidden sm:flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-gray-100 dark:border-gray-700">
                      <div class="flex items-center gap-3 min-w-0 w-full sm:w-auto">
                          <button id="admin-sub-back-btn" class="p-2 rounded-xl bg-gray-100 hover:bg-gray-200 dark:bg-gray-700 dark:hover:bg-gray-650 text-gray-700 dark:text-gray-200 transition active:scale-95 shadow-sm border border-gray-200/20" title="Back" style="outline: none;">
                              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M10 19l-7-7m0 0l7-7m-7 7h18"></path></svg>
@@ -1397,15 +1467,15 @@ const renderAdminSubmissions = () => {
                              Date: ${formatDatePickerDate(selectedDate)}
                          </span>
                          ${window.adminSubmissionsView.selectedDetailTab === 'submissions' && countAll > 0 ? `
-                             <button type="button" id="admin-sub-download-zip-btn" class="rounded-full h-8 w-8 sm:w-auto sm:h-auto sm:px-3.5 sm:py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-black text-[10px] uppercase tracking-wider transition active:scale-95 shadow-sm flex items-center justify-center gap-1 cursor-pointer shrink-0" style="outline: none;" title="Download Screenshots ZIP">
-                                 📥 <span class="hidden sm:inline">Download ZIP</span>
+                             <button type="button" id="admin-sub-download-zip-btn-desktop" class="rounded-full px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-black text-[10px] uppercase tracking-wider transition active:scale-95 shadow-sm flex items-center justify-center gap-1 cursor-pointer shrink-0" style="outline: none;" title="Download Screenshots ZIP">
+                                 📥 <span>Download ZIP</span>
                              </button>
                          ` : ''}
                      </div>
                  </div>
 
                  <!-- Detail Tabs -->
-                 <div class="flex items-center gap-6 border-b border-gray-100 dark:border-gray-700 pb-2 overflow-x-auto scrollbar-none text-xs">
+                 <div class="flex items-center gap-6 border-b border-gray-100 dark:border-gray-700 pb-2 overflow-x-auto mobile-thin-scroll text-xs">
                      ${['overview', 'submissions', 'names_list', 'play_store_verify', 'payments'].map(tab => {
                          const isActive = window.adminSubmissionsView.selectedDetailTab === tab;
                          const labels = {
@@ -1439,20 +1509,8 @@ const renderAdminSubmissions = () => {
                          <p class="text-xs text-gray-500 mt-1">This section is configured to run automatically.</p>
                      </div>
                  ` : `
-                     <!-- Submissions Filter (Dropdown on Mobile, Chips on Desktop) -->
+                     <!-- Submissions Filter (Desktop chips only, Mobile uses icon popup) -->
                      <div class="w-full mb-4">
-                         <!-- Mobile dropdown filter -->
-                         <div class="sm:hidden w-full">
-                             <label class="text-[9px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-wider block mb-1">Filter Submissions</label>
-                             <select id="mobile-sub-filter-select" class="w-full px-3.5 py-3 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl text-xs font-black uppercase text-slate-750 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500/50" style="outline: none;">
-                                 <option value="all" ${window.adminSubmissionsView.selectedSubFilter === 'all' ? 'selected' : ''}>All Submissions (${countAll})</option>
-                                 <option value="ocr_passed" ${window.adminSubmissionsView.selectedSubFilter === 'ocr_passed' ? 'selected' : ''}>OCR Passed (${countOcr})</option>
-                                 <option value="pending" ${window.adminSubmissionsView.selectedSubFilter === 'pending' ? 'selected' : ''}>Pending (${countPending})</option>
-                                 <option value="rejected" ${window.adminSubmissionsView.selectedSubFilter === 'rejected' ? 'selected' : ''}>Rejected (${countRejected})</option>
-                                 <option value="same_username" ${window.adminSubmissionsView.selectedSubFilter === 'same_username' ? 'selected' : ''}>Same User Name (${countSameUsername})</option>
-                             </select>
-                         </div>
-                         
                          <!-- Desktop horizontal chips filter -->
                          <div class="hidden sm:flex flex-wrap items-center gap-2 w-full">
                              ${[
@@ -1469,6 +1527,13 @@ const renderAdminSubmissions = () => {
                                      </button>
                                  `;
                              }).join('')}
+                         </div>
+                         <!-- Mobile: show current filter as inline badge (tapping filter icon in header changes it) -->
+                         <div class="sm:hidden">
+                             <span class="inline-flex items-center gap-1 rounded-full bg-indigo-50 dark:bg-indigo-950/40 px-2.5 py-1 text-[9px] font-black text-indigo-600 dark:text-indigo-400 uppercase tracking-wider border border-indigo-200/40 dark:border-indigo-800/40">
+                                 ${{all:'📋 All', ocr_passed:'✅ OCR Passed', pending:'⏳ Pending', rejected:'❌ Rejected', same_username:'⚠️ Same Name'}[window.adminSubmissionsView.selectedSubFilter] || '📋 All'}
+                                 <span class="text-indigo-400 dark:text-indigo-500">(${filteredSubs.length})</span>
+                             </span>
                          </div>
                      </div>
 
@@ -1846,13 +1911,14 @@ const renderAdminSubmissions = () => {
     }
 
     const backBtn = document.getElementById('admin-sub-back-btn');
-    if (backBtn) {
-        backBtn.onclick = () => {
-            window.adminSubmissionsView.viewState = 'list';
-            window.adminSubmissionsView.selectedTaskId = '';
-            renderAdminSubmissions();
-        };
-    }
+    const backBtnMobile = document.getElementById('admin-sub-back-btn-mobile');
+    const goBack = () => {
+        window.adminSubmissionsView.viewState = 'list';
+        window.adminSubmissionsView.selectedTaskId = '';
+        renderAdminSubmissions();
+    };
+    if (backBtn) backBtn.onclick = goBack;
+    if (backBtnMobile) backBtnMobile.onclick = goBack;
 
     shellEl.querySelectorAll('[data-action="view-task-submissions"]').forEach(btn => {
         btn.onclick = (e) => {
@@ -1880,13 +1946,27 @@ const renderAdminSubmissions = () => {
         };
     });
 
-    const mobileFilterSelect = document.getElementById('mobile-sub-filter-select');
-    if (mobileFilterSelect) {
-        mobileFilterSelect.onchange = (e) => {
-            window.adminSubmissionsView.selectedSubFilter = e.target.value;
-            renderAdminSubmissions();
+    // --- Mobile Filter Icon Popup ---
+    const mobileFilterIconBtn = document.getElementById('mobile-filter-icon-btn');
+    const mobileFilterPopup = document.getElementById('mobile-filter-popup');
+    const mobileFilterOverlay = document.getElementById('mobile-filter-popup-overlay');
+    if (mobileFilterIconBtn && mobileFilterPopup) {
+        mobileFilterIconBtn.onclick = () => {
+            mobileFilterPopup.classList.toggle('hidden');
         };
     }
+    if (mobileFilterOverlay && mobileFilterPopup) {
+        mobileFilterOverlay.onclick = () => {
+            mobileFilterPopup.classList.add('hidden');
+        };
+    }
+    shellEl.querySelectorAll('[data-action="mobile-popup-filter"]').forEach(btn => {
+        btn.onclick = (e) => {
+            window.adminSubmissionsView.selectedSubFilter = e.currentTarget.dataset.filter;
+            if (mobileFilterPopup) mobileFilterPopup.classList.add('hidden');
+            renderAdminSubmissions();
+        };
+    });
 
     shellEl.querySelectorAll('[data-action="open-detail-modal"]').forEach(card => {
         card.onclick = (e) => {
@@ -1895,14 +1975,19 @@ const renderAdminSubmissions = () => {
         };
     });
 
-    const zipBtn = document.getElementById('admin-sub-download-zip-btn');
-    if (zipBtn) {
-        zipBtn.onclick = () => {
-            const selectedTask = (window.allTasksCache || []).find(t => t.id === selectedTaskId);
-            const taskName = selectedTask ? (selectedTask.appName || selectedTask.title) : 'Task';
-            window.downloadAllSubmissionsZip(taskSubs, taskName, selectedDate);
-        };
-    }
+    // ZIP download — bind both mobile and desktop buttons
+    const zipBtnMobile = document.getElementById('admin-sub-download-zip-btn');
+    const zipBtnDesktop = document.getElementById('admin-sub-download-zip-btn-desktop');
+    const handleZipDownload = () => {
+        const selectedTaskId = window.adminSubmissionsView.selectedTaskId;
+        const selectedDate = window.adminSubmissionsView.selectedDate;
+        const taskSubs = window.currentActiveSubmissions || [];
+        const selectedTask = (window.allTasksCache || []).find(t => t.id === selectedTaskId);
+        const taskName = selectedTask ? (selectedTask.appName || selectedTask.title) : 'Task';
+        window.downloadAllSubmissionsZip(taskSubs, taskName, selectedDate);
+    };
+    if (zipBtnMobile) zipBtnMobile.onclick = handleZipDownload;
+    if (zipBtnDesktop) zipBtnDesktop.onclick = handleZipDownload;
 
     // --- Submitted Names list event bindings ---
     if (window.adminSubmissionsView.selectedDetailTab === 'names_list') {
