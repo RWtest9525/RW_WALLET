@@ -333,6 +333,9 @@ window.updateAdminTaskResponsiveLayout = () => {
             window.adminMobileShowMenu = false;
         }
 
+        sidebar.classList.remove('w-20');
+        sidebar.classList.add('w-64');
+
         const showMenu = !!window.adminMobileShowMenu;
         if (showMenu) {
             sidebar.classList.remove('-translate-x-full');
@@ -344,6 +347,7 @@ window.updateAdminTaskResponsiveLayout = () => {
 
         // Always show labels on mobile menu list
         sidebar.querySelectorAll('.sidebar-label').forEach(el => el.classList.remove('hidden'));
+        sidebar.querySelectorAll('.sidebar-header-label').forEach(el => el.classList.remove('hidden'));
 
         // Hide standard collapse button container on mobile
         const toggleBtnContainer = document.getElementById('admin-sidebar-toggle-btn')?.parentElement;
@@ -447,7 +451,7 @@ const showAdminTaskPage = () => {
                         <div id="admin-task-sidebar-backdrop" onclick="window.closeAdminTaskMobileMenu()" class="fixed inset-0 bg-black/40 z-40 hidden transition-opacity duration-300"></div>
 
                         <!-- Left Sidebar Panel -->
-                        <div id="admin-task-sidebar" class="fixed md:sticky md:top-6 top-0 left-0 h-full md:h-auto z-50 md:z-auto shadow-2xl md:shadow-sm rounded-r-3xl rounded-l-none md:rounded-3xl w-64 max-w-[70vw] md:max-w-none shrink-0 transform transition-transform duration-300 flex flex-col justify-between border-y-0 border-l-0 border-r md:border border-slate-100 dark:border-slate-800 bg-white dark:bg-gray-900 p-3 min-h-[350px] -translate-x-full md:translate-x-0">
+                        <div id="admin-task-sidebar" class="fixed md:sticky md:top-6 top-0 left-0 h-full md:h-auto z-50 md:z-auto shadow-2xl md:shadow-sm rounded-r-3xl rounded-l-none md:rounded-3xl w-64 max-w-[70vw] md:max-w-none shrink-0 transform transition-transform duration-300 flex flex-col justify-between border-y-0 border-l-0 border-r md:border border-slate-100 dark:border-slate-800 bg-white dark:bg-gray-900 p-3 min-h-[350px] -translate-x-full md:translate-x-0 overflow-x-hidden overflow-y-auto">
                             <!-- Top Navigation List -->
                             <div class="space-y-1.5 flex flex-col w-full">
                                 <!-- Mobile Only Sidebar Header with Close Button -->
