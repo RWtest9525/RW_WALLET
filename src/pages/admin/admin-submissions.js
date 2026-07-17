@@ -953,26 +953,26 @@ const renderAdminSubmissions = () => {
                             No screenshots found matching this filter.
                         </div>
                     ` : `
-                        <div class="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-6 gap-4">
+                        <div class="grid grid-cols-3 xs:grid-cols-4 sm:grid-cols-6 md:grid-cols-8 lg:grid-cols-10 gap-2">
                             ${filteredSubs.map((s, idx) => {
-                                let badgeClass = 'bg-amber-500/10 text-amber-600 border-amber-500/20';
-                                let label = 'Pending Verify';
+                                let badgeBg = 'bg-amber-500';
+                                let icon = '⏳';
                                 if (s.manual_status === 'approved') {
-                                    badgeClass = 'bg-emerald-500/10 text-emerald-600 border-emerald-500/20';
-                                    label = 'OCR Passed';
+                                    badgeBg = 'bg-emerald-500';
+                                    icon = '✓';
                                 } else if (s.manual_status === 'rejected') {
-                                    badgeClass = 'bg-red-500/10 text-red-600 border-red-500/20';
-                                    label = 'Rejected';
+                                    badgeBg = 'bg-rose-500';
+                                    icon = '✕';
                                 }
                                 
                                 return `
-                                    <div class="flex flex-col gap-2">
-                                        <div class="relative aspect-[9/16] rounded-2xl overflow-hidden border border-gray-150 dark:border-gray-755 bg-gray-900 shadow-sm cursor-pointer hover:scale-[1.02] active:scale-[0.98] transition-all duration-200 flex items-center justify-center" data-action="open-detail-modal" data-index="${idx}">
-                                            <img src="${escapeHtml(s.screenshot_url)}" alt="Screenshot" class="h-full w-full object-cover" loading="lazy">
+                                    <div class="relative aspect-[9/16] rounded-xl overflow-hidden border border-gray-150 dark:border-gray-755 bg-gray-900 shadow-sm cursor-pointer hover:scale-[1.02] active:scale-[0.98] transition-all duration-200 flex items-center justify-center" data-action="open-detail-modal" data-index="${idx}">
+                                        <img src="${escapeHtml(s.screenshot_url)}" alt="Screenshot" class="h-full w-full object-cover" loading="lazy">
+                                        
+                                        <!-- Overlay Mini Status Badge -->
+                                        <div class="absolute top-1 right-1 flex items-center justify-center h-5 w-5 rounded-full shadow text-[9px] font-black ${badgeBg} text-white border border-white/20 select-none">
+                                            ${icon}
                                         </div>
-                                        <span class="rounded-lg py-1 border text-[9px] font-black uppercase tracking-wider text-center ${badgeClass} shadow-sm select-none">
-                                            ${label}
-                                        </span>
                                     </div>
                                 `;
                             }).join('')}
