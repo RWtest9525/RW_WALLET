@@ -1670,21 +1670,21 @@ const showWhatsNewPopupIfNeeded = () => {
             overlay.id = 'whats-new-overlay';
             overlay.className = 'fixed inset-0 z-[75] flex items-center justify-center bg-slate-950/55 p-4 backdrop-blur-sm';
             overlay.innerHTML = `
-                <div class="w-full max-w-[360px] overflow-hidden rounded-[2.25rem] bg-white shadow-2xl border border-gray-150/10">
-                    <div class="relative bg-gradient-to-br from-blue-700 via-indigo-600 to-emerald-500 px-6 pt-7 pb-6 text-white text-left">
-                        <button type="button" onclick="window.closeWhatsNewPopup()" class="absolute right-5 top-5 flex h-8 w-8 items-center justify-center rounded-full bg-white/20 text-white hover:bg-white/30 transition duration-150 active:scale-90" aria-label="Close" style="outline: none;">
-                            <svg class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="3">
+                <div class="w-full max-w-[420px] overflow-hidden rounded-[2rem] bg-white shadow-2xl border border-gray-150/10">
+                    <div class="relative bg-gradient-to-r from-indigo-600 via-blue-600 to-emerald-500 px-6 pt-7 pb-6 text-white text-left">
+                        <button type="button" onclick="window.closeWhatsNewPopup()" class="absolute right-6 top-6 flex h-9 w-9 items-center justify-center rounded-full bg-white/20 text-white hover:bg-white/30 transition duration-150 active:scale-90" aria-label="Close" style="outline: none;">
+                            <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
                                 <path stroke-linecap="round" stroke-linejoin="round" d="M6 18 18 6M6 6l12 12" />
                             </svg>
                         </button>
                         <div class="inline-flex h-15 w-15 items-center justify-center rounded-[18px] bg-white p-1.5 shadow-md">
                             <img src="${RW_LOGO_URL}" alt="REVIEWS WORLD" class="h-full w-full rounded-xl object-cover">
                         </div>
-                        <p class="mt-5 text-[9px] font-black uppercase tracking-[0.2em] text-blue-100/90">REVIEWS WORLD</p>
-                        <h2 class="mt-1.5 text-[26px] font-extrabold tracking-tight text-white leading-tight">${escapeHtml(title)}</h2>
+                        <p class="mt-5 text-[10px] font-black uppercase tracking-[0.2em] text-blue-100/90">REVIEWS WORLD</p>
+                        <h2 class="mt-1.5 text-2xl font-extrabold tracking-tight text-white leading-tight">${escapeHtml(title)}</h2>
                     </div>
-                    <div class="px-6 pb-6 pt-5 flex flex-col text-left">
-                        <div class="whitespace-pre-line text-xs font-bold leading-relaxed text-slate-600">
+                    <div class="px-6 pb-6 pt-6 flex flex-col text-left">
+                        <div class="whitespace-pre-line text-xs font-semibold leading-relaxed text-slate-700">
                             ${escapeHtml(message)}
                         </div>
                         <button type="button" onclick="window.closeWhatsNewPopup()" class="w-full rounded-2xl bg-[#050509] hover:bg-[#18181b] py-3.5 font-bold text-white shadow-sm transition-all duration-150 active:scale-[0.98] mt-6" style="outline: none;">Got it</button>
