@@ -1686,7 +1686,7 @@ const showWhatsNewPopupIfNeeded = () => {
                         </button>
                         <!-- Circular Logo & Info row -->
                         <div class="flex items-center gap-3.5">
-                            <div class="h-15 w-15 rounded-full bg-white p-1.5 shadow-lg flex items-center justify-center shrink-0">
+                            <div class="h-16 w-16 rounded-full bg-white p-1 shadow-lg flex items-center justify-center shrink-0 overflow-hidden">
                                 <img src="${RW_LOGO_URL}" alt="Logo" class="h-full w-full rounded-full object-cover">
                             </div>
                             <div class="space-y-0.5 text-left">
