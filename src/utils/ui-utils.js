@@ -1674,8 +1674,8 @@ const showWhatsNewPopupIfNeeded = () => {
                     <!-- Gradient Header -->
                     <div class="relative bg-gradient-to-r from-blue-700 via-indigo-600 to-emerald-500 px-6 pt-7 pb-6 text-white text-left overflow-hidden">
                         <!-- Megaphone Illustration Background -->
-                        <div class="absolute right-0 bottom-0 top-0 w-44 opacity-95 overflow-hidden pointer-events-none flex items-center justify-end pr-2.5">
-                            <img src="/whats_new_megaphone.png" class="h-28 w-28 object-contain transform rotate-[-12deg] translate-y-3" alt="Megaphone">
+                        <div class="absolute right-0 bottom-0 top-0 w-48 opacity-95 overflow-hidden pointer-events-none flex items-center justify-end">
+                            <img src="/whats_new_megaphone.png" class="h-36 w-36 object-contain transform rotate-[-8deg] translate-y-1 translate-x-2" alt="Megaphone">
                         </div>
                         <button type="button" onclick="window.closeWhatsNewPopup()" class="absolute right-5 top-5 flex h-9 w-9 items-center justify-center rounded-full bg-white/20 text-white hover:bg-white/30 transition duration-150 active:scale-90" aria-label="Close" style="outline: none;">
                             <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
@@ -1689,7 +1689,7 @@ const showWhatsNewPopupIfNeeded = () => {
                             </div>
                             <div class="space-y-0.5 text-left">
                                 <h3 class="text-[15px] font-black text-white uppercase tracking-wide">REVIEWS WORLD</h3>
-                                <p class="text-[10px] font-bold text-blue-100/90 leading-tight">Review Tasks, Earn Rewards, Build Your Future</p>
+                                <p class="text-[10px] font-bold text-blue-100/90 leading-tight">Do task earn reward</p>
                             </div>
                         </div>
                         <h2 class="mt-5 text-3xl font-extrabold tracking-tight text-white leading-tight">${escapeHtml(title)}</h2>
