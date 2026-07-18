@@ -1674,10 +1674,8 @@ const showWhatsNewPopupIfNeeded = () => {
                     <!-- Gradient Header -->
                     <div class="relative bg-gradient-to-r from-blue-700 via-indigo-600 to-emerald-500 px-6 pt-7 pb-6 text-white text-left overflow-hidden">
                         <!-- Megaphone Illustration Background -->
-                        <div class="absolute right-4 bottom-0 top-0 w-32 opacity-15 overflow-hidden pointer-events-none flex items-center justify-end pr-1">
-                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-24 h-24 transform rotate-[-15deg] translate-y-3">
-                                <path stroke-linecap="round" stroke-linejoin="round" d="M19.114 5.636a9 9 0 0 1 0 12.728M16.463 8.288a5.25 5.25 0 0 1 0 7.424M6.75 8.25l4.72-4.72a.75.75 0 0 1 1.28.53v15.88a.75.75 0 0 1-1.28.53l-4.72-4.72H4.51c-.88 0-1.704-.507-1.938-1.354A9.009 9.009 0 0 1 2.25 12c0-.83.112-1.633.322-2.396C2.806 8.756 3.63 8.25 4.51 8.25H6.75Z" />
-                            </svg>
+                        <div class="absolute right-0 bottom-0 top-0 w-44 opacity-95 overflow-hidden pointer-events-none flex items-center justify-end pr-2.5">
+                            <img src="/whats_new_megaphone.png" class="h-28 w-28 object-contain transform rotate-[-12deg] translate-y-3" alt="Megaphone">
                         </div>
                         <button type="button" onclick="window.closeWhatsNewPopup()" class="absolute right-5 top-5 flex h-9 w-9 items-center justify-center rounded-full bg-white/20 text-white hover:bg-white/30 transition duration-150 active:scale-90" aria-label="Close" style="outline: none;">
                             <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
