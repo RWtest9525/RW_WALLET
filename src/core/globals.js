@@ -80,7 +80,7 @@ window.RECHARGE_STATES = [
             'Uttar Pradesh East', 'Uttar Pradesh West', 'West Bengal'
         ];
 window.BACKEND_BASE_URL = (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
-            ? 'http://localhost:8080'
+            ? 'https://rw-wallet.onrender.com'
             : 'https://rw-wallet.onrender.com';
 window.RW_LOGO_URL = 'https://i.ibb.co/x8YBYwGG/6233389803554672153.jpg';
 window.PLAY_STORE_LOGO_URL = 'https://upload.wikimedia.org/wikipedia/commons/d/d0/Google_Play_Arrow_logo.svg';

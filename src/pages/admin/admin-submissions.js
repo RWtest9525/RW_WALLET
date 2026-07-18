@@ -2249,9 +2249,9 @@ const renderAdminSubmissions = () => {
                 const month = String(d.getMonth() + 1).padStart(2, '0');
                 const year = d.getFullYear();
                 const dateStr = `${day}_${month}_${year}`;
-                const filename = `${appName}_${dateStr}.xls`;
+                const filename = `${appName}_${dateStr}.xlsx`;
                 
-                const headers = ['Reviewer Name', 'Rating (Stars)', 'Review Comment', 'Status', 'User Mobile', 'Review Date', 'Helpful Count'];
+                const headers = ['Reviewer Name', 'Review Content', 'Rating Star', 'Date', 'Status'];
                 
                 const dateSubs = (adminSubmissionsCache || []).filter(s => getSubmissionLocalDateStr(s.submitted_at || s.submittedAt) === selectedDate);
                 const taskSubs = dateSubs.filter(s => s.task_id === selectedTaskId || s.taskId === selectedTaskId);
@@ -2279,48 +2279,80 @@ const renderAdminSubmissions = () => {
                     const reviewDate = r.date || r.time ? new Date(r.date || r.time).toLocaleDateString('en-GB') : '';
                     return [
                         r.userName || r.user || 'User',
-                        Math.round(Number(r.score || r.rating || 5)),
                         r.text || r.content || '',
-                        matched ? 'Matched' : 'Not Matched',
-                        matched ? (matched.user_mobile || matched.userMobile || '') : '',
+                        Math.round(Number(r.score || r.rating || 5)),
                         reviewDate,
-                        r.thumbsUpCount || 0
+                        matched ? 'Matched' : 'Not Matched'
                     ];
                 });
                 
-                let xml = `<?xml version="1.0"?><Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet" xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet"><Worksheet ss:Name="Sheet1"><Table>`;
-                
-                xml += '<Row>';
-                headers.forEach(h => {
-                    xml += `<Cell><Data ss:Type="String">${h.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')}</Data></Cell>`;
-                });
-                xml += '</Row>';
-                
-                rows.forEach(row => {
-                    xml += '<Row>';
-                    row.forEach(val => {
-                        const cleanVal = String(val === null || val === undefined ? '' : val)
-                            .replace(/&/g, '&amp;')
-                            .replace(/</g, '&lt;')
-                            .replace(/>/g, '&gt;');
-                        xml += `<Cell><Data ss:Type="String">${cleanVal}</Data></Cell>`;
-                    });
-                    xml += '</Row>';
-                });
-                
-                xml += '</Table></Worksheet></Workbook>';
+                const downloadExcel = () => {
+                    const proceedDownload = () => {
+                        try {
+                            const ws = window.XLSX.utils.aoa_to_sheet([headers, ...rows]);
+                            const wb = window.XLSX.utils.book_new();
+                            window.XLSX.utils.book_append_sheet(wb, ws, "Reviews");
+                            window.XLSX.writeFile(wb, filename);
+                            showNotification(`Downloaded ${filtered.length} reviews as Excel.`);
+                        } catch (err) {
+                            console.error("XLSX write error, falling back to XML", err);
+                            fallbackDownload();
+                        }
+                    };
 
-                const blob = new Blob([xml], { type: 'application/vnd.ms-excel' });
-                const link = document.createElement("a");
-                const url = URL.createObjectURL(blob);
-                link.setAttribute("href", url);
-                link.setAttribute("download", filename);
-                link.style.visibility = 'hidden';
-                document.body.appendChild(link);
-                link.click();
-                document.body.removeChild(link);
-                
-                showNotification(`Downloaded ${filtered.length} reviews as Excel.`);
+                    const fallbackDownload = () => {
+                        let xml = `<?xml version="1.0"?><Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet" xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet"><Worksheet ss:Name="Sheet1"><Table>`;
+                        
+                        xml += '<Row>';
+                        headers.forEach(h => {
+                            xml += `<Cell><Data ss:Type="String">${h.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')}</Data></Cell>`;
+                        });
+                        xml += '</Row>';
+                        
+                        rows.forEach(row => {
+                            xml += '<Row>';
+                            row.forEach(val => {
+                                const cleanVal = String(val === null || val === undefined ? '' : val)
+                                    .replace(/&/g, '&amp;')
+                                    .replace(/</g, '&lt;')
+                                    .replace(/>/g, '&gt;');
+                                xml += `<Cell><Data ss:Type="String">${cleanVal}</Data></Cell>`;
+                            });
+                            xml += '</Row>';
+                        });
+                        
+                        xml += '</Table></Worksheet></Workbook>';
+
+                        const blob = new Blob([xml], { type: 'application/vnd.ms-excel' });
+                        const link = document.createElement("a");
+                        const url = URL.createObjectURL(blob);
+                        link.setAttribute("href", url);
+                        link.setAttribute("download", filename);
+                        link.style.visibility = 'hidden';
+                        document.body.appendChild(link);
+                        link.click();
+                        document.body.removeChild(link);
+                        showNotification(`Downloaded ${filtered.length} reviews as Excel.`);
+                    };
+
+                    if (window.XLSX) {
+                        proceedDownload();
+                    } else {
+                        showNotification('Loading Excel exporter...', false);
+                        const script = document.createElement('script');
+                        script.src = 'https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js';
+                        script.onload = () => {
+                            proceedDownload();
+                        };
+                        script.onerror = () => {
+                            console.error('Failed to load SheetJS from CDN, using fallback XML format');
+                            fallbackDownload();
+                        };
+                        document.head.appendChild(script);
+                    }
+                };
+
+                downloadExcel();
             };
         }
 

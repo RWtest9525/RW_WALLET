@@ -1227,22 +1227,17 @@ const showUserTaskHistoryPage = () => {
                         </button>
                         <h2 class="text-lg font-black text-gray-900 dark:text-white">${title}</h2>
                     </div>
-                    <div class="flex items-center gap-2">
-                        <button id="user-task-history-filter-toggle" class="p-2 rounded-full hover:bg-gray-255 dark:hover:bg-gray-700 shrink-0 ${window.userTaskHistoryFilterDrawerOpen ? 'bg-purple-100 dark:bg-purple-950/30 text-purple-600 dark:text-purple-400' : 'text-gray-700 dark:text-white'}" style="outline: none;">
-                            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon></svg>
-                        </button>
-                    </div>
                 </header>
                 `}
                 
                 <div class="max-w-xl mx-auto space-y-3 pb-24 px-4 pt-3 text-left">
-                    <!-- Category Tabs (Styled Pill Tabs based on Screenshot 1) -->
-                    <div class="grid grid-cols-3 gap-2.5 mb-1.5 select-none">
+                    <!-- Category Tabs (Segmented Control Layout) -->
+                    <div class="flex p-1 bg-gray-100 dark:bg-gray-900 rounded-2xl select-none mb-2">
                         ${['all', 'play_store', 'others'].map(tab => {
                             const isActive = window.userTaskHistoryActiveTab === tab;
                             const label = tab === 'all' ? 'All' : tab === 'play_store' ? 'Play Store' : 'Others';
                             return `
-                                <button type="button" data-action="select-history-tab" data-tab="${tab}" class="rounded-2xl px-4 py-2.5 text-xs font-extrabold transition-all duration-200 ${isActive ? 'bg-indigo-600 text-white shadow-md' : 'bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700'}" style="outline: none;">
+                                <button type="button" data-action="select-history-tab" data-tab="${tab}" class="flex-1 text-center py-2 text-xs font-black rounded-xl transition-all duration-200 ${isActive ? 'bg-indigo-600 text-white shadow-sm' : 'text-gray-500 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200'}" style="outline: none;">
                                     ${label}
                                 </button>
                             `;
@@ -2763,6 +2758,12 @@ window.showBulkerSubmissionDetail = (submissionId) => {
     resultEl.classList.remove('hidden');
     resultEl.innerHTML = `<div class="text-center text-xs font-semibold text-gray-400 py-3">Fetching task and submission details...</div>`;
 
+    // Hide search wrapper initially
+    const searchWrapper = document.getElementById('user-live-lists-search-wrapper');
+    if (searchWrapper) {
+        searchWrapper.classList.add('hidden');
+    }
+
     try {
         const taskRef = doc(db, `artifacts/${appId}/public/data/tasks`, taskId);
         const taskSnap = await getDoc(taskRef);
@@ -2920,6 +2921,19 @@ window.showBulkerSubmissionDetail = (submissionId) => {
             </div>
         `;
 
+        // Update global userLiveListsCache with the task's specific lists
+        window.userLiveListsCache = listData.lists;
+
+        // Show the search wrapper and render the lists
+        if (searchWrapper) {
+            searchWrapper.classList.remove('hidden');
+            const searchInput = document.getElementById('user-live-lists-search');
+            if (searchInput) {
+                searchInput.value = '';
+            }
+        }
+        renderUserLiveLists();
+
     } catch (err) {
         console.error('Verification failed:', err);
         resultEl.innerHTML = `<div class="text-center text-xs font-bold text-red-500 py-2">⚠️ Error verifying task. Please try again later.</div>`;
@@ -2945,23 +2959,22 @@ const showUserLiveListsPage = () => {
                         <div id="user-live-lists-result" class="hidden rounded-2xl border p-4 space-y-3.5 text-left bg-gray-50/40 dark:bg-gray-900/10 border-gray-150 dark:border-gray-800"></div>
                     </div>
 
-                    <!-- Search Existing Lists -->
-                    <div class="bg-white dark:bg-gray-800 p-5 rounded-2xl shadow-md border border-gray-100 dark:border-gray-700 text-left">
-                        <p class="text-xs font-semibold text-gray-500 dark:text-gray-400">
-                            Or browse and search through all uploaded live lists.
-                        </p>
-                        <input type="text" id="user-live-lists-search" placeholder="🔍 Search app name or reviewer name..." class="mt-3 w-full px-4 py-2.5 bg-gray-50 dark:bg-gray-750 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none text-sm border border-gray-100 dark:border-gray-700 text-gray-900 dark:text-white">
-                    </div>
-                    <div id="user-live-lists-container" class="space-y-4">
-                        <div class="py-8 text-center text-sm text-gray-400">Loading lists...</div>
+                    <!-- Search Wrapper (Hidden initially) -->
+                    <div id="user-live-lists-search-wrapper" class="hidden space-y-4">
+                        <!-- Search Existing Lists -->
+                        <div class="bg-white dark:bg-gray-800 p-5 rounded-2xl shadow-md border border-gray-100 dark:border-gray-700 text-left">
+                            <p class="text-xs font-semibold text-gray-500 dark:text-gray-400">
+                                Search within the live lists of this app.
+                            </p>
+                            <input type="text" id="user-live-lists-search" placeholder="🔍 Search app name or reviewer name..." class="mt-3 w-full px-4 py-2.5 bg-gray-50 dark:bg-gray-750 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none text-sm border border-gray-100 dark:border-gray-700 text-gray-900 dark:text-white">
+                        </div>
+                        <div id="user-live-lists-container" class="space-y-4"></div>
                     </div>
                 </div>
                 ${getPageFooter()}`;
 
             showPage(content, { returnTo: 'settings', keepBottomNav: false });
             
-            loadUserLiveLists();
-
             document.getElementById('user-live-lists-search').addEventListener('input', renderUserLiveLists);
         };
 
