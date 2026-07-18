@@ -1688,7 +1688,7 @@ const showWhatsNewPopupIfNeeded = () => {
                                 <img src="${RW_LOGO_URL}" alt="Logo" class="h-full w-full rounded-full object-cover">
                             </div>
                             <div class="space-y-0.5 text-left">
-                                <h3 class="text-[15px] font-black text-white uppercase tracking-wide">REVIEWS WORLD</h3>
+                                <h3 class="text-lg font-black text-white uppercase tracking-wide">REVIEWS WORLD</h3>
                                 <p class="text-[10px] font-bold text-blue-100/90 leading-tight">Do task earn reward</p>
                             </div>
                         </div>
