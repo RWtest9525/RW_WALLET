@@ -137,8 +137,8 @@ root.outerHTML = String.raw`
                     <button id="impersonation-switch-btn" class="hidden h-12 w-12 rounded-2xl bg-amber-500 hover:bg-amber-600 text-slate-900 p-2.5 shadow-sm hover:scale-105 transition flex items-center justify-center border border-amber-650" title="Switch Back to Owner" onclick="window.handleSwitchBackToOwner()">
                         <svg class="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"></path></svg>
                     </button>
-                    <button id="notification-header-btn" class="relative h-12 w-12 rounded-2xl bg-blue-50 dark:bg-blue-900/30 border border-blue-100 dark:border-blue-800 p-2 shadow-sm hover:scale-105 transition" title="Notifications">
-                        <img src="/notification_bell.png" alt="Notifications" class="h-full w-full object-contain" loading="eager" fetchpriority="high" decoding="async">
+                    <button id="notification-header-btn" class="relative h-12 w-12 rounded-2xl bg-blue-50 dark:bg-blue-900/30 border border-blue-100 dark:border-blue-800 overflow-hidden shadow-sm hover:scale-105 transition" title="Notifications">
+                        <img src="/notification_bell.png" alt="Notifications" class="w-full h-full object-cover [image-rendering:-webkit-optimize-contrast] transform-gpu" loading="eager" fetchpriority="high" decoding="async">
                         <span id="notification-unread-badge" class="hidden absolute -right-1 -top-1 min-w-5 h-5 rounded-full bg-red-600 px-1.5 text-center text-[10px] font-black leading-5 text-white shadow">0</span>
                     </button>
                 </div>

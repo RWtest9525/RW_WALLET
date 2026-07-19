@@ -221,8 +221,8 @@ const renderUserNotificationsList = () => {
                 ? notifications.map(item => `
                     <article class="rounded-2xl border ${item.readAt ? 'border-gray-100 dark:border-gray-700 bg-white dark:bg-gray-800' : 'border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-900/20'} p-4 shadow-sm">
                         <div class="flex items-start gap-3">
-                            <div class="h-12 w-12 shrink-0 rounded-2xl bg-white dark:bg-gray-900 border border-blue-100 dark:border-blue-800 p-2 shadow-sm">
-                                <img src="${NOTIFICATION_ICON_URL}" alt="Notification" class="h-full w-full object-contain">
+                            <div class="h-12 w-12 shrink-0 rounded-2xl bg-white dark:bg-gray-900 border border-blue-100 dark:border-blue-800 overflow-hidden shadow-sm">
+                                <img src="${NOTIFICATION_ICON_URL}" alt="Notification" class="w-full h-full object-cover [image-rendering:-webkit-optimize-contrast] transform-gpu">
                             </div>
                             <div class="min-w-0 flex-1">
                                 <div class="flex items-center justify-between gap-2">
@@ -248,8 +248,8 @@ const showNotificationsPage = async () => {
                 <div class="max-w-2xl mx-auto space-y-3">
                     <div class="rounded-2xl bg-gradient-to-r from-blue-600 to-emerald-500 p-4 text-white shadow-lg">
                         <div class="flex items-center gap-3">
-                            <div class="h-14 w-14 rounded-2xl bg-white/95 p-2 shadow-sm">
-                                <img src="${NOTIFICATION_ICON_URL}" alt="Notifications" class="h-full w-full object-contain">
+                            <div class="h-14 w-14 rounded-2xl bg-white/95 overflow-hidden shadow-sm">
+                                <img src="${NOTIFICATION_ICON_URL}" alt="Notifications" class="w-full h-full object-cover [image-rendering:-webkit-optimize-contrast] transform-gpu">
                             </div>
                             <div>
                                 <h3 class="text-lg font-black">REVIEWS WORLD Updates</h3>
