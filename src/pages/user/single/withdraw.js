@@ -961,20 +961,17 @@ const showWithdrawPage = () => {
             const content = `
                 <style>
                     .payment-option-container .payment-option {
-                        border: 1.8px solid rgba(96, 165, 250, 0.55) !important;
-                        box-shadow: 0 0 6px rgba(96, 165, 250, 0.12);
+                        border: 2px solid transparent !important;
                         transition: all 0.15s ease-in-out;
                         -webkit-tap-highlight-color: transparent;
                         background-color: transparent !important;
                     }
                     .payment-option-container .payment-option:hover {
-                        border-color: rgba(59, 130, 246, 0.8) !important;
-                        box-shadow: 0 0 8px rgba(59, 130, 246, 0.25) !important;
+                        background-color: rgba(59, 130, 246, 0.04) !important;
                     }
                     .payment-option-container .payment-option.selected {
-                        border-color: rgba(96, 165, 250, 0.55) !important;
-                        box-shadow: 0 0 6px rgba(96, 165, 250, 0.12) !important;
-                        background-color: transparent !important;
+                        background-color: rgba(59, 130, 246, 0.08) !important;
+                        box-shadow: inset 0 0 0 2px rgba(59, 130, 246, 0.15) !important;
                     }
                 </style>
                 ${getPageHeader('Withdraw Funds')}
