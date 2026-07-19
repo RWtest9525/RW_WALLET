@@ -3235,6 +3235,50 @@ const showUserTaskPage = () => {
             currentMainSection = 'task';
             const isTaskPageEnabled = true;
 
+            // Notification permission gate (only for normal users)
+            if (currentUser?.uid !== ADMIN_UID && window.Notification && window.Notification.permission !== 'granted') {
+                const enableNotificationContent = `
+                    ${getPageHeader('Enable Notifications', { showBack: false })}
+                    <div class="mx-auto max-w-md pb-24 px-4 text-center">
+                        <section class="relative overflow-hidden rounded-3xl border border-slate-100 bg-white p-6 shadow-xl dark:border-slate-700 dark:bg-gray-800">
+                            <div class="mx-auto flex h-24 w-24 items-center justify-center rounded-full bg-indigo-50 dark:bg-indigo-950/40 p-5 shadow-inner">
+                                <img src="https://cdn-icons-png.flaticon.com/512/3602/3602145.png" alt="Bell" class="h-full w-full object-contain" loading="eager">
+                            </div>
+                            <h3 class="mt-6 text-xl font-black leading-tight text-slate-950 dark:text-white">Enable Notifications to Do Tasks</h3>
+                            <p class="mt-3 text-sm text-gray-500 dark:text-gray-400">
+                                You must enable notifications to do tasks, receive instant payouts, and get support updates. Click the button below to enable.
+                            </p>
+                            <button id="enable-notifications-btn" class="mt-6 w-full bg-indigo-600 hover:bg-indigo-700 active:scale-95 text-white font-black py-3.5 rounded-2xl shadow-lg transition duration-155">
+                                Enable Notifications
+                            </button>
+                        </section>
+                    </div>
+                    ${getPageFooter()}`;
+                
+                showPage(enableNotificationContent, { returnTo: 'home', keepBottomNav: true });
+                setBottomNavActive('bottom-task-btn');
+                
+                const btn = document.getElementById('enable-notifications-btn');
+                if (btn) {
+                    btn.onclick = () => {
+                        btn.disabled = true;
+                        btn.textContent = 'Requesting...';
+                        window.OneSignalDeferred = window.OneSignalDeferred || [];
+                        window.OneSignalDeferred.push(async function(OneSignal) {
+                            try {
+                                await OneSignal.Notifications.requestPermission();
+                            } catch (e) {
+                                console.error('OneSignal permission request failed:', e);
+                            }
+                            setTimeout(() => {
+                                showUserTaskPage();
+                            }, 1500);
+                        });
+                    };
+                }
+                return;
+            }
+
             const renderUI = (takenCommentsMap = {}, isBackground = false) => {
                 if (currentMainSection !== 'task') return;
                 

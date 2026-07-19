@@ -1371,6 +1371,9 @@ const handleTakeLoan = async () => {
                 });
                 syncRecentTransactionsToCloud(currentUser.uid).catch(error => console.warn('Take loan background transaction sync failed:', error));
                 showNotification('Loan amount added to wallet.');
+                if (typeof window.notifyWalletBalanceChange === 'function') {
+                    window.notifyWalletBalanceChange(currentUser.uid, 'credit', amount, 'Loan Disbursed');
+                }
                 hidePage();
             } catch (e) {
                 console.error('Take loan failed:', e);
@@ -1427,6 +1430,9 @@ const handleRepayLoan = async (loan) => {
                 });
                 syncRecentTransactionsToCloud(currentUser.uid).catch(error => console.warn('Repay loan background transaction sync failed:', error));
                 showNotification('Loan repaid successfully.');
+                if (typeof window.notifyWalletBalanceChange === 'function') {
+                    window.notifyWalletBalanceChange(currentUser.uid, 'debit', loan.totalRepayable, 'Loan Repayment');
+                }
                 hidePage();
             } catch (e) {
                 console.error('Repay loan failed:', e);
@@ -1522,6 +1528,9 @@ const processDueLoanRepayment = async (loanId) => {
             });
             if (accountLockedForInsufficientBalance) {
                 throw new Error('User has insufficient balance for automatic loan debit. Account locked.');
+            }
+            if (typeof window.notifyWalletBalanceChange === 'function') {
+                window.notifyWalletBalanceChange(loan.userId, 'debit', loan.totalRepayable || 0, 'Loan Auto Debit');
             }
         };
 

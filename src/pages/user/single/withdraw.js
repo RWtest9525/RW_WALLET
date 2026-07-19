@@ -1,75 +1,75 @@
 // File: src/pages/withdraw.js
 
 const loadUserPendingWithdrawalsMerged = async (userId) => {
-            if (!userId) return [];
-            const [cloudRequests, firebaseRequests] = await Promise.all([
-                loadCloudFundRequests({ status: 'pending', type: 'withdrawal', userId, limit: 200, timeoutMs: 2500 }).catch(error => {
-                    console.warn('User cloud pending withdrawals skipped:', error);
-                    return [];
-                }),
-                loadFirebasePendingFundRequests(userId).catch(error => {
-                    console.warn('User Firebase pending withdrawals skipped:', error);
-                    return [];
-                })
-            ]);
-            return mergeFundRequestsById(cloudRequests, firebaseRequests)
-                .filter(req => (req.type || 'withdrawal') === 'withdrawal' && (req.status || 'pending') === 'pending');
-        };
+    if (!userId) return [];
+    const [cloudRequests, firebaseRequests] = await Promise.all([
+        loadCloudFundRequests({ status: 'pending', type: 'withdrawal', userId, limit: 200, timeoutMs: 2500 }).catch(error => {
+            console.warn('User cloud pending withdrawals skipped:', error);
+            return [];
+        }),
+        loadFirebasePendingFundRequests(userId).catch(error => {
+            console.warn('User Firebase pending withdrawals skipped:', error);
+            return [];
+        })
+    ]);
+    return mergeFundRequestsById(cloudRequests, firebaseRequests)
+        .filter(req => (req.type || 'withdrawal') === 'withdrawal' && (req.status || 'pending') === 'pending');
+};
 
 const checkPendingWithdrawal = async (userId) => {
-            try {
-                const pendingQuery = query(
-                    collection(db, `artifacts/${appId}/public/data/fund_requests`),
-                    where("userId", "==", userId),
-                    where("status", "==", "pending")
-                );
-                const snapshot = await getDocs(pendingQuery);
-                return !snapshot.empty;
-            } catch (e) {
-                console.error("Error checking pending withdrawal:", e);
-                return false;
-            }
-        };
+    try {
+        const pendingQuery = query(
+            collection(db, `artifacts/${appId}/public/data/fund_requests`),
+            where("userId", "==", userId),
+            where("status", "==", "pending")
+        );
+        const snapshot = await getDocs(pendingQuery);
+        return !snapshot.empty;
+    } catch (e) {
+        console.error("Error checking pending withdrawal:", e);
+        return false;
+    }
+};
 
 const isWithdrawMethodDetailsComplete = (method) => {
-            const details = getProfilePaymentDetails(method);
-            if (method === 'upi') return !!String(details.upiId || '').trim();
-            if (method === 'bank') {
-                return ['accountNumber', 'ifsc', 'bankName', 'accountName'].every(key => !!String(details[key] || '').trim());
-            }
-            if (['play_store', 'amazon_gift', 'flipkart_gift', 'paypal'].includes(method)) {
-                return !!String(details.email || '').trim();
-            }
-            return false;
-        };
+    const details = getProfilePaymentDetails(method);
+    if (method === 'upi') return !!String(details.upiId || '').trim();
+    if (method === 'bank') {
+        return ['accountNumber', 'ifsc', 'bankName', 'accountName'].every(key => !!String(details[key] || '').trim());
+    }
+    if (['play_store', 'amazon_gift', 'flipkart_gift', 'paypal'].includes(method)) {
+        return !!String(details.email || '').trim();
+    }
+    return false;
+};
 
 const showWithdrawDetailsMissingModal = (method, methodName) => {
-            renderModal('Update Withdraw Method',
-                `<div class="space-y-3">
+    renderModal('Update Withdraw Method',
+        `<div class="space-y-3">
                     <div class="rounded-2xl border border-yellow-100 dark:border-yellow-800 bg-yellow-50 dark:bg-yellow-900/20 p-4">
                         <p class="text-sm font-bold text-yellow-800 dark:text-yellow-100">${escapeHtml(methodName)} details are missing.</p>
                         <p class="text-sm text-yellow-700 dark:text-yellow-200 mt-1">Please update your withdraw method first, then request withdrawal.</p>
                     </div>
                 </div>`,
-                `<button onclick="window.closeModal()" class="px-4 py-2 text-sm bg-gray-200 dark:bg-gray-600 rounded-lg">Cancel</button>
+        `<button onclick="window.closeModal()" class="px-4 py-2 text-sm bg-gray-200 dark:bg-gray-600 rounded-lg">Cancel</button>
                  <button id="set-withdraw-method-now-btn" class="px-4 py-2 text-sm bg-blue-600 text-white rounded-lg">Set Now</button>`,
-                'max-w-sm');
-            document.getElementById('set-withdraw-method-now-btn').onclick = () => {
-                window.closeModal();
-                showProfilePage(method);
-            };
-        };
+        'max-w-sm');
+    document.getElementById('set-withdraw-method-now-btn').onclick = () => {
+        window.closeModal();
+        showProfilePage(method);
+    };
+};
 
 const getWithdrawalTransactions = () => unifiedHistoryCache.filter(item => {
-            if (item.status && item.status !== 'completed') return false;
-            return normalizeTransactionType(item) === 'withdrawal';
-        });
+    if (item.status && item.status !== 'completed') return false;
+    return normalizeTransactionType(item) === 'withdrawal';
+});
 
 const getInvoiceGroupsFromHistory = () => {
     const transactions = (window.unifiedHistoryCache || []).filter(item => {
         if (item.status && item.status !== 'completed' && item.status !== 'approved') return false;
         const type = normalizeTransactionType(item);
-        
+
         if (type !== 'credit') return false;
 
         const comment = String(item.comment || item.remarks || '').toLowerCase();
@@ -90,17 +90,17 @@ const getInvoiceGroupsFromHistory = () => {
     transactions.forEach(item => {
         const date = getSafeDate(item.timestamp || item.createdAt);
         if (!date) return;
-        
+
         const year = date.getFullYear();
-        const month = date.getMonth(); 
-        
+        const month = date.getMonth();
+
         let targetGenYear = year;
         let targetGenMonth = month + 1;
         if (targetGenMonth > 11) {
             targetGenMonth = 0;
             targetGenYear += 1;
         }
-        
+
         const genDate = new Date(targetGenYear, targetGenMonth, 7, 0, 0, 0);
         if (today < genDate) {
             return;
@@ -132,10 +132,10 @@ const getInvoiceGroupsFromHistory = () => {
         const amount = Math.abs(Number(item.amount || item.chargeAmount || 0));
         groups[key].total += amount;
         groups[key].totalTransactions += 1;
-        
+
         const itemName = item.comment || item.remarks || item.type || 'Task Reward';
         const isReview = String(itemName).toLowerCase().includes('review') || String(item.type || '').toLowerCase().includes('review');
-        
+
         groups[key].rawItems.push({
             date: formatDateDDMMYY(item.timestamp || item.createdAt),
             name: itemName,
@@ -148,7 +148,7 @@ const getInvoiceGroupsFromHistory = () => {
 
     const result = Object.values(groups).map(g => {
         g.rawItems.sort((a, b) => b.date.localeCompare(a.date));
-        
+
         const aggregated = {};
         g.rawItems.forEach(item => {
             const aggKey = `${item.name}-${item.rate}`;
@@ -168,7 +168,7 @@ const getInvoiceGroupsFromHistory = () => {
 
         const itemsList = Object.values(aggregated);
         g.tasksCompleted = itemsList.reduce((acc, item) => acc + item.approved, 0);
-        
+
         g.pages = [];
         for (let i = 0; i < itemsList.length; i += 18) {
             g.pages.push(itemsList.slice(i, i + 18));
@@ -189,7 +189,7 @@ const getInvoiceGroupsFromHistory = () => {
 
         g.breakup.review.amount = reviewSum;
         g.breakup.other.amount = otherSum;
-        
+
         const total = g.total || 1;
         g.breakup.review.pct = `${((reviewSum / total) * 100).toFixed(1)}%`;
         g.breakup.other.pct = `${((otherSum / total) * 100).toFixed(1)}%`;
@@ -201,12 +201,12 @@ const getInvoiceGroupsFromHistory = () => {
 };
 
 const showWithdrawalInvoicesPage = () => {
-            const invoiceGroups = getInvoiceGroupsFromHistory();
-            const currentYear = new Date().getFullYear();
-            const invoicesCurrentYear = invoiceGroups.filter(inv => inv.year === currentYear);
-            const invoicesOlder = invoiceGroups.filter(inv => inv.year < currentYear);
-            
-            const content = `
+    const invoiceGroups = getInvoiceGroupsFromHistory();
+    const currentYear = new Date().getFullYear();
+    const invoicesCurrentYear = invoiceGroups.filter(inv => inv.year === currentYear);
+    const invoicesOlder = invoiceGroups.filter(inv => inv.year < currentYear);
+
+    const content = `
                 ${getPageHeader('Invoice')}
                 <div class="max-w-xl mx-auto space-y-4 pb-24 px-4 text-left select-none">
                     <!-- Banner Card -->
@@ -323,42 +323,42 @@ const showWithdrawalInvoicesPage = () => {
                 </div>
                 ${getPageFooter()}`;
 
-            showPage(content, { onBack: showSettingsPage });
+    showPage(content, { onBack: showSettingsPage });
 
-            document.querySelectorAll('.invoice-item-card').forEach(btn => {
-                btn.onclick = () => showWithdrawalInvoiceDetails(btn.dataset.invoiceKey);
-            });
+    document.querySelectorAll('.invoice-item-card').forEach(btn => {
+        btn.onclick = () => showWithdrawalInvoiceDetails(btn.dataset.invoiceKey);
+    });
 
-            const olderBtn = document.getElementById('show-older-invoices-btn');
-            if (olderBtn) {
-                olderBtn.onclick = () => {
-                    const container = document.getElementById('older-invoices-container');
-                    const arrow = document.getElementById('show-older-arrow');
-                    if (container && arrow) {
-                        const isHidden = container.classList.contains('hidden');
-                        if (isHidden) {
-                            container.classList.remove('hidden');
-                            arrow.classList.add('rotate-180');
-                        } else {
-                            container.classList.add('hidden');
-                            arrow.classList.remove('rotate-180');
-                        }
-                    }
-                };
+    const olderBtn = document.getElementById('show-older-invoices-btn');
+    if (olderBtn) {
+        olderBtn.onclick = () => {
+            const container = document.getElementById('older-invoices-container');
+            const arrow = document.getElementById('show-older-arrow');
+            if (container && arrow) {
+                const isHidden = container.classList.contains('hidden');
+                if (isHidden) {
+                    container.classList.remove('hidden');
+                    arrow.classList.add('rotate-180');
+                } else {
+                    container.classList.add('hidden');
+                    arrow.classList.remove('rotate-180');
+                }
             }
         };
+    }
+};
 
 const showWithdrawalInvoiceDetails = (invoiceKey) => {
-            const invoiceGroups = getInvoiceGroupsFromHistory();
-            const inv = invoiceGroups.find(item => item.key === invoiceKey);
-            if (!inv) return showNotification('Invoice not found.', true);
-            
-            const shortMonth = inv.shortMonth || 'Jul';
-            const year = inv.year || 2026;
-            const lastDay = new Date(year, inv.month !== undefined ? inv.month + 1 : 7, 0).getDate();
-            const statementPeriod = `01 ${shortMonth} - ${lastDay} ${shortMonth} ${year}`;
-            
-            const content = `
+    const invoiceGroups = getInvoiceGroupsFromHistory();
+    const inv = invoiceGroups.find(item => item.key === invoiceKey);
+    if (!inv) return showNotification('Invoice not found.', true);
+
+    const shortMonth = inv.shortMonth || 'Jul';
+    const year = inv.year || 2026;
+    const lastDay = new Date(year, inv.month !== undefined ? inv.month + 1 : 7, 0).getDate();
+    const statementPeriod = `01 ${shortMonth} - ${lastDay} ${shortMonth} ${year}`;
+
+    const content = `
                 ${getPageHeader('Invoice Details')}
                 <div class="max-w-xl mx-auto space-y-4 pb-24 px-4 text-left select-none">
                     
@@ -476,24 +476,24 @@ const showWithdrawalInvoiceDetails = (invoiceKey) => {
                 </div>
                 ${getPageFooter()}`;
 
-            showPage(content, { onBack: showWithdrawalInvoicesPage });
+    showPage(content, { onBack: showWithdrawalInvoicesPage });
 
-            document.getElementById('download-invoice-pdf-btn').onclick = () => downloadMockInvoicePdf(inv);
-            document.getElementById('view-invoice-preview-btn').onclick = () => showInvoicePreviewPage(inv);
-        };
+    document.getElementById('download-invoice-pdf-btn').onclick = () => downloadMockInvoicePdf(inv);
+    document.getElementById('view-invoice-preview-btn').onclick = () => showInvoicePreviewPage(inv);
+};
 
 const showInvoicePreviewPage = (inv) => {
-            window.currentInvoicePreviewPage = 0;
-            
-            const renderPreviewTable = () => {
-                const pageIdx = window.currentInvoicePreviewPage;
-                const pageItems = inv.pages[pageIdx] || [];
-                const isLastPage = pageIdx === inv.pages.length - 1;
-                
-                let rowsHtml = '';
-                pageItems.forEach((item, index) => {
-                    const rowNumber = pageIdx * 18 + index + 1;
-                    rowsHtml += `
+    window.currentInvoicePreviewPage = 0;
+
+    const renderPreviewTable = () => {
+        const pageIdx = window.currentInvoicePreviewPage;
+        const pageItems = inv.pages[pageIdx] || [];
+        const isLastPage = pageIdx === inv.pages.length - 1;
+
+        let rowsHtml = '';
+        pageItems.forEach((item, index) => {
+            const rowNumber = pageIdx * 18 + index + 1;
+            rowsHtml += `
                         <tr class="border-b border-gray-100 dark:border-gray-800 text-[10px]">
                             <td class="px-3 py-2 text-gray-500 font-semibold">${rowNumber}</td>
                             <td class="px-3 py-2 text-gray-650 dark:text-gray-400">${item.date}</td>
@@ -503,53 +503,53 @@ const showInvoicePreviewPage = (inv) => {
                             <td class="px-3 py-2 font-black text-gray-900 dark:text-white">₹${item.amount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
                         </tr>
                     `;
-                });
-                
-                let totalRowHtml = '';
-                if (isLastPage) {
-                    totalRowHtml = `
+        });
+
+        let totalRowHtml = '';
+        if (isLastPage) {
+            totalRowHtml = `
                         <tr class="bg-indigo-50/45 dark:bg-indigo-950/20 font-black text-[10px] text-indigo-900 dark:text-indigo-300">
                             <td colspan="4" class="px-3 py-2.5 text-left uppercase tracking-wider">TOTAL</td>
                             <td class="px-3 py-2.5">${inv.tasksCompleted}</td>
                             <td class="px-3 py-2.5">₹${inv.total.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
                         </tr>
                     `;
-                }
-                
-                const tableBody = document.getElementById('preview-table-body');
-                if (tableBody) {
-                    tableBody.innerHTML = rowsHtml + totalRowHtml;
-                }
-                
-                const pageIndicator = document.getElementById('preview-page-indicator');
-                if (pageIndicator) {
-                    pageIndicator.textContent = `${pageIdx + 1}/${inv.pages.length}`;
-                }
-                
-                const prevBtn = document.getElementById('preview-prev-btn');
-                if (prevBtn) {
-                    prevBtn.disabled = pageIdx === 0;
-                    prevBtn.className = `flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-gray-250 dark:border-gray-700 transition active:scale-90 ${pageIdx === 0 ? 'opacity-40 cursor-not-allowed' : 'hover:bg-gray-100 dark:hover:bg-gray-800 text-indigo-650'}`;
-                }
-                
-                const nextBtn = document.getElementById('preview-next-btn');
-                if (nextBtn) {
-                    nextBtn.disabled = isLastPage;
-                    nextBtn.className = `flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-gray-255 dark:border-gray-700 transition active:scale-90 ${isLastPage ? 'opacity-40 cursor-not-allowed' : 'hover:bg-gray-100 dark:hover:bg-gray-800 text-indigo-650'}`;
-                }
-            };
-            
-            const userName = currentUserData?.name || 'Yash Vishal';
-            const userEmail = currentUserData?.email || currentUser?.email || 'yashvishal@gmail.com';
-            const userPhone = currentUserData?.mobile || '+91 91234 56789';
-            const userUpi = currentUserData?.upiId || currentUserData?.paymentAddress || 'yashvishal@upi';
-            
-            const shortMonth = inv.shortMonth || 'Jul';
-            const year = inv.year || 2026;
-            const lastDay = new Date(year, inv.month !== undefined ? inv.month + 1 : 7, 0).getDate();
-            const statementPeriod = `01 ${shortMonth} ${year} - ${lastDay} ${shortMonth} ${year}`;
+        }
 
-            const content = `
+        const tableBody = document.getElementById('preview-table-body');
+        if (tableBody) {
+            tableBody.innerHTML = rowsHtml + totalRowHtml;
+        }
+
+        const pageIndicator = document.getElementById('preview-page-indicator');
+        if (pageIndicator) {
+            pageIndicator.textContent = `${pageIdx + 1}/${inv.pages.length}`;
+        }
+
+        const prevBtn = document.getElementById('preview-prev-btn');
+        if (prevBtn) {
+            prevBtn.disabled = pageIdx === 0;
+            prevBtn.className = `flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-gray-250 dark:border-gray-700 transition active:scale-90 ${pageIdx === 0 ? 'opacity-40 cursor-not-allowed' : 'hover:bg-gray-100 dark:hover:bg-gray-800 text-indigo-650'}`;
+        }
+
+        const nextBtn = document.getElementById('preview-next-btn');
+        if (nextBtn) {
+            nextBtn.disabled = isLastPage;
+            nextBtn.className = `flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-gray-255 dark:border-gray-700 transition active:scale-90 ${isLastPage ? 'opacity-40 cursor-not-allowed' : 'hover:bg-gray-100 dark:hover:bg-gray-800 text-indigo-650'}`;
+        }
+    };
+
+    const userName = currentUserData?.name || 'Yash Vishal';
+    const userEmail = currentUserData?.email || currentUser?.email || 'yashvishal@gmail.com';
+    const userPhone = currentUserData?.mobile || '+91 91234 56789';
+    const userUpi = currentUserData?.upiId || currentUserData?.paymentAddress || 'yashvishal@upi';
+
+    const shortMonth = inv.shortMonth || 'Jul';
+    const year = inv.year || 2026;
+    const lastDay = new Date(year, inv.month !== undefined ? inv.month + 1 : 7, 0).getDate();
+    const statementPeriod = `01 ${shortMonth} ${year} - ${lastDay} ${shortMonth} ${year}`;
+
+    const content = `
                 ${getPageHeader('Invoice Preview')}
                 <div class="max-w-xl mx-auto pb-24 px-4 text-left select-none space-y-5">
                     
@@ -675,290 +675,308 @@ const showInvoicePreviewPage = (inv) => {
                 </div>
                 ${getPageFooter()}`;
 
-            showPage(content, { onBack: () => showWithdrawalInvoiceDetails(inv.key) });
-            
+    showPage(content, { onBack: () => showWithdrawalInvoiceDetails(inv.key) });
+
+    renderPreviewTable();
+
+    document.getElementById('preview-prev-btn').onclick = () => {
+        if (window.currentInvoicePreviewPage > 0) {
+            window.currentInvoicePreviewPage--;
             renderPreviewTable();
-            
-            document.getElementById('preview-prev-btn').onclick = () => {
-                if (window.currentInvoicePreviewPage > 0) {
-                    window.currentInvoicePreviewPage--;
-                    renderPreviewTable();
-                }
-            };
-            
-            document.getElementById('preview-next-btn').onclick = () => {
-                if (window.currentInvoicePreviewPage < inv.pages.length - 1) {
-                    window.currentInvoicePreviewPage++;
-                    renderPreviewTable();
-                }
-            };
-            
-            document.getElementById('preview-download-pdf-btn').onclick = () => downloadMockInvoicePdf(inv);
-        };
+        }
+    };
+
+    document.getElementById('preview-next-btn').onclick = () => {
+        if (window.currentInvoicePreviewPage < inv.pages.length - 1) {
+            window.currentInvoicePreviewPage++;
+            renderPreviewTable();
+        }
+    };
+
+    document.getElementById('preview-download-pdf-btn').onclick = () => downloadMockInvoicePdf(inv);
+};
 
 const createMockInvoicePdf = (inv) => {
-            const commands = [];
-            const text = (value, x, y, size = 10, font = 'F1', color = '0 0 0') => {
-                commands.push('BT', `/${font} ${size} Tf`, `${color} rg`, `${x} ${y} Td`, `(${escapePdfText(value)}) Tj`, 'ET');
-            };
-            const fillRect = (x, y, w, h, color) => commands.push('q', `${color} rg`, `${x} ${y} ${w} ${h} re f`, 'Q');
-            const strokeRect = (x, y, w, h, color = '0.85 0.88 0.92') => commands.push('q', `${color} RG`, `${x} ${y} ${w} ${h} re S`, 'Q');
-            const line = (x1, y1, x2, y2, color = '0.85 0.88 0.92') => commands.push('q', `${color} RG`, `${x1} ${y1} m ${x2} ${y2} l S`, 'Q');
+    const commands = [];
+    const text = (value, x, y, size = 10, font = 'F1', color = '0 0 0') => {
+        commands.push('BT', `/${font} ${size} Tf`, `${color} rg`, `${x} ${y} Td`, `(${escapePdfText(value)}) Tj`, 'ET');
+    };
+    const fillRect = (x, y, w, h, color) => commands.push('q', `${color} rg`, `${x} ${y} ${w} ${h} re f`, 'Q');
+    const strokeRect = (x, y, w, h, color = '0.85 0.88 0.92') => commands.push('q', `${color} RG`, `${x} ${y} ${w} ${h} re S`, 'Q');
+    const line = (x1, y1, x2, y2, color = '0.85 0.88 0.92') => commands.push('q', `${color} RG`, `${x1} ${y1} m ${x2} ${y2} l S`, 'Q');
 
-            fillRect(0, 0, 595, 842, '1 1 1');
+    fillRect(0, 0, 595, 842, '1 1 1');
 
-            text('REVIEWS WORLD', 78, 783, 14, 'F2', '0.1 0.1 0.1');
-            text('Review Tasks, Earn Rewards, Build Your Future', 78, 770, 7, 'F1', '0.5 0.5 0.5');
+    text('REVIEWS WORLD', 78, 783, 14, 'F2', '0.1 0.1 0.1');
+    text('Review Tasks, Earn Rewards, Build Your Future', 78, 770, 7, 'F1', '0.5 0.5 0.5');
 
-            text('INVOICE', 450, 783, 20, 'F2', '0.25 0.28 0.8');
-            
-            strokeRect(450, 742, 60, 18, '0.05 0.6 0.35');
-            text('PAID', 465, 747, 9, 'F2', '0.05 0.6 0.35');
+    text('INVOICE', 450, 783, 20, 'F2', '0.25 0.28 0.8');
 
-            line(50, 730, 545, 730, '0.9 0.9 0.9');
-            
-            text(`Invoice ID : ${inv.invoiceId}`, 50, 715, 8, 'F1', '0.4 0.4 0.4');
-            text(`Invoice Date : ${inv.generatedDate}`, 400, 715, 8, 'F1', '0.4 0.4 0.4');
+    strokeRect(450, 742, 60, 18, '0.05 0.6 0.35');
+    text('PAID', 465, 747, 9, 'F2', '0.05 0.6 0.35');
 
-            fillRect(50, 680, 495, 18, '0.25 0.28 0.8');
-            text('User Details', 60, 685, 9, 'F2', '1 1 1');
-            strokeRect(50, 590, 495, 90, '0.9 0.9 0.9');
+    line(50, 730, 545, 730, '0.9 0.9 0.9');
 
-            const userName = currentUserData?.name || 'Yash Vishal';
-            const userEmail = currentUserData?.email || currentUser?.email || 'yashvishal@gmail.com';
-            const userPhone = currentUserData?.mobile || '+91 91234 56789';
-            const userUpi = currentUserData?.upiId || currentUserData?.paymentAddress || 'yashvishal@upi';
-            
-            const shortMonth = inv.shortMonth || 'Jul';
-            const year = inv.year || 2026;
-            const lastDay = new Date(year, inv.month !== undefined ? inv.month + 1 : 7, 0).getDate();
-            const statementPeriod = `01 ${shortMonth} ${year} - ${lastDay} ${shortMonth} ${year}`;
+    text(`Invoice ID : ${inv.invoiceId}`, 50, 715, 8, 'F1', '0.4 0.4 0.4');
+    text(`Invoice Date : ${inv.generatedDate}`, 400, 715, 8, 'F1', '0.4 0.4 0.4');
 
-            text('Name', 65, 660, 8, 'F1', '0.5 0.5 0.5');
-            text(userName, 65, 648, 9, 'F2', '0.1 0.1 0.1');
+    fillRect(50, 680, 495, 18, '0.25 0.28 0.8');
+    text('User Details', 60, 685, 9, 'F2', '1 1 1');
+    strokeRect(50, 590, 495, 90, '0.9 0.9 0.9');
 
-            text('Email', 65, 630, 8, 'F1', '0.5 0.5 0.5');
-            text(userEmail, 65, 618, 9, 'F2', '0.1 0.1 0.1');
+    const userName = currentUserData?.name || 'Yash Vishal';
+    const userEmail = currentUserData?.email || currentUser?.email || 'yashvishal@gmail.com';
+    const userPhone = currentUserData?.mobile || '+91 91234 56789';
+    const userUpi = currentUserData?.upiId || currentUserData?.paymentAddress || 'yashvishal@upi';
 
-            text('Phone Number', 65, 600, 8, 'F1', '0.5 0.5 0.5');
-            text(userPhone, 65, 588, 9, 'F2', '0.1 0.1 0.1');
+    const shortMonth = inv.shortMonth || 'Jul';
+    const year = inv.year || 2026;
+    const lastDay = new Date(year, inv.month !== undefined ? inv.month + 1 : 7, 0).getDate();
+    const statementPeriod = `01 ${shortMonth} ${year} - ${lastDay} ${shortMonth} ${year}`;
 
-            text('Payment Method', 300, 660, 8, 'F1', '0.5 0.5 0.5');
-            text('Deposit in RW Wallet', 300, 648, 9, 'F2', '0.1 0.1 0.1');
+    text('Name', 65, 660, 8, 'F1', '0.5 0.5 0.5');
+    text(userName, 65, 648, 9, 'F2', '0.1 0.1 0.1');
 
-            text('Account Details', 300, 630, 8, 'F1', '0.5 0.5 0.5');
-            text('RW Digital Wallet', 300, 618, 9, 'F2', '0.1 0.1 0.1');
+    text('Email', 65, 630, 8, 'F1', '0.5 0.5 0.5');
+    text(userEmail, 65, 618, 9, 'F2', '0.1 0.1 0.1');
 
-            text('Invoice For', 300, 600, 8, 'F1', '0.5 0.5 0.5');
-            text(statementPeriod, 300, 588, 9, 'F2', '0.1 0.1 0.1');
+    text('Phone Number', 65, 600, 8, 'F1', '0.5 0.5 0.5');
+    text(userPhone, 65, 588, 9, 'F2', '0.1 0.1 0.1');
 
-            fillRect(50, 550, 495, 18, '0.25 0.28 0.8');
-            text('Earnings Report (Task-wise)', 60, 555, 9, 'F2', '1 1 1');
-            strokeRect(50, 90, 495, 460, '0.9 0.9 0.9');
+    text('Payment Method', 300, 660, 8, 'F1', '0.5 0.5 0.5');
+    text('Deposit in RW Wallet', 300, 648, 9, 'F2', '0.1 0.1 0.1');
 
-            fillRect(50, 528, 495, 14, '0.96 0.97 0.99');
-            text('#', 60, 532, 8, 'F2', '0.4 0.4 0.4');
-            text('Date', 90, 532, 8, 'F2', '0.4 0.4 0.4');
-            text('Task / App Name', 160, 532, 8, 'F2', '0.4 0.4 0.4');
-            text('Rate', 340, 532, 8, 'F2', '0.4 0.4 0.4');
-            text('Approved', 410, 532, 8, 'F2', '0.4 0.4 0.4');
-            text('Amount', 480, 532, 8, 'F2', '0.4 0.4 0.4');
+    text('Account Details', 300, 630, 8, 'F1', '0.5 0.5 0.5');
+    text('RW Digital Wallet', 300, 618, 9, 'F2', '0.1 0.1 0.1');
 
-            let y = 508;
-            const allItems = [];
-            inv.pages.forEach(p => allItems.push(...p));
+    text('Invoice For', 300, 600, 8, 'F1', '0.5 0.5 0.5');
+    text(statementPeriod, 300, 588, 9, 'F2', '0.1 0.1 0.1');
 
-            allItems.forEach((item, index) => {
-                if (index % 2 === 1) {
-                    fillRect(51, y - 4, 493, 14, '0.97 0.98 1');
-                }
-                text(String(index + 1), 60, y, 7.5, 'F1', '0.3 0.3 0.3');
-                text(item.date, 90, y, 7.5, 'F1', '0.3 0.3 0.3');
-                text(item.name, 160, y, 7.5, 'F2', '0.15 0.15 0.15');
-                text(`₹${item.rate.toFixed(2)}`, 340, y, 7.5, 'F1', '0.3 0.3 0.3');
-                text(String(item.approved), 410, y, 7.5, 'F2', '0.2 0.2 0.2');
-                text(`₹${item.amount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`, 480, y, 7.5, 'F2', '0.1 0.1 0.1');
-                
-                y -= 16;
-            });
+    fillRect(50, 550, 495, 18, '0.25 0.28 0.8');
+    text('Earnings Report (Task-wise)', 60, 555, 9, 'F2', '1 1 1');
+    strokeRect(50, 90, 495, 460, '0.9 0.9 0.9');
 
-            fillRect(50, 100, 495, 18, '0.93 0.94 0.98');
-            text('TOTAL', 60, 105, 8.5, 'F2', '0.25 0.28 0.8');
-            text(String(inv.tasksCompleted), 410, 105, 8.5, 'F2', '0.1 0.1 0.1');
-            text(`₹${inv.total.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`, 480, 105, 8.5, 'F2', '0.1 0.1 0.1');
+    fillRect(50, 528, 495, 14, '0.96 0.97 0.99');
+    text('#', 60, 532, 8, 'F2', '0.4 0.4 0.4');
+    text('Date', 90, 532, 8, 'F2', '0.4 0.4 0.4');
+    text('Task / App Name', 160, 532, 8, 'F2', '0.4 0.4 0.4');
+    text('Rate', 340, 532, 8, 'F2', '0.4 0.4 0.4');
+    text('Approved', 410, 532, 8, 'F2', '0.4 0.4 0.4');
+    text('Amount', 480, 532, 8, 'F2', '0.4 0.4 0.4');
 
-            const objects = [];
-            const addObject = (body) => {
-                objects.push(body);
-                return objects.length;
-            };
-            addObject('<< /Type /Catalog /Pages 2 0 R >>');
-            addObject('<< /Type /Pages /Kids [3 0 R] /Count 1 >>');
-            addObject('<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 4 0 R /F2 5 0 R >> >> /Contents 6 0 R >>');
-            addObject('<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>');
-            addObject('<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >>');
-            const contentStream = commands.join('\n');
-            addObject(`<< /Length ${contentStream.length} >>\nstream\n${contentStream}\nendstream`);
-            
-            let pdf = '%PDF-1.4\n';
-            const offsets = [0];
-            objects.forEach((obj, index) => {
-                offsets.push(pdf.length);
-                pdf += `${index + 1} 0 obj\n${obj}\nendobj\n`;
-            });
-            const xref = pdf.length;
-            pdf += `xref\n0 ${objects.length + 1}\n0000000000 65535 f \n`;
-            offsets.slice(1).forEach(offset => {
-                pdf += `${String(offset).padStart(10, '0')} 00000 n \n`;
-            });
-            pdf += `trailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF`;
-            
-            return new Blob([pdf], { type: 'application/pdf' });
-        };
+    let y = 508;
+    const allItems = [];
+    inv.pages.forEach(p => allItems.push(...p));
+
+    allItems.forEach((item, index) => {
+        if (index % 2 === 1) {
+            fillRect(51, y - 4, 493, 14, '0.97 0.98 1');
+        }
+        text(String(index + 1), 60, y, 7.5, 'F1', '0.3 0.3 0.3');
+        text(item.date, 90, y, 7.5, 'F1', '0.3 0.3 0.3');
+        text(item.name, 160, y, 7.5, 'F2', '0.15 0.15 0.15');
+        text(`₹${item.rate.toFixed(2)}`, 340, y, 7.5, 'F1', '0.3 0.3 0.3');
+        text(String(item.approved), 410, y, 7.5, 'F2', '0.2 0.2 0.2');
+        text(`₹${item.amount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`, 480, y, 7.5, 'F2', '0.1 0.1 0.1');
+
+        y -= 16;
+    });
+
+    fillRect(50, 100, 495, 18, '0.93 0.94 0.98');
+    text('TOTAL', 60, 105, 8.5, 'F2', '0.25 0.28 0.8');
+    text(String(inv.tasksCompleted), 410, 105, 8.5, 'F2', '0.1 0.1 0.1');
+    text(`₹${inv.total.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`, 480, 105, 8.5, 'F2', '0.1 0.1 0.1');
+
+    const objects = [];
+    const addObject = (body) => {
+        objects.push(body);
+        return objects.length;
+    };
+    addObject('<< /Type /Catalog /Pages 2 0 R >>');
+    addObject('<< /Type /Pages /Kids [3 0 R] /Count 1 >>');
+    addObject('<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 4 0 R /F2 5 0 R >> >> /Contents 6 0 R >>');
+    addObject('<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>');
+    addObject('<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >>');
+    const contentStream = commands.join('\n');
+    addObject(`<< /Length ${contentStream.length} >>\nstream\n${contentStream}\nendstream`);
+
+    let pdf = '%PDF-1.4\n';
+    const offsets = [0];
+    objects.forEach((obj, index) => {
+        offsets.push(pdf.length);
+        pdf += `${index + 1} 0 obj\n${obj}\nendobj\n`;
+    });
+    const xref = pdf.length;
+    pdf += `xref\n0 ${objects.length + 1}\n0000000000 65535 f \n`;
+    offsets.slice(1).forEach(offset => {
+        pdf += `${String(offset).padStart(10, '0')} 00000 n \n`;
+    });
+    pdf += `trailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF`;
+
+    return new Blob([pdf], { type: 'application/pdf' });
+};
 
 const downloadMockInvoicePdf = (inv) => {
-            const blob = createMockInvoicePdf(inv);
-            const link = document.createElement('a');
-            link.href = URL.createObjectURL(blob);
-            link.download = `Invoice-${inv.invoiceId}.pdf`;
-            document.body.appendChild(link);
-            link.click();
-            link.remove();
-            setTimeout(() => URL.revokeObjectURL(link.href), 1000);
-        };
+    const blob = createMockInvoicePdf(inv);
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = `Invoice-${inv.invoiceId}.pdf`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    setTimeout(() => URL.revokeObjectURL(link.href), 1000);
+};
 
 const getPendingWithdrawalForBot = async () => {
-            if (!currentUser) return null;
-            try {
-                const pending = await loadUserPendingWithdrawalsMerged(currentUser.uid);
-                return pending[0] || null;
-            } catch (error) {
-                console.error('Bot pending withdrawal check failed:', error);
-                return null;
-            }
-        };
+    if (!currentUser) return null;
+    try {
+        const pending = await loadUserPendingWithdrawalsMerged(currentUser.uid);
+        return pending[0] || null;
+    } catch (error) {
+        console.error('Bot pending withdrawal check failed:', error);
+        return null;
+    }
+};
 
 const notifyWithdrawalStatus = ({ userId, status, amount, txnId, requestId, rejectionReason = '', processedAt = Date.now() }) => {
-            if (status === 'completed') return;
-            const title = 'Withdrawal Rejected';
-            const message = [
-                `Your withdrawal of ${formatCurrency(amount)} was rejected.`,
-                `Reason: ${rejectionReason || 'Not specified'}`,
-                `Request ID: ${requestId || 'N/A'}`,
-                `Updated on: ${formatDateDDMMYY(processedAt)}`
-            ].join('\n');
-            sendSystemNotificationToUser({ userId, title, message });
-        };
+    if (status === 'completed') {
+        const title = 'Withdrawal Approved';
+        const message = [
+            `Your withdrawal of ${formatCurrency(amount)} has been approved.`,
+            `Credited Details: ${txnId || 'Processed successfully'}`,
+            `Request ID: ${requestId || 'N/A'}`,
+            `Updated on: ${formatDateDDMMYY(processedAt)}`
+        ].join('\n');
+        sendSystemNotificationToUser({ userId, title, message });
+        
+        if (typeof window.sendNotification === 'function') {
+            window.sendNotification(userId, title, message);
+        }
+    } else {
+        const title = 'Withdrawal Rejected';
+        const message = [
+            `Your withdrawal of ${formatCurrency(amount)} was rejected.`,
+            `Reason: ${rejectionReason || 'Not specified'}`,
+            `Request ID: ${requestId || 'N/A'}`,
+            `Updated on: ${formatDateDDMMYY(processedAt)}`
+        ].join('\n');
+        sendSystemNotificationToUser({ userId, title, message });
+
+        if (typeof window.sendNotification === 'function') {
+            window.sendNotification(userId, title, message);
+        }
+    }
+};
 
 const getWithdrawMethodLogo = (methodId) => WITHDRAW_METHOD_LOGOS[methodId] || '';
 
 const renderWithdrawMethodLogo = (methodId, altText, extraClass = '') => {
-            const logo = getWithdrawMethodLogo(methodId);
-            return logo ? `<img src="${logo}" class="${extraClass || 'w-full h-full object-cover'}" alt="${altText}" loading="eager" fetchpriority="high" decoding="async">` : '';
-        };
+    const logo = getWithdrawMethodLogo(methodId);
+    return logo ? `<img src="${logo}" class="${extraClass || 'w-full h-full object-cover'}" alt="${altText}" loading="eager" fetchpriority="high" decoding="async">` : '';
+};
 
 const getWithdrawalMethodName = (methodId, fallback = '') => {
-            const names = {
-                upi: 'UPI',
-                bank: 'Bank Account',
-                play_store: 'Google Play Gift Card',
-                amazon_gift: 'Amazon Gift Card',
-                flipkart_gift: 'Flipkart Gift Card',
-                paypal: 'PayPal',
-                crypto: 'Crypto'
-            };
-            return names[methodId] || fallback || 'Withdrawal Method';
-        };
+    const names = {
+        upi: 'UPI',
+        bank: 'Bank Account',
+        play_store: 'Google Play Gift Card',
+        amazon_gift: 'Amazon Gift Card',
+        flipkart_gift: 'Flipkart Gift Card',
+        paypal: 'PayPal',
+        crypto: 'Crypto'
+    };
+    return names[methodId] || fallback || 'Withdrawal Method';
+};
 
 const normalizeWithdrawalMethodId = (item = {}) => {
-            const candidates = [
-                item.giftCardType,
-                item.gift_card_type,
-                item.giftCardName,
-                item.gift_card_name,
-                item.methodId,
-                item.paymentMethod,
-                item.withdrawMethod,
-                item.withdraw_method,
-                item.method,
-                item.paymentDetails,
-                item.comment
-            ].map(value => String(value || '').toLowerCase().trim().replace(/[\s-]+/g, '_'));
-            for (const raw of candidates) {
-                if (!raw || raw === 'gift_card' || raw === 'gift') continue;
-                if (raw.includes('upi')) return 'upi';
-                if (raw.includes('bank') || raw.includes('account')) return 'bank';
-                if (raw.includes('play') || raw.includes('google')) return 'play_store';
-                if (raw.includes('amazon')) return 'amazon_gift';
-                if (raw.includes('flipkart')) return 'flipkart_gift';
-                if (raw.includes('paypal')) return 'paypal';
-            }
-            if (item.upiId) return 'upi';
-            if (item.accountNumber || item.ifsc) return 'bank';
-            if (item.email || item.paymentEmail) return 'paypal';
-            return candidates.find(Boolean) || '';
-        };
+    const candidates = [
+        item.giftCardType,
+        item.gift_card_type,
+        item.giftCardName,
+        item.gift_card_name,
+        item.methodId,
+        item.paymentMethod,
+        item.withdrawMethod,
+        item.withdraw_method,
+        item.method,
+        item.paymentDetails,
+        item.comment
+    ].map(value => String(value || '').toLowerCase().trim().replace(/[\s-]+/g, '_'));
+    for (const raw of candidates) {
+        if (!raw || raw === 'gift_card' || raw === 'gift') continue;
+        if (raw.includes('upi')) return 'upi';
+        if (raw.includes('bank') || raw.includes('account')) return 'bank';
+        if (raw.includes('play') || raw.includes('google')) return 'play_store';
+        if (raw.includes('amazon')) return 'amazon_gift';
+        if (raw.includes('flipkart')) return 'flipkart_gift';
+        if (raw.includes('paypal')) return 'paypal';
+    }
+    if (item.upiId) return 'upi';
+    if (item.accountNumber || item.ifsc) return 'bank';
+    if (item.email || item.paymentEmail) return 'paypal';
+    return candidates.find(Boolean) || '';
+};
 
 const getWithdrawalDisplayMethodName = (item = {}, fallback = 'N/A') => {
-            const methodId = normalizeWithdrawalMethodId(item);
-            const knownMethodIds = ['upi', 'bank', 'play_store', 'amazon_gift', 'flipkart_gift', 'paypal', 'crypto'];
-            const specificName = knownMethodIds.includes(methodId) ? getWithdrawalMethodName(methodId, '') : '';
-            const rawName = String(item.method || item.paymentMethod || fallback || '').trim();
-            if (specificName && !['gift card', 'gift_card', 'withdrawal method'].includes(rawName.toLowerCase())) {
-                return specificName;
-            }
-            if (!specificName && ['gift card', 'gift_card'].includes(rawName.toLowerCase())) {
-                return 'Gift Card - type not saved';
-            }
-            return specificName || rawName || fallback;
-        };
+    const methodId = normalizeWithdrawalMethodId(item);
+    const knownMethodIds = ['upi', 'bank', 'play_store', 'amazon_gift', 'flipkart_gift', 'paypal', 'crypto'];
+    const specificName = knownMethodIds.includes(methodId) ? getWithdrawalMethodName(methodId, '') : '';
+    const rawName = String(item.method || item.paymentMethod || fallback || '').trim();
+    if (specificName && !['gift card', 'gift_card', 'withdrawal method'].includes(rawName.toLowerCase())) {
+        return specificName;
+    }
+    if (!specificName && ['gift card', 'gift_card'].includes(rawName.toLowerCase())) {
+        return 'Gift Card - type not saved';
+    }
+    return specificName || rawName || fallback;
+};
 
 const getWithdrawalDetailText = (item = {}) => {
-            const methodId = normalizeWithdrawalMethodId(item);
-            const details = item.paymentDetails && typeof item.paymentDetails === 'object' ? item.paymentDetails : {};
-            const detailText = typeof item.paymentDetails === 'string' ? item.paymentDetails : '';
-            if (methodId === 'upi') return item.upiId || item.paymentDetails || 'N/A';
-            if (methodId === 'bank') {
-                return [
-                    (item.accountNumber || details.accountNumber) ? `A/C: ${item.accountNumber || details.accountNumber}` : '',
-                    (item.ifsc || details.ifsc) ? `IFSC: ${item.ifsc || details.ifsc}` : '',
-                    item.bankName || details.bankName || '',
-                    (item.accountName || details.accountName) ? `Name: ${item.accountName || details.accountName}` : ''
-                ].filter(Boolean).join(' | ') || detailText || 'N/A';
-            }
-            if (['play_store', 'amazon_gift', 'flipkart_gift', 'paypal'].includes(methodId)) {
-                return item.email || item.paymentEmail || details.email || detailText || 'N/A';
-            }
-            return detailText || item.upiId || item.accountNumber || item.email || item.paymentEmail || 'N/A';
-        };
+    const methodId = normalizeWithdrawalMethodId(item);
+    const details = item.paymentDetails && typeof item.paymentDetails === 'object' ? item.paymentDetails : {};
+    const detailText = typeof item.paymentDetails === 'string' ? item.paymentDetails : '';
+    if (methodId === 'upi') return item.upiId || item.paymentDetails || 'N/A';
+    if (methodId === 'bank') {
+        return [
+            (item.accountNumber || details.accountNumber) ? `A/C: ${item.accountNumber || details.accountNumber}` : '',
+            (item.ifsc || details.ifsc) ? `IFSC: ${item.ifsc || details.ifsc}` : '',
+            item.bankName || details.bankName || '',
+            (item.accountName || details.accountName) ? `Name: ${item.accountName || details.accountName}` : ''
+        ].filter(Boolean).join(' | ') || detailText || 'N/A';
+    }
+    if (['play_store', 'amazon_gift', 'flipkart_gift', 'paypal'].includes(methodId)) {
+        return item.email || item.paymentEmail || details.email || detailText || 'N/A';
+    }
+    return detailText || item.upiId || item.accountNumber || item.email || item.paymentEmail || 'N/A';
+};
 
 const getWithdrawalSnapshot = (data = {}) => ({
-            method: getWithdrawalDisplayMethodName(data, getWithdrawalMethodName(data.methodId)),
-            methodId: data.methodId || data.paymentMethod || '',
-            upiId: data.upiId || '',
-            accountNumber: data.accountNumber || '',
-            ifsc: data.ifsc || '',
-            bankName: data.bankName || '',
-            accountName: data.accountName || '',
-            email: data.email || '',
-            paymentDetails: data.paymentDetails || ''
-        });
+    method: getWithdrawalDisplayMethodName(data, getWithdrawalMethodName(data.methodId)),
+    methodId: data.methodId || data.paymentMethod || '',
+    upiId: data.upiId || '',
+    accountNumber: data.accountNumber || '',
+    ifsc: data.ifsc || '',
+    bankName: data.bankName || '',
+    accountName: data.accountName || '',
+    email: data.email || '',
+    paymentDetails: data.paymentDetails || ''
+});
 
 const showWithdrawPage = () => {
-            if (!currentUserData) return showNotification('User data not loaded. Please wait.', true);
-            loadWithdrawalSettingsOnce().catch(error => console.warn('Withdrawal settings background load skipped:', error));
+    if (!currentUserData) return showNotification('User data not loaded. Please wait.', true);
+    loadWithdrawalSettingsOnce().catch(error => console.warn('Withdrawal settings background load skipped:', error));
 
-            if (currentUserData.isFlagged) {
-                return showNotification('Your account is flagged. Please contact support.', true);
-            }
+    if (currentUserData.isFlagged) {
+        return showNotification('Your account is flagged. Please contact support.', true);
+    }
 
-            if (!currentUserData.paymentMethod) {
-                showNotification('Please set your payment method in your profile.', true);
-                showProfilePage();
-                return;
-            }
+    if (!currentUserData.paymentMethod) {
+        showNotification('Please set your payment method in your profile.', true);
+        showProfilePage();
+        return;
+    }
 
-            const content = `
+    const content = `
                 <style>
                     .payment-option-container .payment-option {
                         border: 2px solid transparent !important;
@@ -992,82 +1010,82 @@ const showWithdrawPage = () => {
                     </div>
                 </div>
                 ${getPageFooter()}`;
-            showPage(content);
+    showPage(content);
 
-            document.querySelectorAll('.payment-option').forEach(option => {
-                option.addEventListener('click', function () {
-                    if (this.dataset.comingSoon === 'true') {
-                        showNotification('Coming soon...', true);
-                        return;
-                    }
-                    document.querySelectorAll('.payment-option').forEach(opt => opt.classList.remove('selected'));
-                    this.classList.add('selected');
-                    const method = this.dataset.method;
-                    showWithdrawAmountPage(method);
-                });
-            });
-
-            loadUserPendingWithdrawalsMerged(currentUser.uid)
-                .then((pendingWithdrawals) => {
-                    const pendingWithdrawalCount = pendingWithdrawals.length;
-                    if (pendingWithdrawalCount >= maxPendingWithdrawalsPerUser && document.getElementById('page-container')?.textContent.includes('Choose Withdrawal Method')) {
-                        showNotification(`You already have ${pendingWithdrawalCount} pending withdrawal request(s).`, true);
-                        hidePage();
-                    }
-                })
-                .catch(error => console.warn('Pending withdrawal background check skipped:', error));
-        };
-
-const showWithdrawAmountPage = (method) => {
-            loadWithdrawalSettingsOnce().then(() => applyWithdrawalConfig({})).catch(error => console.warn('Withdrawal settings background load skipped:', error));
-            activeWithdrawMethod = method;
-            let methodName = '';
-            let methodDetails = '';
-            const minForMethod = getMinWithdrawalForMethod(method);
-            const methodIconMap = {
-                upi: renderWithdrawMethodLogo('upi', 'UPI'),
-                bank: renderWithdrawMethodLogo('bank', 'Bank'),
-                play_store: renderWithdrawMethodLogo('play_store', 'Play Store'),
-                amazon_gift: renderWithdrawMethodLogo('amazon_gift', 'Amazon'),
-                flipkart_gift: renderWithdrawMethodLogo('flipkart_gift', 'Flipkart'),
-                paypal: renderWithdrawMethodLogo('paypal', 'PayPal'),
-                crypto: renderWithdrawMethodLogo('crypto', 'Crypto'),
-            };
-
-            switch (method) {
-                case 'upi':
-                    methodName = 'UPI';
-                    methodDetails = getProfilePaymentDetails(method).upiId || 'Not set';
-                    break;
-                case 'bank':
-                    methodName = 'Bank Account';
-                    const bankDetails = getProfilePaymentDetails(method);
-                    methodDetails = `${bankDetails.accountNumber || 'Not set'} - ${bankDetails.bankName || 'Not set'}`;
-                    break;
-                case 'play_store':
-                    methodName = 'Google Play Gift Card';
-                    methodDetails = getProfilePaymentDetails(method).email || 'Not set';
-                    break;
-                case 'amazon_gift':
-                    methodName = 'Amazon Gift Card';
-                    methodDetails = getProfilePaymentDetails(method).email || 'Not set';
-                    break;
-                case 'flipkart_gift':
-                    methodName = 'Flipkart Gift Card';
-                    methodDetails = getProfilePaymentDetails(method).email || 'Not set';
-                    break;
-                case 'paypal':
-                    methodName = 'PayPal';
-                    methodDetails = getProfilePaymentDetails(method).email || 'Not set';
-                    break;
-            }
-
-            if (!isWithdrawMethodDetailsComplete(method)) {
-                showWithdrawDetailsMissingModal(method, methodName || getWithdrawalMethodName(method));
+    document.querySelectorAll('.payment-option').forEach(option => {
+        option.addEventListener('click', function () {
+            if (this.dataset.comingSoon === 'true') {
+                showNotification('Coming soon...', true);
                 return;
             }
+            document.querySelectorAll('.payment-option').forEach(opt => opt.classList.remove('selected'));
+            this.classList.add('selected');
+            const method = this.dataset.method;
+            showWithdrawAmountPage(method);
+        });
+    });
 
-            const content = `
+    loadUserPendingWithdrawalsMerged(currentUser.uid)
+        .then((pendingWithdrawals) => {
+            const pendingWithdrawalCount = pendingWithdrawals.length;
+            if (pendingWithdrawalCount >= maxPendingWithdrawalsPerUser && document.getElementById('page-container')?.textContent.includes('Choose Withdrawal Method')) {
+                showNotification(`You already have ${pendingWithdrawalCount} pending withdrawal request(s).`, true);
+                hidePage();
+            }
+        })
+        .catch(error => console.warn('Pending withdrawal background check skipped:', error));
+};
+
+const showWithdrawAmountPage = (method) => {
+    loadWithdrawalSettingsOnce().then(() => applyWithdrawalConfig({})).catch(error => console.warn('Withdrawal settings background load skipped:', error));
+    activeWithdrawMethod = method;
+    let methodName = '';
+    let methodDetails = '';
+    const minForMethod = getMinWithdrawalForMethod(method);
+    const methodIconMap = {
+        upi: renderWithdrawMethodLogo('upi', 'UPI'),
+        bank: renderWithdrawMethodLogo('bank', 'Bank'),
+        play_store: renderWithdrawMethodLogo('play_store', 'Play Store'),
+        amazon_gift: renderWithdrawMethodLogo('amazon_gift', 'Amazon'),
+        flipkart_gift: renderWithdrawMethodLogo('flipkart_gift', 'Flipkart'),
+        paypal: renderWithdrawMethodLogo('paypal', 'PayPal'),
+        crypto: renderWithdrawMethodLogo('crypto', 'Crypto'),
+    };
+
+    switch (method) {
+        case 'upi':
+            methodName = 'UPI';
+            methodDetails = getProfilePaymentDetails(method).upiId || 'Not set';
+            break;
+        case 'bank':
+            methodName = 'Bank Account';
+            const bankDetails = getProfilePaymentDetails(method);
+            methodDetails = `${bankDetails.accountNumber || 'Not set'} - ${bankDetails.bankName || 'Not set'}`;
+            break;
+        case 'play_store':
+            methodName = 'Google Play Gift Card';
+            methodDetails = getProfilePaymentDetails(method).email || 'Not set';
+            break;
+        case 'amazon_gift':
+            methodName = 'Amazon Gift Card';
+            methodDetails = getProfilePaymentDetails(method).email || 'Not set';
+            break;
+        case 'flipkart_gift':
+            methodName = 'Flipkart Gift Card';
+            methodDetails = getProfilePaymentDetails(method).email || 'Not set';
+            break;
+        case 'paypal':
+            methodName = 'PayPal';
+            methodDetails = getProfilePaymentDetails(method).email || 'Not set';
+            break;
+    }
+
+    if (!isWithdrawMethodDetailsComplete(method)) {
+        showWithdrawDetailsMissingModal(method, methodName || getWithdrawalMethodName(method));
+        return;
+    }
+
+    const content = `
                 ${getPageHeader(`Withdraw to ${methodName}`)}
                 <div class="max-w-md mx-auto bg-white dark:bg-gray-800 p-6 rounded-xl shadow-md space-y-6">
                     
@@ -1099,44 +1117,44 @@ const showWithdrawAmountPage = (method) => {
                 </div>
                 ${getPageFooter()}`;
 
-            showPage(content);
-            document.getElementById('confirm-withdraw-btn').onclick = () => {
-                const amount = parseFloat(document.getElementById('withdraw-amount-input').value);
-                handleWithdrawConfirmation(amount, method, methodName);
-            };
-        };
+    showPage(content);
+    document.getElementById('confirm-withdraw-btn').onclick = () => {
+        const amount = parseFloat(document.getElementById('withdraw-amount-input').value);
+        handleWithdrawConfirmation(amount, method, methodName);
+    };
+};
 
 const handleWithdrawConfirmation = (amount, method, methodName) => {
-            const minForMethod = getMinWithdrawalForMethod(method);
-            if (isNaN(amount) || amount < minForMethod) {
-                return showNotification(`Minimum withdrawal for ${methodName} is ₹${minForMethod}.`, true);
-            }
+    const minForMethod = getMinWithdrawalForMethod(method);
+    if (isNaN(amount) || amount < minForMethod) {
+        return showNotification(`Minimum withdrawal for ${methodName} is ₹${minForMethod}.`, true);
+    }
 
-            if (!currentUserData || getSpendableWalletBalance(currentUserData) < amount) {
-                return showNotification(getInsufficientWalletMessage(currentUserData), true);
-            }
+    if (!currentUserData || getSpendableWalletBalance(currentUserData) < amount) {
+        return showNotification(getInsufficientWalletMessage(currentUserData), true);
+    }
 
-            let methodDetails = '';
-            const missingDetailText = 'Update payout details';
-            switch (method) {
-                case 'upi':
-                    methodDetails = getProfilePaymentDetails(method).upiId || missingDetailText;
-                    break;
-                case 'bank':
-                    const bankDetails = getProfilePaymentDetails(method);
-                    methodDetails = bankDetails.accountNumber || bankDetails.bankName
-                        ? `A/C: ${bankDetails.accountNumber || missingDetailText}, ${bankDetails.bankName || missingDetailText}`
-                        : missingDetailText;
-                    break;
-                default:
-                    methodDetails = getProfilePaymentDetails(method).email || missingDetailText;
-            }
-            const walletBalance = Number(currentUserData?.balance || 0);
-            const spendableBalance = getSpendableWalletBalance(currentUserData);
-            const balanceAfter = spendableBalance - amount;
+    let methodDetails = '';
+    const missingDetailText = 'Update payout details';
+    switch (method) {
+        case 'upi':
+            methodDetails = getProfilePaymentDetails(method).upiId || missingDetailText;
+            break;
+        case 'bank':
+            const bankDetails = getProfilePaymentDetails(method);
+            methodDetails = bankDetails.accountNumber || bankDetails.bankName
+                ? `A/C: ${bankDetails.accountNumber || missingDetailText}, ${bankDetails.bankName || missingDetailText}`
+                : missingDetailText;
+            break;
+        default:
+            methodDetails = getProfilePaymentDetails(method).email || missingDetailText;
+    }
+    const walletBalance = Number(currentUserData?.balance || 0);
+    const spendableBalance = getSpendableWalletBalance(currentUserData);
+    const balanceAfter = spendableBalance - amount;
 
-            renderModal('Withdrawal Request',
-                `<div class="withdraw-confirm-shell">
+    renderModal('Withdrawal Request',
+        `<div class="withdraw-confirm-shell">
                     <div class="withdraw-confirm-hero">
                         <span class="withdraw-confirm-icon">
                             <svg xmlns="http://www.w3.org/2000/svg" class="h-7 w-7" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
@@ -1176,90 +1194,90 @@ const handleWithdrawConfirmation = (amount, method, methodName) => {
                         </div>
                     </div>
                 </div>`,
-                `<button onclick="window.closeModal()" class="withdraw-cancel-btn">Cancel</button>
+        `<button onclick="window.closeModal()" class="withdraw-cancel-btn">Cancel</button>
                  <button id="final-withdraw-btn" class="withdraw-submit-btn">Confirm</button>`,
-                'max-w-md', true
-            );
-            document.getElementById('final-withdraw-btn').onclick = async () => {
-                const btn = document.getElementById('final-withdraw-btn');
-                if (!btn || btn.disabled) return;
-                const originalText = btn.textContent;
-                btn.disabled = true;
-                btn.textContent = 'Processing...';
-                try {
-                    await handleWithdrawRequest(amount, method, methodName);
-                } finally {
-                    const liveBtn = document.getElementById('final-withdraw-btn');
-                    if (liveBtn) {
-                        liveBtn.disabled = false;
-                        liveBtn.textContent = originalText;
-                    }
-                }
-            };
-        };
+        'max-w-md', true
+    );
+    document.getElementById('final-withdraw-btn').onclick = async () => {
+        const btn = document.getElementById('final-withdraw-btn');
+        if (!btn || btn.disabled) return;
+        const originalText = btn.textContent;
+        btn.disabled = true;
+        btn.textContent = 'Processing...';
+        try {
+            await handleWithdrawRequest(amount, method, methodName);
+        } finally {
+            const liveBtn = document.getElementById('final-withdraw-btn');
+            if (liveBtn) {
+                liveBtn.disabled = false;
+                liveBtn.textContent = originalText;
+            }
+        }
+    };
+};
 
 const startLoanRepaymentAfterWithdrawalApproval = async (userId, processedAtValue = Date.now()) => {
-            if (!userId) return;
-            const processedAtMillis = timestampToMillis(processedAtValue) || Date.now();
-            const repaymentStartDate = new Date(processedAtMillis);
-            const dueDate = getNextMonthRepaymentDate(repaymentStartDate);
-            const loansSnap = await getDocs(query(
-                collection(db, `artifacts/${appId}/public/data/loans`),
-                where("userId", "==", userId),
-                where("status", "==", "active")
-            ));
-            const activeLoans = loansSnap.docs
-                .map(docItem => ({ id: docItem.id, ...docItem.data() }))
-                .filter(loan => isModernLoanRecord(loan) && isActiveLoanRecord(loan))
-                .filter(loan => {
-                    const basis = String(loan.repaymentBasis || loan.repaymentStatus || '').toLowerCase();
-                    return !timestampToMillis(loan.repaymentStartedAt) || !basis.includes('withdrawal');
-                });
-            if (!activeLoans.length) return;
+    if (!userId) return;
+    const processedAtMillis = timestampToMillis(processedAtValue) || Date.now();
+    const repaymentStartDate = new Date(processedAtMillis);
+    const dueDate = getNextMonthRepaymentDate(repaymentStartDate);
+    const loansSnap = await getDocs(query(
+        collection(db, `artifacts/${appId}/public/data/loans`),
+        where("userId", "==", userId),
+        where("status", "==", "active")
+    ));
+    const activeLoans = loansSnap.docs
+        .map(docItem => ({ id: docItem.id, ...docItem.data() }))
+        .filter(loan => isModernLoanRecord(loan) && isActiveLoanRecord(loan))
+        .filter(loan => {
+            const basis = String(loan.repaymentBasis || loan.repaymentStatus || '').toLowerCase();
+            return !timestampToMillis(loan.repaymentStartedAt) || !basis.includes('withdrawal');
+        });
+    if (!activeLoans.length) return;
 
-            await Promise.all(activeLoans.map(loan => updateDoc(doc(db, `artifacts/${appId}/public/data/loans`, loan.id), {
-                repaymentStartedAt: Timestamp.fromDate(repaymentStartDate),
-                repaymentBasis: 'withdrawal_processed',
-                repaymentStatus: 'running',
-                dueDate: Timestamp.fromDate(dueDate),
-                lockedAmount: Number(loan.totalRepayable || 0),
-                reserveStartsAt: Timestamp.fromDate(dueDate),
-                updatedAt: serverTimestamp()
-            })));
+    await Promise.all(activeLoans.map(loan => updateDoc(doc(db, `artifacts/${appId}/public/data/loans`, loan.id), {
+        repaymentStartedAt: Timestamp.fromDate(repaymentStartDate),
+        repaymentBasis: 'withdrawal_processed',
+        repaymentStatus: 'running',
+        dueDate: Timestamp.fromDate(dueDate),
+        lockedAmount: Number(loan.totalRepayable || 0),
+        reserveStartsAt: Timestamp.fromDate(dueDate),
+        updatedAt: serverTimestamp()
+    })));
 
-            const firstLoan = activeLoans[0];
-            const totalFutureReserve = Number(activeLoans.reduce((sum, loan) => sum + Number(loan.totalRepayable || 0), 0).toFixed(2));
-            const userMarkerUpdate = {
-                activeLoanDueDate: Timestamp.fromDate(dueDate),
-                activeLoanRepaymentStartedAt: Timestamp.fromDate(repaymentStartDate),
-                activeLoanRepaymentBasis: 'withdrawal_processed',
-                loanLockedAmount: totalFutureReserve,
-                loanReserveStartsAt: Timestamp.fromDate(dueDate)
-            };
-            await updateDoc(doc(db, `artifacts/${appId}/public/data/users`, userId), userMarkerUpdate);
+    const firstLoan = activeLoans[0];
+    const totalFutureReserve = Number(activeLoans.reduce((sum, loan) => sum + Number(loan.totalRepayable || 0), 0).toFixed(2));
+    const userMarkerUpdate = {
+        activeLoanDueDate: Timestamp.fromDate(dueDate),
+        activeLoanRepaymentStartedAt: Timestamp.fromDate(repaymentStartDate),
+        activeLoanRepaymentBasis: 'withdrawal_processed',
+        loanLockedAmount: totalFutureReserve,
+        loanReserveStartsAt: Timestamp.fromDate(dueDate)
+    };
+    await updateDoc(doc(db, `artifacts/${appId}/public/data/users`, userId), userMarkerUpdate);
 
-            allLoansCache = allLoansCache.map(loan => activeLoans.some(activeLoan => activeLoan.id === loan.id)
-                ? {
-                    ...loan,
-                    repaymentStartedAt: repaymentStartDate.getTime(),
-                    repaymentBasis: 'withdrawal_processed',
-                    repaymentStatus: 'running',
-                    dueDate: dueDate.getTime(),
-                    lockedAmount: Number(loan.totalRepayable || 0),
-                    reserveStartsAt: dueDate.getTime()
-                }
-                : loan);
-            if (currentUser?.uid === userId && currentUserData) {
-                currentUserData = {
-                    ...currentUserData,
-                    ...userMarkerUpdate,
-                    activeLoanId: currentUserData.activeLoanId || firstLoan.id
-                };
-            }
+    allLoansCache = allLoansCache.map(loan => activeLoans.some(activeLoan => activeLoan.id === loan.id)
+        ? {
+            ...loan,
+            repaymentStartedAt: repaymentStartDate.getTime(),
+            repaymentBasis: 'withdrawal_processed',
+            repaymentStatus: 'running',
+            dueDate: dueDate.getTime(),
+            lockedAmount: Number(loan.totalRepayable || 0),
+            reserveStartsAt: dueDate.getTime()
+        }
+        : loan);
+    if (currentUser?.uid === userId && currentUserData) {
+        currentUserData = {
+            ...currentUserData,
+            ...userMarkerUpdate,
+            activeLoanId: currentUserData.activeLoanId || firstLoan.id
         };
+    }
+};
 
 const showWithdrawalHistoryPage = () => {
-            const content = `
+    const content = `
                 ${getPageHeader('Withdrawal History')}
                 <div class="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-md">
                     <!-- Filters -->
@@ -1310,243 +1328,243 @@ const showWithdrawalHistoryPage = () => {
                     <div id="withdrawal-history-list" class="max-h-[60vh] overflow-y-auto"></div>
                 </div>
                 ${getPageFooter()}`;
-            showPage(content);
+    showPage(content);
 
-            // Set today as default active
-            document.querySelector('[data-filter="today"]').classList.add('active-filter');
-            if (withdrawalHistoryCache.length) {
-                renderWithdrawalHistoryList();
-            } else {
-                document.getElementById('withdrawal-history-list').innerHTML = '<p class="text-center text-gray-500 dark:text-gray-400 py-8">Loading withdrawal history...</p>';
-            }
-            loadWithdrawalHistory('today');
-            document.getElementById('withdrawal-history-search').addEventListener('input', renderWithdrawalHistoryList);
+    // Set today as default active
+    document.querySelector('[data-filter="today"]').classList.add('active-filter');
+    if (withdrawalHistoryCache.length) {
+        renderWithdrawalHistoryList();
+    } else {
+        document.getElementById('withdrawal-history-list').innerHTML = '<p class="text-center text-gray-500 dark:text-gray-400 py-8">Loading withdrawal history...</p>';
+    }
+    loadWithdrawalHistory('today');
+    document.getElementById('withdrawal-history-search').addEventListener('input', renderWithdrawalHistoryList);
 
-            // Add event listeners for filters
-            document.querySelectorAll('[data-filter]').forEach(btn => {
-                btn.addEventListener('click', function () {
-                    document.querySelectorAll('[data-filter]').forEach(b => b.classList.remove('active-filter'));
-                    this.classList.add('active-filter');
-                    const filter = this.dataset.filter;
-                    loadWithdrawalHistory(filter);
-                });
-            });
+    // Add event listeners for filters
+    document.querySelectorAll('[data-filter]').forEach(btn => {
+        btn.addEventListener('click', function () {
+            document.querySelectorAll('[data-filter]').forEach(b => b.classList.remove('active-filter'));
+            this.classList.add('active-filter');
+            const filter = this.dataset.filter;
+            loadWithdrawalHistory(filter);
+        });
+    });
 
-            document.getElementById('apply-date-filter').addEventListener('click', () => {
-                const fromDate = document.getElementById('filter-from-date').value;
-                const toDate = document.getElementById('filter-to-date').value;
-                if (fromDate && toDate) {
-                    loadWithdrawalHistory('custom', fromDate, toDate);
-                } else {
-                    showNotification('Please select both from and to dates.', true);
-                }
-            });
-        };
+    document.getElementById('apply-date-filter').addEventListener('click', () => {
+        const fromDate = document.getElementById('filter-from-date').value;
+        const toDate = document.getElementById('filter-to-date').value;
+        if (fromDate && toDate) {
+            loadWithdrawalHistory('custom', fromDate, toDate);
+        } else {
+            showNotification('Please select both from and to dates.', true);
+        }
+    });
+};
 
 const isWithdrawalHistorySourceRecord = (record = {}) => {
-            const rawType = String(record.type || record.requestType || record.request_type || '').toLowerCase().replace(/\s+/g, '_');
-            const normalizedType = normalizeTransactionType(record);
-            const hasRechargeFields = !!(
-                record.mobileNumber ||
-                record.operator ||
-                record.planDetails ||
-                record.discountRate ||
-                rawType.includes('recharge') ||
-                normalizedType === 'mobile_recharge'
-            );
-            if (hasRechargeFields) return false;
-            if (normalizedType === 'withdrawal' || rawType.includes('withdraw')) return true;
+    const rawType = String(record.type || record.requestType || record.request_type || '').toLowerCase().replace(/\s+/g, '_');
+    const normalizedType = normalizeTransactionType(record);
+    const hasRechargeFields = !!(
+        record.mobileNumber ||
+        record.operator ||
+        record.planDetails ||
+        record.discountRate ||
+        rawType.includes('recharge') ||
+        normalizedType === 'mobile_recharge'
+    );
+    if (hasRechargeFields) return false;
+    if (normalizedType === 'withdrawal' || rawType.includes('withdraw')) return true;
 
-            // Compatibility for old withdrawal rows that stored only payout fields.
-            return !rawType && !!(
-                record.methodId ||
-                record.paymentMethod ||
-                record.paymentDetails ||
-                record.upiId ||
-                record.accountNumber ||
-                record.ifsc ||
-                record.bankName ||
-                record.giftCardType
-            );
-        };
+    // Compatibility for old withdrawal rows that stored only payout fields.
+    return !rawType && !!(
+        record.methodId ||
+        record.paymentMethod ||
+        record.paymentDetails ||
+        record.upiId ||
+        record.accountNumber ||
+        record.ifsc ||
+        record.bankName ||
+        record.giftCardType
+    );
+};
 
 const normalizeWithdrawalHistoryRecord = (record = {}) => {
-            const sourceType = normalizeTransactionType(record);
-            const requestedAt = record.requestedAt || record.timestamp || record.createdAt || record.processedAt || Date.now();
-            const userProfile = allUsersCache.find(u =>
-                (record.userId && u.id === record.userId) ||
-                (record.userMobile && normalizePhoneDigits(getUserMobileValue(u)) === normalizePhoneDigits(record.userMobile)) ||
-                (record.userEmail && u.email === record.userEmail)
-            ) || {};
-            return {
-                ...record,
-                id: record.id || record.requestId || record.request_id || record.transactionId || record.transaction_id || `${sourceType}-${timestampToMillis(requestedAt)}-${record.amount || 0}`,
-                userId: record.userId || record.user_id || userProfile.id || '',
-                userName: record.userName || record.senderName || record.recipientName || userProfile.name || 'N/A',
-                userMobile: record.userMobile || record.mobile || getUserMobileValue(userProfile) || '',
-                userEmail: record.userEmail || record.emailAddress || userProfile.email || '',
-                type: 'withdrawal',
-                amount: absoluteAmount(record.amount || 0),
-                method: getWithdrawalDisplayMethodName(record, record.paymentMethod || 'N/A'),
-                status: record.status || 'completed',
-                requestedAt,
-                processedAt: ['completed', 'rejected'].includes(record.status) ? (record.processedAt || null) : null
-            };
-        };
+    const sourceType = normalizeTransactionType(record);
+    const requestedAt = record.requestedAt || record.timestamp || record.createdAt || record.processedAt || Date.now();
+    const userProfile = allUsersCache.find(u =>
+        (record.userId && u.id === record.userId) ||
+        (record.userMobile && normalizePhoneDigits(getUserMobileValue(u)) === normalizePhoneDigits(record.userMobile)) ||
+        (record.userEmail && u.email === record.userEmail)
+    ) || {};
+    return {
+        ...record,
+        id: record.id || record.requestId || record.request_id || record.transactionId || record.transaction_id || `${sourceType}-${timestampToMillis(requestedAt)}-${record.amount || 0}`,
+        userId: record.userId || record.user_id || userProfile.id || '',
+        userName: record.userName || record.senderName || record.recipientName || userProfile.name || 'N/A',
+        userMobile: record.userMobile || record.mobile || getUserMobileValue(userProfile) || '',
+        userEmail: record.userEmail || record.emailAddress || userProfile.email || '',
+        type: 'withdrawal',
+        amount: absoluteAmount(record.amount || 0),
+        method: getWithdrawalDisplayMethodName(record, record.paymentMethod || 'N/A'),
+        status: record.status || 'completed',
+        requestedAt,
+        processedAt: ['completed', 'rejected'].includes(record.status) ? (record.processedAt || null) : null
+    };
+};
 
 const mergeWithdrawalHistoryRecords = (...groups) => {
-            const merged = new Map();
-            groups.flat().forEach((record, index) => {
-                if (!record) return;
-                if (!isWithdrawalHistorySourceRecord(record)) return;
-                const normalized = normalizeWithdrawalHistoryRecord(record);
-                const key = normalized.requestId || normalized.request_id || normalized.transactionId || normalized.transaction_id || normalized.id || `withdrawal-${timestampToMillis(normalized.requestedAt)}-${normalized.amount}-${index}`;
-                const existing = merged.get(String(key)) || {};
-                const requestedAtCandidates = [existing.requestedAt, existing.requested_at, existing.timestamp, normalized.requestedAt, normalized.requested_at, normalized.timestamp]
-                    .map(timestampToMillis)
-                    .filter(time => Number.isFinite(time) && time > 0);
-                const requestedAt = requestedAtCandidates.length ? Math.min(...requestedAtCandidates) : normalized.requestedAt;
-                merged.set(String(key), {
-                    ...existing,
-                    ...normalized,
-                    requestedAt,
-                    timestamp: requestedAt
-                });
-            });
-            return Array.from(merged.values())
-                .sort((a, b) => timestampToMillis(b.requestedAt || b.timestamp || b.processedAt) - timestampToMillis(a.requestedAt || a.timestamp || a.processedAt));
-        };
+    const merged = new Map();
+    groups.flat().forEach((record, index) => {
+        if (!record) return;
+        if (!isWithdrawalHistorySourceRecord(record)) return;
+        const normalized = normalizeWithdrawalHistoryRecord(record);
+        const key = normalized.requestId || normalized.request_id || normalized.transactionId || normalized.transaction_id || normalized.id || `withdrawal-${timestampToMillis(normalized.requestedAt)}-${normalized.amount}-${index}`;
+        const existing = merged.get(String(key)) || {};
+        const requestedAtCandidates = [existing.requestedAt, existing.requested_at, existing.timestamp, normalized.requestedAt, normalized.requested_at, normalized.timestamp]
+            .map(timestampToMillis)
+            .filter(time => Number.isFinite(time) && time > 0);
+        const requestedAt = requestedAtCandidates.length ? Math.min(...requestedAtCandidates) : normalized.requestedAt;
+        merged.set(String(key), {
+            ...existing,
+            ...normalized,
+            requestedAt,
+            timestamp: requestedAt
+        });
+    });
+    return Array.from(merged.values())
+        .sort((a, b) => timestampToMillis(b.requestedAt || b.timestamp || b.processedAt) - timestampToMillis(a.requestedAt || a.timestamp || a.processedAt));
+};
 
 const loadWithdrawalHistory = async (filter = 'today', fromDate = null, toDate = null) => {
-            activeWithdrawalHistoryFilter = { filter, fromDate, toDate };
-            try {
-                const needsDeepHistoryScan = filter === 'all' || filter === 'custom';
-                const historyLimit = needsDeepHistoryScan ? 1200 : 450;
-                const withdrawalQuery = query(
-                    collection(db, `artifacts/${appId}/public/data/fund_requests`),
-                    orderBy("requestedAt", "desc"),
-                    firestoreLimit(historyLimit)
-                );
+    activeWithdrawalHistoryFilter = { filter, fromDate, toDate };
+    try {
+        const needsDeepHistoryScan = filter === 'all' || filter === 'custom';
+        const historyLimit = needsDeepHistoryScan ? 1200 : 450;
+        const withdrawalQuery = query(
+            collection(db, `artifacts/${appId}/public/data/fund_requests`),
+            orderBy("requestedAt", "desc"),
+            firestoreLimit(historyLimit)
+        );
 
-                const [snap, cloudRequests, legacyWithdrawals] = await Promise.all([
-                    getDocs(withdrawalQuery),
-                    loadCloudFundRequests({ status: 'all', type: 'withdrawal', limit: historyLimit, timeoutMs: needsDeepHistoryScan ? 8000 : 3000 }).catch(error => {
-                        console.warn('Cloud withdrawal history load skipped:', error);
-                        return [];
-                    }),
-                    needsDeepHistoryScan
-                        ? loadLegacyWithdrawalTransactionsForAdmin()
-                        : Promise.resolve([])
-                ]);
-                const firebaseRequests = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-                let withdrawals = mergeWithdrawalHistoryRecords(firebaseRequests, cloudRequests, legacyWithdrawals);
+        const [snap, cloudRequests, legacyWithdrawals] = await Promise.all([
+            getDocs(withdrawalQuery),
+            loadCloudFundRequests({ status: 'all', type: 'withdrawal', limit: historyLimit, timeoutMs: needsDeepHistoryScan ? 8000 : 3000 }).catch(error => {
+                console.warn('Cloud withdrawal history load skipped:', error);
+                return [];
+            }),
+            needsDeepHistoryScan
+                ? loadLegacyWithdrawalTransactionsForAdmin()
+                : Promise.resolve([])
+        ]);
+        const firebaseRequests = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        let withdrawals = mergeWithdrawalHistoryRecords(firebaseRequests, cloudRequests, legacyWithdrawals);
 
-                // Apply filters
-                const now = new Date();
-                const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-                const yesterday = new Date(today);
-                yesterday.setDate(yesterday.getDate() - 1);
-                const weekAgo = new Date(today);
-                weekAgo.setDate(weekAgo.getDate() - 7);
-                const monthAgo = new Date(today);
-                monthAgo.setMonth(monthAgo.getMonth() - 1);
+        // Apply filters
+        const now = new Date();
+        const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+        const yesterday = new Date(today);
+        yesterday.setDate(yesterday.getDate() - 1);
+        const weekAgo = new Date(today);
+        weekAgo.setDate(weekAgo.getDate() - 7);
+        const monthAgo = new Date(today);
+        monthAgo.setMonth(monthAgo.getMonth() - 1);
 
-                if (filter === 'today') {
-                    withdrawals = withdrawals.filter(w => {
-                        if (!w.requestedAt) return false;
-                        const reqDate = getSafeDate(w.requestedAt);
-                        return reqDate >= today;
-                    });
-                } else if (filter === 'yesterday') {
-                    withdrawals = withdrawals.filter(w => {
-                        if (!w.requestedAt) return false;
-                        const reqDate = getSafeDate(w.requestedAt);
-                        return reqDate >= yesterday && reqDate < today;
-                    });
-                } else if (filter === 'week') {
-                    withdrawals = withdrawals.filter(w => {
-                        if (!w.requestedAt) return false;
-                        const reqDate = getSafeDate(w.requestedAt);
-                        return reqDate >= weekAgo;
-                    });
-                } else if (filter === 'month') {
-                    withdrawals = withdrawals.filter(w => {
-                        if (!w.requestedAt) return false;
-                        const reqDate = getSafeDate(w.requestedAt);
-                        return reqDate >= monthAgo;
-                    });
-                } else if (filter === 'custom' && fromDate && toDate) {
-                    const from = new Date(fromDate);
-                    const to = new Date(toDate);
-                    to.setDate(to.getDate() + 1); // Include the entire to date
+        if (filter === 'today') {
+            withdrawals = withdrawals.filter(w => {
+                if (!w.requestedAt) return false;
+                const reqDate = getSafeDate(w.requestedAt);
+                return reqDate >= today;
+            });
+        } else if (filter === 'yesterday') {
+            withdrawals = withdrawals.filter(w => {
+                if (!w.requestedAt) return false;
+                const reqDate = getSafeDate(w.requestedAt);
+                return reqDate >= yesterday && reqDate < today;
+            });
+        } else if (filter === 'week') {
+            withdrawals = withdrawals.filter(w => {
+                if (!w.requestedAt) return false;
+                const reqDate = getSafeDate(w.requestedAt);
+                return reqDate >= weekAgo;
+            });
+        } else if (filter === 'month') {
+            withdrawals = withdrawals.filter(w => {
+                if (!w.requestedAt) return false;
+                const reqDate = getSafeDate(w.requestedAt);
+                return reqDate >= monthAgo;
+            });
+        } else if (filter === 'custom' && fromDate && toDate) {
+            const from = new Date(fromDate);
+            const to = new Date(toDate);
+            to.setDate(to.getDate() + 1); // Include the entire to date
 
-                    withdrawals = withdrawals.filter(w => {
-                        if (!w.requestedAt) return false;
-                        const reqDate = getSafeDate(w.requestedAt);
-                        return reqDate >= from && reqDate < to;
-                    });
-                }
-                // 'all' filter shows all withdrawals
+            withdrawals = withdrawals.filter(w => {
+                if (!w.requestedAt) return false;
+                const reqDate = getSafeDate(w.requestedAt);
+                return reqDate >= from && reqDate < to;
+            });
+        }
+        // 'all' filter shows all withdrawals
 
-                withdrawalHistoryCache = withdrawals;
-                renderWithdrawalHistoryList();
-            } catch (error) {
-                console.error("Error loading withdrawal history:", error);
-                showNotification('Error loading withdrawal history: ' + error.message, true);
+        withdrawalHistoryCache = withdrawals;
+        renderWithdrawalHistoryList();
+    } catch (error) {
+        console.error("Error loading withdrawal history:", error);
+        showNotification('Error loading withdrawal history: ' + error.message, true);
 
-                // Show error in the list
-                const listEl = document.getElementById('withdrawal-history-list');
-                if (listEl) {
-                    listEl.innerHTML = `
+        // Show error in the list
+        const listEl = document.getElementById('withdrawal-history-list');
+        if (listEl) {
+            listEl.innerHTML = `
                         <div class="text-center py-8">
                             <p class="text-red-500">Error loading withdrawal history</p>
                             <p class="text-sm text-gray-500 dark:text-gray-400 mt-2">Please check console for details</p>
                         </div>`;
-                }
-            }
-        };
+        }
+    }
+};
 
 const renderWithdrawalHistoryList = () => {
-            const listEl = document.getElementById('withdrawal-history-list');
-            if (!listEl) return;
-            const search = (document.getElementById('withdrawal-history-search')?.value || '').trim().toLowerCase();
-            const withdrawals = withdrawalHistoryCache.filter(w => !search || [
-                w.userName,
-                w.userMobile,
-                w.userEmail
-            ].some(value => String(value || '').toLowerCase().includes(search)));
+    const listEl = document.getElementById('withdrawal-history-list');
+    if (!listEl) return;
+    const search = (document.getElementById('withdrawal-history-search')?.value || '').trim().toLowerCase();
+    const withdrawals = withdrawalHistoryCache.filter(w => !search || [
+        w.userName,
+        w.userMobile,
+        w.userEmail
+    ].some(value => String(value || '').toLowerCase().includes(search)));
 
-            const totalWithdrawals = withdrawals.length;
-            const approvedWithdrawals = withdrawals.filter(w => w.status === 'completed').length;
-            const rejectedWithdrawals = withdrawals.filter(w => w.status === 'rejected').length;
+    const totalWithdrawals = withdrawals.length;
+    const approvedWithdrawals = withdrawals.filter(w => w.status === 'completed').length;
+    const rejectedWithdrawals = withdrawals.filter(w => w.status === 'rejected').length;
 
-            document.getElementById('total-withdrawals-count').textContent = totalWithdrawals;
-            document.getElementById('approved-withdrawals-count').textContent = approvedWithdrawals;
-            document.getElementById('rejected-withdrawals-count').textContent = rejectedWithdrawals;
+    document.getElementById('total-withdrawals-count').textContent = totalWithdrawals;
+    document.getElementById('approved-withdrawals-count').textContent = approvedWithdrawals;
+    document.getElementById('rejected-withdrawals-count').textContent = rejectedWithdrawals;
 
-            if (withdrawals.length === 0) {
-                listEl.innerHTML = '<p class="text-gray-500 dark:text-gray-400 text-center py-4">No withdrawal history found.</p>';
-                return;
-            }
+    if (withdrawals.length === 0) {
+        listEl.innerHTML = '<p class="text-gray-500 dark:text-gray-400 text-center py-4">No withdrawal history found.</p>';
+        return;
+    }
 
-            listEl.innerHTML = withdrawals.map(w => {
-                    const statusColor = w.status === 'completed' ? 'text-green-500' :
-                        w.status === 'rejected' ? 'text-red-500' : 'text-yellow-500';
-                    const statusBg = w.status === 'completed' ? 'bg-green-100 dark:bg-green-900/30' :
-                        w.status === 'rejected' ? 'bg-red-100 dark:bg-red-900/30' : 'bg-yellow-100 dark:bg-yellow-900/30';
-                    const statusText = w.status === 'completed' ? 'Approved' :
-                        w.status === 'rejected' ? 'Rejected' : 'Pending';
-                    const payoutDetails = getWithdrawalDetailText(w);
+    listEl.innerHTML = withdrawals.map(w => {
+        const statusColor = w.status === 'completed' ? 'text-green-500' :
+            w.status === 'rejected' ? 'text-red-500' : 'text-yellow-500';
+        const statusBg = w.status === 'completed' ? 'bg-green-100 dark:bg-green-900/30' :
+            w.status === 'rejected' ? 'bg-red-100 dark:bg-red-900/30' : 'bg-yellow-100 dark:bg-yellow-900/30';
+        const statusText = w.status === 'completed' ? 'Approved' :
+            w.status === 'rejected' ? 'Rejected' : 'Pending';
+        const payoutDetails = getWithdrawalDetailText(w);
 
-                    // Format date safely
-                    let requestDate = 'N/A';
-                    let requestTime = 'N/A';
-                    if (w.requestedAt) {
-                        requestDate = formatDate(w.requestedAt).split(' ')[0];
-                        requestTime = getTimeFromTimestamp(w.requestedAt);
-                    }
+        // Format date safely
+        let requestDate = 'N/A';
+        let requestTime = 'N/A';
+        if (w.requestedAt) {
+            requestDate = formatDate(w.requestedAt).split(' ')[0];
+            requestTime = getTimeFromTimestamp(w.requestedAt);
+        }
 
-                    return `
+        return `
                         <div class="p-4 mb-3 bg-gray-50 dark:bg-gray-700/50 rounded-lg">
                             <div class="flex justify-between items-start mb-3">
                                 <div>
@@ -1579,9 +1597,9 @@ const renderWithdrawalHistoryList = () => {
                             <div class="flex justify-between items-center text-xs text-gray-500 dark:text-gray-400">
                                 <span>Requested: ${requestDate} ${requestTime}</span>
                                 ${w.adminTransactionId ?
-                            `<span class="txn-id-badge">${w.adminTransactionId}</span>` :
-                            ''
-                        }
+                `<span class="txn-id-badge">${w.adminTransactionId}</span>` :
+                ''
+            }
                             </div>
                             
                             ${w.rejectionReason ? `
@@ -1598,125 +1616,125 @@ const renderWithdrawalHistoryList = () => {
                             ` : ''}
                         </div>
                     `;
-            }).join('');
-        };
+    }).join('');
+};
 
 const isLegacyWithdrawalRequest = (request = {}) => {
-            return (request.type || 'withdrawal') === 'withdrawal';
-        };
+    return (request.type || 'withdrawal') === 'withdrawal';
+};
 
 const isWithdrawalBalanceDeducted = (request = {}) => {
-            if (request.balanceDeducted === true || request.balance_deducted === true || request.legacyBalanceAdjusted === true || request.legacy_balance_adjusted === true) return true;
-            const balanceAfter = Number(request.balanceAfter ?? request.balance_after);
-            if (Number.isFinite(balanceAfter)) return true;
-            return !isLegacyWithdrawalRequest(request);
-        };
+    if (request.balanceDeducted === true || request.balance_deducted === true || request.legacyBalanceAdjusted === true || request.legacy_balance_adjusted === true) return true;
+    const balanceAfter = Number(request.balanceAfter ?? request.balance_after);
+    if (Number.isFinite(balanceAfter)) return true;
+    return !isLegacyWithdrawalRequest(request);
+};
 
 const shouldDeductLegacyWithdrawal = (request = {}) =>
-            isLegacyWithdrawalRequest(request) && !isWithdrawalBalanceDeducted(request);
+    isLegacyWithdrawalRequest(request) && !isWithdrawalBalanceDeducted(request);
 
 const getLegacyWithdrawalTargets = () =>
-            allFundRequestsCache.filter(req => (req.status || 'pending') === 'pending' && shouldDeductLegacyWithdrawal(req));
+    allFundRequestsCache.filter(req => (req.status || 'pending') === 'pending' && shouldDeductLegacyWithdrawal(req));
 
 const handleSetWithdrawalGiftCardType = async (userId, requestId, methodId) => {
-            const allowed = ['amazon_gift', 'play_store', 'flipkart_gift'];
-            if (!allowed.includes(methodId)) return;
-            const giftCardName = getWithdrawalMethodName(methodId, 'Gift Card');
-            const updatePayload = {
-                methodId,
-                paymentMethod: methodId,
-                method: giftCardName,
-                giftCardType: methodId,
-                giftCardName,
-                updatedAt: serverTimestamp()
-            };
-            try {
-                const reqRef = doc(db, `artifacts/${appId}/public/data/fund_requests`, requestId);
-                await updateDoc(reqRef, updatePayload);
-                const existing = allFundRequestsCache.find(req => req.id === requestId) || {};
-                const updatedRequest = { ...existing, ...updatePayload, updatedAt: Date.now() };
-                allFundRequestsCache = allFundRequestsCache.map(req => req.id === requestId ? updatedRequest : req);
-                renderAdminFundRequests(allFundRequestsCache);
-                updateCloudFundRequestStatus(requestId, updatedRequest.status || 'pending', updatedRequest)
-                    .catch(error => console.warn('Cloud gift card type update skipped:', error));
-                if (userId) syncRecentTransactionsToCloud(userId).catch(error => console.warn('Gift card transaction sync skipped:', error));
-                showNotification(`${giftCardName} saved for this withdrawal.`);
-            } catch (error) {
-                console.error('Gift card type update failed:', error);
-                showNotification(`Could not save gift card type: ${error.message}`, true);
-                renderAdminFundRequests(allFundRequestsCache);
-            }
-        };
+    const allowed = ['amazon_gift', 'play_store', 'flipkart_gift'];
+    if (!allowed.includes(methodId)) return;
+    const giftCardName = getWithdrawalMethodName(methodId, 'Gift Card');
+    const updatePayload = {
+        methodId,
+        paymentMethod: methodId,
+        method: giftCardName,
+        giftCardType: methodId,
+        giftCardName,
+        updatedAt: serverTimestamp()
+    };
+    try {
+        const reqRef = doc(db, `artifacts/${appId}/public/data/fund_requests`, requestId);
+        await updateDoc(reqRef, updatePayload);
+        const existing = allFundRequestsCache.find(req => req.id === requestId) || {};
+        const updatedRequest = { ...existing, ...updatePayload, updatedAt: Date.now() };
+        allFundRequestsCache = allFundRequestsCache.map(req => req.id === requestId ? updatedRequest : req);
+        renderAdminFundRequests(allFundRequestsCache);
+        updateCloudFundRequestStatus(requestId, updatedRequest.status || 'pending', updatedRequest)
+            .catch(error => console.warn('Cloud gift card type update skipped:', error));
+        if (userId) syncRecentTransactionsToCloud(userId).catch(error => console.warn('Gift card transaction sync skipped:', error));
+        showNotification(`${giftCardName} saved for this withdrawal.`);
+    } catch (error) {
+        console.error('Gift card type update failed:', error);
+        showNotification(`Could not save gift card type: ${error.message}`, true);
+        renderAdminFundRequests(allFundRequestsCache);
+    }
+};
 
 const applyLegacyWithdrawalDeduction = async (userId, requestId, requestData = {}) => {
-            if (!shouldDeductLegacyWithdrawal(requestData)) return requestData;
-            const amount = Number(requestData.amount || 0);
-            if (!amount || amount <= 0) return requestData;
+    if (!shouldDeductLegacyWithdrawal(requestData)) return requestData;
+    const amount = Number(requestData.amount || 0);
+    if (!amount || amount <= 0) return requestData;
 
-            const userRef = doc(db, `artifacts/${appId}/public/data/users`, userId);
-            const reqRef = doc(db, `artifacts/${appId}/public/data/fund_requests`, requestId);
-            const cachedUser = allUsersCache.find(u => u.id === userId || u.uid === userId) || {};
-            const currentBalance = Number.isFinite(Number(requestData.balanceBefore ?? requestData.balance_before))
-                ? Number(requestData.balanceBefore ?? requestData.balance_before)
-                : (Number.isFinite(Number(cachedUser.balance)) ? Number(cachedUser.balance) : null);
-            const balanceAfter = currentBalance !== null ? Number((currentBalance - amount).toFixed(2)) : null;
-            const cutTransactionId = `ADMIN-CUT-${requestId}`;
-            const adjustment = {
-                ...(currentBalance !== null ? { balanceBefore: currentBalance } : {}),
-                ...(balanceAfter !== null ? { balanceAfter } : {}),
-                balanceDeducted: true,
-                legacyBalanceAdjusted: true,
-                legacyBalanceAdjustedAt: serverTimestamp(),
-                legacyBalanceAdjustedBy: currentUser?.uid || ADMIN_UID
-            };
-            const updatedRequest = { ...requestData, ...adjustment, legacyBalanceAdjustedAt: Date.now() };
+    const userRef = doc(db, `artifacts/${appId}/public/data/users`, userId);
+    const reqRef = doc(db, `artifacts/${appId}/public/data/fund_requests`, requestId);
+    const cachedUser = allUsersCache.find(u => u.id === userId || u.uid === userId) || {};
+    const currentBalance = Number.isFinite(Number(requestData.balanceBefore ?? requestData.balance_before))
+        ? Number(requestData.balanceBefore ?? requestData.balance_before)
+        : (Number.isFinite(Number(cachedUser.balance)) ? Number(cachedUser.balance) : null);
+    const balanceAfter = currentBalance !== null ? Number((currentBalance - amount).toFixed(2)) : null;
+    const cutTransactionId = `ADMIN-CUT-${requestId}`;
+    const adjustment = {
+        ...(currentBalance !== null ? { balanceBefore: currentBalance } : {}),
+        ...(balanceAfter !== null ? { balanceAfter } : {}),
+        balanceDeducted: true,
+        legacyBalanceAdjusted: true,
+        legacyBalanceAdjustedAt: serverTimestamp(),
+        legacyBalanceAdjustedBy: currentUser?.uid || ADMIN_UID
+    };
+    const updatedRequest = { ...requestData, ...adjustment, legacyBalanceAdjustedAt: Date.now() };
 
-            await Promise.all([
-                updateDoc(userRef, { balance: increment(-amount) }),
-                updateDoc(reqRef, adjustment).catch(error => {
-                    console.warn('Legacy withdrawal request marker skipped:', error);
-                })
-            ]);
+    await Promise.all([
+        updateDoc(userRef, { balance: increment(-amount) }),
+        updateDoc(reqRef, adjustment).catch(error => {
+            console.warn('Legacy withdrawal request marker skipped:', error);
+        })
+    ]);
 
-            await updateCloudFundRequestStatus(requestId, 'pending', {
-                ...updatedRequest,
-                balanceBefore: updatedRequest.balanceBefore,
-                balanceAfter: updatedRequest.balanceAfter,
-                balanceDeducted: true,
-                legacyBalanceAdjusted: true,
-                legacyBalanceAdjustedAt: Date.now()
-            });
-            const debitHistory = {
-                type: 'debit',
-                amount,
-                comment: 'Admin Debit - Pending Withdrawal Balance Cut',
-                adminComment: 'Balance deducted for pending withdrawal request',
-                timestamp: Date.now(),
-                transactionId: cutTransactionId,
-                requestId,
-                method: getWithdrawalDisplayMethodName(requestData, 'Withdrawal'),
-                status: 'completed',
-                balanceBefore: currentBalance,
-                balanceAfter,
-                isAdminTransaction: true,
-                isWithdrawalBalanceCut: true
-            };
-            await recordUserFirestoreTransaction(userId, debitHistory);
-            recordCloudTransaction(userId, debitHistory).catch(error => {
-                console.warn('Legacy withdrawal debit cloud history skipped:', error);
-            });
-            allFundRequestsCache = allFundRequestsCache.map(req => req.id === requestId ? { ...req, ...updatedRequest } : req);
-            allUsersCache = allUsersCache.map(u => (u.id === userId || u.uid === userId) ? { ...u, balance: Number(u.balance || 0) - amount } : u);
-            return updatedRequest;
-        };
+    await updateCloudFundRequestStatus(requestId, 'pending', {
+        ...updatedRequest,
+        balanceBefore: updatedRequest.balanceBefore,
+        balanceAfter: updatedRequest.balanceAfter,
+        balanceDeducted: true,
+        legacyBalanceAdjusted: true,
+        legacyBalanceAdjustedAt: Date.now()
+    });
+    const debitHistory = {
+        type: 'debit',
+        amount,
+        comment: 'Admin Debit - Pending Withdrawal Balance Cut',
+        adminComment: 'Balance deducted for pending withdrawal request',
+        timestamp: Date.now(),
+        transactionId: cutTransactionId,
+        requestId,
+        method: getWithdrawalDisplayMethodName(requestData, 'Withdrawal'),
+        status: 'completed',
+        balanceBefore: currentBalance,
+        balanceAfter,
+        isAdminTransaction: true,
+        isWithdrawalBalanceCut: true
+    };
+    await recordUserFirestoreTransaction(userId, debitHistory);
+    recordCloudTransaction(userId, debitHistory).catch(error => {
+        console.warn('Legacy withdrawal debit cloud history skipped:', error);
+    });
+    allFundRequestsCache = allFundRequestsCache.map(req => req.id === requestId ? { ...req, ...updatedRequest } : req);
+    allUsersCache = allUsersCache.map(u => (u.id === userId || u.uid === userId) ? { ...u, balance: Number(u.balance || 0) - amount } : u);
+    return updatedRequest;
+};
 
 const handleFixLegacyPendingWithdrawals = async () => {
-            if (currentUser?.uid !== ADMIN_UID) return showNotification('Admin access only.', true);
-            const targets = getLegacyWithdrawalTargets();
-            if (!targets.length) return showNotification('No pending withdrawals need balance correction.');
-            const total = targets.reduce((sum, req) => sum + Number(req.amount || 0), 0);
-            renderModal('Fix Uncut Pending Withdrawals',
-                `<div class="space-y-3 text-sm">
+    if (currentUser?.uid !== ADMIN_UID) return showNotification('Admin access only.', true);
+    const targets = getLegacyWithdrawalTargets();
+    if (!targets.length) return showNotification('No pending withdrawals need balance correction.');
+    const total = targets.reduce((sum, req) => sum + Number(req.amount || 0), 0);
+    renderModal('Fix Uncut Pending Withdrawals',
+        `<div class="space-y-3 text-sm">
                     <p>This will deduct pending withdrawal amounts that are not already marked as balance cut. Use this for old app withdrawals where balance was not deducted.</p>
                     <div class="rounded-xl bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 p-3">
                         <p class="font-bold">${targets.length} request(s)</p>
@@ -1724,343 +1742,354 @@ const handleFixLegacyPendingWithdrawals = async () => {
                     </div>
                     <p class="text-xs text-gray-500 dark:text-gray-400">A completed admin debit entry will be added to each user's transaction history with before/after balance.</p>
                 </div>`,
-                `<button onclick="window.closeModal()" class="px-4 py-2 text-sm bg-gray-200 dark:bg-gray-600 rounded-lg">Cancel</button>
+        `<button onclick="window.closeModal()" class="px-4 py-2 text-sm bg-gray-200 dark:bg-gray-600 rounded-lg">Cancel</button>
                  <button id="confirm-legacy-withdrawal-fix-btn" class="px-4 py-2 text-sm bg-yellow-600 text-white rounded-lg">Deduct Uncut Pending</button>`,
-                'max-w-md'
-            );
-            document.getElementById('confirm-legacy-withdrawal-fix-btn').onclick = async () => {
-                const btn = document.getElementById('confirm-legacy-withdrawal-fix-btn');
-                btn.disabled = true;
-                btn.textContent = 'Fixing...';
-                let fixed = 0;
-                try {
-                    for (const req of targets) {
-                        await applyLegacyWithdrawalDeduction(req.userId, req.id, req);
-                        fixed++;
-                    }
-                    renderAdminFundRequests(allFundRequestsCache);
-                    updateLegacyWithdrawalFixSummary();
-                    refreshAdminDashboardCaches().catch(error => console.warn('Admin cache refresh after legacy fix skipped:', error));
-                    showNotification(`Fixed ${fixed} old pending withdrawal(s).`);
-                    window.closeModal();
-                } catch (error) {
-                    console.error('Legacy withdrawal fix failed:', error);
-                    showNotification(`Error: ${error.message}`, true);
-                    btn.disabled = false;
-                    btn.textContent = 'Deduct Old Pending';
-                }
-            };
-        };
+        'max-w-md'
+    );
+    document.getElementById('confirm-legacy-withdrawal-fix-btn').onclick = async () => {
+        const btn = document.getElementById('confirm-legacy-withdrawal-fix-btn');
+        btn.disabled = true;
+        btn.textContent = 'Fixing...';
+        let fixed = 0;
+        try {
+            for (const req of targets) {
+                await applyLegacyWithdrawalDeduction(req.userId, req.id, req);
+                fixed++;
+            }
+            renderAdminFundRequests(allFundRequestsCache);
+            updateLegacyWithdrawalFixSummary();
+            refreshAdminDashboardCaches().catch(error => console.warn('Admin cache refresh after legacy fix skipped:', error));
+            showNotification(`Fixed ${fixed} old pending withdrawal(s).`);
+            window.closeModal();
+        } catch (error) {
+            console.error('Legacy withdrawal fix failed:', error);
+            showNotification(`Error: ${error.message}`, true);
+            btn.disabled = false;
+            btn.textContent = 'Deduct Old Pending';
+        }
+    };
+};
 
 let handleWithdrawRequest = async (amount, method, methodName) => {
-            if (!currentUser) return showNotification('Error: You are not logged in.', true);
-            if (!currentUserData) {
-                return showNotification('Your user data is still loading. Please try again.', true);
+    if (!currentUser) return showNotification('Error: You are not logged in.', true);
+    if (!currentUserData) {
+        return showNotification('Your user data is still loading. Please try again.', true);
+    }
+    if (currentUserData.isDisabled || currentUserData.dueLoanBlocked) {
+        return showNotification(currentUserData.dueLoanReason || currentUserData.banReason || 'Your account is blocked. Please contact admin.', true);
+    }
+    if (currentUserData.isFlagged) {
+        return showNotification(currentUserData.banReason || 'Your account is flagged. Please contact admin.', true);
+    }
+    const resolvedMethodName = methodName || getWithdrawalMethodName(method, 'Withdrawal');
+
+    const pendingWithdrawalCount = (await loadUserPendingWithdrawalsMerged(currentUser.uid)).length;
+    if (pendingWithdrawalCount >= maxPendingWithdrawalsPerUser) {
+        return showNotification(`You already have ${pendingWithdrawalCount} pending withdrawal request(s). Please wait for them to be processed.`, true);
+    }
+
+    let paymentDetails = '';
+    let methodSpecificDetails = {};
+
+    switch (method) {
+        case 'upi':
+            paymentDetails = getProfilePaymentDetails(method).upiId || 'Not set';
+            methodSpecificDetails = { upiId: paymentDetails };
+            if (amount < minWithdrawalUpi) return showNotification(`Minimum withdrawal for UPI is ₹${minWithdrawalUpi}`, true);
+            break;
+        case 'bank':
+            const bankData = getProfilePaymentDetails(method);
+            // If bank details are missing in current profile, try to fetch from user data
+            const accountNumber = bankData.accountNumber || currentUserData.accountNumber || 'N/A';
+            const ifsc = bankData.ifsc || currentUserData.ifsc || 'N/A';
+            const bankName = bankData.bankName || currentUserData.bankName || 'N/A';
+            const accountName = bankData.accountName || currentUserData.accountName || 'N/A';
+
+            paymentDetails = `A/C: ${accountNumber}, IFSC: ${ifsc}, Name: ${accountName}`;
+            methodSpecificDetails = {
+                accountNumber: accountNumber,
+                ifsc: ifsc,
+                bankName: bankName,
+                accountName: accountName
+            };
+            if (amount < minWithdrawalBank) return showNotification(`Minimum withdrawal for Bank is ₹${minWithdrawalBank}`, true);
+            break;
+        default:
+            paymentDetails = getProfilePaymentDetails(method).email || 'Not set';
+            methodSpecificDetails = { email: paymentDetails };
+            if (['play_store', 'amazon_gift', 'flipkart_gift'].includes(method)) {
+                methodSpecificDetails.giftCardType = method;
+                methodSpecificDetails.giftCardName = resolvedMethodName;
             }
-            if (currentUserData.isDisabled || currentUserData.dueLoanBlocked) {
-                return showNotification(currentUserData.dueLoanReason || currentUserData.banReason || 'Your account is blocked. Please contact admin.', true);
+            if (amount < minWithdrawalRedeem) return showNotification(`Minimum withdrawal for this method is ₹${minWithdrawalRedeem}`, true);
+    }
+
+    // Anti-spam check: Verify no other pending withdrawal exists in Firestore
+    try {
+        const frQuery = query(
+            collection(db, `artifacts/${appId}/public/data/fund_requests`),
+            where("userId", "==", currentUser.uid),
+            where("status", "==", "pending")
+        );
+        const frSnap = await getDocs(frQuery);
+        if (!frSnap.empty) {
+            showNotification("You already have a pending withdrawal request. Please wait for approval.", true);
+            return;
+        }
+
+        // Anti-click-spam check: Verify no withdrawal submitted in the last 60 seconds
+        const oneMinuteAgo = Date.now() - 60000;
+        const recentQuery = query(
+            collection(db, `artifacts/${appId}/public/data/fund_requests`),
+            where("userId", "==", currentUser.uid),
+            where("requestedAt", ">=", oneMinuteAgo)
+        );
+        const recentSnap = await getDocs(recentQuery);
+        if (!recentSnap.empty) {
+            showNotification("Please wait 60 seconds before submitting another withdrawal request.", true);
+            return;
+        }
+    } catch (err) {
+        console.warn("Spam checks skipped due to fetch error:", err);
+    }
+
+    try {
+        const userRef = doc(db, `artifacts/${appId}/public/data/users`, currentUser.uid);
+        const reqRef = doc(collection(db, `artifacts/${appId}/public/data/fund_requests`));
+        const requestedAt = Date.now();
+        const requestPayload = stripUndefinedFields({
+            id: reqRef.id,
+            userId: currentUser.uid,
+            userName: currentUserData.name || 'N/A',
+            userMobile: currentUserData.mobile || 'N/A',
+            userEmail: currentUserData.email || 'N/A',
+            type: 'withdrawal',
+            amount,
+            method: resolvedMethodName,
+            methodId: method,
+            upiId: method === 'upi' ? paymentDetails : '',
+            paymentDetails,
+            ...methodSpecificDetails,
+            status: 'pending',
+            requestedAt
+        });
+
+        await runTransaction(db, async (tx) => {
+            const userDoc = await tx.get(userRef);
+            if (!userDoc.exists()) throw new Error("User account not found!");
+
+            const currentBalance = userDoc.data().balance || 0;
+            if (getSpendableWalletBalance(userDoc.data()) < amount) throw new Error(getInsufficientWalletMessage(userDoc.data()));
+
+            // 1. Deduct balance immediately
+            const balanceAfter = currentBalance - amount;
+            requestPayload.balanceBefore = currentBalance;
+            requestPayload.balanceAfter = balanceAfter;
+            tx.update(userRef, { balance: balanceAfter });
+
+            // 2. Add fund request (with snapshot of payment details)
+            const { id, ...firebaseRequestPayload } = requestPayload;
+            tx.set(reqRef, stripUndefinedFields({
+                ...firebaseRequestPayload,
+                requestedAt: serverTimestamp()
+            }));
+
+            // 3. Add a pending transaction record for the user
+            const txRef = doc(collection(userRef, 'transactions'));
+            tx.set(txRef, stripUndefinedFields({
+                type: 'withdrawal',
+                amount: amount,
+                comment: `Withdrawal Request (${resolvedMethodName})`,
+                timestamp: serverTimestamp(),
+                status: 'pending',
+                requestId: reqRef.id,
+                transactionId: generateTransactionId(),
+                method: resolvedMethodName,
+                methodId: method,
+                // Save a snapshot of details here too
+                paymentDetails: paymentDetails,
+                balanceBefore: currentBalance,
+                balanceAfter,
+                ...methodSpecificDetails
+            }));
+        });
+
+        upsertCloudFundRequest(requestPayload).catch(error => {
+            console.warn('Withdrawal cloud request background sync skipped:', error);
+        });
+        syncRecentTransactionsToCloud(currentUser.uid).catch(error => {
+            console.warn('Withdrawal transaction background sync skipped:', error);
+        });
+        showNotification('Withdrawal request sent to admin.', false, true);
+
+        // Notify admins about the new withdrawal request
+        if (typeof window.sendNotification === 'function') {
+            const adminId = currentUserData?.parentAdmin || currentUserData?.parent_admin || ADMIN_UID;
+            const notificationMsg = `User ${currentUserData?.name || 'User'} (${currentUserData?.mobile || ''}) requested ₹${amount} via ${resolvedMethodName}.`;
+            window.sendNotification(adminId, 'New Withdrawal Request', notificationMsg);
+            if (adminId !== ADMIN_UID) {
+                window.sendNotification(ADMIN_UID, 'New Withdrawal Request', notificationMsg);
             }
-            if (currentUserData.isFlagged) {
-                return showNotification(currentUserData.banReason || 'Your account is flagged. Please contact admin.', true);
-            }
-            const resolvedMethodName = methodName || getWithdrawalMethodName(method, 'Withdrawal');
+        }
 
-            const pendingWithdrawalCount = (await loadUserPendingWithdrawalsMerged(currentUser.uid)).length;
-            if (pendingWithdrawalCount >= maxPendingWithdrawalsPerUser) {
-                return showNotification(`You already have ${pendingWithdrawalCount} pending withdrawal request(s). Please wait for them to be processed.`, true);
-            }
-
-            let paymentDetails = '';
-            let methodSpecificDetails = {};
-
-            switch (method) {
-                case 'upi':
-                    paymentDetails = getProfilePaymentDetails(method).upiId || 'Not set';
-                    methodSpecificDetails = { upiId: paymentDetails };
-                    if (amount < minWithdrawalUpi) return showNotification(`Minimum withdrawal for UPI is ₹${minWithdrawalUpi}`, true);
-                    break;
-                case 'bank':
-                    const bankData = getProfilePaymentDetails(method);
-                    // If bank details are missing in current profile, try to fetch from user data
-                    const accountNumber = bankData.accountNumber || currentUserData.accountNumber || 'N/A';
-                    const ifsc = bankData.ifsc || currentUserData.ifsc || 'N/A';
-                    const bankName = bankData.bankName || currentUserData.bankName || 'N/A';
-                    const accountName = bankData.accountName || currentUserData.accountName || 'N/A';
-
-                    paymentDetails = `A/C: ${accountNumber}, IFSC: ${ifsc}, Name: ${accountName}`;
-                    methodSpecificDetails = {
-                        accountNumber: accountNumber,
-                        ifsc: ifsc,
-                        bankName: bankName,
-                        accountName: accountName
-                    };
-                    if (amount < minWithdrawalBank) return showNotification(`Minimum withdrawal for Bank is ₹${minWithdrawalBank}`, true);
-                    break;
-                default:
-                    paymentDetails = getProfilePaymentDetails(method).email || 'Not set';
-                    methodSpecificDetails = { email: paymentDetails };
-                    if (['play_store', 'amazon_gift', 'flipkart_gift'].includes(method)) {
-                        methodSpecificDetails.giftCardType = method;
-                        methodSpecificDetails.giftCardName = resolvedMethodName;
-                    }
-                    if (amount < minWithdrawalRedeem) return showNotification(`Minimum withdrawal for this method is ₹${minWithdrawalRedeem}`, true);
-            }
-
-            // Anti-spam check: Verify no other pending withdrawal exists in Firestore
-            try {
-                const frQuery = query(
-                    collection(db, `artifacts/${appId}/public/data/fund_requests`),
-                    where("userId", "==", currentUser.uid),
-                    where("status", "==", "pending")
-                );
-                const frSnap = await getDocs(frQuery);
-                if (!frSnap.empty) {
-                    showNotification("You already have a pending withdrawal request. Please wait for approval.", true);
-                    return;
-                }
-
-                // Anti-click-spam check: Verify no withdrawal submitted in the last 60 seconds
-                const oneMinuteAgo = Date.now() - 60000;
-                const recentQuery = query(
-                    collection(db, `artifacts/${appId}/public/data/fund_requests`),
-                    where("userId", "==", currentUser.uid),
-                    where("requestedAt", ">=", oneMinuteAgo)
-                );
-                const recentSnap = await getDocs(recentQuery);
-                if (!recentSnap.empty) {
-                    showNotification("Please wait 60 seconds before submitting another withdrawal request.", true);
-                    return;
-                }
-            } catch (err) {
-                console.warn("Spam checks skipped due to fetch error:", err);
-            }
-
-            try {
-                const userRef = doc(db, `artifacts/${appId}/public/data/users`, currentUser.uid);
-                const reqRef = doc(collection(db, `artifacts/${appId}/public/data/fund_requests`));
-                const requestedAt = Date.now();
-                const requestPayload = stripUndefinedFields({
-                    id: reqRef.id,
-                    userId: currentUser.uid,
-                    userName: currentUserData.name || 'N/A',
-                    userMobile: currentUserData.mobile || 'N/A',
-                    userEmail: currentUserData.email || 'N/A',
-                    type: 'withdrawal',
-                    amount,
-                    method: resolvedMethodName,
-                    methodId: method,
-                    upiId: method === 'upi' ? paymentDetails : '',
-                    paymentDetails,
-                    ...methodSpecificDetails,
-                    status: 'pending',
-                    requestedAt
-                });
-
-                await runTransaction(db, async (tx) => {
-                    const userDoc = await tx.get(userRef);
-                    if (!userDoc.exists()) throw new Error("User account not found!");
-
-                    const currentBalance = userDoc.data().balance || 0;
-                    if (getSpendableWalletBalance(userDoc.data()) < amount) throw new Error(getInsufficientWalletMessage(userDoc.data()));
-
-                    // 1. Deduct balance immediately
-                    const balanceAfter = currentBalance - amount;
-                    requestPayload.balanceBefore = currentBalance;
-                    requestPayload.balanceAfter = balanceAfter;
-                    tx.update(userRef, { balance: balanceAfter });
-
-                    // 2. Add fund request (with snapshot of payment details)
-                    const { id, ...firebaseRequestPayload } = requestPayload;
-                    tx.set(reqRef, stripUndefinedFields({
-                        ...firebaseRequestPayload,
-                        requestedAt: serverTimestamp()
-                    }));
-
-                    // 3. Add a pending transaction record for the user
-                    const txRef = doc(collection(userRef, 'transactions'));
-                    tx.set(txRef, stripUndefinedFields({
-                        type: 'withdrawal',
-                        amount: amount,
-                        comment: `Withdrawal Request (${resolvedMethodName})`,
-                        timestamp: serverTimestamp(),
-                        status: 'pending',
-                        requestId: reqRef.id,
-                        transactionId: generateTransactionId(),
-                        method: resolvedMethodName,
-                        methodId: method,
-                        // Save a snapshot of details here too
-                        paymentDetails: paymentDetails,
-                        balanceBefore: currentBalance,
-                        balanceAfter,
-                        ...methodSpecificDetails
-                    }));
-                });
-
-                upsertCloudFundRequest(requestPayload).catch(error => {
-                    console.warn('Withdrawal cloud request background sync skipped:', error);
-                });
-                syncRecentTransactionsToCloud(currentUser.uid).catch(error => {
-                    console.warn('Withdrawal transaction background sync skipped:', error);
-                });
-                showNotification('Withdrawal request sent to admin.', false, true);
-                window.closeModal();
-                hidePage();
-            } catch (e) {
-                console.error("Withdraw request failed: ", e);
-                const message = String(e?.message || '');
-                const userMessage = /permission-denied|missing or insufficient permissions/i.test(message)
-                    ? 'Withdrawal permission is blocked for this account. Please contact admin.'
-                    : /resource-exhausted|quota exceeded/i.test(message)
-                    ? 'Database daily quota exceeded. Please try again later.'
-                    : /insufficient|pending|not found|minimum|flagged|blocked/i.test(message)
+        window.closeModal();
+        hidePage();
+    } catch (e) {
+        console.error("Withdraw request failed: ", e);
+        const message = String(e?.message || '');
+        const userMessage = /permission-denied|missing or insufficient permissions/i.test(message)
+            ? 'Withdrawal permission is blocked for this account. Please contact admin.'
+            : /resource-exhausted|quota exceeded/i.test(message)
+                ? 'Database daily quota exceeded. Please try again later.'
+                : /insufficient|pending|not found|minimum|flagged|blocked/i.test(message)
                     ? message
                     : 'Could not submit withdrawal request. Please try again.';
-                showNotification(userMessage, true);
-            }
-        };
+        showNotification(userMessage, true);
+    }
+};
 
 const handleSaveWithdrawSettings = async () => {
-            const referralReward = parseInt(document.getElementById('setting-referral-reward')?.value || '0');
-            const minUpi = parseInt(document.getElementById('setting-min-upi').value);
-            const minBank = parseInt(document.getElementById('setting-min-bank').value);
-            const minRedeem = parseInt(document.getElementById('setting-min-redeem').value);
-            const maxDay = parseInt(document.getElementById('setting-max-day').value);
-            const maxPending = parseInt(document.getElementById('setting-max-pending').value);
+    const referralReward = parseInt(document.getElementById('setting-referral-reward')?.value || '0');
+    const minUpi = parseInt(document.getElementById('setting-min-upi').value);
+    const minBank = parseInt(document.getElementById('setting-min-bank').value);
+    const minRedeem = parseInt(document.getElementById('setting-min-redeem').value);
+    const maxDay = parseInt(document.getElementById('setting-max-day').value);
+    const maxPending = parseInt(document.getElementById('setting-max-pending').value);
 
-            if (isNaN(referralReward) || referralReward < 0 || isNaN(minUpi) || isNaN(minBank) || isNaN(minRedeem) || isNaN(maxDay) || isNaN(maxPending)) {
-                return showNotification('Please enter valid numbers for all settings.', true);
-            }
+    if (isNaN(referralReward) || referralReward < 0 || isNaN(minUpi) || isNaN(minBank) || isNaN(minRedeem) || isNaN(maxDay) || isNaN(maxPending)) {
+        return showNotification('Please enter valid numbers for all settings.', true);
+    }
 
-            try {
-                const configRef = doc(db, `artifacts/${appId}/settings`, 'app_config');
-                const updatedConfig = {
-                    referralRewardAmount: referralReward,
-                    referralRewardUpdatedAt: serverTimestamp(),
-                    referralRewardUpdatedBy: currentUser.uid,
-                    min_withdrawal_upi: minUpi,
-                    min_withdrawal_bank: minBank,
-                    min_withdrawal_redeem: minRedeem,
-                    min_withdrawal_amount: Math.min(minUpi, minBank, minRedeem),
-                    max_withdrawal_per_day: maxDay,
-                    max_pending_withdrawals: maxPending,
-                    updatedAt: serverTimestamp()
-                };
-                await setDoc(configRef, updatedConfig, { merge: true });
-
-                const localConfig = {
-                    referralRewardAmount: referralReward,
-                    referralRewardUpdatedAt: Date.now(),
-                    min_withdrawal_upi: minUpi,
-                    min_withdrawal_bank: minBank,
-                    min_withdrawal_redeem: minRedeem,
-                    min_withdrawal_amount: Math.min(minUpi, minBank, minRedeem),
-                    max_withdrawal_per_day: maxDay,
-                    max_pending_withdrawals: maxPending
-                };
-                applyAppConfig(localConfig);
-                withdrawalSettingsLoadedAt = Date.now();
-
-                showNotification('Rate settings saved successfully!');
-                window.closeModal();
-            } catch (e) {
-                console.error("Save settings failed:", e);
-                showNotification(`Error: ${e.message}`, true);
-            }
+    try {
+        const configRef = doc(db, `artifacts/${appId}/settings`, 'app_config');
+        const updatedConfig = {
+            referralRewardAmount: referralReward,
+            referralRewardUpdatedAt: serverTimestamp(),
+            referralRewardUpdatedBy: currentUser.uid,
+            min_withdrawal_upi: minUpi,
+            min_withdrawal_bank: minBank,
+            min_withdrawal_redeem: minRedeem,
+            min_withdrawal_amount: Math.min(minUpi, minBank, minRedeem),
+            max_withdrawal_per_day: maxDay,
+            max_pending_withdrawals: maxPending,
+            updatedAt: serverTimestamp()
         };
+        await setDoc(configRef, updatedConfig, { merge: true });
+
+        const localConfig = {
+            referralRewardAmount: referralReward,
+            referralRewardUpdatedAt: Date.now(),
+            min_withdrawal_upi: minUpi,
+            min_withdrawal_bank: minBank,
+            min_withdrawal_redeem: minRedeem,
+            min_withdrawal_amount: Math.min(minUpi, minBank, minRedeem),
+            max_withdrawal_per_day: maxDay,
+            max_pending_withdrawals: maxPending
+        };
+        applyAppConfig(localConfig);
+        withdrawalSettingsLoadedAt = Date.now();
+
+        showNotification('Rate settings saved successfully!');
+        window.closeModal();
+    } catch (e) {
+        console.error("Save settings failed:", e);
+        showNotification(`Error: ${e.message}`, true);
+    }
+};
 
 const applyWithdrawalConfig = (config = {}) => {
-            minWithdrawalUpi = setNumberSetting(config.min_withdrawal_upi, minWithdrawalUpi);
-            minWithdrawalBank = setNumberSetting(config.min_withdrawal_bank, minWithdrawalBank);
-            minWithdrawalRedeem = setNumberSetting(config.min_withdrawal_redeem, minWithdrawalRedeem);
-            maxWithdrawalPerDay = setNumberSetting(config.max_withdrawal_per_day, maxWithdrawalPerDay);
-            maxPendingWithdrawalsPerUser = Math.max(1, setNumberSetting(config.max_pending_withdrawals, maxPendingWithdrawalsPerUser));
-            minWithdrawalAmount = setNumberSetting(
-                config.min_withdrawal_amount,
-                Math.min(minWithdrawalUpi, minWithdrawalBank, minWithdrawalRedeem)
-            );
-            updateMinWithdrawalInfo();
-            const amountInput = document.getElementById('withdraw-amount-input');
-            if (amountInput && activeWithdrawMethod) {
-                const minForMethod = getMinWithdrawalForMethod(activeWithdrawMethod);
-                amountInput.min = String(minForMethod);
-                const helper = amountInput.parentElement?.querySelector('p');
-                if (helper) helper.textContent = `Minimum withdrawal: ₹${minForMethod}`;
-            }
-        };
+    minWithdrawalUpi = setNumberSetting(config.min_withdrawal_upi, minWithdrawalUpi);
+    minWithdrawalBank = setNumberSetting(config.min_withdrawal_bank, minWithdrawalBank);
+    minWithdrawalRedeem = setNumberSetting(config.min_withdrawal_redeem, minWithdrawalRedeem);
+    maxWithdrawalPerDay = setNumberSetting(config.max_withdrawal_per_day, maxWithdrawalPerDay);
+    maxPendingWithdrawalsPerUser = Math.max(1, setNumberSetting(config.max_pending_withdrawals, maxPendingWithdrawalsPerUser));
+    minWithdrawalAmount = setNumberSetting(
+        config.min_withdrawal_amount,
+        Math.min(minWithdrawalUpi, minWithdrawalBank, minWithdrawalRedeem)
+    );
+    updateMinWithdrawalInfo();
+    const amountInput = document.getElementById('withdraw-amount-input');
+    if (amountInput && activeWithdrawMethod) {
+        const minForMethod = getMinWithdrawalForMethod(activeWithdrawMethod);
+        amountInput.min = String(minForMethod);
+        const helper = amountInput.parentElement?.querySelector('p');
+        if (helper) helper.textContent = `Minimum withdrawal: ₹${minForMethod}`;
+    }
+};
 
 const loadWithdrawalSettingsOnce = async (force = false) => {
-            const now = Date.now();
-            if (!force && withdrawalSettingsLoadedAt && now - withdrawalSettingsLoadedAt < 30000) return;
-            if (withdrawalSettingsLoadPromise && !force) return withdrawalSettingsLoadPromise;
+    const now = Date.now();
+    if (!force && withdrawalSettingsLoadedAt && now - withdrawalSettingsLoadedAt < 30000) return;
+    if (withdrawalSettingsLoadPromise && !force) return withdrawalSettingsLoadPromise;
 
-            withdrawalSettingsLoadPromise = getDoc(doc(db, `artifacts/${appId}/settings`, 'app_config'))
-                .then(snapshot => {
-                    if (snapshot.exists()) applyAppConfig(snapshot.data());
-                    withdrawalSettingsLoadedAt = Date.now();
-                })
-                .catch(error => {
-                    console.error('Withdrawal settings load failed:', error);
-                })
-                .finally(() => {
-                    withdrawalSettingsLoadPromise = null;
-                });
+    withdrawalSettingsLoadPromise = getDoc(doc(db, `artifacts/${appId}/settings`, 'app_config'))
+        .then(snapshot => {
+            if (snapshot.exists()) applyAppConfig(snapshot.data());
+            withdrawalSettingsLoadedAt = Date.now();
+        })
+        .catch(error => {
+            console.error('Withdrawal settings load failed:', error);
+        })
+        .finally(() => {
+            withdrawalSettingsLoadPromise = null;
+        });
 
-            return withdrawalSettingsLoadPromise;
-        };
+    return withdrawalSettingsLoadPromise;
+};
 
 const getMinWithdrawalForMethod = (method) => {
-            if (method === 'upi') return minWithdrawalUpi;
-            if (method === 'bank') return minWithdrawalBank;
-            return minWithdrawalRedeem;
-        };
+    if (method === 'upi') return minWithdrawalUpi;
+    if (method === 'bank') return minWithdrawalBank;
+    return minWithdrawalRedeem;
+};
 
 const updateMinWithdrawalInfo = () => {
-            const infoElement = document.getElementById('min-withdrawal-info');
-            if (infoElement) {
-                infoElement.textContent = `Min. withdrawal: ₹${minWithdrawalAmount}`;
-            }
-        };
+    const infoElement = document.getElementById('min-withdrawal-info');
+    if (infoElement) {
+        infoElement.textContent = `Min. withdrawal: ₹${minWithdrawalAmount}`;
+    }
+};
 
 const originalHandleWithdrawRequest = handleWithdrawRequest;
 
 handleWithdrawRequest = async function (amount, method, methodName) {
-            // Prevent duplicate request
-            if (!preventDuplicateRequest('withdrawal', 15000)) {
-                return;
-            }
+    // Prevent duplicate request
+    if (!preventDuplicateRequest('withdrawal', 15000)) {
+        return;
+    }
 
-            try {
-                await loadWithdrawalSettingsOnce();
-                // Check minimum withdrawal
-                const minForMethod = getMinWithdrawalForMethod(method);
-                if (amount < minForMethod) {
-                    showNotification(`Minimum withdrawal for ${methodName} is ₹${minForMethod}`, true);
-                    return;
-                }
+    try {
+        await loadWithdrawalSettingsOnce();
+        // Check minimum withdrawal
+        const minForMethod = getMinWithdrawalForMethod(method);
+        if (amount < minForMethod) {
+            showNotification(`Minimum withdrawal for ${methodName} is ₹${minForMethod}`, true);
+            return;
+        }
 
-                // Call original function
-                await originalHandleWithdrawRequest.call(this, amount, method, methodName);
-            } finally {
-                pendingRequests.delete('withdrawal');
-            }
-        };
+        // Call original function
+        await originalHandleWithdrawRequest.call(this, amount, method, methodName);
+    } finally {
+        pendingRequests.delete('withdrawal');
+    }
+};
 
 const startWithdrawalSettingsListener = () => {
-            if (appConfigListenerActive) return;
-            appConfigListenerActive = true;
-            const stopListening = onSnapshot(doc(db, `artifacts/${appId}/settings`, 'app_config'), (snapshot) => {
-                if (!snapshot.exists()) return;
-                applyAppConfig(snapshot.data());
-                withdrawalSettingsLoadedAt = Date.now();
-            }, (error) => {
-                appConfigListenerActive = false;
-                console.error('App settings listener failed:', error);
-            });
-            unsubscribers.push(() => {
-                stopListening();
-                appConfigListenerActive = false;
-            });
-        };
+    if (appConfigListenerActive) return;
+    appConfigListenerActive = true;
+    const stopListening = onSnapshot(doc(db, `artifacts/${appId}/settings`, 'app_config'), (snapshot) => {
+        if (!snapshot.exists()) return;
+        applyAppConfig(snapshot.data());
+        withdrawalSettingsLoadedAt = Date.now();
+    }, (error) => {
+        appConfigListenerActive = false;
+        console.error('App settings listener failed:', error);
+    });
+    unsubscribers.push(() => {
+        stopListening();
+        appConfigListenerActive = false;
+    });
+};
 
 // Expose functions to window for global access
 window.loadUserPendingWithdrawalsMerged = loadUserPendingWithdrawalsMerged;

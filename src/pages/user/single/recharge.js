@@ -180,6 +180,9 @@ const handleSubmitRechargeRequest = async ({ mobileNumber, operator, state, plan
                     console.warn('Recharge cloud transaction sync skipped:', error);
                 });
                 showNotification('Recharge request submitted and wallet amount deducted!', false, true);
+                if (typeof window.notifyWalletBalanceChange === 'function') {
+                    window.notifyWalletBalanceChange(currentUser.uid, 'debit', chargeAmount, `Mobile Recharge (${operator} - ${mobileNumber})`);
+                }
                 window.closeModal();
                 hidePage();
             } catch (e) {
@@ -315,6 +318,16 @@ const proceedWithRechargeAction = async (userId, requestId, newStatus, txnId, re
                 updateAdminPendingRequestSummary();
                 refreshAdminFundRequestsFromCloud().catch(error => console.warn('Recharge request background refresh skipped:', error));
                 showNotification(`Recharge request has been ${newStatus === 'completed' ? 'completed' : 'rejected'}.`);
+                if (typeof window.sendNotification === 'function') {
+                    if (newStatus === 'completed') {
+                        window.sendNotification(userId, 'Recharge Completed', `Your recharge of ₹${reqData.amount || ''} for mobile ${reqData.mobileNumber || ''} is successful. Txn ID: ${txnId || 'N/A'}`);
+                    } else {
+                        window.sendNotification(userId, 'Recharge Rejected', `Your recharge of ₹${reqData.amount || ''} was rejected. Reason: ${rejectionReason || 'Not specified'}. ₹${reqData.chargeAmount} refunded to your wallet.`);
+                        if (typeof window.notifyWalletBalanceChange === 'function') {
+                            window.notifyWalletBalanceChange(userId, 'credit', reqData.chargeAmount, 'Recharge Refund');
+                        }
+                    }
+                }
                 window.closeModal();
             } catch (e) {
                 console.error("Recharge action failed:", e);

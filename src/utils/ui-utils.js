@@ -2805,11 +2805,20 @@ const handlePayToWallet = async (recipientData, amount, comment) => {
                 window.lastTransferTimeMap = window.lastTransferTimeMap || new Map();
                 window.lastTransferTimeMap.set(`${recipientData.uid}-${amount}`, Date.now());
                 showNotification(`Success! Sent ${formatCurrency(amount)} to ${recipientData.name || recipientData.mobile}`, false, true);
+                
+                // Trigger success notifications
+                sendNotification(currentUser.uid, 'Wallet Deducted', `Sent ₹${amount} to ${recipientData.name || 'User'} (${maskMobile(recipientData.mobile || '')}).`);
+                sendNotification(recipientData.uid, 'Wallet Credited', `Received ₹${amount} from ${currentUserData.name || 'User'} (${maskMobile(currentUserData.mobile || '')}).`);
+
                 window.closeModal();
                 showTransactionDetails(instantTransaction?.key || senderTxnId);
             } catch (e) {
                 console.error("Pay to wallet failed:", e);
                 showNotification(`Transaction failed: ${e.message}`, true);
+                
+                // Trigger failed notification
+                sendNotification(currentUser.uid, 'Transfer Failed', `Transfer of ₹${amount} to ${recipientData.name || recipientData.mobile || 'User'} failed: ${e.message}`);
+
                 if (btn) {
                     btn.disabled = false;
                     btn.textContent = 'Confirm & Send';
@@ -3150,6 +3159,10 @@ const handleEditUserBalance = async (userId) => {
                 recordCloudTransaction(userId, { ...transactionPayload, timestamp: Date.now() }).catch(error => {
                     console.warn('Admin balance adjustment cloud history skipped:', error);
                 });
+
+                if (transactionPayload) {
+                    notifyWalletBalanceChange(userId, transactionPayload.type, transactionPayload.amount, transactionPayload.comment);
+                }
 
                 allUsersCache = allUsersCache.map(u => u.id === userId ? { ...u, balance: newBalance } : u);
                 if (currentUserData?.uid === userId) {
@@ -3764,3 +3777,40 @@ window.preventDuplicateRequest = preventDuplicateRequest;
 window.showForgotPasswordModal = showForgotPasswordModal;
 window.handleForgotPassword = handleForgotPassword;
 window.checkAppVersion = checkAppVersion;
+
+async function sendNotification(userId, title, message) {
+    try {
+        const token = await getBackendAuthToken().catch(() => null);
+        if (!token) return;
+
+        const response = await fetch(`${BACKEND_BASE_URL}/api/notifications/send`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`
+            },
+            body: JSON.stringify({ userId, title, message })
+        });
+        const result = await response.json().catch(() => ({}));
+        console.log(`[Notification] Sent to ${userId}. Status:`, result);
+        return result;
+    } catch (err) {
+        console.error('[Notification] Failed to send push:', err);
+    }
+}
+
+async function notifyWalletBalanceChange(userId, type, amount, comment) {
+    try {
+        const title = type === 'credit' ? 'Wallet Credited' : 'Wallet Deducted';
+        const message = type === 'credit'
+            ? `Your wallet was credited with ₹${amount}. Details: ${comment || 'N/A'}`
+            : `₹${amount} was deducted from your wallet. Details: ${comment || 'N/A'}`;
+        await sendNotification(userId, title, message);
+    } catch (e) {
+        console.error("[Notification] Failed to notify wallet change:", e);
+    }
+}
+
+window.sendNotification = sendNotification;
+window.notifyWalletBalanceChange = notifyWalletBalanceChange;
+

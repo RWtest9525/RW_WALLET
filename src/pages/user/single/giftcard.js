@@ -45,6 +45,9 @@ const handleRedeem = async () => {
                 });
                 syncRecentTransactionsToCloud(currentUser.uid).catch(error => console.warn('Redeem background transaction sync failed:', error));
                 showNotification(`Success! Added ${formatCurrency(redeemedAmount)} to your wallet.`, false, true);
+                if (typeof window.notifyWalletBalanceChange === 'function') {
+                    window.notifyWalletBalanceChange(currentUser.uid, 'credit', redeemedAmount, `Redeemed gift code: ${code}`);
+                }
                 window.closeModal();
             } catch (e) {
                 console.error("Redeem failed:", e);

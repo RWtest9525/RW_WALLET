@@ -997,6 +997,53 @@ async function deleteNotification(d1, notificationId, deletedAt = nowMs()) {
   );
 }
 
+async function sendOneSignalPush(userId, title, message) {
+  const appId = process.env.ONESIGNAL_APP_ID || '465e22bd-8540-437b-ba7b-efa14ef4069f';
+  const apiKey = process.env.ONESIGNAL_REST_API_KEY;
+  if (!apiKey) {
+    console.warn('[OneSignal] ONESIGNAL_REST_API_KEY not configured, skipping push.');
+    return;
+  }
+
+  try {
+    const response = await fetch('https://onesignal.com/api/v1/notifications', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json; charset=utf-8',
+        'Authorization': `Basic ${apiKey}`
+      },
+      body: JSON.stringify({
+        app_id: appId,
+        include_aliases: {
+          external_id: [userId]
+        },
+        target_channel: 'push',
+        headings: { en: title },
+        contents: { en: message }
+      })
+    });
+    const result = await response.json().catch(() => ({}));
+    console.log(`[OneSignal] Push sent to ${userId}. Response:`, result);
+  } catch (err) {
+    console.error(`[OneSignal] Push failed for ${userId}:`, err);
+  }
+}
+
+async function sendNotification(d1, userId, title, message) {
+  try {
+    await createNotification(d1, {
+      title,
+      message,
+      audience: 'selected',
+      recipients: [userId]
+    });
+  } catch (err) {
+    console.error(`Failed to save notification to DB for ${userId}:`, err);
+  }
+
+  await sendOneSignalPush(userId, title, message);
+}
+
 async function putR2Object(r2, key, body, contentType = 'application/json') {
   if (!r2) throw new Error('R2 is not configured');
 
@@ -1615,6 +1662,9 @@ async function processAutoPayouts(d1) {
         verifiedAt: sub.verified_at || now
       });
 
+      // Send push and in-app notification for credited balance
+      await sendNotification(d1, sub.user_id, 'Wallet Credited', `₹${reward} added to your wallet for task: ${sub.app_name || 'Task'}.`);
+
       paidCount++;
     } catch (error) {
       console.error(`Auto-payout failed for submission ${sub.id}:`, error);
@@ -1780,6 +1830,9 @@ async function processPeriodicLiveChecksAndPayouts(d1) {
           }).catch(e => console.error(`[Day7-Payout] Firestore transaction write failed:`, e));
 
           paidStatus = 'paid';
+
+          // Notify user of Day 7 payout credit
+          await sendNotification(d1, sub.user_id, 'Wallet Credited', `₹${reward} added to your wallet for Day 7 Live Review: ${sub.app_name || 'Task'}.`);
         }
 
         await updateTaskSubmission(d1, sub.id, {
@@ -1994,6 +2047,9 @@ async function processDailyLists(d1) {
             
             sub.scraper_status = 'live_confirmed';
             sub.manual_status = 'approved';
+
+            // Send push and in-app notification to the user
+            await sendNotification(d1, sub.user_id, 'Task Approved', `Your task "${sub.app_name || 'Task'}" of ₹${sub.reward || 0} has been approved.`);
           } else {
             await d1.query(
               "UPDATE task_submissions SET scraper_status = 'not_live' WHERE id = ?",
@@ -2055,6 +2111,18 @@ async function processDailyLists(d1) {
           'INSERT INTO compiled_lists (task_id, date, compiled_at, drive_folder_id) VALUES (?, ?, ?, ?)',
           [taskDoc.id, todayDateStr, Date.now(), dateFolderId]
         );
+
+        // Notify admins about successful list compilation
+        const admins = await d1.all("SELECT id FROM users WHERE role = 'admin' OR role = 'owner' OR id = ?", [ADMIN_UID]);
+        const uniqueAdmins = Array.from(new Set(admins.map(a => a.id)));
+        for (const adminId of uniqueAdmins) {
+          await sendNotification(
+            d1,
+            adminId,
+            'Task List Compiled',
+            `List for task "${task.title || 'Task'}" (${todayDateStr}) compiled and uploaded to Google Drive.`
+          );
+        }
       } catch (driveErr) {
         console.error(`[Scheduler] Google Drive sync failed for task ${taskDoc.id}:`, driveErr);
       }
@@ -3026,6 +3094,20 @@ ${memoriesContext}`
     res.json({ ok: true, history });
   });
 
+  app.post('/api/notifications/send', requireHttpAuth, async (req, res) => {
+    const { userId, title, message } = req.body;
+    if (!userId || !title || !message) {
+      return res.status(400).json({ ok: false, error: 'MISSING_FIELDS' });
+    }
+    try {
+      await sendNotification(d1, userId, title, message);
+      res.json({ ok: true });
+    } catch (err) {
+      console.error('sendNotification endpoint failed:', err);
+      res.status(500).json({ ok: false, error: 'SEND_FAILED', message: err.message });
+    }
+  });
+
   app.get('/api/notifications', requireHttpAuth, async (req, res) => {
     const notifications = await listUserNotifications(d1, req.auth.sub, Math.min(Number(req.query.limit || 80), 200));
     res.json({ ok: true, notifications });
@@ -3050,6 +3132,19 @@ ${memoriesContext}`
     }
     const recipients = await listNotificationRecipients(d1, req.params.notificationId, Math.min(Number(req.query.limit || 1000), 3000));
     res.json({ ok: true, recipients });
+  });
+
+  app.post('/api/admin/notifications/send-daily-summary', requireHttpAuth, async (req, res) => {
+    if (!req.auth.isAdmin) {
+      return res.status(403).json({ ok: false, error: 'ADMIN_REQUIRED' });
+    }
+    try {
+      await sendDailySummaryToAdmins(d1);
+      res.json({ ok: true });
+    } catch (err) {
+      console.error('Failed to run daily summary:', err);
+      res.status(500).json({ ok: false, error: 'SUMMARY_FAILED', message: err.message });
+    }
   });
 
   app.post('/api/admin/notifications', requireHttpAuth, async (req, res) => {
@@ -4024,6 +4119,20 @@ ${memoriesContext}`
             }
           });
           updates.paidAt = now;
+
+          // Notify user of credited wallet balance
+          await sendNotification(d1, sub.user_id, 'Wallet Credited', `₹${reward} added to your wallet for task: ${sub.app_name || 'Task'}.`);
+        }
+      }
+
+      // Handle task manual status changes
+      if (updates.manualStatus && updates.manualStatus !== sub.manual_status) {
+        if (updates.manualStatus === 'approved') {
+          await sendNotification(d1, sub.user_id, 'Task Approved', `Your task "${sub.app_name || 'Task'}" of ₹${sub.reward || 0} has been approved.`);
+        } else if (updates.manualStatus === 'rejected') {
+          const isAppReview = sub.task_link && (sub.task_link.includes('play.google.com') || sub.task_link.includes('details?id='));
+          const reason = isAppReview ? "Your review has not come live on Play Store." : "Your task is not approved.";
+          await sendNotification(d1, sub.user_id, 'Task Rejected', `Your task "${sub.app_name || 'Task'}" of ₹${sub.reward || 0} has been rejected. Reason: ${reason}`);
         }
       }
 
@@ -5312,6 +5421,36 @@ function registerSocketHandlers(io, { d1 }) {
           adminSockets.forEach((socketId) => {
             io.to(socketId).emit('new_message', chatMessage);
           });
+
+          // Send push notification if admin does not have this room open
+          if (!adminRooms.has(roomId)) {
+            (async () => {
+              try {
+                const senderUser = await d1.first('SELECT name, parent_admin FROM users WHERE id = ? LIMIT 1', [socket.user.sub]);
+                const parentAdmin = senderUser?.parent_admin || ADMIN_UID;
+                const senderName = senderUser?.name || userMeta.userName || 'User';
+                
+                await sendNotification(d1, parentAdmin, 'New Support Message', `From ${senderName}: "${chatMessage.message.slice(0, 100)}"`);
+                if (parentAdmin !== ADMIN_UID) {
+                  await sendNotification(d1, ADMIN_UID, 'New Support Message', `From ${senderName}: "${chatMessage.message.slice(0, 100)}"`);
+                }
+              } catch (err) {
+                console.error('Support chat admin notification failed:', err);
+              }
+            })();
+          }
+        } else {
+          // Send push notification if user does not have this room open
+          if (!userRooms.has(roomId)) {
+            (async () => {
+              try {
+                const recipientUserId = roomId.replace(/^support_/, '');
+                await sendNotification(d1, recipientUserId, 'Support Team Reply', `Admin: "${chatMessage.message.slice(0, 100)}"`);
+              } catch (err) {
+                console.error('Support chat user notification failed:', err);
+              }
+            })();
+          }
         }
         upsertChatRoom(d1, {
             roomId,
@@ -5363,6 +5502,64 @@ async function createCloudflareWalletService() {
   }, 60 * 60 * 1000);
   cleanupTimer.unref?.();
 
+  async function sendDailySummaryToAdmins(d1) {
+    try {
+      const now = new Date();
+      const istOffset = 330 * 60 * 1000;
+      const istNow = new Date(now.getTime() + istOffset);
+      const istMidnight = new Date(istNow.getFullYear(), istNow.getMonth(), istNow.getDate());
+      const startTimestamp = istMidnight.getTime() - istOffset;
+
+      const transactions = await d1.all(
+        `SELECT t.amount, u.parent_admin
+         FROM transactions t
+         JOIN users u ON t.user_id = u.id
+         WHERE t.type = 'credit'
+           AND t.timestamp >= ?
+           AND (t.details_json LIKE '%task_payout%' OR t.details_json LIKE '%task_auto_payout%' OR t.details_json LIKE '%task_manual_payout%' OR t.details_json LIKE '%task_payout_day7%')`,
+        [startTimestamp]
+      );
+
+      let overallTotal = 0;
+      const subAdminTotals = {};
+
+      for (const tx of transactions) {
+        const amt = Number(tx.amount || 0);
+        overallTotal += amt;
+        const parentAdmin = tx.parent_admin || tx.parentAdmin || '';
+        if (parentAdmin) {
+          subAdminTotals[parentAdmin] = (subAdminTotals[parentAdmin] || 0) + amt;
+        }
+      }
+
+      const admins = await d1.all("SELECT id, role FROM users WHERE role = 'admin' OR role = 'owner' OR id = ?", [ADMIN_UID]);
+      const uniqueAdmins = Array.from(new Set(admins.map(a => a.id)));
+
+      for (const adminId of uniqueAdmins) {
+        const adminRecord = admins.find(a => a.id === adminId);
+        const isAdminOwner = adminId === ADMIN_UID || (adminRecord && adminRecord.role === 'owner');
+        if (isAdminOwner) {
+          await sendNotification(
+            d1,
+            adminId,
+            'Daily Payout Summary',
+            `Overall total funds sent to users for task approvals today: ₹${overallTotal.toFixed(2)}.`
+          );
+        } else {
+          const subAdminTotal = subAdminTotals[adminId] || 0;
+          await sendNotification(
+            d1,
+            adminId,
+            'Daily Payout Summary',
+            `Total funds sent to users for task approvals today from your panel: ₹${subAdminTotal.toFixed(2)}.`
+          );
+        }
+      }
+    } catch (err) {
+      console.error('Failed to send daily summary to admins:', err);
+    }
+  }
+
   // Schedule auto-payout at 8 PM IST daily
   const scheduleAutoPayoutAt8PM = () => {
     const now = new Date();
@@ -5374,9 +5571,15 @@ async function createCloudflareWalletService() {
     setTimeout(() => {
       processAutoPayouts(d1).catch(e => console.error('Scheduled auto-payout failed:', e));
       processPeriodicLiveChecksAndPayouts(d1).catch(e => console.error('Scheduled periodic live checks failed:', e));
+      setTimeout(() => {
+        sendDailySummaryToAdmins(d1).catch(e => console.error('Daily summary failed:', e));
+      }, 60000);
       setInterval(() => {
         processAutoPayouts(d1).catch(e => console.error('Daily auto-payout failed:', e));
         processPeriodicLiveChecksAndPayouts(d1).catch(e => console.error('Daily periodic live checks failed:', e));
+        setTimeout(() => {
+          sendDailySummaryToAdmins(d1).catch(e => console.error('Daily summary failed:', e));
+        }, 60000);
       }, 24 * 60 * 60 * 1000).unref?.();
     }, delay).unref?.();
   };
@@ -5415,7 +5618,10 @@ async function createCloudflareWalletService() {
     resolveSyncAuditLog: (logId) => resolveSyncAuditLog(d1, logId),
     getSyncAuditSummary: () => getSyncAuditSummary(d1),
     processAutoPayouts: () => processAutoPayouts(d1),
-    processPeriodicLiveChecksAndPayouts: () => processPeriodicLiveChecksAndPayouts(d1)
+    processPeriodicLiveChecksAndPayouts: () => processPeriodicLiveChecksAndPayouts(d1),
+    sendNotification: (userId, title, message) => sendNotification(d1, userId, title, message),
+    sendOneSignalPush,
+    sendDailySummaryToAdmins: () => sendDailySummaryToAdmins(d1)
   };
 }
 
@@ -5444,5 +5650,8 @@ module.exports = {
   resolveSyncAuditLog,
   getSyncAuditSummary,
   processAutoPayouts,
-  processPeriodicLiveChecksAndPayouts
+  processPeriodicLiveChecksAndPayouts,
+  sendNotification,
+  sendOneSignalPush,
+  sendDailySummaryToAdmins
 };
