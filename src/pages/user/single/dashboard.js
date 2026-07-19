@@ -3237,14 +3237,30 @@ const showUserTaskPage = () => {
 
             // Temp debug alert to find APK bridge
             (() => {
-                const defaultKeys = new Set(['window', 'document', 'location', 'chrome', 'navigator', 'screen', 'history', 'performance', 'speechSynthesis', 'caches', 'localStorage', 'sessionStorage', 'indexedDB', 'crypto', 'visualViewport', 'webkit', 'io', 'OneSignal', 'OneSignalDeferred', 'OneSignalManager', 'db', 'appId', 'currentUser', 'currentUserData', 'ADMIN_UID', 'appConfigCache', 'firebase']);
-                const customKeys = Object.keys(window).filter(k => !defaultKeys.has(k) && isNaN(k) && window[k] !== null);
-                let webkitKeys = [];
-                if (window.webkit && window.webkit.messageHandlers) {
-                    webkitKeys = Object.keys(window.webkit.messageHandlers);
+                let webToApkProps = [];
+                if (window.WebToApk) {
+                    try {
+                        webToApkProps = Object.getOwnPropertyNames(window.WebToApk);
+                        if (webToApkProps.length === 0) {
+                            webToApkProps = Object.keys(window.WebToApk);
+                        }
+                    } catch (e) {
+                        webToApkProps = ['Error reading keys'];
+                    }
                 }
-                const msg = `Window Keys: ${customKeys.join(', ') || 'None'}\nWebkit Keys: ${webkitKeys.join(', ') || 'None'}`;
-                alert("WebView Debug Details:\n" + msg);
+                let authProps = [];
+                if (window.WebToApkAuth) {
+                    try {
+                        authProps = Object.getOwnPropertyNames(window.WebToApkAuth);
+                        if (authProps.length === 0) {
+                            authProps = Object.keys(window.WebToApkAuth);
+                        }
+                    } catch (e) {
+                        authProps = ['Error reading keys'];
+                    }
+                }
+                const msg = `WebToApk Keys:\n${webToApkProps.join('\n') || 'None'}\n\nWebToApkAuth Keys:\n${authProps.join('\n') || 'None'}`;
+                alert("WebView debug details:\n" + msg);
             })();
 
             // Notification permission gate (only for normal users)
