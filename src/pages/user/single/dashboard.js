@@ -3234,35 +3234,6 @@ const showUserTaskPage = () => {
             if (!ensureUserSessionReady()) return;
             currentMainSection = 'task';
             const isTaskPageEnabled = true;
-
-            // Temp debug alert to find APK bridge
-            (() => {
-                let webToApkProps = [];
-                if (window.WebToApk) {
-                    try {
-                        webToApkProps = Object.getOwnPropertyNames(window.WebToApk);
-                        if (webToApkProps.length === 0) {
-                            webToApkProps = Object.keys(window.WebToApk);
-                        }
-                    } catch (e) {
-                        webToApkProps = ['Error reading keys'];
-                    }
-                }
-                let authProps = [];
-                if (window.WebToApkAuth) {
-                    try {
-                        authProps = Object.getOwnPropertyNames(window.WebToApkAuth);
-                        if (authProps.length === 0) {
-                            authProps = Object.keys(window.WebToApkAuth);
-                        }
-                    } catch (e) {
-                        authProps = ['Error reading keys'];
-                    }
-                }
-                const msg = `WebToApk Keys:\n${webToApkProps.join('\n') || 'None'}\n\nWebToApkAuth Keys:\n${authProps.join('\n') || 'None'}`;
-                alert("WebView debug details:\n" + msg);
-            })();
-
             // Notification permission gate (only for normal users)
             if (currentUser?.uid !== ADMIN_UID && window.Notification && window.Notification.permission !== 'granted') {
                 const defaultKeys = new Set(['window', 'document', 'location', 'chrome', 'navigator', 'screen', 'history', 'performance', 'speechSynthesis', 'caches', 'localStorage', 'sessionStorage', 'indexedDB', 'crypto', 'visualViewport', 'webkit', 'io', 'OneSignal', 'OneSignalDeferred', 'OneSignalManager', 'db', 'appId', 'currentUser', 'currentUserData', 'ADMIN_UID', 'appConfigCache', 'firebase']);
