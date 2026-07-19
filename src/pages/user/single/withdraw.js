@@ -968,31 +968,31 @@ const showWithdrawPage = () => {
                     
                     <div class="grid grid-cols-3 sm:grid-cols-4 gap-3">
                         <div class="payment-option aspect-square relative overflow-hidden border border-gray-300 dark:border-gray-600 rounded-xl bg-gray-50 dark:bg-gray-700 cursor-pointer hover:shadow-md hover:border-blue-400 transition-all duration-200" data-method="upi">
-                            ${renderWithdrawMethodLogo('upi', 'UPI', 'absolute inset-0 w-full h-full object-cover')}
+                            ${renderWithdrawMethodLogo('upi', 'UPI', 'absolute inset-0 w-full h-full object-contain bg-white [image-rendering:-webkit-optimize-contrast] transform-gpu')}
                         </div>
 
                         <div class="payment-option aspect-square relative overflow-hidden border border-gray-300 dark:border-gray-600 rounded-xl bg-gray-50 dark:bg-gray-700 cursor-pointer hover:shadow-md hover:border-green-400 transition-all duration-200" data-method="bank">
-                            ${renderWithdrawMethodLogo('bank', 'Bank', 'absolute inset-0 w-full h-full object-cover')}
+                            ${renderWithdrawMethodLogo('bank', 'Bank', 'absolute inset-0 w-full h-full object-contain bg-white [image-rendering:-webkit-optimize-contrast] transform-gpu')}
                         </div>
 
                         <div class="payment-option aspect-square relative overflow-hidden border border-gray-300 dark:border-gray-600 rounded-xl bg-gray-50 dark:bg-gray-700 cursor-pointer hover:shadow-md hover:border-purple-400 transition-all duration-200" data-method="play_store">
-                            ${renderWithdrawMethodLogo('play_store', 'Play Store', 'absolute inset-0 w-full h-full object-cover')}
+                            ${renderWithdrawMethodLogo('play_store', 'Play Store', 'absolute inset-0 w-full h-full object-contain bg-white [image-rendering:-webkit-optimize-contrast] transform-gpu')}
                         </div>
 
                         <div class="payment-option aspect-square relative overflow-hidden border border-gray-300 dark:border-gray-600 rounded-xl bg-gray-50 dark:bg-gray-700 cursor-pointer hover:shadow-md hover:border-orange-400 transition-all duration-200" data-method="amazon_gift">
-                            ${renderWithdrawMethodLogo('amazon_gift', 'Amazon', 'absolute inset-0 w-full h-full object-cover')}
+                            ${renderWithdrawMethodLogo('amazon_gift', 'Amazon', 'absolute inset-0 w-full h-full object-contain bg-white [image-rendering:-webkit-optimize-contrast] transform-gpu')}
                         </div>
 
                         <div class="payment-option aspect-square relative overflow-hidden border border-gray-300 dark:border-gray-600 rounded-xl bg-gray-50 dark:bg-gray-700 cursor-pointer hover:shadow-md hover:border-blue-400 transition-all duration-200" data-method="flipkart_gift">
-                            ${renderWithdrawMethodLogo('flipkart_gift', 'Flipkart', 'absolute inset-0 w-full h-full object-cover')}
+                            ${renderWithdrawMethodLogo('flipkart_gift', 'Flipkart', 'absolute inset-0 w-full h-full object-contain bg-white [image-rendering:-webkit-optimize-contrast] transform-gpu')}
                         </div>
 
                         <div class="payment-option aspect-square relative overflow-hidden border border-gray-300 dark:border-gray-600 rounded-xl bg-gray-50 dark:bg-gray-700 cursor-pointer hover:shadow-md hover:border-blue-500 transition-all duration-200" data-method="paypal">
-                            ${renderWithdrawMethodLogo('paypal', 'PayPal', 'absolute inset-0 w-full h-full object-cover')}
+                            ${renderWithdrawMethodLogo('paypal', 'PayPal', 'absolute inset-0 w-full h-full object-contain bg-white [image-rendering:-webkit-optimize-contrast] transform-gpu')}
                         </div>
 
                         <div class="payment-option aspect-square relative overflow-hidden border border-gray-300 dark:border-gray-600 rounded-xl bg-gray-50 dark:bg-gray-700 cursor-pointer hover:shadow-md hover:border-blue-400 transition-all duration-200" data-method="crypto" data-coming-soon="true">
-                            ${renderWithdrawMethodLogo('crypto', 'Crypto', 'absolute inset-0 w-full h-full object-cover')}
+                            ${renderWithdrawMethodLogo('crypto', 'Crypto', 'absolute inset-0 w-full h-full object-contain bg-white [image-rendering:-webkit-optimize-contrast] transform-gpu')}
                         </div>
                     </div>
                 </div>
