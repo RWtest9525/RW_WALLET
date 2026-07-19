@@ -3442,7 +3442,8 @@ const preloadLogoImages = () => {
                 '/withdraw_amazon.png',
                 '/withdraw_flipkart.png',
                 '/withdraw_paypal.png',
-                '/withdraw_crypto.png'
+                '/withdraw_crypto.png',
+                '/withdraw_methods_layout.jpg'
             ])];
             const idleLogoUrls = [...new Set([
                 REFER_ICON_URL,

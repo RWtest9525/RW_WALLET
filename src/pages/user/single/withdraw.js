@@ -960,40 +960,18 @@ const showWithdrawPage = () => {
 
             const content = `
                 ${getPageHeader('Withdraw Funds')}
-                <div class="max-w-md mx-auto bg-white dark:bg-gray-800 p-6 rounded-xl shadow-md space-y-6">
-                    <div class="text-center">
-                        <h3 class="text-lg font-semibold">Choose Withdrawal Method</h3>
-                        <p class="text-sm text-gray-500 dark:text-gray-400 mt-2">Select how you want to receive your funds</p>
-                    </div>
+                <div class="max-w-xl mx-auto bg-white dark:bg-gray-800 rounded-3xl shadow-lg overflow-hidden relative select-none">
+                    <img src="/withdraw_methods_layout.jpg" class="w-full h-auto block [image-rendering:-webkit-optimize-contrast]" alt="Withdraw Methods" loading="eager" fetchpriority="high">
                     
-                    <div class="grid grid-cols-3 sm:grid-cols-4 gap-3">
-                        <div class="payment-option aspect-square relative overflow-hidden border border-gray-300 dark:border-gray-600 rounded-xl bg-gray-50 dark:bg-gray-700 cursor-pointer hover:shadow-md hover:border-blue-400 transition-all duration-200" data-method="upi">
-                            ${renderWithdrawMethodLogo('upi', 'UPI', 'absolute inset-0 w-full h-full object-contain bg-white [image-rendering:-webkit-optimize-contrast] transform-gpu')}
-                        </div>
-
-                        <div class="payment-option aspect-square relative overflow-hidden border border-gray-300 dark:border-gray-600 rounded-xl bg-gray-50 dark:bg-gray-700 cursor-pointer hover:shadow-md hover:border-green-400 transition-all duration-200" data-method="bank">
-                            ${renderWithdrawMethodLogo('bank', 'Bank', 'absolute inset-0 w-full h-full object-contain bg-white [image-rendering:-webkit-optimize-contrast] transform-gpu')}
-                        </div>
-
-                        <div class="payment-option aspect-square relative overflow-hidden border border-gray-300 dark:border-gray-600 rounded-xl bg-gray-50 dark:bg-gray-700 cursor-pointer hover:shadow-md hover:border-purple-400 transition-all duration-200" data-method="play_store">
-                            ${renderWithdrawMethodLogo('play_store', 'Play Store', 'absolute inset-0 w-full h-full object-contain bg-white [image-rendering:-webkit-optimize-contrast] transform-gpu')}
-                        </div>
-
-                        <div class="payment-option aspect-square relative overflow-hidden border border-gray-300 dark:border-gray-600 rounded-xl bg-gray-50 dark:bg-gray-700 cursor-pointer hover:shadow-md hover:border-orange-400 transition-all duration-200" data-method="amazon_gift">
-                            ${renderWithdrawMethodLogo('amazon_gift', 'Amazon', 'absolute inset-0 w-full h-full object-contain bg-white [image-rendering:-webkit-optimize-contrast] transform-gpu')}
-                        </div>
-
-                        <div class="payment-option aspect-square relative overflow-hidden border border-gray-300 dark:border-gray-600 rounded-xl bg-gray-50 dark:bg-gray-700 cursor-pointer hover:shadow-md hover:border-blue-400 transition-all duration-200" data-method="flipkart_gift">
-                            ${renderWithdrawMethodLogo('flipkart_gift', 'Flipkart', 'absolute inset-0 w-full h-full object-contain bg-white [image-rendering:-webkit-optimize-contrast] transform-gpu')}
-                        </div>
-
-                        <div class="payment-option aspect-square relative overflow-hidden border border-gray-300 dark:border-gray-600 rounded-xl bg-gray-50 dark:bg-gray-700 cursor-pointer hover:shadow-md hover:border-blue-500 transition-all duration-200" data-method="paypal">
-                            ${renderWithdrawMethodLogo('paypal', 'PayPal', 'absolute inset-0 w-full h-full object-contain bg-white [image-rendering:-webkit-optimize-contrast] transform-gpu')}
-                        </div>
-
-                        <div class="payment-option aspect-square relative overflow-hidden border border-gray-300 dark:border-gray-600 rounded-xl bg-gray-50 dark:bg-gray-700 cursor-pointer hover:shadow-md hover:border-blue-400 transition-all duration-200" data-method="crypto" data-coming-soon="true">
-                            ${renderWithdrawMethodLogo('crypto', 'Crypto', 'absolute inset-0 w-full h-full object-contain bg-white [image-rendering:-webkit-optimize-contrast] transform-gpu')}
-                        </div>
+                    <!-- Clickable hotspot overlays -->
+                    <div class="absolute inset-0">
+                        <div class="payment-option absolute cursor-pointer rounded-2xl hover:bg-black/5 active:bg-black/10 transition-all duration-150" style="left: 6.35%; top: 28.07%; width: 20.5%; height: 29.41%;" data-method="upi" title="UPI"></div>
+                        <div class="payment-option absolute cursor-pointer rounded-2xl hover:bg-black/5 active:bg-black/10 transition-all duration-150" style="left: 28.81%; top: 28.07%; width: 20.5%; height: 29.41%;" data-method="bank" title="Bank Transfer"></div>
+                        <div class="payment-option absolute cursor-pointer rounded-2xl hover:bg-black/5 active:bg-black/10 transition-all duration-150" style="left: 51.27%; top: 28.07%; width: 20.5%; height: 29.41%;" data-method="play_store" title="Google Play Gift Card"></div>
+                        <div class="payment-option absolute cursor-pointer rounded-2xl hover:bg-black/5 active:bg-black/10 transition-all duration-150" style="left: 73.73%; top: 28.07%; width: 20.5%; height: 29.41%;" data-method="amazon_gift" title="Amazon Gift Card"></div>
+                        <div class="payment-option absolute cursor-pointer rounded-2xl hover:bg-black/5 active:bg-black/10 transition-all duration-150" style="left: 6.35%; top: 60.16%; width: 20.5%; height: 29.41%;" data-method="flipkart_gift" title="Flipkart Gift Card"></div>
+                        <div class="payment-option absolute cursor-pointer rounded-2xl hover:bg-black/5 active:bg-black/10 transition-all duration-150" style="left: 28.81%; top: 60.16%; width: 20.5%; height: 29.41%;" data-method="paypal" title="PayPal"></div>
+                        <div class="payment-option absolute cursor-pointer rounded-2xl hover:bg-black/5 active:bg-black/10 transition-all duration-150" style="left: 51.27%; top: 60.16%; width: 20.5%; height: 29.41%;" data-method="crypto" data-coming-soon="true" title="Crypto Currency"></div>
                     </div>
                 </div>
                 ${getPageFooter()}`;
