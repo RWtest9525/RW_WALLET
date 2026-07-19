@@ -967,64 +967,48 @@ const showWithdrawPage = () => {
                     </div>
                     
                     <div class="grid grid-cols-3 sm:grid-cols-4 gap-3">
-                        <div class="payment-option border border-gray-300 dark:border-gray-600 rounded-xl p-3 bg-gray-50 dark:bg-gray-700 flex items-center justify-center cursor-pointer hover:shadow-md hover:border-blue-400 transition-all duration-200" data-method="upi">
-                            <div class="w-12 h-12 flex items-center justify-center">
-                                ${renderWithdrawMethodLogo('upi', 'UPI')}
-                            </div>
+                        <div class="payment-option aspect-square border border-gray-300 dark:border-gray-600 rounded-xl p-2 bg-gray-50 dark:bg-gray-700 flex items-center justify-center cursor-pointer hover:shadow-md hover:border-blue-400 transition-all duration-200" data-method="upi">
+                            ${renderWithdrawMethodLogo('upi', 'UPI')}
                         </div>
 
-                        <div class="payment-option border border-gray-300 dark:border-gray-600 rounded-xl p-3 bg-gray-50 dark:bg-gray-700 flex items-center justify-center cursor-pointer hover:shadow-md hover:border-green-400 transition-all duration-200" data-method="bank">
-                            <div class="w-12 h-12 flex items-center justify-center">
-                                ${renderWithdrawMethodLogo('bank', 'Bank')}
-                            </div>
+                        <div class="payment-option aspect-square border border-gray-300 dark:border-gray-600 rounded-xl p-2 bg-gray-50 dark:bg-gray-700 flex items-center justify-center cursor-pointer hover:shadow-md hover:border-green-400 transition-all duration-200" data-method="bank">
+                            ${renderWithdrawMethodLogo('bank', 'Bank')}
                         </div>
 
-                        <div class="payment-option border border-gray-300 dark:border-gray-600 rounded-xl p-3 bg-gray-50 dark:bg-gray-700 flex items-center justify-center cursor-pointer hover:shadow-md hover:border-purple-400 transition-all duration-200" data-method="play_store">
-                            <div class="w-12 h-12 flex items-center justify-center">
-                                ${renderWithdrawMethodLogo('play_store', 'Play Store')}
-                            </div>
+                        <div class="payment-option aspect-square border border-gray-300 dark:border-gray-600 rounded-xl p-2 bg-gray-50 dark:bg-gray-700 flex items-center justify-center cursor-pointer hover:shadow-md hover:border-purple-400 transition-all duration-200" data-method="play_store">
+                            ${renderWithdrawMethodLogo('play_store', 'Play Store')}
                         </div>
 
-                        <div class="payment-option border border-gray-300 dark:border-gray-600 rounded-xl p-3 bg-gray-50 dark:bg-gray-700 flex items-center justify-center cursor-pointer hover:shadow-md hover:border-orange-400 transition-all duration-200" data-method="amazon_gift">
-                            <div class="w-12 h-12 flex items-center justify-center">
-                                ${renderWithdrawMethodLogo('amazon_gift', 'Amazon')}
-                            </div>
+                        <div class="payment-option aspect-square border border-gray-300 dark:border-gray-600 rounded-xl p-2 bg-gray-50 dark:bg-gray-700 flex items-center justify-center cursor-pointer hover:shadow-md hover:border-orange-400 transition-all duration-200" data-method="amazon_gift">
+                            ${renderWithdrawMethodLogo('amazon_gift', 'Amazon')}
                         </div>
 
-                        <div class="payment-option border border-gray-300 dark:border-gray-600 rounded-xl p-3 bg-gray-50 dark:bg-gray-700 flex items-center justify-center cursor-pointer hover:shadow-md hover:border-blue-400 transition-all duration-200" data-method="flipkart_gift">
-                            <div class="w-12 h-12 flex items-center justify-center">
-                                ${renderWithdrawMethodLogo('flipkart_gift', 'Flipkart')}
-                            </div>
+                        <div class="payment-option aspect-square border border-gray-300 dark:border-gray-600 rounded-xl p-2 bg-gray-50 dark:bg-gray-700 flex items-center justify-center cursor-pointer hover:shadow-md hover:border-blue-400 transition-all duration-200" data-method="flipkart_gift">
+                            ${renderWithdrawMethodLogo('flipkart_gift', 'Flipkart')}
                         </div>
 
-                        <div class="payment-option border border-gray-300 dark:border-gray-600 rounded-xl p-3 bg-gray-50 dark:bg-gray-700 flex items-center justify-center cursor-pointer hover:shadow-md hover:border-blue-500 transition-all duration-200" data-method="paypal">
-                            <div class="w-12 h-12 flex items-center justify-center">
-                                ${renderWithdrawMethodLogo('paypal', 'PayPal')}
-                            </div>
+                        <div class="payment-option aspect-square border border-gray-300 dark:border-gray-600 rounded-xl p-2 bg-gray-50 dark:bg-gray-700 flex items-center justify-center cursor-pointer hover:shadow-md hover:border-blue-500 transition-all duration-200" data-method="paypal">
+                            ${renderWithdrawMethodLogo('paypal', 'PayPal')}
                         </div>
 
-                        <div class="payment-option coming-soon border border-gray-300 dark:border-gray-600 rounded-xl p-3 bg-gray-50 dark:bg-gray-700 flex items-center justify-center cursor-not-allowed opacity-70" data-method="crypto">
-                            <div class="w-12 h-12 flex items-center justify-center">
-                                ${renderWithdrawMethodLogo('crypto', 'Crypto')}
-                            </div>
+                        <div class="payment-option aspect-square border border-gray-300 dark:border-gray-600 rounded-xl p-2 bg-gray-50 dark:bg-gray-700 flex items-center justify-center cursor-pointer hover:shadow-md hover:border-blue-400 transition-all duration-200" data-method="crypto" data-coming-soon="true">
+                            ${renderWithdrawMethodLogo('crypto', 'Crypto')}
                         </div>
                     </div>
                 </div>
                 ${getPageFooter()}`;
             showPage(content);
 
-            document.querySelectorAll('.payment-option:not(.coming-soon)').forEach(option => {
+            document.querySelectorAll('.payment-option').forEach(option => {
                 option.addEventListener('click', function () {
+                    if (this.dataset.comingSoon === 'true') {
+                        showNotification('Coming soon...', true);
+                        return;
+                    }
                     document.querySelectorAll('.payment-option').forEach(opt => opt.classList.remove('selected'));
                     this.classList.add('selected');
                     const method = this.dataset.method;
                     showWithdrawAmountPage(method);
-                });
-            });
-
-            document.querySelectorAll('.payment-option.coming-soon').forEach(option => {
-                option.addEventListener('click', function () {
-                    showNotification('Coming soon...', true);
                 });
             });
 
