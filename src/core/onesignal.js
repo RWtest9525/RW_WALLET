@@ -7,21 +7,29 @@ export const OneSignalManager = {
     init: () => {
         window.OneSignalDeferred = window.OneSignalDeferred || [];
         window.OneSignalDeferred.push(async function(OneSignal) {
-            console.log("Initializing OneSignal SDK...");
-            await OneSignal.init({
-                appId: ONESIGNAL_APP_ID,
-                serviceWorkerPath: "firebase-messaging-sw.js",
-                allowLocalhostAsSecureOrigin: true,
-            });
+            try {
+                console.log("Initializing OneSignal SDK...");
+                await OneSignal.init({
+                    appId: ONESIGNAL_APP_ID,
+                    serviceWorkerPath: "firebase-messaging-sw.js",
+                    allowLocalhostAsSecureOrigin: true,
+                });
+                console.log("OneSignal SDK initialized successfully!");
+            } catch (err) {
+                console.error("OneSignal init error:", err);
+                alert("OneSignal init error: " + err.message);
+            }
 
             // Register push subscription observer
-            OneSignal.User.PushSubscription.addEventListener("change", (event) => {
-                console.log("OneSignal Push Subscription changed:", event);
+            try {
+                OneSignal.User.PushSubscription.addEventListener("change", (event) => {
+                    console.log("OneSignal Push Subscription changed:", event);
+                    OneSignalManager.checkSubscriptionState(OneSignal);
+                });
                 OneSignalManager.checkSubscriptionState(OneSignal);
-            });
-
-            // Evaluate immediately at observer-registration time
-            OneSignalManager.checkSubscriptionState(OneSignal);
+            } catch (err) {
+                console.error("OneSignal subscription observer error:", err);
+            }
         });
     },
 
@@ -56,8 +64,15 @@ export const OneSignalManager = {
         window.OneSignalDeferred = window.OneSignalDeferred || [];
         window.OneSignalDeferred.push(async function(OneSignal) {
             if (userId) {
-                console.log("OneSignal logging in external user:", userId);
-                await OneSignal.login(userId);
+                try {
+                    console.log("OneSignal logging in external user:", userId);
+                    alert("OneSignal calling login for user: " + userId);
+                    await OneSignal.login(userId);
+                    alert("OneSignal login completed successfully!");
+                } catch (err) {
+                    console.error("OneSignal login error:", err);
+                    alert("OneSignal login error: " + err.message);
+                }
             }
         });
     },
