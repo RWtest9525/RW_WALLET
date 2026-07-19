@@ -961,13 +961,10 @@ const showWithdrawPage = () => {
             const content = `
                 <style>
                     .payment-option-container .payment-option {
-                        border: 2px solid #e2e8f0;
+                        border: 2px solid transparent;
                         transition: all 0.15s ease-in-out;
                         -webkit-tap-highlight-color: transparent;
                         background-color: transparent !important;
-                    }
-                    .dark .payment-option-container .payment-option {
-                        border-color: #4b5563;
                     }
                     .payment-option-container .payment-option:hover {
                         border-color: rgba(59, 130, 246, 0.6) !important;
@@ -979,18 +976,20 @@ const showWithdrawPage = () => {
                     }
                 </style>
                 ${getPageHeader('Withdraw Funds')}
-                <div class="max-w-xl mx-auto relative select-none w-full payment-option-container" style="aspect-ratio: 1024 / 748;">
-                    <img src="/withdraw_methods_layout.jpg" class="w-full h-auto block [image-rendering:-webkit-optimize-contrast]" alt="Withdraw Methods" loading="eager" fetchpriority="high">
-                    
-                    <!-- Clickable hotspot overlays -->
-                    <div class="absolute inset-0">
-                        <div class="payment-option absolute cursor-pointer rounded-2xl" style="left: 6.35%; top: 27.14%; width: 20.5%; height: 28.88%;" data-method="upi" title="UPI"></div>
-                        <div class="payment-option absolute cursor-pointer rounded-2xl" style="left: 28.81%; top: 27.14%; width: 20.5%; height: 28.88%;" data-method="bank" title="Bank Transfer"></div>
-                        <div class="payment-option absolute cursor-pointer rounded-2xl" style="left: 51.27%; top: 27.14%; width: 20.5%; height: 28.88%;" data-method="play_store" title="Google Play Gift Card"></div>
-                        <div class="payment-option absolute cursor-pointer rounded-2xl" style="left: 73.73%; top: 27.14%; width: 20.5%; height: 28.88%;" data-method="amazon_gift" title="Amazon Gift Card"></div>
-                        <div class="payment-option absolute cursor-pointer rounded-2xl" style="left: 6.35%; top: 59.49%; width: 20.5%; height: 28.88%;" data-method="flipkart_gift" title="Flipkart Gift Card"></div>
-                        <div class="payment-option absolute cursor-pointer rounded-2xl" style="left: 28.81%; top: 59.49%; width: 20.5%; height: 28.88%;" data-method="paypal" title="PayPal"></div>
-                        <div class="payment-option absolute cursor-pointer rounded-2xl" style="left: 51.27%; top: 59.49%; width: 20.5%; height: 28.88%;" data-method="crypto" data-coming-soon="true" title="Crypto Currency"></div>
+                <div class="max-w-xl mx-auto relative select-none w-full payment-option-container rounded-3xl border border-gray-100 dark:border-gray-850 shadow-md overflow-hidden bg-white dark:bg-gray-800" style="aspect-ratio: 1024 / 748;">
+                    <div class="absolute inset-0 scale-[1.08] origin-center transform-gpu">
+                        <img src="/withdraw_methods_layout.jpg" class="w-full h-full object-cover [image-rendering:-webkit-optimize-contrast]" alt="Withdraw Methods" loading="eager" fetchpriority="high">
+                        
+                        <!-- Clickable hotspot overlays -->
+                        <div class="absolute inset-0">
+                            <div class="payment-option absolute cursor-pointer rounded-2xl" style="left: 6.35%; top: 27.14%; width: 20.5%; height: 28.88%;" data-method="upi" title="UPI"></div>
+                            <div class="payment-option absolute cursor-pointer rounded-2xl" style="left: 28.81%; top: 27.14%; width: 20.5%; height: 28.88%;" data-method="bank" title="Bank Transfer"></div>
+                            <div class="payment-option absolute cursor-pointer rounded-2xl" style="left: 51.27%; top: 27.14%; width: 20.5%; height: 28.88%;" data-method="play_store" title="Google Play Gift Card"></div>
+                            <div class="payment-option absolute cursor-pointer rounded-2xl" style="left: 73.73%; top: 27.14%; width: 20.5%; height: 28.88%;" data-method="amazon_gift" title="Amazon Gift Card"></div>
+                            <div class="payment-option absolute cursor-pointer rounded-2xl" style="left: 6.35%; top: 59.49%; width: 20.5%; height: 28.88%;" data-method="flipkart_gift" title="Flipkart Gift Card"></div>
+                            <div class="payment-option absolute cursor-pointer rounded-2xl" style="left: 28.81%; top: 59.49%; width: 20.5%; height: 28.88%;" data-method="paypal" title="PayPal"></div>
+                            <div class="payment-option absolute cursor-pointer rounded-2xl" style="left: 51.27%; top: 59.49%; width: 20.5%; height: 28.88%;" data-method="crypto" data-coming-soon="true" title="Crypto Currency"></div>
+                        </div>
                     </div>
                 </div>
                 ${getPageFooter()}`;
