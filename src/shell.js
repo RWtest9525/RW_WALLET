@@ -138,7 +138,7 @@ root.outerHTML = String.raw`
                         <svg class="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"></path></svg>
                     </button>
                     <button id="notification-header-btn" class="relative h-12 w-12 rounded-2xl bg-blue-50 dark:bg-blue-900/30 border border-blue-100 dark:border-blue-800 p-2 shadow-sm hover:scale-105 transition" title="Notifications">
-                        <img src="https://cdn-icons-png.flaticon.com/512/1827/1827370.png" alt="Notifications" class="h-full w-full object-contain" loading="eager" fetchpriority="high" decoding="async">
+                        <img src="/notification_bell.png" alt="Notifications" class="h-full w-full object-contain" loading="eager" fetchpriority="high" decoding="async">
                         <span id="notification-unread-badge" class="hidden absolute -right-1 -top-1 min-w-5 h-5 rounded-full bg-red-600 px-1.5 text-center text-[10px] font-black leading-5 text-white shadow">0</span>
                     </button>
                 </div>

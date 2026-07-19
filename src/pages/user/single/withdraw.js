@@ -1022,6 +1022,12 @@ const showWithdrawPage = () => {
                 });
             });
 
+            document.querySelectorAll('.payment-option.coming-soon').forEach(option => {
+                option.addEventListener('click', function () {
+                    showNotification('Coming soon...', true);
+                });
+            });
+
             loadUserPendingWithdrawalsMerged(currentUser.uid)
                 .then((pendingWithdrawals) => {
                     const pendingWithdrawalCount = pendingWithdrawals.length;

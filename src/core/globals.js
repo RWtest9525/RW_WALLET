@@ -90,7 +90,7 @@ window.ADMIN_ICON_URL = 'https://cdn-icons-png.flaticon.com/512/3135/3135715.png
 window.TASK_ICON_URL = 'https://cdn-icons-png.flaticon.com/512/3176/3176366.png';
 window.CHAT_ICON_URL = 'https://cdn-icons-png.flaticon.com/512/5962/5962463.png';
 window.SETTINGS_ICON_URL = 'https://cdn-icons-png.flaticon.com/512/3524/3524659.png';
-window.NOTIFICATION_ICON_URL = 'https://cdn-icons-png.flaticon.com/512/1827/1827370.png';
+window.NOTIFICATION_ICON_URL = '/notification_bell.png';
 window.app = initializeApp(firebaseConfig);
 window.auth = getAuth(app);
 window.db = initializeFirestore(app, {
@@ -227,13 +227,13 @@ window.monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 'Ju
 window.shortMonthNames = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'];
 window.CHATBOT_ICON_URL = 'https://cdn-icons-png.flaticon.com/512/2040/2040946.png';
 window.WITHDRAW_METHOD_LOGOS = {
-            upi: 'https://upload.wikimedia.org/wikipedia/commons/e/e1/UPI-Logo-vector.svg',
-            bank: 'https://cdn-icons-png.flaticon.com/512/3635/3635987.png',
-            play_store: 'https://upload.wikimedia.org/wikipedia/commons/d/d0/Google_Play_Arrow_logo.svg',
-            amazon_gift: 'https://upload.wikimedia.org/wikipedia/commons/a/a9/Amazon_logo.svg',
-            flipkart_gift: 'https://cdn.iconscout.com/icon/free/png-256/free-flipkart-logo-icon-download-in-svg-png-gif-file-formats--online-shopping-brand-logos-pack-icons-226594.png',
+            upi: '/withdraw_upi.png',
+            bank: '/withdraw_bank.png',
+            play_store: '/withdraw_playstore.png',
+            amazon_gift: '/withdraw_amazon.png',
+            flipkart_gift: '/withdraw_flipkart.png',
             paypal: 'https://upload.wikimedia.org/wikipedia/commons/b/b5/PayPal.svg',
-            crypto: 'https://cdn-icons-png.flaticon.com/512/2091/2091665.png'
+            crypto: '/withdraw_crypto.png'
         };
 window.loanPageOpening = false;
 window.CURRENT_VERSION_CODE = 2;

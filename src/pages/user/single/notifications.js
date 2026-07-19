@@ -222,7 +222,7 @@ const renderUserNotificationsList = () => {
                     <article class="rounded-2xl border ${item.readAt ? 'border-gray-100 dark:border-gray-700 bg-white dark:bg-gray-800' : 'border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-900/20'} p-4 shadow-sm">
                         <div class="flex items-start gap-3">
                             <div class="h-12 w-12 shrink-0 rounded-2xl bg-white dark:bg-gray-900 border border-blue-100 dark:border-blue-800 p-2 shadow-sm">
-                                <img src="https://cdn-icons-png.flaticon.com/512/1827/1827370.png" alt="Notification" class="h-full w-full object-contain">
+                                <img src="${NOTIFICATION_ICON_URL}" alt="Notification" class="h-full w-full object-contain">
                             </div>
                             <div class="min-w-0 flex-1">
                                 <div class="flex items-center justify-between gap-2">
@@ -249,7 +249,7 @@ const showNotificationsPage = async () => {
                     <div class="rounded-2xl bg-gradient-to-r from-blue-600 to-emerald-500 p-4 text-white shadow-lg">
                         <div class="flex items-center gap-3">
                             <div class="h-14 w-14 rounded-2xl bg-white/95 p-2 shadow-sm">
-                                <img src="https://cdn-icons-png.flaticon.com/512/1827/1827370.png" alt="Notifications" class="h-full w-full object-contain">
+                                <img src="${NOTIFICATION_ICON_URL}" alt="Notifications" class="h-full w-full object-contain">
                             </div>
                             <div>
                                 <h3 class="text-lg font-black">REVIEWS WORLD Updates</h3>

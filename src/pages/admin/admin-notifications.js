@@ -183,7 +183,7 @@ const showAdminNotificationsPage = async () => {
                     <section class="rounded-3xl bg-white dark:bg-gray-800 border border-gray-100 dark:border-gray-700 p-4 shadow-sm">
                         <div class="flex items-center gap-3 mb-4">
                             <div class="h-14 w-14 rounded-2xl bg-blue-50 dark:bg-blue-900/30 border border-blue-100 dark:border-blue-800 p-2">
-                                <img src="https://cdn-icons-png.flaticon.com/512/1827/1827370.png" alt="Notification" class="h-full w-full object-contain">
+                                <img src="${NOTIFICATION_ICON_URL}" alt="Notification" class="h-full w-full object-contain">
                             </div>
                             <div>
                                 <h3 class="text-lg font-black">Send Notification</h3>
