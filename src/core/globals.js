@@ -232,7 +232,7 @@ window.WITHDRAW_METHOD_LOGOS = {
             play_store: '/withdraw_playstore.png',
             amazon_gift: '/withdraw_amazon.png',
             flipkart_gift: '/withdraw_flipkart.png',
-            paypal: 'https://upload.wikimedia.org/wikipedia/commons/b/b5/PayPal.svg',
+            paypal: '/withdraw_paypal.png',
             crypto: '/withdraw_crypto.png'
         };
 window.loanPageOpening = false;

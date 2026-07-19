@@ -3435,7 +3435,14 @@ const openUserQuickAction = (handler) => {
 const preloadLogoImages = () => {
             const criticalLogoUrls = [...new Set([
                 RW_LOGO_URL,
-                CHATBOT_ICON_URL
+                CHATBOT_ICON_URL,
+                '/withdraw_upi.png',
+                '/withdraw_bank.png',
+                '/withdraw_playstore.png',
+                '/withdraw_amazon.png',
+                '/withdraw_flipkart.png',
+                '/withdraw_paypal.png',
+                '/withdraw_crypto.png'
             ])];
             const idleLogoUrls = [...new Set([
                 REFER_ICON_URL,
