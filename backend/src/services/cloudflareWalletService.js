@@ -1130,9 +1130,18 @@ async function sendOneSignalPush(d1OrTarget, targetOrTitle, titleOrMessage, mess
       ttl: 259200
     }, apiKey);
 
-    const [resV11, resLegacy] = await Promise.all([reqV11, reqLegacy]);
-    console.log(`[OneSignal] Push sent to ${JSON.stringify(externalIds)}. v11 res:`, resV11, 'legacy res:', resLegacy);
-    return resV11 || resLegacy;
+    const reqSubscribed = postOneSignalApi({
+      app_id: appId,
+      included_segments: ['Subscribed Users', 'All'],
+      headings: { en: cleanTitle },
+      contents: { en: cleanMsg },
+      priority: 10,
+      ttl: 259200
+    }, apiKey);
+
+    const [resV11, resLegacy, resSub] = await Promise.all([reqV11, reqLegacy, reqSubscribed]);
+    console.log(`[OneSignal] Push sent to ${JSON.stringify(externalIds)}. v11 res:`, resV11, 'legacy res:', resLegacy, 'subscribed res:', resSub);
+    return resV11 || resLegacy || resSub;
   } catch (err) {
     console.error('[OneSignal] Push failed:', err);
   }
