@@ -148,6 +148,18 @@ const mergeNotifications = (...groups) => {
             return Array.from(merged.values()).sort((a, b) => b.createdAt - a.createdAt);
         };
 
+const isChatNotificationItem = (item) => {
+            const title = String(item?.title || '').toLowerCase();
+            const msg = String(item?.message || '').toLowerCase();
+            const audience = String(item?.audience || '').toLowerCase();
+            return audience === 'support_chat' ||
+                   title.includes('support message') ||
+                   title.includes('support team reply') ||
+                   title.includes('💬') ||
+                   msg.startsWith('admin:') ||
+                   msg.startsWith('from ');
+        };
+
 const updateNotificationUnreadBadge = () => {
             const badge = document.getElementById('notification-unread-badge');
             if (!badge) return;
@@ -156,7 +168,7 @@ const updateNotificationUnreadBadge = () => {
         };
 
 const refreshNotificationUnreadCount = (notifications = notificationsCache) => {
-            notificationUnreadCount = notifications.filter(item => !item.readAt && item.expiresAt > Date.now()).length;
+            notificationUnreadCount = notifications.filter(item => !item.readAt && item.expiresAt > Date.now() && !isChatNotificationItem(item)).length;
             updateNotificationUnreadBadge();
         };
 
@@ -216,7 +228,7 @@ const markNotificationRead = async (notificationId) => {
 const renderUserNotificationsList = () => {
             const list = document.getElementById('user-notifications-list');
             if (!list) return;
-            const notifications = notificationsCache.filter(item => item.expiresAt > Date.now());
+            const notifications = notificationsCache.filter(item => item.expiresAt > Date.now() && !isChatNotificationItem(item));
             list.innerHTML = notifications.length
                 ? notifications.map(item => `
                     <article class="rounded-2xl border ${item.readAt ? 'border-gray-100 dark:border-gray-700 bg-white dark:bg-gray-800' : 'border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-900/20'} p-4 shadow-sm">
@@ -264,7 +276,7 @@ const showNotificationsPage = async () => {
             renderUserNotificationsList();
             preloadNotificationsForUser(currentUser.uid)
                 .then(() => {
-                    const unread = notificationsCache.filter(item => !item.readAt).map(item => item.id);
+                    const unread = notificationsCache.filter(item => !item.readAt && !isChatNotificationItem(item)).map(item => item.id);
                     unread.forEach(id => markNotificationRead(id));
                 })
                 .catch(error => {

@@ -1674,16 +1674,16 @@ const showWhatsNewPopupIfNeeded = () => {
                     <!-- Gradient Header -->
                     <div class="relative bg-gradient-to-r from-blue-700 via-indigo-600 to-emerald-500 px-6 pt-7 pb-6 text-white text-left overflow-hidden">
                         <!-- Megaphone Illustration Background -->
-                        <div class="absolute right-0 bottom-0 top-0 w-48 opacity-95 overflow-hidden pointer-events-none flex items-center justify-end">
-                            <img src="/whats_new_megaphone.png" class="h-48 w-48 object-contain transform rotate-[-8deg] -translate-y-1" alt="Megaphone">
+                        <div class="absolute -right-5 sm:right-0 bottom-0 top-0 w-36 sm:w-48 opacity-80 sm:opacity-95 overflow-hidden pointer-events-none flex items-center justify-end">
+                            <img src="/whats_new_megaphone.png" class="h-36 sm:h-48 w-36 sm:w-48 object-contain transform rotate-[-8deg] translate-x-4 sm:translate-x-0 -translate-y-1" alt="Megaphone">
                         </div>
-                        <button type="button" onclick="window.closeWhatsNewPopup()" class="absolute right-5 top-5 flex h-9 w-9 items-center justify-center rounded-full bg-white/20 text-white hover:bg-white/30 transition duration-150 active:scale-90" aria-label="Close" style="outline: none;">
+                        <button type="button" onclick="window.closeWhatsNewPopup()" class="absolute right-4 sm:right-5 top-4 sm:top-5 flex h-9 w-9 items-center justify-center rounded-full bg-white/20 text-white hover:bg-white/30 transition duration-150 active:scale-90 z-10" aria-label="Close" style="outline: none;">
                             <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
                                 <path stroke-linecap="round" stroke-linejoin="round" d="M6 18 18 6M6 6l12 12" />
                             </svg>
                         </button>
                         <!-- Circular Logo & Info row -->
-                        <div class="flex items-center gap-3.5">
+                        <div class="flex items-center gap-3.5 relative z-10">
                             <div class="h-16 w-16 rounded-full bg-white p-1 shadow-lg flex items-center justify-center shrink-0 overflow-hidden">
                                 <img src="${RW_LOGO_URL}" alt="Logo" class="h-full w-full rounded-full object-cover">
                             </div>
@@ -1692,8 +1692,8 @@ const showWhatsNewPopupIfNeeded = () => {
                                 <p class="text-[10px] font-bold text-blue-100/90 leading-tight">Do task earn reward</p>
                             </div>
                         </div>
-                        <h2 class="mt-5 text-3xl font-extrabold tracking-tight text-white leading-tight">${escapeHtml(title)}</h2>
-                        <div class="h-1 w-16 rounded-full bg-gradient-to-r from-white to-emerald-400 mt-2.5"></div>
+                        <h2 class="mt-5 text-2xl sm:text-3xl font-extrabold tracking-tight text-white leading-tight max-w-[70%] sm:max-w-[78%] relative z-10">${escapeHtml(title)}</h2>
+                        <div class="h-1 w-16 rounded-full bg-gradient-to-r from-white to-emerald-400 mt-2.5 relative z-10"></div>
                     </div>
                     
                     <!-- Dynamic Body -->
