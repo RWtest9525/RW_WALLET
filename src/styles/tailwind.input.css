@@ -10,33 +10,13 @@
     gap: 18px;
     padding: 18px;
     border-radius: 24px;
-    background: url('/profile_card_bg.png') center/cover no-repeat, #28115c;
-    box-shadow: 0 15px 35px rgba(110,70,255,.30);
+    background-image: linear-gradient(rgba(0, 0, 0, 0.15), rgba(0, 0, 0, 0.15)), url('/profile_card_bg.png');
+    background-size: cover;
+    background-position: center;
+    background-repeat: no-repeat;
+    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.25);
     overflow: hidden;
     position: relative;
-}
-
-/* Background Glow */
-.profile-card::before {
-    content: "";
-    position: absolute;
-    width: 260px;
-    height: 260px;
-    right: -120px;
-    top: -100px;
-    background: rgba(255,255,255,.08);
-    border-radius: 50%;
-}
-
-.profile-card::after {
-    content: "";
-    position: absolute;
-    width: 220px;
-    height: 220px;
-    left: -120px;
-    bottom: -120px;
-    background: rgba(255,255,255,.05);
-    border-radius: 50%;
 }
 
 /* Left */
@@ -56,7 +36,7 @@
     width: 92px;
     height: 92px;
     border-radius: 50%;
-    border: 4px solid rgba(255,255,255,.85);
+    border: 4px solid rgba(255, 255, 255, 0.85);
     object-fit: cover;
 }
 
@@ -73,7 +53,7 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    box-shadow: 0 5px 12px rgba(0,0,0,.35);
+    box-shadow: 0 5px 12px rgba(0, 0, 0, 0.35);
     cursor: pointer;
     z-index: 10;
     font-size: 15px;
@@ -132,8 +112,8 @@
     gap: 8px;
     margin-top: 16px;
     padding: 8px 16px;
-    background: rgba(255,255,255,.12);
-    border: 1px solid rgba(255,255,255,.15);
+    background: rgba(255, 255, 255, 0.12);
+    border: 1px solid rgba(255, 255, 255, 0.15);
     border-radius: 999px;
     color: #fff;
     font-size: 14px;
@@ -157,6 +137,7 @@
     .camera-btn {
         width: 30px;
         height: 30px;
+        font-size: 13px;
     }
     .name-row h2 {
         font-size: 20px;
