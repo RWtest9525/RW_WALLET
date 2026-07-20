@@ -780,8 +780,8 @@ const showProfilePage = (focusMethod = '') => {
                 <div class="profile-left">
                     <div class="avatar-wrap cursor-pointer" id="profile-avatar-trigger-btn" title="Change Profile Photo">
                         <img id="profile-avatar-preview" src="${escapeHtml(currentAvatar)}" class="avatar" alt="Avatar">
-                        <button type="button" class="camera-btn" aria-label="Camera">
-                            <i class="fas fa-camera"></i>
+                        <button type="button" class="camera-btn" id="camera-btn-trigger" aria-label="Camera">
+                            <i class="fa-solid fa-camera fas fa-camera"></i>
                         </button>
                         <input type="hidden" id="profile-avatar-url" value="${escapeHtml(currentAvatar)}">
                     </div>
@@ -792,22 +792,22 @@ const showProfilePage = (focusMethod = '') => {
                         <h2 class="uppercase truncate">${escapeHtml(userDisplayName)}</h2>
                         ${isVerified ? `
                         <span class="verified" title="Verified Profile">
-                            <i class="fas fa-check-circle"></i>
+                            <i class="fa-solid fa-circle-check fas fa-check-circle"></i>
                         </span>` : ''}
                     </div>
 
                     <div class="info">
-                        <i class="fas fa-phone"></i>
+                        <i class="fa-solid fa-phone fas fa-phone"></i>
                         <span class="truncate">${escapeHtml(userMobile)}</span>
                     </div>
 
                     <div class="info">
-                        <i class="fas fa-envelope"></i>
+                        <i class="fa-solid fa-envelope fas fa-envelope"></i>
                         <span class="truncate">${escapeHtml(userEmail)}</span>
                     </div>
 
                     <div class="joined">
-                        <i class="far fa-calendar"></i>
+                        <i class="fa-regular fa-calendar far fa-calendar"></i>
                         <span>${escapeHtml(joinedSinceText)}</span>
                     </div>
                 </div>
@@ -884,12 +884,18 @@ const showProfilePage = (focusMethod = '') => {
 
     // Event Listeners
     const avatarTrigger = document.getElementById('profile-avatar-trigger-btn');
-    if (avatarTrigger) {
-        avatarTrigger.onclick = () => {
-            const activeAvatar = document.getElementById('profile-avatar-url').value;
-            window.showProfilePhotoSelectionModal(activeAvatar, async (chosenUrl) => {
-                await syncProfilePhotoToDatabase(chosenUrl);
-            });
+    const cameraTrigger = document.getElementById('camera-btn-trigger');
+    const openAvatarModal = () => {
+        const activeAvatar = document.getElementById('profile-avatar-url')?.value || '';
+        window.showProfilePhotoSelectionModal(activeAvatar, async (chosenUrl) => {
+            await syncProfilePhotoToDatabase(chosenUrl);
+        });
+    };
+    if (avatarTrigger) avatarTrigger.onclick = openAvatarModal;
+    if (cameraTrigger) {
+        cameraTrigger.onclick = (e) => {
+            e.stopPropagation();
+            openAvatarModal();
         };
     }
 

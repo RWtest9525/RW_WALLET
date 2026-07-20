@@ -73,8 +73,12 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    box-shadow: 0 5px 12px rgba(0,0,0,.25);
+    box-shadow: 0 5px 12px rgba(0,0,0,.35);
     cursor: pointer;
+    z-index: 10;
+    font-size: 15px;
+    line-height: 1;
+    pointer-events: auto;
 }
 
 /* Right */
@@ -101,6 +105,10 @@
 .verified {
     color: #35b8ff;
     font-size: 20px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    line-height: 1;
 }
 
 .info {
