@@ -205,7 +205,7 @@ const showCropperModal = (imageSrc, onSelect) => {
                     <span>Zoom</span>
                     <span id="zoom-value">100%</span>
                 </div>
-                <input type="range" id="cropper-zoom" min="0.5" max="3" step="0.05" value="1" class="w-full h-1.5 bg-gray-200 dark:bg-gray-700 rounded-lg appearance-none cursor-pointer accent-indigo-600">
+                <input type="range" id="cropper-zoom" min="0.1" max="4" step="0.02" value="1" class="w-full h-1.5 bg-gray-200 dark:bg-gray-700 rounded-lg appearance-none cursor-pointer accent-indigo-600">
             </div>
         </div>
     `;
@@ -231,16 +231,14 @@ const showCropperModal = (imageSrc, onSelect) => {
     let startY = 0;
 
     img.onload = () => {
-        const minDim = Math.min(img.naturalWidth, img.naturalHeight);
-        if (minDim > 0) {
-            const initialScale = 240 / minDim;
-            scale = Math.max(0.5, Math.min(3, initialScale));
+        const maxDim = Math.max(img.naturalWidth, img.naturalHeight);
+        if (maxDim > 0) {
+            const fitScale = 200 / maxDim;
+            scale = Math.max(0.1, Math.min(3, fitScale));
             zoomInput.value = scale;
             zoomValText.textContent = Math.round(scale * 100) + '%';
+            img.style.transform = `translate(${currentX}px, ${currentY}px) scale(${scale})`;
         }
-        currentX = 0;
-        currentY = 0;
-        img.style.transform = `translate(${currentX}px, ${currentY}px) scale(${scale})`;
     };
 
     zoomInput.oninput = function() {
@@ -378,172 +376,573 @@ window.showProfilePhotoSelectionModal = (currentAvatar, onSelect) => {
     }
 };
 
-const showProfilePage = (focusMethod = '') => {
-            if (!currentUserData) return showNotification('User data not loaded. Please wait.', true);
-            const isAdminProfile = currentUser?.uid === ADMIN_UID || currentUserData?.role === 'admin' || currentUserData?.role === 'owner';
-            const websiteLinks = Array.isArray(currentUserData.websiteLinks) ? currentUserData.websiteLinks.slice(0, 3) : [];
-            const activePaymentMethod = focusMethod || normalizeProfilePaymentMethod(currentUserData);
+const getJoinedSinceText = (user = currentUserData) => {
+    const raw = user?.createdAt || user?.created_at || user?.createdAtMs || Date.now();
+    let date;
+    if (typeof raw === 'number') {
+        date = new Date(raw);
+    } else if (raw && typeof raw === 'object' && raw.seconds) {
+        date = new Date(raw.seconds * 1000);
+    } else if (typeof raw === 'string') {
+        date = new Date(raw);
+    } else {
+        date = new Date();
+    }
+    if (isNaN(date.getTime())) return 'Joined Recently';
+    const day = date.getDate();
+    const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+    const month = monthNames[date.getMonth()];
+    const year = date.getFullYear();
+    return `Joined Since ${day} ${month} ${year}`;
+};
 
-            const currentAvatar = getProfileAvatarUrl(currentUserData);
+const isUserVerifiedProfile = (user = currentUserData) => {
+    if (!user) return false;
+    return !!(user.isVerified || user.kycVerified || user.status === 'active' || user.verified || user.role === 'admin' || user.role === 'owner' || user.uid === ADMIN_UID);
+};
 
-            let avatarGridHtml = '';
-            if (!isAdminProfile) {
-                avatarGridHtml = `
-                <div class="flex flex-col items-center justify-center py-4 bg-gray-50 dark:bg-gray-900/60 rounded-2xl border border-gray-150 dark:border-gray-800">
-                    <div class="relative cursor-pointer group" id="profile-avatar-trigger-btn">
-                        <img id="profile-avatar-preview" src="${escapeHtml(currentAvatar)}" class="h-24 w-24 rounded-full border-4 border-white dark:border-gray-700 shadow-md object-cover bg-white">
-                        <div class="absolute inset-0 bg-black/40 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition duration-200">
-                            <span class="text-[10px] font-black text-white uppercase tracking-wider">Change</span>
-                        </div>
-                        <div class="absolute bottom-0 right-0 bg-blue-600 rounded-full p-2 text-white shadow-sm border border-white dark:border-gray-700">
-                            <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"></path><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"></path></svg>
-                        </div>
-                    </div>
-                    <p class="mt-2 text-xs font-semibold text-gray-500 dark:text-gray-400">Tap photo to choose avatar</p>
-                    <input type="hidden" id="profile-avatar-url" value="${escapeHtml(currentAvatar)}">
-                </div>`;
-            } else {
-                avatarGridHtml = `
-                <div class="flex items-center gap-3 bg-gray-50 dark:bg-gray-900/60 p-4 rounded-2xl border border-gray-150 dark:border-gray-800 text-left">
-                    <img src="${escapeHtml(currentAvatar)}" class="h-12 w-12 rounded-xl border border-gray-200 dark:border-gray-755 shrink-0 bg-white p-1">
-                    <div>
-                        <h4 class="text-sm font-extrabold text-gray-850 dark:text-white">${escapeHtml(currentUserData.name || 'Admin')}</h4>
-                        <p class="text-xs font-bold text-gray-500 dark:text-gray-400 mt-0.5">${escapeHtml(currentUserData.mobile || currentUserData.phoneNumber || currentUserData.email || '')}</p>
-                    </div>
-                </div>`;
+const showSavedPaymentMethodsPage = (focusMethod = '') => {
+    if (!currentUserData) return showNotification('User data not loaded.', true);
+
+    const methodsConfig = [
+        {
+            id: 'upi',
+            name: 'UPI',
+            iconUrl: 'https://cdn-icons-png.flaticon.com/512/10110/10110436.png',
+            getSummary: () => {
+                const details = getProfilePaymentDetails('upi');
+                return details.upiId ? details.upiId : 'Not Added Yet';
             }
-
-            const paymentMethods = [
-                { value: '', label: 'Select Payment Method' },
-                { value: 'upi', label: 'UPI ID' },
-                { value: 'bank', label: 'Bank Account' },
-                { value: 'play_store', label: 'Play Store Redeem Code' },
-                { value: 'amazon_gift', label: 'Amazon Gift Card' },
-                { value: 'flipkart_gift', label: 'Flipkart Gift Card' },
-                { value: 'paypal', label: 'PayPal' },
-                { value: 'crypto', label: 'Crypto Currency (Coming Soon)', disabled: true }
-            ];
-
-            const paymentOptions = paymentMethods.map(method =>
-                `<option value="${method.value}" ${method.disabled ? 'disabled' : ''} ${activePaymentMethod === method.value ? 'selected' : ''}>${method.label}</option>`
-            ).join('');
-
-            let paymentDetailsForm = '';
-            if (activePaymentMethod) {
-                paymentDetailsForm = renderPaymentDetailsForm(activePaymentMethod, getProfilePaymentDetails(activePaymentMethod));
+        },
+        {
+            id: 'bank',
+            name: 'Bank Account',
+            iconUrl: 'https://cdn-icons-png.flaticon.com/512/2830/2830284.png',
+            getSummary: () => {
+                const details = getProfilePaymentDetails('bank');
+                if (!details.accountNumber) return 'Not Added Yet';
+                const bank = details.bankName || 'Bank Account';
+                const masked = String(details.accountNumber).slice(-4);
+                return `${bank}\n**** **** **** ${masked}`;
             }
-            const savedPaymentSummary = activePaymentMethod ? getProfilePaymentSummaryText(activePaymentMethod) : '';
-            const isPaymentMethodSaved = activePaymentMethod && !!savedPaymentSummary.trim();
-            const savedPaymentCard = isPaymentMethodSaved ? `
-                    <div class="rounded-xl border border-emerald-100 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-900/20 p-3">
-                        <p class="text-xs font-semibold uppercase text-emerald-600 dark:text-emerald-300">Saved Payment Method</p>
-                        <p class="mt-1 text-sm font-bold text-gray-900 dark:text-white">${escapeHtml(getProfilePaymentMethodLabel(activePaymentMethod, currentUserData))}</p>
-                        ${savedPaymentSummary ? `<p class="mt-1 text-sm text-gray-600 dark:text-gray-300 break-words">${escapeHtml(savedPaymentSummary)}</p>` : ''}
-                        <button type="button" id="delete-payment-method-btn" class="mt-3 w-full rounded-lg bg-red-50 dark:bg-red-900/30 px-3 py-2 text-sm font-bold text-red-600 dark:text-red-200">Delete payment method</button>
-                    </div>` : '';
-            const paymentMethodControl = isPaymentMethodSaved ? `
-                    <input type="hidden" id="profile-payment-method" value="${escapeHtml(activePaymentMethod)}">` : `
-                    <div class="space-y-1">
-                        <label class="text-sm font-medium text-gray-500 dark:text-gray-400">Payment Method</label>
-                        <select id="profile-payment-method" class="w-full px-4 py-3 bg-gray-100 dark:bg-gray-700 border-transparent rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-white">
-                            ${paymentOptions}
-                        </select>
-                    </div>`;
+        },
+        {
+            id: 'play_store',
+            name: 'Google Play',
+            iconUrl: 'https://cdn-icons-png.flaticon.com/512/6124/6124997.png',
+            getSummary: () => {
+                const details = getProfilePaymentDetails('play_store');
+                return details.email ? details.email : 'Not Added Yet';
+            }
+        },
+        {
+            id: 'amazon_gift',
+            name: 'Amazon Pay',
+            iconUrl: 'https://cdn-icons-png.flaticon.com/512/5968/5968269.png',
+            getSummary: () => {
+                const details = getProfilePaymentDetails('amazon_gift');
+                return details.email ? details.email : 'Not Added Yet';
+            }
+        },
+        {
+            id: 'flipkart_gift',
+            name: 'Flipkart Voucher',
+            iconUrl: 'https://cdn-icons-png.flaticon.com/512/825/825508.png',
+            getSummary: () => {
+                const details = getProfilePaymentDetails('flipkart_gift');
+                return details.email ? details.email : 'Not Added Yet';
+            }
+        },
+        {
+            id: 'paypal',
+            name: 'PayPal',
+            iconUrl: 'https://cdn-icons-png.flaticon.com/512/174/174861.png',
+            getSummary: () => {
+                const details = getProfilePaymentDetails('paypal');
+                return details.email ? details.email : 'Not Added Yet';
+            }
+        },
+        {
+            id: 'crypto',
+            name: 'Crypto Wallet',
+            iconUrl: 'https://cdn-icons-png.flaticon.com/512/6001/6001368.png',
+            getSummary: () => {
+                const details = getProfilePaymentDetails('crypto');
+                return (details.address || details.email) ? (details.address || details.email) : 'Not Added Yet';
+            }
+        }
+    ];
 
-            const content = `
-                ${getPageHeader('My Profile')}
-                <div class="max-w-lg mx-auto bg-white dark:bg-gray-800 p-6 rounded-xl shadow-md space-y-4">
-                    ${avatarGridHtml}
-                    <div class="space-y-1">
-                        <label class="text-sm font-medium text-gray-500 dark:text-gray-400">Email Address</label>
-                        <input type="email" value="${escapeHtml(currentUserData.email || '')}" class="w-full px-4 py-3 bg-gray-100 dark:bg-gray-700 border-transparent rounded-lg cursor-not-allowed" readonly>
-                    </div>
-                    <div class="space-y-1">
-                        <label class="text-sm font-medium text-gray-500 dark:text-gray-400">Full Name</label>
-                        <input type="text" id="profile-name-input" value="${escapeHtml(currentUserData.name || '')}" class="w-full px-4 py-3 bg-gray-100 dark:bg-gray-700 border-transparent rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
-                    </div>
-                    <div class="space-y-1">
-                        <label class="text-sm font-medium text-gray-500 dark:text-gray-400">Mobile Number</label>
-                        <input type="tel" id="profile-mobile-input" value="${escapeHtml(currentUserData.mobile || '')}" class="w-full px-4 py-3 bg-gray-100 dark:bg-gray-700 border-transparent rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
-                    </div>
-                    ${paymentMethodControl}
-                    ${savedPaymentCard}
-                    <div id="payment-details-container">
-                        ${paymentDetailsForm}
-                    </div>
-                    ${isAdminProfile ? `
-                    <div class="rounded-2xl border border-blue-100 dark:border-blue-800 bg-blue-50/60 dark:bg-blue-900/20 p-4 space-y-3">
-                        <div>
-                            <p class="text-sm font-bold text-blue-900 dark:text-blue-100">Support Profile</p>
-                            <p class="text-xs text-blue-600 dark:text-blue-300">Shown in chat profile details.</p>
+    const activeMethod = normalizeProfilePaymentMethod(currentUserData);
+
+    const methodsListHtml = methodsConfig.map(method => {
+        const summary = method.getSummary();
+        const isAdded = summary !== 'Not Added Yet';
+        const isPrimary = activeMethod === method.id;
+
+        return `
+            <div class="flex items-center justify-between gap-3 p-4 bg-white dark:bg-slate-800 rounded-2xl border border-slate-150 dark:border-slate-700/80 shadow-sm transition hover:shadow-md">
+                <div class="flex items-center gap-3.5 min-w-0">
+                    <div class="relative flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-gradient-to-tr from-indigo-500 via-purple-500 to-pink-500 p-0.5 shadow-md">
+                        <div class="h-full w-full rounded-full bg-white p-2.5 flex items-center justify-center overflow-hidden">
+                            <img src="${method.iconUrl}" alt="${escapeHtml(method.name)}" class="h-full w-full object-contain">
                         </div>
-                        <div class="space-y-1">
-                            <label class="text-sm font-medium text-gray-500 dark:text-gray-400">WhatsApp Number</label>
-                            <input type="tel" id="profile-whatsapp-input" value="${escapeHtml(currentUserData.whatsappNumber || currentUserData.mobile || '')}" maxlength="15" placeholder="WhatsApp number" class="w-full px-4 py-3 bg-white dark:bg-gray-700 border-transparent rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    </div>
+                    <div class="min-w-0 text-left space-y-0.5">
+                        <div class="flex items-center gap-2">
+                            <h4 class="text-base font-black text-slate-900 dark:text-white truncate">${escapeHtml(method.name)}</h4>
+                            ${isPrimary ? `<span class="rounded-full bg-emerald-100 dark:bg-emerald-950/60 border border-emerald-300 dark:border-emerald-700 px-2 py-0.5 text-[10px] font-black text-emerald-700 dark:text-emerald-300">Primary</span>` : ''}
                         </div>
-                        <div class="space-y-2">
-                            <label class="text-sm font-medium text-gray-500 dark:text-gray-400">Website Links (optional, max 3)</label>
-                            <div id="website-links-container" class="space-y-2">${renderWebsiteLinkInputs(websiteLinks)}</div>
-                        </div>
-                    </div>` : ''}
-                    <button id="save-profile-btn" class="w-full bg-blue-600 text-white font-semibold py-3 rounded-lg hover:bg-blue-700 transition">Save Changes</button>
+                        <p class="text-xs font-semibold ${isAdded ? 'text-slate-700 dark:text-slate-300' : 'text-slate-400 dark:text-slate-500'} whitespace-pre-line truncate">${escapeHtml(summary)}</p>
+                    </div>
                 </div>
-                ${getPageFooter()}`;
-            showPage(content);
+                <button type="button" onclick="window.showEditPaymentMethodModal('${method.id}')" class="shrink-0 flex items-center gap-1.5 rounded-xl bg-purple-50 dark:bg-purple-900/30 hover:bg-purple-100 border border-purple-200/60 px-3.5 py-2 text-xs font-extrabold text-purple-700 dark:text-purple-300 transition active:scale-95">
+                    <svg class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                    </svg>
+                    <span>${isAdded ? 'Edit' : 'Add'}</span>
+                </button>
+            </div>
+        `;
+    }).join('');
 
-            const paymentSelect = document.getElementById('profile-payment-method');
-            if (paymentSelect?.tagName === 'SELECT') {
-                paymentSelect.value = activePaymentMethod;
-                paymentSelect.addEventListener('change', function () {
-                    const method = this.value;
-                    document.getElementById('payment-details-container').innerHTML = renderPaymentDetailsForm(method, getProfilePaymentDetails(method));
-                });
+    const content = `
+        <div class="sticky top-0 z-30 flex items-center justify-between border-b border-gray-200 dark:border-gray-800 bg-white/95 dark:bg-gray-900/95 px-4 py-3 backdrop-blur-md">
+            <button type="button" onclick="window.showProfilePage()" class="flex h-9 w-9 items-center justify-center rounded-xl bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-200 hover:bg-gray-200 transition active:scale-90" aria-label="Back">
+                <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7" />
+                </svg>
+            </button>
+            <h2 class="text-base font-black text-gray-900 dark:text-white">Withdrawal Methods</h2>
+            <div class="w-9"></div>
+        </div>
+        <div class="max-w-lg mx-auto p-4 space-y-3 text-left">
+            <div class="space-y-3">
+                ${methodsListHtml}
+            </div>
+            <div class="pt-3">
+                <button type="button" onclick="window.showEditPaymentMethodModal('')" class="w-full flex items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-purple-300 dark:border-purple-700 bg-purple-50/50 dark:bg-purple-950/20 py-3.5 text-sm font-black text-purple-700 dark:text-purple-300 hover:bg-purple-100/60 transition active:scale-98">
+                    <span class="text-lg">+</span>
+                    <span>Add New Method</span>
+                </button>
+            </div>
+        </div>
+        ${getPageFooter()}`;
+
+    showPage(content);
+
+    if (focusMethod) {
+        setTimeout(() => window.showEditPaymentMethodModal(focusMethod), 100);
+    }
+};
+
+const showEditPaymentMethodModal = (methodId = 'upi') => {
+    const activeMethod = methodId || 'upi';
+    const details = getProfilePaymentDetails(activeMethod);
+
+    let formFieldsHtml = '';
+    let modalTitle = 'Update Payment Method';
+
+    if (activeMethod === 'upi') {
+        modalTitle = 'UPI Details';
+        formFieldsHtml = `
+            <div class="space-y-1">
+                <label class="text-xs font-bold uppercase text-gray-400">UPI ID</label>
+                <input type="text" id="modal-upi-id" value="${escapeHtml(details.upiId || '')}" placeholder="example@upi" class="w-full px-4 py-3 bg-gray-100 dark:bg-gray-700 border-transparent rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-500 font-medium">
+            </div>
+        `;
+    } else if (activeMethod === 'bank') {
+        modalTitle = 'Bank Account Details';
+        formFieldsHtml = `
+            <div class="space-y-3">
+                <div class="space-y-1">
+                    <label class="text-xs font-bold uppercase text-gray-400">Bank Name</label>
+                    <input type="text" id="modal-bank-name" value="${escapeHtml(details.bankName || '')}" placeholder="State Bank of India" class="w-full px-4 py-3 bg-gray-100 dark:bg-gray-700 border-transparent rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-500 font-medium">
+                </div>
+                <div class="space-y-1">
+                    <label class="text-xs font-bold uppercase text-gray-400">Account Holder Name</label>
+                    <input type="text" id="modal-account-name" value="${escapeHtml(details.accountName || '')}" placeholder="Full Name as in Bank" class="w-full px-4 py-3 bg-gray-100 dark:bg-gray-700 border-transparent rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-500 font-medium">
+                </div>
+                <div class="space-y-1">
+                    <label class="text-xs font-bold uppercase text-gray-400">Account Number</label>
+                    <input type="text" id="modal-account-number" value="${escapeHtml(details.accountNumber || '')}" placeholder="Account Number" class="w-full px-4 py-3 bg-gray-100 dark:bg-gray-700 border-transparent rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-500 font-medium">
+                </div>
+                <div class="space-y-1">
+                    <label class="text-xs font-bold uppercase text-gray-400">IFSC Code</label>
+                    <input type="text" id="modal-ifsc" value="${escapeHtml(details.ifsc || '')}" placeholder="SBIN0001234" class="w-full px-4 py-3 bg-gray-100 dark:bg-gray-700 border-transparent rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-500 font-medium uppercase">
+                </div>
+            </div>
+        `;
+    } else if (['play_store', 'amazon_gift', 'flipkart_gift', 'paypal'].includes(activeMethod)) {
+        const names = { play_store: 'Google Play', amazon_gift: 'Amazon Pay', flipkart_gift: 'Flipkart Voucher', paypal: 'PayPal' };
+        modalTitle = `${names[activeMethod] || 'Payment'} Email`;
+        formFieldsHtml = `
+            <div class="space-y-1">
+                <label class="text-xs font-bold uppercase text-gray-400">Email Address</label>
+                <input type="email" id="modal-payment-email" value="${escapeHtml(details.email || '')}" placeholder="your-email@example.com" class="w-full px-4 py-3 bg-gray-100 dark:bg-gray-700 border-transparent rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-500 font-medium">
+            </div>
+        `;
+    } else if (activeMethod === 'crypto') {
+        modalTitle = 'Crypto Wallet Details';
+        formFieldsHtml = `
+            <div class="space-y-1">
+                <label class="text-xs font-bold uppercase text-gray-400">Wallet Address or Email</label>
+                <input type="text" id="modal-crypto-address" value="${escapeHtml(details.address || details.email || '')}" placeholder="Binance Pay ID / USDT Wallet Address" class="w-full px-4 py-3 bg-gray-100 dark:bg-gray-700 border-transparent rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-500 font-medium">
+            </div>
+        `;
+    } else {
+        const paymentMethods = [
+            { value: 'upi', label: 'UPI ID' },
+            { value: 'bank', label: 'Bank Account' },
+            { value: 'play_store', label: 'Google Play Redeem Code' },
+            { value: 'amazon_gift', label: 'Amazon Gift Card' },
+            { value: 'flipkart_gift', label: 'Flipkart Gift Card' },
+            { value: 'paypal', label: 'PayPal' },
+            { value: 'crypto', label: 'Crypto Currency' }
+        ];
+        modalTitle = 'Choose Payment Method';
+        formFieldsHtml = `
+            <div class="space-y-3">
+                <label class="text-xs font-bold uppercase text-gray-400">Select Method</label>
+                <select id="modal-select-method" class="w-full px-4 py-3 bg-gray-100 dark:bg-gray-700 border-transparent rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-500 font-medium">
+                    ${paymentMethods.map(m => `<option value="${m.value}">${m.label}</option>`).join('')}
+                </select>
+            </div>
+        `;
+    }
+
+    renderModal(modalTitle, `
+        <div class="space-y-4 text-left">
+            ${formFieldsHtml}
+        </div>
+    `, `
+        <div class="flex gap-2 w-full">
+            <button onclick="window.closeModal()" class="flex-1 rounded-xl bg-gray-100 dark:bg-gray-700 py-3 text-sm font-extrabold text-gray-700 dark:text-gray-200">Cancel</button>
+            <button id="modal-save-payment-btn" class="flex-1 rounded-xl bg-purple-600 hover:bg-purple-700 text-white py-3 text-sm font-black shadow-md">Save Details</button>
+        </div>
+    `, 'max-w-md');
+
+    document.getElementById('modal-save-payment-btn').onclick = async () => {
+        let method = activeMethod;
+        let paymentDetails = {};
+
+        if (!method) {
+            method = document.getElementById('modal-select-method')?.value || 'upi';
+        }
+
+        if (method === 'upi') {
+            const upiId = document.getElementById('modal-upi-id')?.value.trim();
+            if (!upiId) return showNotification('Please enter a valid UPI ID.', true);
+            paymentDetails = { upiId };
+        } else if (method === 'bank') {
+            const bankName = document.getElementById('modal-bank-name')?.value.trim();
+            const accountName = document.getElementById('modal-account-name')?.value.trim();
+            const accountNumber = document.getElementById('modal-account-number')?.value.trim();
+            const ifsc = document.getElementById('modal-ifsc')?.value.trim();
+            if (!bankName || !accountName || !accountNumber || !ifsc) {
+                return showNotification('All bank account details are required.', true);
+            }
+            paymentDetails = { bankName, accountName, accountNumber, ifsc };
+        } else if (['play_store', 'amazon_gift', 'flipkart_gift', 'paypal'].includes(method)) {
+            const email = document.getElementById('modal-payment-email')?.value.trim();
+            if (!email) return showNotification('Please enter a valid email address.', true);
+            paymentDetails = { email };
+        } else if (method === 'crypto') {
+            const address = document.getElementById('modal-crypto-address')?.value.trim();
+            if (!address) return showNotification('Please enter a crypto address or ID.', true);
+            paymentDetails = { address };
+        }
+
+        showNotification('Saving payment details...', false);
+        try {
+            const updatePayload = {
+                paymentMethod: method,
+                paymentDetails: paymentDetails
+            };
+            if (method === 'upi') updatePayload.upiId = paymentDetails.upiId;
+            if (method === 'bank') {
+                updatePayload.accountNumber = paymentDetails.accountNumber;
+                updatePayload.ifsc = paymentDetails.ifsc;
+                updatePayload.bankName = paymentDetails.bankName;
+                updatePayload.accountName = paymentDetails.accountName;
+            }
+            if (['play_store', 'amazon_gift', 'flipkart_gift', 'paypal'].includes(method)) {
+                updatePayload.paymentEmail = paymentDetails.email;
             }
 
-            document.getElementById('save-profile-btn').onclick = handleUpdateProfile;
+            const userRef = doc(db, `artifacts/${appId}/public/data/users`, currentUser.uid);
+            await updateDoc(userRef, updatePayload);
 
-            if (!isAdminProfile) {
-                const triggerBtn = document.getElementById('profile-avatar-trigger-btn');
-                if (triggerBtn) {
-                    triggerBtn.onclick = () => {
-                        const activeAvatar = document.getElementById('profile-avatar-url').value;
-                        window.showProfilePhotoSelectionModal(activeAvatar, async (chosenUrl) => {
-                            await syncProfilePhotoToDatabase(chosenUrl);
-                        });
-                    };
-                }
-            }
-            document.getElementById('delete-payment-method-btn')?.addEventListener('click', async () => {
-                if (!confirm('Delete saved payment method? You can add a new one after deleting it.')) return;
-                try {
-                    const userRef = doc(db, `artifacts/${appId}/public/data/users`, currentUser.uid);
-                    await updateDoc(userRef, {
-                        paymentMethod: '',
-                        paymentDetails: {},
-                        upiId: deleteField(),
-                        accountNumber: deleteField(),
-                        ifsc: deleteField(),
-                        bankName: deleteField(),
-                        accountName: deleteField(),
-                        paymentEmail: deleteField()
-                    });
-                    currentUserData = { ...(currentUserData || {}), paymentMethod: '', paymentDetails: {} };
-                    ['upiId', 'accountNumber', 'ifsc', 'bankName', 'accountName', 'paymentEmail'].forEach(key => delete currentUserData[key]);
-                    writeJsonCache(getUserCacheKey(currentUser.uid), sanitizeUserForCache(currentUserData, currentUser.uid));
-                    showNotification('Payment method deleted. You can add a new one now.');
-                    showProfilePage();
-                } catch (error) {
-                    console.error('Delete payment method failed:', error);
-                    showNotification('Could not delete payment method.', true);
-                }
+            currentUserData = { ...(currentUserData || {}), ...updatePayload };
+            writeJsonCache(getUserCacheKey(currentUser.uid), sanitizeUserForCache(currentUserData, currentUser.uid));
+
+            window.closeModal();
+            showNotification('Payment method saved successfully!');
+            showSavedPaymentMethodsPage();
+        } catch (e) {
+            console.error('Save payment method failed:', e);
+            showNotification('Could not save payment details. Please try again.', true);
+        }
+    };
+};
+
+const showEditFullNameModal = () => {
+    renderModal('Edit Full Name', `
+        <div class="space-y-3 text-left">
+            <div class="space-y-1">
+                <label class="text-xs font-bold uppercase text-gray-400">Full Name</label>
+                <input type="text" id="modal-full-name-input" value="${escapeHtml(currentUserData?.name || '')}" placeholder="Enter your full name" class="w-full px-4 py-3 bg-gray-100 dark:bg-gray-700 border-transparent rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-500 font-medium">
+            </div>
+        </div>
+    `, `
+        <div class="flex gap-2 w-full">
+            <button onclick="window.closeModal()" class="flex-1 rounded-xl bg-gray-100 dark:bg-gray-700 py-3 text-sm font-extrabold text-gray-700 dark:text-gray-200">Cancel</button>
+            <button id="modal-save-name-btn" class="flex-1 rounded-xl bg-purple-600 hover:bg-purple-700 text-white py-3 text-sm font-black shadow-md">Save Name</button>
+        </div>
+    `, 'max-w-md');
+
+    document.getElementById('modal-save-name-btn').onclick = async () => {
+        const newName = document.getElementById('modal-full-name-input')?.value.trim();
+        if (!newName) return showNotification('Full Name cannot be empty.', true);
+
+        showNotification('Saving name...', false);
+        try {
+            const userRef = doc(db, `artifacts/${appId}/public/data/users`, currentUser.uid);
+            await updateDoc(userRef, { name: newName });
+
+            currentUserData = { ...(currentUserData || {}), name: newName };
+            writeJsonCache(getUserCacheKey(currentUser.uid), sanitizeUserForCache(currentUserData, currentUser.uid));
+
+            window.closeModal();
+            showNotification('Name updated successfully!');
+            showProfilePage();
+        } catch (e) {
+            console.error('Save name failed:', e);
+            showNotification('Could not save name. Please try again.', true);
+        }
+    };
+};
+
+const showAdminSupportProfileModal = () => {
+    const websiteLinks = Array.isArray(currentUserData.websiteLinks) ? currentUserData.websiteLinks.slice(0, 3) : [];
+    renderModal('Admin Support Profile', `
+        <div class="space-y-4 text-left">
+            <p class="text-xs text-gray-500">Shown in support chat profile details.</p>
+            <div class="space-y-1">
+                <label class="text-xs font-bold uppercase text-gray-400">WhatsApp Number</label>
+                <input type="tel" id="modal-whatsapp-input" value="${escapeHtml(currentUserData.whatsappNumber || currentUserData.mobile || '')}" maxlength="15" placeholder="WhatsApp number" class="w-full px-4 py-3 bg-gray-100 dark:bg-gray-700 border-transparent rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-500 font-medium">
+            </div>
+            <div class="space-y-2">
+                <label class="text-xs font-bold uppercase text-gray-400">Website Links (optional, max 3)</label>
+                <div id="website-links-container" class="space-y-2">${renderWebsiteLinkInputs(websiteLinks)}</div>
+            </div>
+        </div>
+    `, `
+        <div class="flex gap-2 w-full">
+            <button onclick="window.closeModal()" class="flex-1 rounded-xl bg-gray-100 dark:bg-gray-700 py-3 text-sm font-extrabold text-gray-700 dark:text-gray-200">Cancel</button>
+            <button id="modal-save-support-btn" class="flex-1 rounded-xl bg-purple-600 hover:bg-purple-700 text-white py-3 text-sm font-black shadow-md">Save Support Profile</button>
+        </div>
+    `, 'max-w-md');
+
+    bindWebsiteLinkControls();
+
+    document.getElementById('modal-save-support-btn').onclick = async () => {
+        const whatsappNumber = document.getElementById('modal-whatsapp-input')?.value.trim() || '';
+        if (whatsappNumber && !/^\d{10,15}$/.test(whatsappNumber)) {
+            return showNotification('WhatsApp number must be 10 to 15 digits.', true);
+        }
+        const websiteLinks = Array.from(document.querySelectorAll('.profile-website-input'))
+            .map(input => input.value.trim())
+            .filter(Boolean)
+            .slice(0, 3);
+        const invalidLink = websiteLinks.find(link => !/^https?:\/\/.+\..+/.test(link));
+        if (invalidLink) {
+            return showNotification('Website links must start with http:// or https://', true);
+        }
+
+        showNotification('Saving support profile...', false);
+        try {
+            const userRef = doc(db, `artifacts/${appId}/public/data/users`, currentUser.uid);
+            await updateDoc(userRef, {
+                whatsappNumber,
+                websiteLinks
             });
-            bindWebsiteLinkControls();
-            if (focusMethod) {
-                if (paymentSelect) paymentSelect.value = focusMethod;
-                document.getElementById('payment-details-container').innerHTML = renderPaymentDetailsForm(focusMethod, getProfilePaymentDetails(focusMethod));
-                setTimeout(() => document.getElementById('payment-details-container')?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 50);
-            }
+
+            currentUserData = { ...(currentUserData || {}), whatsappNumber, websiteLinks };
+            writeJsonCache(getUserCacheKey(currentUser.uid), sanitizeUserForCache(currentUserData, currentUser.uid));
+
+            window.closeModal();
+            showNotification('Support profile saved!');
+            showProfilePage();
+        } catch (e) {
+            console.error('Save support profile failed:', e);
+            showNotification('Could not save support profile.', true);
+        }
+    };
+};
+
+const showProfilePage = (focusMethod = '') => {
+    if (!currentUserData) return showNotification('User data not loaded. Please wait.', true);
+    if (focusMethod) return showSavedPaymentMethodsPage(focusMethod);
+
+    const isAdminProfile = currentUser?.uid === ADMIN_UID || currentUserData?.role === 'admin' || currentUserData?.role === 'owner';
+    const currentAvatar = getProfileAvatarUrl(currentUserData);
+    const isVerified = isUserVerifiedProfile(currentUserData);
+    const joinedSinceText = getJoinedSinceText(currentUserData);
+
+    const userDisplayName = currentUserData.name || (isAdminProfile ? 'REVIEWS WORLD ADMIN' : 'User');
+    const userMobile = currentUserData.mobile || currentUserData.phoneNumber || 'Not Set';
+    const userEmail = currentUserData.email || 'Not Set';
+
+    const content = `
+        ${getPageHeader('My Profile')}
+        <div class="max-w-lg mx-auto space-y-4 text-left px-1">
+            <!-- Header Card (Glowing Dark Purple Card matching screenshot mockup) -->
+            <div class="relative overflow-hidden rounded-[2rem] bg-gradient-to-br from-indigo-950 via-purple-900 to-slate-950 p-6 text-white shadow-xl border border-purple-500/20">
+                <!-- Background Wavy Glow Effect -->
+                <div class="absolute -right-10 -bottom-10 w-48 h-48 rounded-full bg-purple-500/20 blur-3xl pointer-events-none"></div>
+                <div class="absolute -left-10 -top-10 w-48 h-48 rounded-full bg-blue-500/20 blur-3xl pointer-events-none"></div>
+                
+                <div class="relative z-10 flex items-center gap-5">
+                    <!-- Circular Avatar with Camera Button -->
+                    <div class="relative shrink-0 cursor-pointer group" id="profile-avatar-trigger-btn">
+                        <div class="h-24 w-24 rounded-full p-1 bg-gradient-to-tr from-purple-500 via-indigo-400 to-emerald-400 shadow-xl">
+                            <img id="profile-avatar-preview" src="${escapeHtml(currentAvatar)}" class="h-full w-full rounded-full object-cover bg-slate-900 border-2 border-slate-950" alt="Avatar">
+                        </div>
+                        <!-- Lower Right Camera Button -->
+                        <div class="absolute bottom-0 right-0 h-8 w-8 rounded-full bg-purple-600 border-2 border-white flex items-center justify-center text-white shadow-md hover:bg-purple-700 transition active:scale-90">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
+                            </svg>
+                        </div>
+                        <input type="hidden" id="profile-avatar-url" value="${escapeHtml(currentAvatar)}">
+                    </div>
+
+                    <!-- User Details Column -->
+                    <div class="min-w-0 flex-1 space-y-1.5 text-left">
+                        <div class="flex items-center gap-1.5">
+                            <h3 class="text-lg font-black text-white truncate uppercase tracking-tight">${escapeHtml(userDisplayName)}</h3>
+                            ${isVerified ? `
+                            <span class="inline-flex items-center justify-center shrink-0 h-5 w-5 rounded-full bg-blue-500 text-white shadow-sm" title="Verified Profile">
+                                <svg class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="3">
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
+                                </svg>
+                            </span>` : ''}
+                        </div>
+                        <p class="flex items-center gap-2 text-xs font-semibold text-purple-200/90 truncate">
+                            <svg class="h-3.5 w-3.5 text-purple-400 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
+                            </svg>
+                            <span>${escapeHtml(userMobile)}</span>
+                        </p>
+                        <p class="flex items-center gap-2 text-xs font-semibold text-purple-200/90 truncate">
+                            <svg class="h-3.5 w-3.5 text-purple-400 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                            </svg>
+                            <span>${escapeHtml(userEmail)}</span>
+                        </p>
+                        <div class="pt-1">
+                            <span class="inline-flex items-center gap-1.5 rounded-full bg-purple-900/60 border border-purple-400/30 px-3 py-1 text-[10px] font-bold text-purple-200 shadow-inner">
+                                <svg class="h-3 w-3 text-purple-300" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                                </svg>
+                                <span>${escapeHtml(joinedSinceText)}</span>
+                            </span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Body Cards -->
+            <div class="space-y-3 pt-1">
+                <!-- Full Name Card -->
+                <div class="flex items-center justify-between gap-3 rounded-2xl bg-white dark:bg-slate-800 p-4 border border-slate-150 dark:border-slate-700/80 shadow-sm">
+                    <div class="flex items-center gap-3.5 min-w-0">
+                        <div class="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-purple-50 dark:bg-purple-950/50 text-purple-600 dark:text-purple-300 border border-purple-200/50">
+                            <svg class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                            </svg>
+                        </div>
+                        <div class="min-w-0 text-left">
+                            <p class="text-[11px] font-black uppercase text-slate-400 dark:text-slate-400 tracking-wide">Full Name</p>
+                            <p class="text-base font-black text-slate-900 dark:text-white truncate mt-0.5">${escapeHtml(userDisplayName)}</p>
+                        </div>
+                    </div>
+                    <button type="button" id="edit-full-name-btn" class="shrink-0 flex items-center gap-1.5 rounded-xl bg-purple-50 dark:bg-purple-900/30 hover:bg-purple-100 border border-purple-200/60 px-4 py-2 text-xs font-extrabold text-purple-700 dark:text-purple-300 transition active:scale-95">
+                        <svg class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                        </svg>
+                        <span>Edit</span>
+                    </button>
+                </div>
+
+                <!-- Saved Payment Method Card -->
+                <div id="open-saved-payment-methods-btn" class="cursor-pointer flex items-center justify-between gap-3 rounded-2xl bg-white dark:bg-slate-800 p-4 border border-slate-150 dark:border-slate-700/80 shadow-sm hover:border-purple-300 transition active:scale-98">
+                    <div class="flex items-center gap-3.5 min-w-0">
+                        <div class="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-purple-50 dark:bg-purple-950/50 text-purple-600 dark:text-purple-300 border border-purple-200/50">
+                            <svg class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M3 10h18M7 15h1m4 0h1m-7 4h12a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                            </svg>
+                        </div>
+                        <div class="min-w-0 text-left space-y-0.5">
+                            <p class="text-sm font-black text-slate-900 dark:text-white">Saved Payment Method</p>
+                            <p class="text-xs font-semibold text-slate-500 dark:text-slate-400 truncate">UPI • Bank Account • Google Play • Amazon Pay • Flipkart • PayPal • Crypto</p>
+                        </div>
+                    </div>
+                    <div class="shrink-0 text-purple-600 dark:text-purple-400">
+                        <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7" />
+                        </svg>
+                    </div>
+                </div>
+
+                ${isAdminProfile ? `
+                <!-- Support Profile Box (Admin Only) -->
+                <div id="open-admin-support-profile-btn" class="cursor-pointer flex items-center justify-between gap-3 rounded-2xl bg-blue-50/70 dark:bg-blue-950/30 p-4 border border-blue-200/60 dark:border-blue-800/60 shadow-sm hover:border-blue-400 transition active:scale-98">
+                    <div class="flex items-center gap-3.5 min-w-0">
+                        <div class="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-blue-100 dark:bg-blue-900/50 text-blue-600 dark:text-blue-300">
+                            <svg class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M18.364 5.636l-3.536 3.536m0 5.656l3.536 3.536M9.172 9.172L5.636 5.636m3.536 9.192l-3.536 3.536M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-5 0a4 4 0 11-8 0 4 4 0 018 0z" />
+                            </svg>
+                        </div>
+                        <div class="min-w-0 text-left space-y-0.5">
+                            <p class="text-sm font-black text-blue-950 dark:text-blue-100">Support Profile Settings</p>
+                            <p class="text-xs font-semibold text-blue-700/80 dark:text-blue-300/80 truncate">WhatsApp Number & Support Links for chat</p>
+                        </div>
+                    </div>
+                    <div class="shrink-0 text-blue-600 dark:text-blue-400">
+                        <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7" />
+                        </svg>
+                    </div>
+                </div>` : ''}
+            </div>
+        </div>
+        ${getPageFooter()}`;
+
+    showPage(content);
+
+    // Event Listeners
+    const avatarTrigger = document.getElementById('profile-avatar-trigger-btn');
+    if (avatarTrigger) {
+        avatarTrigger.onclick = () => {
+            const activeAvatar = document.getElementById('profile-avatar-url').value;
+            window.showProfilePhotoSelectionModal(activeAvatar, async (chosenUrl) => {
+                await syncProfilePhotoToDatabase(chosenUrl);
+            });
         };
+    }
+
+    const editNameBtn = document.getElementById('edit-full-name-btn');
+    if (editNameBtn) editNameBtn.onclick = showEditFullNameModal;
+
+    const paymentMethodsBtn = document.getElementById('open-saved-payment-methods-btn');
+    if (paymentMethodsBtn) paymentMethodsBtn.onclick = () => showSavedPaymentMethodsPage();
+
+    const supportProfileBtn = document.getElementById('open-admin-support-profile-btn');
+    if (supportProfileBtn) supportProfileBtn.onclick = showAdminSupportProfileModal;
+};
 
 const showSettingsPage = () => {
             if (!ensureUserSessionReady()) return;
@@ -1202,3 +1601,7 @@ window.handleSaveWhatsNewSettings = handleSaveWhatsNewSettings;
 window.showReferralSettingsPage = showReferralSettingsPage;
 window.handleSaveReferralSettings = handleSaveReferralSettings;
 window.handleUpdateProfile = handleUpdateProfile;
+window.showSavedPaymentMethodsPage = showSavedPaymentMethodsPage;
+window.showEditPaymentMethodModal = showEditPaymentMethodModal;
+window.showEditFullNameModal = showEditFullNameModal;
+window.showAdminSupportProfileModal = showAdminSupportProfileModal;
