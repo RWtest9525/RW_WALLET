@@ -775,44 +775,39 @@ const showProfilePage = (focusMethod = '') => {
     const content = `
         ${getPageHeader('My Profile')}
         <div class="max-w-lg mx-auto space-y-4 text-left px-1">
-            <!-- Header Card (User CSS Profile Card Layout) -->
+            <!-- Header Card (Exact User HTML & FontAwesome Icons) -->
             <div class="profile-card">
                 <div class="profile-left">
                     <div class="avatar-wrap cursor-pointer" id="profile-avatar-trigger-btn" title="Change Profile Photo">
                         <img id="profile-avatar-preview" src="${escapeHtml(currentAvatar)}" class="avatar" alt="Avatar">
                         <button type="button" class="camera-btn" aria-label="Camera">
-                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-                                <path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"></path>
-                                <circle cx="12" cy="13" r="3"></circle>
-                            </svg>
+                            <i class="fas fa-camera"></i>
                         </button>
                         <input type="hidden" id="profile-avatar-url" value="${escapeHtml(currentAvatar)}">
                     </div>
                 </div>
+
                 <div class="profile-right text-left">
                     <div class="name-row">
                         <h2 class="uppercase truncate">${escapeHtml(userDisplayName)}</h2>
                         ${isVerified ? `
-                        <svg class="verified w-5 h-5 inline-block text-[#35b8ff] fill-current shrink-0" viewBox="0 0 24 24" fill="currentColor" title="Verified Profile">
-                            <path d="M22.25 12c0-1.43-.88-2.67-2.19-3.34.46-1.39.2-2.9-.81-3.91s-2.52-1.27-3.91-.81c-.67-1.31-1.91-2.19-3.34-2.19s-2.67.88-3.34 2.19c-1.39-.46-2.9-.2-3.91.81s-1.27 2.52-.81 3.91c-1.31.67-2.19 1.91-2.19 3.34s.88 2.67 2.19 3.34c-.46 1.39-.2 2.9.81 3.91s2.52 1.27 3.91.81c.67 1.31 1.91 2.19 3.34 2.19s2.67-.88 3.34-2.19c1.39.46 2.9.2 3.91-.81s1.27-2.52.81-3.91c1.31-.67 2.19-1.91 2.19-3.34zm-11.7 4.8l-3.5-3.5 1.4-1.4 2.1 2.1 4.6-4.6 1.4 1.4-6 6z"/>
-                        </svg>` : ''}
+                        <span class="verified" title="Verified Profile">
+                            <i class="fas fa-check-circle"></i>
+                        </span>` : ''}
                     </div>
+
                     <div class="info">
-                        <svg class="h-4 w-4 text-[#d7c3ff] shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                            <path stroke-linecap="round" stroke-linejoin="round" d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
-                        </svg>
+                        <i class="fas fa-phone"></i>
                         <span class="truncate">${escapeHtml(userMobile)}</span>
                     </div>
-                    <div class="info" style="margin-top:6px;">
-                        <svg class="h-4 w-4 text-[#d7c3ff] shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                            <path stroke-linecap="round" stroke-linejoin="round" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
-                        </svg>
+
+                    <div class="info">
+                        <i class="fas fa-envelope"></i>
                         <span class="truncate">${escapeHtml(userEmail)}</span>
                     </div>
+
                     <div class="joined">
-                        <svg class="h-3.5 w-3.5 text-white shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                            <path stroke-linecap="round" stroke-linejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                        </svg>
+                        <i class="far fa-calendar"></i>
                         <span>${escapeHtml(joinedSinceText)}</span>
                     </div>
                 </div>
