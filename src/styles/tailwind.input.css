@@ -1,3 +1,168 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/* User Profile Card Styles */
+.profile-card {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    gap: 18px;
+    padding: 18px;
+    border-radius: 24px;
+    background: linear-gradient(
+        135deg,
+        #28115c,
+        #52208f,
+        #6a2bc9
+    );
+    box-shadow: 0 15px 35px rgba(110,70,255,.30);
+    overflow: hidden;
+    position: relative;
+}
+
+/* Background Glow */
+.profile-card::before {
+    content: "";
+    position: absolute;
+    width: 260px;
+    height: 260px;
+    right: -120px;
+    top: -100px;
+    background: rgba(255,255,255,.08);
+    border-radius: 50%;
+}
+
+.profile-card::after {
+    content: "";
+    position: absolute;
+    width: 220px;
+    height: 220px;
+    left: -120px;
+    bottom: -120px;
+    background: rgba(255,255,255,.05);
+    border-radius: 50%;
+}
+
+/* Left */
+.profile-left {
+    flex-shrink: 0;
+    position: relative;
+    z-index: 2;
+}
+
+.avatar-wrap {
+    position: relative;
+    width: 92px;
+    height: 92px;
+}
+
+.avatar {
+    width: 92px;
+    height: 92px;
+    border-radius: 50%;
+    border: 4px solid rgba(255,255,255,.85);
+    object-fit: cover;
+}
+
+.camera-btn {
+    position: absolute;
+    right: -2px;
+    bottom: -2px;
+    width: 34px;
+    height: 34px;
+    border: none;
+    border-radius: 50%;
+    background: #8b5cf6;
+    color: #fff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 5px 12px rgba(0,0,0,.25);
+    cursor: pointer;
+}
+
+/* Right */
+.profile-right {
+    flex: 1;
+    min-width: 0;
+    z-index: 2;
+}
+
+.name-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.name-row h2 {
+    margin: 0;
+    color: #fff;
+    font-size: 24px;
+    font-weight: 700;
+}
+
+.verified {
+    color: #35b8ff;
+    font-size: 20px;
+}
+
+.info {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-top: 12px;
+    color: #f5f5f5;
+    font-size: 16px;
+    word-break: break-word;
+}
+
+.info i {
+    width: 18px;
+    color: #d7c3ff;
+}
+
+.joined {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 16px;
+    padding: 8px 16px;
+    background: rgba(255,255,255,.12);
+    border: 1px solid rgba(255,255,255,.15);
+    border-radius: 999px;
+    color: #fff;
+    font-size: 14px;
+    backdrop-filter: blur(10px);
+}
+
+/* Mobile */
+@media (max-width: 480px) {
+    .profile-card {
+        gap: 14px;
+        padding: 16px;
+    }
+    .avatar-wrap {
+        width: 74px;
+        height: 74px;
+    }
+    .avatar {
+        width: 74px;
+        height: 74px;
+    }
+    .camera-btn {
+        width: 30px;
+        height: 30px;
+    }
+    .name-row h2 {
+        font-size: 20px;
+    }
+    .info {
+        font-size: 14px;
+    }
+    .joined {
+        font-size: 13px;
+        padding: 7px 13px;
+    }
+}
