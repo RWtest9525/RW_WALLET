@@ -10,12 +10,7 @@
     gap: 18px;
     padding: 18px;
     border-radius: 24px;
-    background: linear-gradient(
-        135deg,
-        #28115c,
-        #52208f,
-        #6a2bc9
-    );
+    background: url('/profile_card_bg.png') center/cover no-repeat, #28115c;
     box-shadow: 0 15px 35px rgba(110,70,255,.30);
     overflow: hidden;
     position: relative;
