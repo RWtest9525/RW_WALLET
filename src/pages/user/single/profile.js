@@ -321,39 +321,20 @@ const showCropperModal = (imageSrc, onSelect) => {
 
 window.showProfilePhotoSelectionModal = (currentAvatar, onSelect) => {
     const modalGridHtml = `
-        <div class="space-y-4 text-left">
-            <p class="text-xs font-black uppercase text-gray-400 tracking-wider">Select Premium Avatar</p>
-            <div class="grid grid-cols-5 gap-2.5">
-                ${PREMIUM_AVATARS.map((url, idx) => {
-                    const isSelected = url === currentAvatar;
-                    return `
-                    <div class="avatar-modal-option relative cursor-pointer aspect-square rounded-2xl overflow-hidden border-2 ${isSelected ? 'border-orange-500 ring-2 ring-orange-500/20 bg-orange-50 dark:bg-orange-950/20' : 'border-gray-200 dark:border-gray-700 hover:border-gray-400'} p-0.5 transition duration-200" data-avatar-url="${escapeHtml(url)}">
-                        <img src="${escapeHtml(url)}" alt="Avatar ${idx + 1}" class="w-full h-full object-cover rounded-xl bg-gray-50">
-                        ${isSelected ? '<div class="absolute bottom-1 right-1 h-4 w-4 bg-orange-500 rounded-full flex items-center justify-center text-[9px] font-black text-white">✓</div>' : ''}
-                    </div>`;
-                }).join('')}
-            </div>
-            
-            <div class="mt-4 pt-4 border-t border-gray-100 dark:border-gray-700 flex flex-col gap-2">
-                <button type="button" id="upload-custom-avatar-btn" class="w-full flex items-center justify-center gap-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white py-3 text-sm font-black transition shadow-md active:scale-98">
-                    📁 Upload Custom Photo
+        <div class="space-y-4 text-left p-1">
+            <p class="text-xs font-semibold text-gray-500">Choose a new profile photo from your device gallery.</p>
+            <div class="flex flex-col gap-3">
+                <button type="button" id="upload-custom-avatar-btn" class="w-full flex items-center justify-center gap-2 rounded-2xl bg-purple-600 hover:bg-purple-700 text-white py-3.5 text-sm font-black transition shadow-md active:scale-98">
+                    📁 Choose Photo from Gallery
                 </button>
                 <input type="file" id="custom-avatar-file-input" accept="image/*" class="hidden">
             </div>
         </div>
     `;
 
-    renderModal('Choose Avatar', modalGridHtml, `
+    renderModal('Choose Profile Photo', modalGridHtml, `
         <button onclick="window.closeModal()" class="w-full rounded-xl bg-gray-100 dark:bg-gray-700 py-3 text-sm font-extrabold text-gray-700 dark:text-gray-200">Cancel</button>
     `, 'max-w-md');
-
-    document.querySelectorAll('.avatar-modal-option').forEach(opt => {
-        opt.onclick = () => {
-            const chosenUrl = opt.getAttribute('data-avatar-url');
-            window.closeModal();
-            onSelect(chosenUrl);
-        };
-    });
 
     const uploadBtn = document.getElementById('upload-custom-avatar-btn');
     const fileInput = document.getElementById('custom-avatar-file-input');
@@ -483,8 +464,8 @@ const showSavedPaymentMethodsPage = (focusMethod = '') => {
         return `
             <div class="flex items-center justify-between gap-3 p-4 bg-white dark:bg-slate-800 rounded-2xl border border-slate-150 dark:border-slate-700/80 shadow-sm transition hover:shadow-md">
                 <div class="flex items-center gap-3.5 min-w-0">
-                    <div class="relative flex h-14 w-14 shrink-0 items-center justify-center rounded-full border border-indigo-100 bg-white p-1 shadow-sm overflow-hidden">
-                        <img src="${method.iconUrl}" alt="${escapeHtml(method.name)}" class="h-full w-full object-contain">
+                    <div class="relative flex h-12 w-12 shrink-0 items-center justify-center rounded-full border border-indigo-150 dark:border-indigo-800/60 bg-white p-1.5 shadow-sm overflow-hidden">
+                        <img src="${method.iconUrl}" alt="${escapeHtml(method.name)}" class="h-full w-full object-contain rounded-full">
                     </div>
                     <div class="min-w-0 text-left space-y-0.5">
                         <div class="flex items-center gap-2">
@@ -511,7 +492,7 @@ const showSavedPaymentMethodsPage = (focusMethod = '') => {
                     <path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7" />
                 </svg>
             </button>
-            <h2 class="text-base font-black text-gray-900 dark:text-white">Withdrawal Methods</h2>
+            <h2 class="text-base font-black text-gray-900 dark:text-white">Saved Payment Method</h2>
             <div class="w-9"></div>
         </div>
         <div class="max-w-lg mx-auto p-4 space-y-3 text-left">
@@ -794,21 +775,21 @@ const showProfilePage = (focusMethod = '') => {
     const content = `
         ${getPageHeader('My Profile')}
         <div class="max-w-lg mx-auto space-y-4 text-left px-1">
-            <!-- Header Card (Glowing Dark Purple Card matching screenshot mockup) -->
-            <div class="relative overflow-hidden rounded-[2rem] bg-gradient-to-br from-indigo-950 via-purple-900 to-slate-950 p-6 text-white shadow-xl border border-purple-500/20">
+            <!-- Header Card (Compact Ultra-Premium Dark Purple Card) -->
+            <div class="relative overflow-hidden rounded-3xl bg-gradient-to-br from-indigo-950 via-purple-900 to-slate-950 p-4.5 text-white shadow-xl border border-purple-500/20">
                 <!-- Background Wavy Glow Effect -->
-                <div class="absolute -right-10 -bottom-10 w-48 h-48 rounded-full bg-purple-500/20 blur-3xl pointer-events-none"></div>
-                <div class="absolute -left-10 -top-10 w-48 h-48 rounded-full bg-blue-500/20 blur-3xl pointer-events-none"></div>
+                <div class="absolute -right-8 -bottom-8 w-40 h-40 rounded-full bg-purple-500/20 blur-2xl pointer-events-none"></div>
+                <div class="absolute -left-8 -top-8 w-40 h-40 rounded-full bg-blue-500/20 blur-2xl pointer-events-none"></div>
                 
-                <div class="relative z-10 flex items-center gap-5">
+                <div class="relative z-10 flex items-center gap-4">
                     <!-- Circular Avatar with Camera Button -->
-                    <div class="relative shrink-0 cursor-pointer group" id="profile-avatar-trigger-btn">
-                        <div class="h-24 w-24 rounded-full p-1 bg-gradient-to-tr from-purple-500 via-indigo-400 to-emerald-400 shadow-xl">
-                            <img id="profile-avatar-preview" src="${escapeHtml(currentAvatar)}" class="h-full w-full rounded-full object-cover bg-slate-900 border-2 border-slate-950" alt="Avatar">
+                    <div class="relative shrink-0 cursor-pointer" id="profile-avatar-trigger-btn">
+                        <div class="h-20 w-20 rounded-full p-1 bg-gradient-to-tr from-purple-500 via-indigo-400 to-emerald-400 shadow-md">
+                            <img id="profile-avatar-preview" src="${escapeHtml(currentAvatar)}" class="h-full w-full rounded-full object-cover bg-slate-900 border border-slate-950" alt="Avatar">
                         </div>
-                        <!-- Lower Right Camera Button -->
-                        <div class="absolute bottom-0 right-0 h-8 w-8 rounded-full bg-purple-600 border-2 border-white flex items-center justify-center text-white shadow-md hover:bg-purple-700 transition active:scale-90">
-                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
+                        <!-- Small Perfect Circle Camera Button -->
+                        <div class="absolute bottom-0.5 right-0.5 h-6.5 w-6.5 rounded-full bg-purple-600 border-2 border-white flex items-center justify-center text-white shadow-sm hover:bg-purple-700 transition active:scale-90">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
                                 <path stroke-linecap="round" stroke-linejoin="round" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
                                 <path stroke-linecap="round" stroke-linejoin="round" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
                             </svg>
@@ -816,32 +797,30 @@ const showProfilePage = (focusMethod = '') => {
                         <input type="hidden" id="profile-avatar-url" value="${escapeHtml(currentAvatar)}">
                     </div>
 
-                    <!-- User Details Column -->
-                    <div class="min-w-0 flex-1 space-y-1.5 text-left">
+                    <!-- User Details Column (Tighter Spacing, Crisp Text) -->
+                    <div class="min-w-0 flex-1 space-y-1 text-left">
                         <div class="flex items-center gap-1.5">
-                            <h3 class="text-lg font-black text-white truncate uppercase tracking-tight">${escapeHtml(userDisplayName)}</h3>
+                            <h3 class="text-base sm:text-lg font-black text-white truncate uppercase tracking-tight">${escapeHtml(userDisplayName)}</h3>
                             ${isVerified ? `
-                            <span class="inline-flex items-center justify-center shrink-0 h-5 w-5 rounded-full bg-blue-500 text-white shadow-sm" title="Verified Profile">
-                                <svg class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="3">
-                                    <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
-                                </svg>
-                            </span>` : ''}
+                            <svg class="w-4 h-4 inline-block text-blue-500 fill-current shrink-0" viewBox="0 0 24 24" fill="currentColor" title="Verified Profile">
+                                <path d="M22.25 12c0-1.43-.88-2.67-2.19-3.34.46-1.39.2-2.9-.81-3.91s-2.52-1.27-3.91-.81c-.67-1.31-1.91-2.19-3.34-2.19s-2.67.88-3.34 2.19c-1.39-.46-2.9-.2-3.91.81s-1.27 2.52-.81 3.91c-1.31.67-2.19 1.91-2.19 3.34s.88 2.67 2.19 3.34c-.46 1.39-.2 2.9.81 3.91s2.52 1.27 3.91.81c.67 1.31 1.91 2.19 3.34 2.19s2.67-.88 3.34-2.19c1.39.46 2.9.2 3.91-.81s1.27-2.52.81-3.91c1.31-.67 2.19-1.91 2.19-3.34zm-11.7 4.8l-3.5-3.5 1.4-1.4 2.1 2.1 4.6-4.6 1.4 1.4-6 6z"/>
+                            </svg>` : ''}
                         </div>
-                        <p class="flex items-center gap-2 text-xs font-semibold text-purple-200/90 truncate">
+                        <p class="flex items-center gap-1.5 text-xs font-semibold text-purple-200/90 truncate">
                             <svg class="h-3.5 w-3.5 text-purple-400 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
                                 <path stroke-linecap="round" stroke-linejoin="round" d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
                             </svg>
                             <span>${escapeHtml(userMobile)}</span>
                         </p>
-                        <p class="flex items-center gap-2 text-xs font-semibold text-purple-200/90 truncate">
+                        <p class="flex items-center gap-1.5 text-xs font-semibold text-purple-200/90 truncate">
                             <svg class="h-3.5 w-3.5 text-purple-400 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
                                 <path stroke-linecap="round" stroke-linejoin="round" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
                             </svg>
                             <span>${escapeHtml(userEmail)}</span>
                         </p>
-                        <div class="pt-1">
-                            <span class="inline-flex items-center gap-1.5 rounded-full bg-purple-900/60 border border-purple-400/30 px-3 py-1 text-[10px] font-bold text-purple-200 shadow-inner">
-                                <svg class="h-3 w-3 text-purple-300" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                        <div class="pt-0.5">
+                            <span class="inline-flex items-center gap-1.5 rounded-full bg-purple-900/60 border border-purple-400/30 px-2.5 py-0.5 text-[10px] font-bold text-purple-200 shadow-inner">
+                                <svg class="h-3 w-3 text-purple-300 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
                                     <path stroke-linecap="round" stroke-linejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
                                 </svg>
                                 <span>${escapeHtml(joinedSinceText)}</span>
