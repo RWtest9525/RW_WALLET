@@ -899,7 +899,7 @@ async function createNotification(d1, { title = '', message = '', audience = 'se
   const uniqueRecipients = Array.from(new Set((Array.isArray(recipients) ? recipients : [])
     .map((recipient) => String(recipient || '').trim())
     .filter(Boolean)));
-  if (!uniqueRecipients.length) throw new Error('RECIPIENTS_REQUIRED');
+  if (!uniqueRecipients.length && audience !== 'all') throw new Error('RECIPIENTS_REQUIRED');
 
   const createdAt = nowMs();
   const id = `notif_${createdAt}_${Math.random().toString(36).slice(2, 10)}`;
@@ -910,16 +910,21 @@ async function createNotification(d1, { title = '', message = '', audience = 'se
     [id, String(title || '').trim().slice(0, 160), cleanMessage, senderId, String(audience || 'selected').slice(0, 40), createdAt, expiresAt]
   );
 
-  const chunkSize = 25;
-  for (let index = 0; index < uniqueRecipients.length; index += chunkSize) {
-    const chunk = uniqueRecipients.slice(index, index + chunkSize);
-    const valuesSql = chunk.map(() => '(?, ?, ?, NULL)').join(', ');
-    const params = chunk.flatMap((userId) => [id, userId, createdAt]);
-    await d1.query(
-      `INSERT OR IGNORE INTO notification_recipients (notification_id, user_id, delivered_at, read_at)
-       VALUES ${valuesSql}`,
-      params
-    );
+  if (audience === 'all') {
+    sendOneSignalPush('all', title, cleanMessage).catch((err) => console.error('[OneSignal] Broadcast push failed:', err));
+  } else if (uniqueRecipients.length > 0) {
+    const chunkSize = 25;
+    for (let index = 0; index < uniqueRecipients.length; index += chunkSize) {
+      const chunk = uniqueRecipients.slice(index, index + chunkSize);
+      const valuesSql = chunk.map(() => '(?, ?, ?, NULL)').join(', ');
+      const params = chunk.flatMap((userId) => [id, userId, createdAt]);
+      await d1.query(
+        `INSERT OR IGNORE INTO notification_recipients (notification_id, user_id, delivered_at, read_at)
+         VALUES ${valuesSql}`,
+        params
+      );
+    }
+    sendOneSignalPush(uniqueRecipients, title, cleanMessage).catch((err) => console.error('[OneSignal] Targeted push failed:', err));
   }
 
   return { id, title: String(title || '').trim().slice(0, 160), message: cleanMessage, audience, createdAt, expiresAt, deliveredCount: uniqueRecipients.length };
@@ -997,35 +1002,48 @@ async function deleteNotification(d1, notificationId, deletedAt = nowMs()) {
   );
 }
 
-async function sendOneSignalPush(userId, title, message) {
+async function sendOneSignalPush(target, title, message) {
   const appId = process.env.ONESIGNAL_APP_ID || '465e22bd-8540-437b-ba7b-efa14ef4069f';
   const apiKey = process.env.ONESIGNAL_REST_API_KEY;
-  if (!apiKey) {
+  if (!apiKey || apiKey === 'your_onesignal_rest_api_key') {
     console.warn('[OneSignal] ONESIGNAL_REST_API_KEY not configured, skipping push.');
     return;
   }
 
   try {
+    const payload = {
+      app_id: appId,
+      headings: { en: title },
+      contents: { en: message }
+    };
+
+    if (target === 'all' || target === 'broadcast') {
+      payload.included_segments = ['Subscribed Users', 'All'];
+    } else if (Array.isArray(target) && target.length > 0) {
+      payload.include_aliases = { external_id: target };
+      payload.include_external_user_ids = target;
+      payload.target_channel = 'push';
+    } else if (typeof target === 'string' && target.trim()) {
+      payload.include_aliases = { external_id: [target.trim()] };
+      payload.include_external_user_ids = [target.trim()];
+      payload.target_channel = 'push';
+    } else {
+      return;
+    }
+
     const response = await fetch('https://onesignal.com/api/v1/notifications', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json; charset=utf-8',
         'Authorization': `Basic ${apiKey}`
       },
-      body: JSON.stringify({
-        app_id: appId,
-        include_aliases: {
-          external_id: [userId]
-        },
-        target_channel: 'push',
-        headings: { en: title },
-        contents: { en: message }
-      })
+      body: JSON.stringify(payload)
     });
     const result = await response.json().catch(() => ({}));
-    console.log(`[OneSignal] Push sent to ${userId}. Response:`, result);
+    console.log(`[OneSignal] Push sent to ${JSON.stringify(target)}. Response:`, result);
+    return result;
   } catch (err) {
-    console.error(`[OneSignal] Push failed for ${userId}:`, err);
+    console.error(`[OneSignal] Push failed:`, err);
   }
 }
 
@@ -1908,6 +1926,64 @@ async function processPeriodicLiveChecksAndPayouts(d1) {
   }
 
   console.log('[Scheduler] Finished 3rd and 7th day live check and payout processor.');
+}
+
+async function sendDailySummaryToAdmins(d1) {
+  try {
+    const now = new Date();
+    const istOffset = 330 * 60 * 1000;
+    const istNow = new Date(now.getTime() + istOffset);
+    const istMidnight = new Date(istNow.getFullYear(), istNow.getMonth(), istNow.getDate());
+    const startTimestamp = istMidnight.getTime() - istOffset;
+
+    const transactions = await d1.all(
+      `SELECT t.amount, u.parent_admin
+       FROM transactions t
+       JOIN users u ON t.user_id = u.id
+       WHERE t.type = 'credit'
+         AND t.timestamp >= ?
+         AND (t.details_json LIKE '%task_payout%' OR t.details_json LIKE '%task_auto_payout%' OR t.details_json LIKE '%task_manual_payout%' OR t.details_json LIKE '%task_payout_day7%')`,
+      [startTimestamp]
+    );
+
+    let overallTotal = 0;
+    const subAdminTotals = {};
+
+    for (const tx of transactions) {
+      const amt = Number(tx.amount || 0);
+      overallTotal += amt;
+      const parentAdmin = tx.parent_admin || tx.parentAdmin || '';
+      if (parentAdmin) {
+        subAdminTotals[parentAdmin] = (subAdminTotals[parentAdmin] || 0) + amt;
+      }
+    }
+
+    const admins = await d1.all("SELECT id, role FROM users WHERE role = 'admin' OR role = 'owner' OR id = ?", [ADMIN_UID]);
+    const uniqueAdmins = Array.from(new Set(admins.map(a => a.id)));
+
+    for (const adminId of uniqueAdmins) {
+      const adminRecord = admins.find(a => a.id === adminId);
+      const isAdminOwner = adminId === ADMIN_UID || (adminRecord && adminRecord.role === 'owner');
+      if (isAdminOwner) {
+        await sendNotification(
+          d1,
+          adminId,
+          'Daily Payout Summary',
+          `Overall total funds sent to users for task approvals today: ₹${overallTotal.toFixed(2)}.`
+        );
+      } else {
+        const subAdminTotal = subAdminTotals[adminId] || 0;
+        await sendNotification(
+          d1,
+          adminId,
+          'Daily Payout Summary',
+          `Total funds sent to users for task approvals today from your panel: ₹${subAdminTotal.toFixed(2)}.`
+        );
+      }
+    }
+  } catch (err) {
+    console.error('Failed to send daily summary to admins:', err);
+  }
 }
 
 async function processDailyLists(d1) {
@@ -5501,64 +5577,6 @@ async function createCloudflareWalletService() {
     processPeriodicLiveChecksAndPayouts(d1).catch((error) => console.error('Scheduled periodic live checks payout failed:', error));
   }, 60 * 60 * 1000);
   cleanupTimer.unref?.();
-
-  async function sendDailySummaryToAdmins(d1) {
-    try {
-      const now = new Date();
-      const istOffset = 330 * 60 * 1000;
-      const istNow = new Date(now.getTime() + istOffset);
-      const istMidnight = new Date(istNow.getFullYear(), istNow.getMonth(), istNow.getDate());
-      const startTimestamp = istMidnight.getTime() - istOffset;
-
-      const transactions = await d1.all(
-        `SELECT t.amount, u.parent_admin
-         FROM transactions t
-         JOIN users u ON t.user_id = u.id
-         WHERE t.type = 'credit'
-           AND t.timestamp >= ?
-           AND (t.details_json LIKE '%task_payout%' OR t.details_json LIKE '%task_auto_payout%' OR t.details_json LIKE '%task_manual_payout%' OR t.details_json LIKE '%task_payout_day7%')`,
-        [startTimestamp]
-      );
-
-      let overallTotal = 0;
-      const subAdminTotals = {};
-
-      for (const tx of transactions) {
-        const amt = Number(tx.amount || 0);
-        overallTotal += amt;
-        const parentAdmin = tx.parent_admin || tx.parentAdmin || '';
-        if (parentAdmin) {
-          subAdminTotals[parentAdmin] = (subAdminTotals[parentAdmin] || 0) + amt;
-        }
-      }
-
-      const admins = await d1.all("SELECT id, role FROM users WHERE role = 'admin' OR role = 'owner' OR id = ?", [ADMIN_UID]);
-      const uniqueAdmins = Array.from(new Set(admins.map(a => a.id)));
-
-      for (const adminId of uniqueAdmins) {
-        const adminRecord = admins.find(a => a.id === adminId);
-        const isAdminOwner = adminId === ADMIN_UID || (adminRecord && adminRecord.role === 'owner');
-        if (isAdminOwner) {
-          await sendNotification(
-            d1,
-            adminId,
-            'Daily Payout Summary',
-            `Overall total funds sent to users for task approvals today: ₹${overallTotal.toFixed(2)}.`
-          );
-        } else {
-          const subAdminTotal = subAdminTotals[adminId] || 0;
-          await sendNotification(
-            d1,
-            adminId,
-            'Daily Payout Summary',
-            `Total funds sent to users for task approvals today from your panel: ₹${subAdminTotal.toFixed(2)}.`
-          );
-        }
-      }
-    } catch (err) {
-      console.error('Failed to send daily summary to admins:', err);
-    }
-  }
 
   // Schedule auto-payout at 8 PM IST daily
   const scheduleAutoPayoutAt8PM = () => {
