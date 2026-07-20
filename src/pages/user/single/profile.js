@@ -408,7 +408,7 @@ const showSavedPaymentMethodsPage = (focusMethod = '') => {
         {
             id: 'upi',
             name: 'UPI',
-            iconUrl: 'https://cdn-icons-png.flaticon.com/512/10110/10110436.png',
+            iconUrl: '/withdraw_upi.png',
             getSummary: () => {
                 const details = getProfilePaymentDetails('upi');
                 return details.upiId ? details.upiId : 'Not Added Yet';
@@ -417,7 +417,7 @@ const showSavedPaymentMethodsPage = (focusMethod = '') => {
         {
             id: 'bank',
             name: 'Bank Account',
-            iconUrl: 'https://cdn-icons-png.flaticon.com/512/2830/2830284.png',
+            iconUrl: '/withdraw_bank.png',
             getSummary: () => {
                 const details = getProfilePaymentDetails('bank');
                 if (!details.accountNumber) return 'Not Added Yet';
@@ -429,7 +429,7 @@ const showSavedPaymentMethodsPage = (focusMethod = '') => {
         {
             id: 'play_store',
             name: 'Google Play',
-            iconUrl: 'https://cdn-icons-png.flaticon.com/512/6124/6124997.png',
+            iconUrl: '/withdraw_playstore.png',
             getSummary: () => {
                 const details = getProfilePaymentDetails('play_store');
                 return details.email ? details.email : 'Not Added Yet';
@@ -438,7 +438,7 @@ const showSavedPaymentMethodsPage = (focusMethod = '') => {
         {
             id: 'amazon_gift',
             name: 'Amazon Pay',
-            iconUrl: 'https://cdn-icons-png.flaticon.com/512/5968/5968269.png',
+            iconUrl: '/withdraw_amazon.png',
             getSummary: () => {
                 const details = getProfilePaymentDetails('amazon_gift');
                 return details.email ? details.email : 'Not Added Yet';
@@ -447,7 +447,7 @@ const showSavedPaymentMethodsPage = (focusMethod = '') => {
         {
             id: 'flipkart_gift',
             name: 'Flipkart Voucher',
-            iconUrl: 'https://cdn-icons-png.flaticon.com/512/825/825508.png',
+            iconUrl: '/withdraw_flipkart.png',
             getSummary: () => {
                 const details = getProfilePaymentDetails('flipkart_gift');
                 return details.email ? details.email : 'Not Added Yet';
@@ -456,7 +456,7 @@ const showSavedPaymentMethodsPage = (focusMethod = '') => {
         {
             id: 'paypal',
             name: 'PayPal',
-            iconUrl: 'https://cdn-icons-png.flaticon.com/512/174/174861.png',
+            iconUrl: '/withdraw_paypal.png',
             getSummary: () => {
                 const details = getProfilePaymentDetails('paypal');
                 return details.email ? details.email : 'Not Added Yet';
@@ -465,7 +465,7 @@ const showSavedPaymentMethodsPage = (focusMethod = '') => {
         {
             id: 'crypto',
             name: 'Crypto Wallet',
-            iconUrl: 'https://cdn-icons-png.flaticon.com/512/6001/6001368.png',
+            iconUrl: '/withdraw_crypto.png',
             getSummary: () => {
                 const details = getProfilePaymentDetails('crypto');
                 return (details.address || details.email) ? (details.address || details.email) : 'Not Added Yet';
@@ -483,10 +483,8 @@ const showSavedPaymentMethodsPage = (focusMethod = '') => {
         return `
             <div class="flex items-center justify-between gap-3 p-4 bg-white dark:bg-slate-800 rounded-2xl border border-slate-150 dark:border-slate-700/80 shadow-sm transition hover:shadow-md">
                 <div class="flex items-center gap-3.5 min-w-0">
-                    <div class="relative flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-gradient-to-tr from-indigo-500 via-purple-500 to-pink-500 p-0.5 shadow-md">
-                        <div class="h-full w-full rounded-full bg-white p-2.5 flex items-center justify-center overflow-hidden">
-                            <img src="${method.iconUrl}" alt="${escapeHtml(method.name)}" class="h-full w-full object-contain">
-                        </div>
+                    <div class="relative flex h-14 w-14 shrink-0 items-center justify-center rounded-full border border-indigo-100 bg-white p-1 shadow-sm overflow-hidden">
+                        <img src="${method.iconUrl}" alt="${escapeHtml(method.name)}" class="h-full w-full object-contain">
                     </div>
                     <div class="min-w-0 text-left space-y-0.5">
                         <div class="flex items-center gap-2">
@@ -783,7 +781,6 @@ const showAdminSupportProfileModal = () => {
 
 const showProfilePage = (focusMethod = '') => {
     if (!currentUserData) return showNotification('User data not loaded. Please wait.', true);
-    if (focusMethod) return showSavedPaymentMethodsPage(focusMethod);
 
     const isAdminProfile = currentUser?.uid === ADMIN_UID || currentUserData?.role === 'admin' || currentUserData?.role === 'owner';
     const currentAvatar = getProfileAvatarUrl(currentUserData);
