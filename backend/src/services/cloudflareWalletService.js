@@ -1115,7 +1115,9 @@ async function sendOneSignalPush(d1OrTarget, targetOrTitle, titleOrMessage, mess
       include_aliases: { external_id: externalIds },
       target_channel: 'push',
       headings: { en: cleanTitle },
-      contents: { en: cleanMsg }
+      contents: { en: cleanMsg },
+      priority: 10,
+      ttl: 259200
     }, apiKey);
 
     const reqLegacy = postOneSignalApi({
@@ -1123,7 +1125,9 @@ async function sendOneSignalPush(d1OrTarget, targetOrTitle, titleOrMessage, mess
       include_external_user_ids: externalIds,
       channel_for_external_user_ids: 'push',
       headings: { en: cleanTitle },
-      contents: { en: cleanMsg }
+      contents: { en: cleanMsg },
+      priority: 10,
+      ttl: 259200
     }, apiKey);
 
     const [resV11, resLegacy] = await Promise.all([reqV11, reqLegacy]);
@@ -5584,7 +5588,7 @@ function registerSocketHandlers(io, { d1 }) {
             io.to(socketId).emit('new_message', chatMessage);
           });
 
-          // Send push notification if admin does not have this room open
+          // Send direct outside push notification to admin (WhatsApp style)
           if (!adminRooms.has(roomId)) {
             (async () => {
               try {
@@ -5592,23 +5596,23 @@ function registerSocketHandlers(io, { d1 }) {
                 const parentAdmin = senderUser?.parent_admin || ADMIN_UID;
                 const senderName = senderUser?.name || userMeta.userName || 'User';
                 
-                await sendNotification(d1, parentAdmin, 'New Support Message', `From ${senderName}: "${chatMessage.message.slice(0, 100)}"`);
+                await sendOneSignalPush(d1, parentAdmin, `💬 New Message from ${senderName}`, chatMessage.message.slice(0, 150));
                 if (parentAdmin !== ADMIN_UID) {
-                  await sendNotification(d1, ADMIN_UID, 'New Support Message', `From ${senderName}: "${chatMessage.message.slice(0, 100)}"`);
+                  await sendOneSignalPush(d1, ADMIN_UID, `💬 New Message from ${senderName}`, chatMessage.message.slice(0, 150));
                 }
               } catch (err) {
-                console.error('Support chat admin notification failed:', err);
+                console.error('Support chat admin push failed:', err);
               }
             })();
           }
         } else {
-          // Send push notification when admin replies in support chat
+          // Send direct outside push notification to user (WhatsApp style)
           (async () => {
             try {
               const recipientUserId = roomId.replace(/^support_/, '');
-              await sendNotification(d1, recipientUserId, 'Support Team Reply', `Admin: "${chatMessage.message.slice(0, 100)}"`);
+              await sendOneSignalPush(d1, recipientUserId, '💬 Support Team Reply', `Admin: "${chatMessage.message.slice(0, 150)}"`);
             } catch (err) {
-              console.error('Support chat user notification failed:', err);
+              console.error('Support chat user push failed:', err);
             }
           })();
         }
