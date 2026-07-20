@@ -911,7 +911,7 @@ async function createNotification(d1, { title = '', message = '', audience = 'se
   );
 
   if (audience === 'all') {
-    sendOneSignalPush('all', title, cleanMessage).catch((err) => console.error('[OneSignal] Broadcast push failed:', err));
+    sendOneSignalPush(d1, 'all', title, cleanMessage).catch((err) => console.error('[OneSignal] Broadcast push failed:', err));
   } else if (uniqueRecipients.length > 0) {
     const chunkSize = 25;
     for (let index = 0; index < uniqueRecipients.length; index += chunkSize) {
@@ -924,7 +924,7 @@ async function createNotification(d1, { title = '', message = '', audience = 'se
         params
       );
     }
-    sendOneSignalPush(uniqueRecipients, title, cleanMessage).catch((err) => console.error('[OneSignal] Targeted push failed:', err));
+    sendOneSignalPush(d1, uniqueRecipients, title, cleanMessage).catch((err) => console.error('[OneSignal] Targeted push failed:', err));
   }
 
   return { id, title: String(title || '').trim().slice(0, 160), message: cleanMessage, audience, createdAt, expiresAt, deliveredCount: uniqueRecipients.length };
@@ -1002,7 +1002,50 @@ async function deleteNotification(d1, notificationId, deletedAt = nowMs()) {
   );
 }
 
-async function sendOneSignalPush(target, title, message) {
+async function resolveUserOneSignalIds(d1, target) {
+  if (!target) return [];
+  const targets = Array.isArray(target) ? target : [target];
+  const resolved = new Set();
+
+  for (const t of targets) {
+    if (!t) continue;
+    const str = String(t).trim();
+    if (!str || str === 'all' || str === 'broadcast') continue;
+    resolved.add(str);
+
+    if (d1 && typeof d1.all === 'function') {
+      try {
+        const rows = await d1.all(
+          `SELECT id, firebase_uid, email FROM users WHERE id = ? OR firebase_uid = ? OR email = ? LIMIT 1`,
+          [str, str, str]
+        );
+        const user = rows?.[0];
+        if (user) {
+          if (user.id) resolved.add(String(user.id).trim());
+          if (user.firebase_uid) resolved.add(String(user.firebase_uid).trim());
+        }
+      } catch {
+        // Continue with collected targets
+      }
+    }
+  }
+
+  return Array.from(resolved);
+}
+
+async function sendOneSignalPush(d1OrTarget, targetOrTitle, titleOrMessage, messageOnly) {
+  let d1 = null;
+  let target = d1OrTarget;
+  let title = targetOrTitle;
+  let message = titleOrMessage;
+
+  if (d1OrTarget && typeof d1OrTarget.query === 'function') {
+    d1 = d1OrTarget;
+    target = targetOrTitle;
+    title = titleOrMessage;
+    message = messageOnly;
+  }
+
   const appId = process.env.ONESIGNAL_APP_ID || '465e22bd-8540-437b-ba7b-efa14ef4069f';
   const apiKey = process.env.ONESIGNAL_REST_API_KEY;
   if (!apiKey || apiKey === 'your_onesignal_rest_api_key') {
@@ -1010,40 +1053,68 @@ async function sendOneSignalPush(target, title, message) {
     return;
   }
 
-  try {
-    const payload = {
-      app_id: appId,
-      headings: { en: title },
-      contents: { en: message }
-    };
+  const cleanTitle = String(title || '').trim();
+  const cleanMsg = String(message || '').trim();
+  if (!cleanTitle && !cleanMsg) return;
 
+  try {
     if (target === 'all' || target === 'broadcast') {
-      payload.included_segments = ['Subscribed Users', 'All'];
-    } else if (Array.isArray(target) && target.length > 0) {
-      payload.include_aliases = { external_id: target };
-      payload.include_external_user_ids = target;
-      payload.target_channel = 'push';
-    } else if (typeof target === 'string' && target.trim()) {
-      payload.include_aliases = { external_id: [target.trim()] };
-      payload.include_external_user_ids = [target.trim()];
-      payload.target_channel = 'push';
-    } else {
-      return;
+      const response = await fetch('https://onesignal.com/api/v1/notifications', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json; charset=utf-8',
+          'Authorization': `Basic ${apiKey}`
+        },
+        body: JSON.stringify({
+          app_id: appId,
+          included_segments: ['Subscribed Users', 'All'],
+          headings: { en: cleanTitle },
+          contents: { en: cleanMsg }
+        })
+      });
+      const result = await response.json().catch(() => ({}));
+      console.log('[OneSignal] Broadcast push response:', result);
+      return result;
     }
 
-    const response = await fetch('https://onesignal.com/api/v1/notifications', {
+    const externalIds = await resolveUserOneSignalIds(d1, target);
+    if (!externalIds.length) return;
+
+    const reqV11 = fetch('https://onesignal.com/api/v1/notifications', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json; charset=utf-8',
         'Authorization': `Basic ${apiKey}`
       },
-      body: JSON.stringify(payload)
-    });
-    const result = await response.json().catch(() => ({}));
-    console.log(`[OneSignal] Push sent to ${JSON.stringify(target)}. Response:`, result);
-    return result;
+      body: JSON.stringify({
+        app_id: appId,
+        include_aliases: { external_id: externalIds },
+        target_channel: 'push',
+        headings: { en: cleanTitle },
+        contents: { en: cleanMsg }
+      })
+    }).then((r) => r.json()).catch(() => ({}));
+
+    const reqLegacy = fetch('https://onesignal.com/api/v1/notifications', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json; charset=utf-8',
+        'Authorization': `Basic ${apiKey}`
+      },
+      body: JSON.stringify({
+        app_id: appId,
+        include_external_user_ids: externalIds,
+        channel_for_external_user_ids: 'push',
+        headings: { en: cleanTitle },
+        contents: { en: cleanMsg }
+      })
+    }).then((r) => r.json()).catch(() => ({}));
+
+    const [resV11, resLegacy] = await Promise.all([reqV11, reqLegacy]);
+    console.log(`[OneSignal] Push sent to ${JSON.stringify(externalIds)}. v11 res:`, resV11, 'legacy res:', resLegacy);
+    return resV11 || resLegacy;
   } catch (err) {
-    console.error(`[OneSignal] Push failed:`, err);
+    console.error('[OneSignal] Push failed:', err);
   }
 }
 
@@ -1057,9 +1128,8 @@ async function sendNotification(d1, userId, title, message) {
     });
   } catch (err) {
     console.error(`Failed to save notification to DB for ${userId}:`, err);
+    await sendOneSignalPush(d1, userId, title, message);
   }
-
-  await sendOneSignalPush(userId, title, message);
 }
 
 async function putR2Object(r2, key, body, contentType = 'application/json') {
@@ -5516,17 +5586,15 @@ function registerSocketHandlers(io, { d1 }) {
             })();
           }
         } else {
-          // Send push notification if user does not have this room open
-          if (!userRooms.has(roomId)) {
-            (async () => {
-              try {
-                const recipientUserId = roomId.replace(/^support_/, '');
-                await sendNotification(d1, recipientUserId, 'Support Team Reply', `Admin: "${chatMessage.message.slice(0, 100)}"`);
-              } catch (err) {
-                console.error('Support chat user notification failed:', err);
-              }
-            })();
-          }
+          // Send push notification when admin replies in support chat
+          (async () => {
+            try {
+              const recipientUserId = roomId.replace(/^support_/, '');
+              await sendNotification(d1, recipientUserId, 'Support Team Reply', `Admin: "${chatMessage.message.slice(0, 100)}"`);
+            } catch (err) {
+              console.error('Support chat user notification failed:', err);
+            }
+          })();
         }
         upsertChatRoom(d1, {
             roomId,
