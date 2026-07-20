@@ -1033,6 +1033,44 @@ async function resolveUserOneSignalIds(d1, target) {
   return Array.from(resolved);
 }
 
+function getOneSignalAuthHeaders(apiKey) {
+  const cleanKey = String(apiKey || '').replace(/[\r\n\t]+/g, '').trim();
+  if (!cleanKey) return [];
+  if (/^(Basic|Key|Bearer)\s+/i.test(cleanKey)) {
+    return [cleanKey];
+  }
+  if (cleanKey.startsWith('os_v2_')) {
+    return [`Key ${cleanKey}`, `Basic ${cleanKey}`];
+  }
+  return [`Basic ${cleanKey}`, `Key ${cleanKey}`];
+}
+
+async function postOneSignalApi(payload, apiKey) {
+  const headersList = getOneSignalAuthHeaders(apiKey);
+  let lastResult = null;
+  for (const authHeader of headersList) {
+    try {
+      const response = await fetch('https://onesignal.com/api/v1/notifications', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json; charset=utf-8',
+          'Authorization': authHeader
+        },
+        body: JSON.stringify(payload)
+      });
+      const result = await response.json().catch(() => ({}));
+      if (response.ok && !result.errors) {
+        return result;
+      }
+      lastResult = result;
+      console.warn(`[OneSignal] Auth header '${authHeader.slice(0, 15)}...' result:`, result?.errors || response.statusText);
+    } catch (err) {
+      console.error('[OneSignal] Fetch request error:', err);
+    }
+  }
+  return lastResult;
+}
+
 async function sendOneSignalPush(d1OrTarget, targetOrTitle, titleOrMessage, messageOnly) {
   let d1 = null;
   let target = d1OrTarget;
@@ -1059,56 +1097,34 @@ async function sendOneSignalPush(d1OrTarget, targetOrTitle, titleOrMessage, mess
 
   try {
     if (target === 'all' || target === 'broadcast') {
-      const response = await fetch('https://onesignal.com/api/v1/notifications', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json; charset=utf-8',
-          'Authorization': `Basic ${apiKey}`
-        },
-        body: JSON.stringify({
-          app_id: appId,
-          included_segments: ['Subscribed Users', 'All'],
-          headings: { en: cleanTitle },
-          contents: { en: cleanMsg }
-        })
-      });
-      const result = await response.json().catch(() => ({}));
-      console.log('[OneSignal] Broadcast push response:', result);
+      const result = await postOneSignalApi({
+        app_id: appId,
+        included_segments: ['Subscribed Users', 'All'],
+        headings: { en: cleanTitle },
+        contents: { en: cleanMsg }
+      }, apiKey);
+      console.log('[OneSignal] Broadcast push result:', result);
       return result;
     }
 
     const externalIds = await resolveUserOneSignalIds(d1, target);
     if (!externalIds.length) return;
 
-    const reqV11 = fetch('https://onesignal.com/api/v1/notifications', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json; charset=utf-8',
-        'Authorization': `Basic ${apiKey}`
-      },
-      body: JSON.stringify({
-        app_id: appId,
-        include_aliases: { external_id: externalIds },
-        target_channel: 'push',
-        headings: { en: cleanTitle },
-        contents: { en: cleanMsg }
-      })
-    }).then((r) => r.json()).catch(() => ({}));
+    const reqV11 = postOneSignalApi({
+      app_id: appId,
+      include_aliases: { external_id: externalIds },
+      target_channel: 'push',
+      headings: { en: cleanTitle },
+      contents: { en: cleanMsg }
+    }, apiKey);
 
-    const reqLegacy = fetch('https://onesignal.com/api/v1/notifications', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json; charset=utf-8',
-        'Authorization': `Basic ${apiKey}`
-      },
-      body: JSON.stringify({
-        app_id: appId,
-        include_external_user_ids: externalIds,
-        channel_for_external_user_ids: 'push',
-        headings: { en: cleanTitle },
-        contents: { en: cleanMsg }
-      })
-    }).then((r) => r.json()).catch(() => ({}));
+    const reqLegacy = postOneSignalApi({
+      app_id: appId,
+      include_external_user_ids: externalIds,
+      channel_for_external_user_ids: 'push',
+      headings: { en: cleanTitle },
+      contents: { en: cleanMsg }
+    }, apiKey);
 
     const [resV11, resLegacy] = await Promise.all([reqV11, reqLegacy]);
     console.log(`[OneSignal] Push sent to ${JSON.stringify(externalIds)}. v11 res:`, resV11, 'legacy res:', resLegacy);
