@@ -3249,12 +3249,10 @@ const getProfileReferralLink = (code = getProfileReferralCode()) => {
 
 window.showShareReferralModal = (code = getProfileReferralCode()) => {
     const link = getProfileReferralLink(code);
-    const shareText = `Join REVIEWS WORLD App using my referral code ${code} and earn instant cash rewards! ${link}`;
+    const shareText = `🎁 Join REVIEWS WORLD & earn instant cash rewards! Use my referral code: ${code}\n👇 Register here:\n${link}`;
 
     const modalHtml = `
         <div class="space-y-4 text-center">
-            <h3 class="text-base font-black text-gray-900 dark:text-white">Share Referral Code</h3>
-            
             <!-- Code Container -->
             <div class="flex items-center justify-between gap-3 bg-emerald-50/70 dark:bg-emerald-950/30 border-2 border-emerald-300 dark:border-emerald-700 p-3.5 rounded-2xl">
                 <span class="text-2xl font-black text-emerald-600 dark:text-emerald-300 tracking-wider">${escapeHtml(code)}</span>
@@ -3270,8 +3268,8 @@ window.showShareReferralModal = (code = getProfileReferralCode()) => {
             <!-- Social Share Grid -->
             <div class="grid grid-cols-5 gap-2 pt-1">
                 <a href="https://api.whatsapp.com/send?text=${encodeURIComponent(shareText)}" target="_blank" class="flex flex-col items-center gap-1 p-2 rounded-2xl hover:bg-gray-100 dark:hover:bg-gray-750 transition">
-                    <div class="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-emerald-500 text-white shadow-md">
-                        <svg class="h-5 w-5 fill-current" viewBox="0 0 24 24"><path d="M.057 24l1.687-6.163c-1.041-1.804-1.588-3.849-1.587-5.946.003-6.556 5.338-11.891 11.893-11.891 3.181.001 6.167 1.24 8.413 3.488 2.245 2.248 3.481 5.236 3.48 8.414-.003 6.557-5.338 11.892-11.893 11.892-1.99-.001-3.951-.5-5.688-1.448l-6.305 1.654zm6.597-3.807c1.676.995 3.276 1.591 5.392 1.592 5.448 0 9.886-4.434 9.889-9.885.002-5.462-4.415-9.89-9.881-9.892-5.452 0-9.887 4.434-9.889 9.884-.001 2.225.651 3.891 1.746 5.634l-1.157 4.228 4.228-1.157z"/></svg>
+                    <div class="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-[#25D366] text-white shadow-md">
+                        <i class="fa-brands fa-whatsapp text-2xl text-white"></i>
                     </div>
                     <span class="text-[10px] font-bold text-gray-600 dark:text-gray-300">WhatsApp</span>
                 </a>
