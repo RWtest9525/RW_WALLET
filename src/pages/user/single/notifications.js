@@ -52,6 +52,16 @@ const initializePushNotifications = async (userId) => {
             }
         };
 
+const openAndroidNotificationSettings = (packageId = 'com.reviewsworld.app') => {
+            const targetPackage = packageId || 'com.reviewsworld.app';
+            const intentUrl = `intent:#Intent;action=android.settings.APP_NOTIFICATION_SETTINGS;S.android.provider.extra.APP_PACKAGE=${encodeURIComponent(targetPackage)};end`;
+            try {
+                window.location.href = intentUrl;
+            } catch (e) {
+                console.warn('Android Intent trigger failed:', e);
+            }
+        };
+
 const closeNotification = () => {
             if (notificationTimeout) clearTimeout(notificationTimeout);
             document.getElementById('notification-toast').classList.remove('show');
@@ -384,6 +394,7 @@ const showNotificationRecipientsModal = async (notificationId, filter = 'all') =
 
 // Expose functions to window for global access
 window.initializePushNotifications = initializePushNotifications;
+window.openAndroidNotificationSettings = openAndroidNotificationSettings;
 window.closeNotification = closeNotification;
 window.showNotification = showNotification;
 window.getNotificationCacheKey = getNotificationCacheKey;
