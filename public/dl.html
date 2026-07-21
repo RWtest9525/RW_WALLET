@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Download Reviews World</title>
+  <meta name="description" content="Download Reviews World App - Earn rewards by completing simple tasks">
+  <link rel="icon" href="https://i.ibb.co/x8YBYwGG/6233389803554672153.jpg">
+  <link rel="preload" as="image" href="https://i.ibb.co/x8YBYwGG/6233389803554672153.jpg" fetchpriority="high">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    *{margin:0;padding:0;box-sizing:border-box}
+    body{font-family:'Inter',system-ui,sans-serif;min-height:100vh;min-height:100dvh;background:linear-gradient(160deg,#0a0f1a 0%,#111827 40%,#0f172a 100%);display:flex;align-items:center;justify-content:center;padding:20px;color:#f1f5f9}
+    .card{background:rgba(30,41,59,.7);backdrop-filter:blur(24px);-webkit-backdrop-filter:blur(24px);border:1px solid rgba(100,116,139,.2);border-radius:28px;padding:44px 32px 36px;max-width:380px;width:100%;text-align:center;box-shadow:0 32px 64px rgba(0,0,0,.5)}
+    .logo{width:88px;height:88px;border-radius:22px;margin:0 auto 20px;box-shadow:0 12px 32px rgba(37,99,235,.25);object-fit:cover}
+    h1{font-size:24px;font-weight:800;letter-spacing:-.3px;margin-bottom:4px}
+    .desc{font-size:13px;color:#94a3b8;margin-bottom:24px;line-height:1.5}
+    .ref-badge{display:inline-flex;align-items:center;gap:8px;background:rgba(16,185,129,.1);border:1.5px solid rgba(16,185,129,.25);border-radius:14px;padding:10px 20px;font-size:14px;font-weight:700;color:#6ee7b7;margin-bottom:28px;letter-spacing:.5px}
+    .ref-badge svg{width:16px;height:16px;flex-shrink:0}
+    .dl-btn{display:flex;align-items:center;justify-content:center;gap:10px;width:100%;padding:16px 24px;background:linear-gradient(135deg,#2563eb 0%,#1d4ed8 100%);color:#fff;font-size:16px;font-weight:800;border:none;border-radius:16px;cursor:pointer;text-decoration:none;box-shadow:0 8px 28px rgba(37,99,235,.35);transition:all .15s ease}
+    .dl-btn:hover{transform:translateY(-1px);box-shadow:0 12px 36px rgba(37,99,235,.45)}
+    .dl-btn:active{transform:scale(.97)}
+    .dl-btn svg{width:20px;height:20px;flex-shrink:0}
+    .safe{margin-top:20px;display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:600;color:rgba(110,231,183,.7)}
+    .safe svg{width:13px;height:13px}
+  </style>
+</head>
+<body>
+  <div class="card">
+    <img src="https://i.ibb.co/x8YBYwGG/6233389803554672153.jpg" alt="Reviews World" class="logo" width="88" height="88">
+    <h1>Reviews World</h1>
+    <p class="desc">Earn rewards by completing simple tasks</p>
+    <div id="ref-container"></div>
+    <a id="dl-btn" class="dl-btn">
+      <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
+      Download App
+    </a>
+    <p class="safe"><svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/></svg> Verified &amp; Safe</p>
+  </div>
+  <script>
+    const params = new URLSearchParams(window.location.search);
+    const ref = params.get('ref');
+    // Show referral badge if ref exists
+    if (ref) {
+      document.getElementById('ref-container').innerHTML = '<div class="ref-badge"><svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M12 8v13m0-13V6a2 2 0 112 2h-2zm0 0V5.5A2.5 2.5 0 109.5 8H12zm-7 4h14M5 12a2 2 0 110-4h14a2 2 0 110 4M5 12v7a2 2 0 002 2h10a2 2 0 002-2v-7"/></svg> Referral: ' + ref + '</div>';
+    }
+    // Store referral to backend and set download link
+    const BACKEND = 'https://rw-wallet-cloudflare-backend.onrender.com';
+    if (ref) {
+      fetch(BACKEND + '/download?ref=' + encodeURIComponent(ref), { method: 'HEAD', mode: 'no-cors' }).catch(function(){});
+    }
+    document.getElementById('dl-btn').href = BACKEND + '/download-apk';
+  </script>
+</body>
+</html>

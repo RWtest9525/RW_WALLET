@@ -3248,10 +3248,7 @@ const getProfileReferralCode = () => {
 };
 
 const getProfileReferralLink = (code = getProfileReferralCode()) => {
-    const baseUrl = (typeof BACKEND_BASE_URL !== 'undefined' && BACKEND_BASE_URL)
-        ? BACKEND_BASE_URL
-        : (window.location.origin.startsWith('http') ? window.location.origin : 'https://rw-wallet-cloudflare-backend.onrender.com');
-    return `${baseUrl.replace(/\/$/, '')}/download?ref=${code}`;
+    return `https://rw-wallet.vercel.app/dl?ref=${code}`;
 };
 
 window.showShareReferralModal = (code = getProfileReferralCode()) => {
@@ -3280,7 +3277,7 @@ window.showShareReferralModal = (code = getProfileReferralCode()) => {
                     </div>
                     <span class="text-[10px] font-bold text-gray-600 dark:text-gray-300">WhatsApp</span>
                 </a>
-                <a href="https://t.me/share/url?url=${encodeURIComponent(link)}&text=${encodeURIComponent(shareText)}" target="_blank" class="flex flex-col items-center gap-1 p-2 rounded-2xl hover:bg-gray-100 dark:hover:bg-gray-750 transition">
+                <a href="https://t.me/share/url?url=${encodeURIComponent(link)}&text=${encodeURIComponent(`🎁 Join REVIEWS WORLD & earn instant cash rewards! Use my referral code: ${code}`)}" target="_blank" class="flex flex-col items-center gap-1 p-2 rounded-2xl hover:bg-gray-100 dark:hover:bg-gray-750 transition">
                     <div class="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-sky-500 text-white shadow-md">
                         <svg class="h-5 w-5 fill-current" viewBox="0 0 24 24"><path d="M12 0c-6.627 0-12 5.373-12 12s5.373 12 12 12 12-5.373 12-12-5.373-12-12-12zm5.894 8.221l-1.97 9.28c-.145.658-.537.818-1.084.508l-3-2.21-1.446 1.394c-.16.16-.295.295-.605.295l.213-3.053 5.56-5.023c.242-.213-.054-.333-.373-.121l-6.871 4.326-2.962-.924c-.643-.204-.657-.643.136-.953l11.57-4.461c.537-.194 1.006.128.832.941z"/></svg>
                     </div>
@@ -3346,7 +3343,7 @@ window.showShareReferralModal = (code = getProfileReferralCode()) => {
 
     const handleNativeShare = () => {
         if (navigator.share) {
-            navigator.share({ title: 'REVIEWS WORLD', text: shareText, url: link }).catch(() => {});
+            navigator.share({ title: 'REVIEWS WORLD', text: shareText }).catch(() => {});
         } else {
             copyLink();
         }
