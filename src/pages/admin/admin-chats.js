@@ -180,7 +180,12 @@ const renderAdminChatsList = () => {
             const existingChatUserIds = new Set(allSupportChatsCache.map(chat => String(chat.userId || chat.id || '')));
             const usersToStartChat = searchTerm
                 ? allUsersCache
-                    .filter(user => !isAdminUserRecord(user))
+                    .filter(user => {
+                        if (currentUser?.uid === ADMIN_UID) {
+                            return user.id !== ADMIN_UID && user.uid !== ADMIN_UID;
+                        }
+                        return !isAdminUserRecord(user);
+                    })
                     .map(getAdminChatUserMeta)
                     .filter(user => user.userId && !existingChatUserIds.has(String(user.userId)))
                     .filter(user => [

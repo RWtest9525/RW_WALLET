@@ -3678,7 +3678,7 @@ const showReferEarnPage = () => {
                     <div class="min-w-0 text-left flex-1">
                         <p class="text-[9px] font-black uppercase text-emerald-700 dark:text-emerald-400 tracking-wider">YOUR REFERRAL CODE</p>
                         <div class="flex items-center gap-2 mt-0.5">
-                            <h3 class="text-xl font-black text-emerald-900 dark:text-emerald-200 truncate tracking-wide">${escapeHtml(referralCode)}</h3>
+                            <h3 class="${referralCode.length > 10 ? 'text-sm' : referralCode.length > 8 ? 'text-base' : 'text-xl'} font-black text-emerald-900 dark:text-emerald-200 truncate tracking-wide">${escapeHtml(referralCode)}</h3>
                             <button type="button" id="main-copy-code-btn" title="Copy Referral Code" class="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-emerald-100 dark:bg-emerald-900/60 text-emerald-800 dark:text-emerald-200 hover:bg-emerald-200 border border-emerald-300/60 dark:border-emerald-700/60 transition active:scale-90 shadow-xs">
                                 <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
                                     <path stroke-linecap="round" stroke-linejoin="round" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />

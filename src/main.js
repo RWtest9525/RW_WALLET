@@ -213,10 +213,15 @@ onAuthStateChanged(auth, async (user) => {
                     currentUserData = { ...impUserData, ...currentUserData };
                     backendAuthToken = impToken;
 
-                    // Toggle visibility of switch-back button in the header
                     const switchBtn = document.getElementById('impersonation-switch-btn');
                     if (switchBtn) {
                         switchBtn.classList.remove('hidden');
+                    }
+                    // Shrink header title to fit on one line with switch-back button
+                    const headerTitle = document.getElementById('header-title');
+                    if (headerTitle) {
+                        headerTitle.classList.remove('text-xl');
+                        headerTitle.classList.add('text-base');
                     }
                     document.getElementById('impersonation-banner')?.remove();
                 } else {
@@ -224,6 +229,12 @@ onAuthStateChanged(auth, async (user) => {
                     const switchBtn = document.getElementById('impersonation-switch-btn');
                     if (switchBtn) {
                         switchBtn.classList.add('hidden');
+                    }
+                    // Restore header title to normal size
+                    const headerTitle = document.getElementById('header-title');
+                    if (headerTitle) {
+                        headerTitle.classList.remove('text-base');
+                        headerTitle.classList.add('text-xl');
                     }
                     document.getElementById('impersonation-banner')?.remove();
                 }

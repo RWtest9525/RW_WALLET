@@ -129,7 +129,7 @@ root.outerHTML = String.raw`
                         onload="this.classList.remove('hidden'); this.classList.add('loaded'); document.getElementById('header-logo-fallback')?.classList.add('hidden');"
                         onerror="this.classList.add('hidden'); document.getElementById('header-logo-fallback')?.classList.remove('hidden');">
                     <div>
-                        <h1 class="text-xl font-bold">Reviews World</h1>
+                        <h1 id="header-title" class="text-xl font-bold">Reviews World</h1>
                         <p class="text-xs text-gray-500 dark:text-gray-400 mt-0.5">Do task , Earn rewards !</p>
                     </div>
                 </div>
