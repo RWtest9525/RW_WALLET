@@ -3248,7 +3248,10 @@ const getProfileReferralCode = () => {
 };
 
 const getProfileReferralLink = (code = getProfileReferralCode()) => {
-    return `https://yourbrand.link/?ref=${code}`;
+    const baseUrl = (typeof BACKEND_BASE_URL !== 'undefined' && BACKEND_BASE_URL)
+        ? BACKEND_BASE_URL
+        : (window.location.origin.startsWith('http') ? window.location.origin : 'https://rw-wallet-cloudflare-backend.onrender.com');
+    return `${baseUrl.replace(/\/$/, '')}/download?ref=${code}`;
 };
 
 window.showShareReferralModal = (code = getProfileReferralCode()) => {
