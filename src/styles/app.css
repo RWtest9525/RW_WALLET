@@ -1,6 +1,7 @@
 html,
         body {
             min-height: 100%;
+            background-color: #f3f4f6;
             -webkit-text-size-adjust: 100%;
             touch-action: manipulation;
             font-family: "Manrope", "Inter", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
