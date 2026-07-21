@@ -1,48 +1,60 @@
 // File: src/pages/notifications.js
 
-const initializePushNotifications = (userId) => {
-            if (!messaging || !('Notification' in window)) return;
+const initializePushNotifications = async (userId) => {
+            if (!messaging) return;
+            if (!('Notification' in window)) {
+                console.log('This browser does not support desktop notifications');
+                return;
+            }
 
-            // Run completely non-blocking in background so app opens instantly (0ms delay)
-            setTimeout(async () => {
-                try {
-                    let permission = Notification.permission;
-
-                    if (permission === 'default' && typeof Notification.requestPermission === 'function') {
+            try {
+                let permission = Notification.permission;
+                if (permission === 'default') {
+                    if (window.OneSignalDeferred) {
+                        window.OneSignalDeferred.push(async function(OneSignal) {
+                            try {
+                                if (OneSignal.Notifications && typeof OneSignal.Notifications.requestPermission === 'function') {
+                                    await OneSignal.Notifications.requestPermission();
+                                }
+                            } catch (e) {
+                                console.warn('OneSignal requestPermission failed:', e);
+                            }
+                        });
+                    }
+                    if (typeof Notification.requestPermission === 'function') {
                         try {
-                            const reqPromise = Notification.requestPermission((res) => {
-                                permission = res;
-                            });
-                            if (reqPromise && typeof reqPromise.then === 'function') {
-                                permission = await reqPromise.catch(() => Notification.permission);
-                            }
+                            permission = await Notification.requestPermission();
                         } catch (e) {
-                            console.warn('Native permission request skipped:', e);
+                            console.warn('Native Notification permission request failed:', e);
                         }
                     }
-
-                    permission = Notification.permission;
-                    if (permission === 'granted') {
-                        const tokenOptions = FCM_VAPID_KEY ? { vapidKey: FCM_VAPID_KEY } : {};
-                        const fcmToken = await getToken(messaging, tokenOptions).catch(() => null);
-
-                        if (fcmToken) {
-                            console.log('FCM Token generated:', fcmToken);
-                            if (currentUserData && currentUserData.fcmToken === fcmToken) {
-                                console.log('FCM Token is already up-to-date in DB.');
-                            } else {
-                                const userDocRef = doc(db, `artifacts/${appId}/public/data/users`, userId);
-                                await updateDoc(userDocRef, {
-                                    fcmToken: fcmToken,
-                                    fcmTokenUpdatedAt: serverTimestamp()
-                                }).catch(err => console.warn('Failed to update user FCM Token in DB:', err));
-                            }
-                        }
-                    }
-                } catch (error) {
-                    console.warn('An error occurred while retrieving FCM token:', error);
                 }
-            }, 1000);
+
+                if (permission === 'granted') {
+                    const tokenOptions = {};
+                    if (FCM_VAPID_KEY) {
+                        tokenOptions.vapidKey = FCM_VAPID_KEY;
+                    }
+                    const fcmToken = await getToken(messaging, tokenOptions);
+
+                    if (fcmToken) {
+                        console.log('FCM Token generated:', fcmToken);
+                        if (currentUserData && currentUserData.fcmToken === fcmToken) {
+                            console.log('FCM Token is already up-to-date in DB.');
+                        } else {
+                            const userDocRef = doc(db, `artifacts/${appId}/public/data/users`, userId);
+                            await updateDoc(userDocRef, {
+                                fcmToken: fcmToken,
+                                fcmTokenUpdatedAt: serverTimestamp()
+                            }).catch(err => console.warn('Failed to update user FCM Token in DB:', err));
+                        }
+                    } else {
+                        console.log('No FCM registration token available.');
+                    }
+                }
+            } catch (error) {
+                console.warn('An error occurred while retrieving FCM token:', error);
+            }
 
             // Listen for foreground messages
             try {
