@@ -3845,20 +3845,32 @@ const showUserTaskPage = () => {
             const isTaskPageEnabled = true;
             // Notification permission gate (only for normal users)
             if (currentUser?.uid !== ADMIN_UID && window.Notification && window.Notification.permission !== 'granted') {
-                // Permission not granted — show enable page
                 const enableNotificationContent = `
                     ${getPageHeader('Enable Notifications', { showBack: false })}
-                    <div class="mx-auto max-w-md pb-24 px-4 text-center">
-                        <section class="relative overflow-hidden rounded-3xl border border-slate-100 bg-white p-6 shadow-xl dark:border-slate-700 dark:bg-gray-800">
-                            <div class="mx-auto flex h-24 w-24 items-center justify-center rounded-full bg-indigo-50 dark:bg-indigo-950/40 p-5 shadow-inner">
-                                <img src="https://cdn-icons-png.flaticon.com/512/3602/3602145.png" alt="Bell" class="h-full w-full object-contain" loading="eager">
+                    <div class="mx-auto max-w-md pb-24 px-4">
+                        <section class="relative overflow-hidden rounded-3xl border border-slate-100 bg-white p-6 shadow-xl dark:border-slate-700 dark:bg-gray-800 space-y-6">
+                            <div class="text-center">
+                                <div class="mx-auto flex h-20 w-20 items-center justify-center rounded-full bg-indigo-50 dark:bg-indigo-950/40 p-4 shadow-inner">
+                                    <img src="https://cdn-icons-png.flaticon.com/512/3602/3602145.png" alt="Bell" class="h-full w-full object-contain" loading="eager">
+                                </div>
+                                <h3 class="mt-4 text-lg font-black text-slate-950 dark:text-white">Enable Notifications to Do Tasks</h3>
+                                <p class="mt-2 text-xs text-gray-500 dark:text-gray-400">
+                                    You must allow notifications to access tasks, payouts, and chat support.
+                                </p>
                             </div>
-                            <h3 class="mt-6 text-xl font-black leading-tight text-slate-950 dark:text-white">Enable Notifications to Do Tasks</h3>
-                            <p class="mt-3 text-sm text-gray-500 dark:text-gray-400">
-                                You must enable notifications to do tasks, receive instant payouts, and get support updates. Tap the button below to enable.
-                            </p>
-                            <button id="enable-notifications-btn" class="mt-6 w-full bg-indigo-600 hover:bg-indigo-700 active:scale-95 text-white font-black py-3.5 rounded-2xl shadow-lg transition duration-155">
-                                Enable Notifications
+
+                            <!-- Step-by-Step Instructions -->
+                            <div class="bg-gray-50 dark:bg-gray-900/50 rounded-2xl p-4 border border-gray-100 dark:border-gray-800 space-y-3.5">
+                                <p class="text-xs font-bold text-gray-400 uppercase tracking-wider">Follow these steps:</p>
+                                <ol class="space-y-3 text-sm text-gray-700 dark:text-gray-300 list-decimal pl-4">
+                                    <li class="pl-1"><b>Long press (Hold)</b> the app icon on your screen for 2 seconds.</li>
+                                    <li class="pl-1">Click on <b>App Info</b> button <span class="inline-flex items-center justify-center w-5 h-5 rounded-full border border-gray-400 text-xs font-mono font-bold">i</span></li>
+                                    <li class="pl-1">Go to <b>Notifications</b> &amp; click <b>Enable / Allow</b>.</li>
+                                </ol>
+                            </div>
+
+                            <button id="enable-notifications-btn" class="w-full bg-indigo-600 hover:bg-indigo-700 active:scale-95 text-white font-black py-3.5 rounded-2xl shadow-lg transition duration-155">
+                                Check Permission Status
                             </button>
                         </section>
                     </div>
@@ -3871,10 +3883,10 @@ const showUserTaskPage = () => {
                 if (btn) {
                     btn.onclick = async () => {
                         btn.disabled = true;
-                        btn.textContent = 'Requesting...';
+                        btn.textContent = 'Checking...';
                         
                         try {
-                            // Bulletproof notification wrapper (handles callback-based and promise-based WebViews)
+                            // Try requesting permission natively first in case it's default
                             if (window.Notification && typeof window.Notification.requestPermission === 'function') {
                                 await new Promise((resolve) => {
                                     try {
@@ -3885,30 +3897,27 @@ const showUserTaskPage = () => {
                                             returnedPromise.then(resolve).catch(() => resolve(window.Notification.permission));
                                         }
                                     } catch (err) {
-                                        console.error('Promise/callback check error:', err);
                                         resolve(window.Notification.permission);
                                     }
                                 });
                             }
                             
-                            // Initialize FCM tokens and listeners if permission was granted
                             if (typeof window.initializePushNotifications === 'function' && currentUser?.uid) {
                                 await window.initializePushNotifications(currentUser.uid);
                             }
                         } catch (e) {
-                            console.error('Notification permission request failed:', e);
+                            console.error(e);
                         }
 
-                        // Check permission and update UI
                         setTimeout(() => {
                             if (window.Notification && window.Notification.permission === 'granted') {
                                 showUserTaskPage();
                             } else {
                                 btn.disabled = false;
-                                btn.textContent = 'Enable Notifications';
-                                showNotification('Please allow notifications to start doing tasks!');
+                                btn.textContent = 'Check Permission Status';
+                                showNotification('Notification permission is still not enabled. Please check app settings!', true);
                             }
-                        }, 1000);
+                        }, 800);
                     };
                 }
                 return;
