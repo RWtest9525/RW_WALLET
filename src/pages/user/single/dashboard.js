@@ -3356,7 +3356,7 @@ window.showShareReferralModal = (code = getProfileReferralCode()) => {
     });
 };
 
-const showTrackReferralsPage = async (filter = 'all') => {
+window.showTrackReferralsPage = async (filter = 'all') => {
     if (!ensureUserSessionReady()) return;
 
     showLoadingState('Loading your referrals...');
@@ -3381,8 +3381,8 @@ const showTrackReferralsPage = async (filter = 'all') => {
             <div class="flex h-12 w-12 mx-auto items-center justify-center rounded-full bg-slate-100 dark:bg-slate-700 text-slate-400">
                 <svg class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"/></svg>
             </div>
-            <h4 class="text-sm font-black text-slate-800 dark:text-white">No Referrals Found</h4>
-            <p class="text-xs text-slate-500 dark:text-slate-400">Share your referral code/link to start earning bonuses when friends join!</p>
+            <h4 class="text-sm font-black text-slate-800 dark:text-white">No Referrals Yet</h4>
+            <p class="text-xs text-slate-500 dark:text-slate-400">No referral has joined using your link yet. Share your code to start earning bonuses!</p>
         </div>
     ` : filteredList.map(item => `
         <div class="track-referral-item flex items-center justify-between gap-3 p-3 bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700/80 shadow-xs transition hover:shadow-sm cursor-pointer active:scale-98" onclick="window.showReferralDetailPage('${item.id}')">
