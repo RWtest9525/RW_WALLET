@@ -68,6 +68,9 @@ async function createApp(io, { startedAt = new Date().toISOString() } = {}) {
 
   app.get('/health', createHealthHandler(app, startedAt));
 
+  const { registerDeepLinkRoutes } = require('./services/customDeepLinkService');
+  registerDeepLinkRoutes(app);
+
   try {
     const walletService = await createCloudflareWalletService();
     walletService.registerRoutes(app);
