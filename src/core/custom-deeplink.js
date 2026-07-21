@@ -59,9 +59,9 @@ function injectReferralCodeToUI(refCode) {
 
 window.verifyAndFillReferral = verifyAndFillReferral;
 
-// Run automatically on startup
-if (window.cordova || window.Capacitor) {
-    document.addEventListener('deviceready', verifyAndFillReferral, false);
-} else {
-    verifyAndFillReferral();
-}
+// Automatic startup network verification disabled to prevent app load stalling on sleeping backend
+// if (window.cordova || window.Capacitor) {
+//     document.addEventListener('deviceready', verifyAndFillReferral, false);
+// } else {
+//     verifyAndFillReferral();
+// }
