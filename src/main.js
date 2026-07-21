@@ -270,22 +270,36 @@ onAuthStateChanged(auth, async (user) => {
                 if (currentUser.uid !== ADMIN_UID && localSignupApprovalInProgress) return;
 
                 const isAdmin = currentUser.uid === ADMIN_UID || isImpersonating;
-                await loadAppConfigForStartup();
-                const maintenanceActiveForUser = !isAdmin && isMaintenanceConfigActive(appConfigCache);
 
-                // Hide loading overlay only after maintenance status is known.
+                // INSTANT UNBLOCK: Show app UI immediately so user sees 0ms latency without any white screen delay
                 hideLoading();
                 window.__appLoaded = true;
-
                 applyAdminBottomChrome(isAdmin);
+                document.getElementById('auth-screen')?.classList.add('hidden');
+                document.getElementById('main-content')?.classList.remove('hidden');
+
+                if (!shouldPreserveOpenPage && !shouldPreserveHydratedDashboard) {
+                    currentMainSection = 'home';
+                    switchTab('user-panel');
+                    setBottomNavActive(isAdmin ? 'bottom-admin-btn' : 'bottom-home-btn');
+                    setMainChrome(true);
+                    document.getElementById('dashboard-content')?.classList.remove('hidden');
+                }
+
+                // Background config & approval checks
+                await loadAppConfigForStartup().catch(e => console.warn('App config startup skipped:', e));
+                const maintenanceActiveForUser = !isAdmin && isMaintenanceConfigActive(appConfigCache);
+
                 applyMaintenanceMode();
                 showWhatsNewPopupIfNeeded();
                 hydrateUserFromCache(currentUser.uid);
+
                 const userDocRef = doc(db, `artifacts/${appId}/public/data/users`, currentUser.uid);
                 const userDocSnap = await getDoc(userDocRef).catch(error => {
                     console.warn('Initial user approval check skipped:', error);
                     return null;
                 });
+
                 if (userDocSnap?.exists()) {
                     const approvalBlocked = await enforceCurrentUserApproval(currentUser.uid, userDocRef, userDocSnap.data()).catch(error => {
                         console.error('Approval enforcement failed:', error);
@@ -306,44 +320,21 @@ onAuthStateChanged(auth, async (user) => {
                 refreshNotificationUnreadCount(notificationsCache);
                 preloadNotificationsForUser(currentUser.uid).catch(e => logBackgroundSkip('Initial notification preload skipped', e));
                 startNotificationAutoRefresh(currentUser.uid);
-                applyAdminBottomChrome(isAdmin);
+
                 if (maintenanceActiveForUser) {
                     maintenanceGateActive = true;
                     currentMainSection = 'home';
                     setMainChrome(false);
-                } else if (!shouldPreserveOpenPage) {
-                    currentMainSection = 'home';
-                    if (!shouldPreserveHydratedDashboard) {
-                        switchTab('user-panel');
+                    document.getElementById('dashboard-content')?.classList.add('hidden');
+                    const pageContainer = document.getElementById('page-container');
+                    if (pageContainer) {
+                        pageContainer.classList.add('hidden');
+                        pageContainer.innerHTML = '';
+                        pageContainer.style.overflowY = 'auto';
                     }
-                    const selectedTabId = document.querySelector('.tab-button[aria-selected="true"]')?.dataset.tab || 'user-panel';
-                    setBottomNavActive(selectedTabId === 'admin-panel' ? 'bottom-admin-btn' : 'bottom-home-btn');
-                    setMainChrome(true);
+                    applyMaintenanceMode();
                 }
 
-                // Show main content after admin/user chrome is already ready.
-                document.getElementById('auth-screen').classList.add('hidden');
-                document.getElementById('main-content').classList.remove('hidden');
-                if (maintenanceActiveForUser) {
-                    document.getElementById('dashboard-content').classList.add('hidden');
-                    const pageContainer = document.getElementById('page-container');
-                    pageContainer.classList.add('hidden');
-                    pageContainer.innerHTML = '';
-                    pageContainer.style.overflowY = 'auto';
-                    applyMaintenanceMode();
-                } else if (shouldPreserveOpenPage) {
-                    document.getElementById('dashboard-content').classList.add('hidden');
-                    document.getElementById('page-container').classList.remove('hidden');
-                } else if (!shouldPreserveHydratedDashboard) {
-                    document.getElementById('dashboard-content').classList.remove('hidden');
-                    document.getElementById('page-container').classList.add('hidden');
-                    document.getElementById('page-container').innerHTML = '';
-                    document.getElementById('page-container').style.overflowY = 'auto';
-                } else {
-                    document.getElementById('dashboard-content').classList.remove('hidden');
-                    document.getElementById('page-container').classList.add('hidden');
-                    document.getElementById('page-container').style.overflowY = 'auto';
-                }
                 document.getElementById('app-footer')?.classList.add('app-footer-hidden');
 
                 if (forceRecoverTask) {
