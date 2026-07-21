@@ -3454,7 +3454,11 @@ window.showReferralDetailPage = (referralId = 'ref-1') => {
                     
                     <!-- Timeline Item 1 -->
                     <div class="relative">
-                        <div class="absolute -left-6 top-0 flex h-5 w-5 rounded-full shrink-0 items-center justify-center bg-emerald-500 text-white text-[10px] font-black">✓</div>
+                        <div class="absolute -left-6 top-0.5 shrink-0 flex items-center justify-center bg-emerald-500 text-white shadow-xs" style="width: 20px; height: 20px; min-width: 20px; min-height: 20px; max-width: 20px; max-height: 20px; border-radius: 50% !important;">
+                            <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="3.5">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
+                            </svg>
+                        </div>
                         <p class="text-[10px] font-bold text-slate-400 dark:text-slate-400">${item.joinedAt} • ${item.joinedTime}</p>
                         <h5 class="text-xs font-black text-slate-900 dark:text-white mt-0.5">Account Created</h5>
                         <p class="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">User joined using your referral code</p>
@@ -3463,7 +3467,11 @@ window.showReferralDetailPage = (referralId = 'ref-1') => {
                     ${item.firstWithdrawalAt ? `
                     <!-- Timeline Item 2 -->
                     <div class="relative">
-                        <div class="absolute -left-6 top-0 flex h-5 w-5 rounded-full shrink-0 items-center justify-center bg-emerald-500 text-white text-[10px] font-black">✓</div>
+                        <div class="absolute -left-6 top-0.5 shrink-0 flex items-center justify-center bg-emerald-500 text-white shadow-xs" style="width: 20px; height: 20px; min-width: 20px; min-height: 20px; max-width: 20px; max-height: 20px; border-radius: 50% !important;">
+                            <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="3.5">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
+                            </svg>
+                        </div>
                         <div class="flex items-center justify-between">
                             <div>
                                 <p class="text-[10px] font-bold text-slate-400 dark:text-slate-400">${item.firstWithdrawalAt}</p>
@@ -3477,7 +3485,11 @@ window.showReferralDetailPage = (referralId = 'ref-1') => {
                     ${item.latestLifetimeAt ? `
                     <!-- Timeline Item 3 -->
                     <div class="relative">
-                        <div class="absolute -left-6 top-0 flex h-5 w-5 rounded-full shrink-0 items-center justify-center bg-emerald-500 text-white text-[10px] font-black">✓</div>
+                        <div class="absolute -left-6 top-0.5 shrink-0 flex items-center justify-center bg-emerald-500 text-white shadow-xs" style="width: 20px; height: 20px; min-width: 20px; min-height: 20px; max-width: 20px; max-height: 20px; border-radius: 50% !important;">
+                            <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="3.5">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
+                            </svg>
+                        </div>
                         <div class="flex items-center justify-between">
                             <div>
                                 <p class="text-[10px] font-bold text-slate-400 dark:text-slate-400">${item.latestLifetimeAt}</p>
@@ -3492,7 +3504,9 @@ window.showReferralDetailPage = (referralId = 'ref-1') => {
 
             <!-- Bottom Note -->
             <div class="rounded-xl bg-emerald-50/80 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800 p-3 flex items-center gap-2.5 text-[11px] font-semibold text-emerald-800 dark:text-emerald-200">
-                <div class="flex h-5 w-5 rounded-full shrink-0 items-center justify-center bg-emerald-500 text-white text-[10px] font-black">⭐</div>
+                <div class="shrink-0 flex items-center justify-center bg-emerald-500 text-white shadow-xs" style="width: 20px; height: 20px; min-width: 20px; min-height: 20px; max-width: 20px; max-height: 20px; border-radius: 50% !important;">
+                    <span class="text-[10px]">⭐</span>
+                </div>
                 <span>You will continue to earn 1% on all future withdrawals of this friend.</span>
             </div>
         </div>
