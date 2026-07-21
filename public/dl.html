@@ -46,7 +46,7 @@
     if (ref) {
       fetch(BACKEND + '/download?ref=' + encodeURIComponent(ref), { method: 'HEAD', mode: 'no-cors' }).catch(function(){});
     }
-    document.getElementById('dl-btn').href = BACKEND + '/download-apk';
+    document.getElementById('dl-btn').href = BACKEND + '/public/files/ReviewsWorld.apk';
   </script>
 </body>
 </html>
