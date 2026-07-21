@@ -3128,14 +3128,13 @@ const maskUserMobile = (mobile = '') => {
     const clean = String(mobile || '').trim();
     if (!clean) return 'N/A';
     const digitsOnly = clean.replace(/\D/g, '');
-    if (digitsOnly.length >= 10) {
-        const last10 = digitsOnly.slice(-10);
-        const prefix = clean.startsWith('+91') ? '+91 ' : (clean.length > 10 ? clean.slice(0, clean.length - 10) + ' ' : '');
-        const first3 = last10.slice(0, 3);
-        const last2 = last10.slice(-2);
-        return `${prefix}${first3}*****${last2}`;
+    if (digitsOnly.length >= 5) {
+        const first3 = digitsOnly.slice(0, 3);
+        const last2 = digitsOnly.slice(-2);
+        const prefix = clean.startsWith('+91') ? '+91 ' : (clean.startsWith('+') ? clean.slice(0, clean.indexOf(' ') + 1 || 4) : '');
+        return `${prefix}${first3}***${last2}`;
     }
-    return clean;
+    return '***';
 };
 
 const getProfileReferralCode = () => {
@@ -3450,14 +3449,16 @@ window.showReferralDetailPage = (referralId = 'ref-1') => {
             <!-- Activity Timeline -->
             <div class="bg-white dark:bg-slate-800 p-4 rounded-xl border border-slate-200 dark:border-slate-700/80 shadow-xs space-y-3">
                 <h4 class="text-[10px] font-black uppercase tracking-wider text-slate-400 dark:text-slate-400">Activity Timeline</h4>
-                <div class="relative pl-6 space-y-5 before:absolute before:left-2.5 before:top-2 before:bottom-2 before:w-0.5 before:bg-emerald-200 dark:before:bg-emerald-900">
+                <div class="relative pl-7 space-y-6 before:absolute before:left-[9px] before:top-2.5 before:bottom-2.5 before:w-0.5 before:bg-emerald-200 dark:before:bg-emerald-900">
                     
                     <!-- Timeline Item 1 -->
                     <div class="relative">
-                        <div class="absolute -left-6 top-0.5 shrink-0 flex items-center justify-center bg-emerald-500 text-white shadow-xs" style="width: 20px; height: 20px; min-width: 20px; min-height: 20px; max-width: 20px; max-height: 20px; border-radius: 50% !important;">
-                            <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="3.5">
-                                <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
-                            </svg>
+                        <div class="absolute -left-7 top-0.5" style="width: 20px; height: 20px; min-width: 20px; min-height: 20px; max-width: 20px; max-height: 20px;">
+                            <div style="width: 20px; height: 20px; border-radius: 50% !important; background-color: #10b981; display: flex; align-items: center; justify-content: center;">
+                                <svg style="width: 12px; height: 12px; color: white; display: block;" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="3.5">
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
+                                </svg>
+                            </div>
                         </div>
                         <p class="text-[10px] font-bold text-slate-400 dark:text-slate-400">${item.joinedAt} • ${item.joinedTime}</p>
                         <h5 class="text-xs font-black text-slate-900 dark:text-white mt-0.5">Account Created</h5>
@@ -3467,10 +3468,12 @@ window.showReferralDetailPage = (referralId = 'ref-1') => {
                     ${item.firstWithdrawalAt ? `
                     <!-- Timeline Item 2 -->
                     <div class="relative">
-                        <div class="absolute -left-6 top-0.5 shrink-0 flex items-center justify-center bg-emerald-500 text-white shadow-xs" style="width: 20px; height: 20px; min-width: 20px; min-height: 20px; max-width: 20px; max-height: 20px; border-radius: 50% !important;">
-                            <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="3.5">
-                                <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
-                            </svg>
+                        <div class="absolute -left-7 top-0.5" style="width: 20px; height: 20px; min-width: 20px; min-height: 20px; max-width: 20px; max-height: 20px;">
+                            <div style="width: 20px; height: 20px; border-radius: 50% !important; background-color: #10b981; display: flex; align-items: center; justify-content: center;">
+                                <svg style="width: 12px; height: 12px; color: white; display: block;" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="3.5">
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
+                                </svg>
+                            </div>
                         </div>
                         <div class="flex items-center justify-between">
                             <div>
@@ -3485,10 +3488,12 @@ window.showReferralDetailPage = (referralId = 'ref-1') => {
                     ${item.latestLifetimeAt ? `
                     <!-- Timeline Item 3 -->
                     <div class="relative">
-                        <div class="absolute -left-6 top-0.5 shrink-0 flex items-center justify-center bg-emerald-500 text-white shadow-xs" style="width: 20px; height: 20px; min-width: 20px; min-height: 20px; max-width: 20px; max-height: 20px; border-radius: 50% !important;">
-                            <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="3.5">
-                                <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
-                            </svg>
+                        <div class="absolute -left-7 top-0.5" style="width: 20px; height: 20px; min-width: 20px; min-height: 20px; max-width: 20px; max-height: 20px;">
+                            <div style="width: 20px; height: 20px; border-radius: 50% !important; background-color: #10b981; display: flex; align-items: center; justify-content: center;">
+                                <svg style="width: 12px; height: 12px; color: white; display: block;" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="3.5">
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
+                                </svg>
+                            </div>
                         </div>
                         <div class="flex items-center justify-between">
                             <div>
@@ -3504,8 +3509,8 @@ window.showReferralDetailPage = (referralId = 'ref-1') => {
 
             <!-- Bottom Note -->
             <div class="rounded-xl bg-emerald-50/80 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800 p-3 flex items-center gap-2.5 text-[11px] font-semibold text-emerald-800 dark:text-emerald-200">
-                <div class="shrink-0 flex items-center justify-center bg-emerald-500 text-white shadow-xs" style="width: 20px; height: 20px; min-width: 20px; min-height: 20px; max-width: 20px; max-height: 20px; border-radius: 50% !important;">
-                    <span class="text-[10px]">⭐</span>
+                <div style="width: 20px; height: 20px; min-width: 20px; min-height: 20px; max-width: 20px; max-height: 20px; border-radius: 50% !important; background-color: #10b981; display: flex; align-items: center; justify-content: center; shrink: 0;">
+                    <span style="font-size: 10px; line-height: 1;">⭐</span>
                 </div>
                 <span>You will continue to earn 1% on all future withdrawals of this friend.</span>
             </div>
