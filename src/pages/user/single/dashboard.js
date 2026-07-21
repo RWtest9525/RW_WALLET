@@ -3653,95 +3653,9 @@ const showReferEarnPage = () => {
                 <img src="/referral_banner.png" alt="Refer & Earn - Invite Friends, Earn Together" class="w-full h-auto object-cover rounded-2xl block">
             </div>
 
-            <!-- 3 Stat Cards Row (Left Symbol + Right Text) -->
-            <div class="grid grid-cols-3 gap-2">
-                <!-- Card 1: YOU GET -->
-                <div class="bg-emerald-50/90 dark:bg-emerald-950/40 border border-emerald-200/80 dark:border-emerald-900/50 rounded-xl p-2.5 flex items-center gap-2 shadow-xs">
-                    <div class="w-7 h-7 min-w-[28px] min-h-[28px] rounded-full shrink-0 aspect-square flex items-center justify-center bg-emerald-100 dark:bg-emerald-900/60 text-emerald-600">
-                        <svg class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M3 10h18M7 15h1m4 0h1m-7 4h12a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>
-                    </div>
-                    <div class="min-w-0 text-left">
-                        <span class="text-[9px] font-black uppercase text-emerald-700 dark:text-emerald-300 tracking-wider block leading-none">YOU GET</span>
-                        <h4 class="text-sm font-black text-emerald-800 dark:text-emerald-300 mt-0.5 leading-none">${rewardText}</h4>
-                        <p class="text-[8px] font-bold text-slate-500 dark:text-slate-400 mt-0.5 leading-tight truncate">Per Referral</p>
-                    </div>
-                </div>
-
-                <!-- Card 2: FRIEND GETS -->
-                <div class="bg-blue-50/90 dark:bg-blue-950/40 border border-blue-200/80 dark:border-blue-900/50 rounded-xl p-2.5 flex items-center gap-2 shadow-xs">
-                    <div class="w-7 h-7 min-w-[28px] min-h-[28px] rounded-full shrink-0 aspect-square flex items-center justify-center bg-blue-100 dark:bg-blue-900/60 text-blue-600">
-                        <svg class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"/></svg>
-                    </div>
-                    <div class="min-w-0 text-left">
-                        <span class="text-[9px] font-black uppercase text-blue-700 dark:text-blue-300 tracking-wider block leading-none">FRIEND GETS</span>
-                        <h4 class="text-sm font-black text-blue-800 dark:text-blue-300 mt-0.5 leading-none">${rewardText}</h4>
-                        <p class="text-[8px] font-bold text-slate-500 dark:text-slate-400 mt-0.5 leading-tight truncate">After 1st Withdraw</p>
-                    </div>
-                </div>
-
-                <!-- Card 3: LIFETIME -->
-                <div class="bg-orange-50/90 dark:bg-orange-950/40 border border-orange-200/80 dark:border-orange-900/50 rounded-xl p-2.5 flex items-center gap-2 shadow-xs">
-                    <div class="w-7 h-7 min-w-[28px] min-h-[28px] rounded-full shrink-0 aspect-square flex items-center justify-center bg-orange-100 dark:bg-orange-900/60 text-orange-600">
-                        <svg class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M11 3.055A9.001 9.001 0 1020.945 13H11V3.055z"/><path stroke-linecap="round" stroke-linejoin="round" d="M20.488 9H15V3.512A9.025 9.025 0 0120.488 9z"/></svg>
-                    </div>
-                    <div class="min-w-0 text-left">
-                        <span class="text-[9px] font-black uppercase text-orange-700 dark:text-orange-300 tracking-wider block leading-none">LIFETIME</span>
-                        <h4 class="text-sm font-black text-orange-800 dark:text-orange-300 mt-0.5 leading-none">1%</h4>
-                        <p class="text-[8px] font-bold text-slate-500 dark:text-slate-400 mt-0.5 leading-tight truncate">Of Friend Withdraw</p>
-                    </div>
-                </div>
-            </div>
-
-            <!-- How It Works (Horizontal Stepper with Top Embedded Connected Lines) -->
-            <div class="bg-white dark:bg-slate-800 rounded-xl p-2.5 pt-2 border border-slate-200 dark:border-slate-800 shadow-xs text-center space-y-1.5">
-                <!-- Header with Left & Right border lines connected -->
-                <div class="flex items-center justify-center gap-2">
-                    <div class="h-px bg-slate-200 dark:bg-slate-700 flex-1"></div>
-                    <span class="text-[9px] font-black uppercase text-slate-400 dark:text-slate-400 tracking-widest shrink-0">HOW IT WORKS</span>
-                    <div class="h-px bg-slate-200 dark:bg-slate-700 flex-1"></div>
-                </div>
-                
-                <div class="grid grid-cols-4 gap-1 text-center relative">
-                    <!-- Step 1 -->
-                    <div class="flex flex-col items-center space-y-0.5">
-                        <div class="shrink-0 flex items-center justify-center bg-emerald-50 dark:bg-emerald-950/50 text-emerald-600 border border-emerald-200/50 shadow-xs" style="width: 32px; height: 32px; min-width: 32px; min-height: 32px; max-width: 32px; max-height: 32px; border-radius: 50% !important;">
-                            <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z"/></svg>
-                        </div>
-                        <span class="text-[9px] font-black text-emerald-600 dark:text-emerald-400 uppercase">01</span>
-                        <h5 class="text-[10px] font-black text-slate-900 dark:text-white leading-tight">Share Code</h5>
-                        <p class="text-[8px] font-medium text-slate-400 leading-tight">Send code to friend</p>
-                    </div>
-
-                    <!-- Step 2 -->
-                    <div class="flex flex-col items-center space-y-0.5">
-                        <div class="shrink-0 flex items-center justify-center bg-blue-50 dark:bg-blue-950/50 text-blue-600 border border-blue-200/50 shadow-xs" style="width: 32px; height: 32px; min-width: 32px; min-height: 32px; max-width: 32px; max-height: 32px; border-radius: 50% !important;">
-                            <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z"/></svg>
-                        </div>
-                        <span class="text-[9px] font-black text-blue-600 dark:text-blue-400 uppercase">02</span>
-                        <h5 class="text-[10px] font-black text-slate-900 dark:text-white leading-tight">Friend Joins</h5>
-                        <p class="text-[8px] font-medium text-slate-400 leading-tight">They sign up</p>
-                    </div>
-
-                    <!-- Step 3 -->
-                    <div class="flex flex-col items-center space-y-0.5">
-                        <div class="shrink-0 flex items-center justify-center bg-purple-50 dark:bg-purple-950/50 text-purple-600 border border-purple-200/50 shadow-xs" style="width: 32px; height: 32px; min-width: 32px; min-height: 32px; max-width: 32px; max-height: 32px; border-radius: 50% !important;">
-                            <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M19 14l-7 7m0 0l-7-7m7 7V3"/></svg>
-                        </div>
-                        <span class="text-[9px] font-black text-purple-600 dark:text-purple-400 uppercase">03</span>
-                        <h5 class="text-[10px] font-black text-slate-900 dark:text-white leading-tight">1st Withdraw</h5>
-                        <p class="text-[8px] font-medium text-slate-400 leading-tight">Friend withdraws</p>
-                    </div>
-
-                    <!-- Step 4 -->
-                    <div class="flex flex-col items-center space-y-0.5">
-                        <div class="shrink-0 flex items-center justify-center bg-orange-50 dark:bg-orange-950/50 text-orange-600 border border-orange-200/50 shadow-xs" style="width: 32px; height: 32px; min-width: 32px; min-height: 32px; max-width: 32px; max-height: 32px; border-radius: 50% !important;">
-                            <span class="text-sm font-black">%</span>
-                        </div>
-                        <span class="text-[9px] font-black text-orange-600 dark:text-orange-400 uppercase">04</span>
-                        <h5 class="text-[10px] font-black text-slate-900 dark:text-white leading-tight">You Earn</h5>
-                        <p class="text-[8px] font-medium text-slate-400 leading-tight">Get ₹5 + 1% bonus</p>
-                    </div>
-                </div>
+            <!-- Refer & Earn Middle Premium Stats & How It Works Image Card -->
+            <div class="relative overflow-hidden rounded-2xl shadow-xs border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900">
+                <img src="/referral_howitworks_cards.png" alt="Referral Rewards & How It Works" class="w-full h-auto object-cover rounded-2xl block">
             </div>
 
             <!-- Referral Code & Actions Box (Redesigned Light Premium Style) -->
