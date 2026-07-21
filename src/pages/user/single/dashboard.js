@@ -3652,7 +3652,7 @@ const showReferEarnPage = () => {
     });
 
     const content = `
-        <div class="max-w-md mx-auto space-y-2.5 text-left px-1 pb-20">
+        <div class="max-w-md mx-auto space-y-3 text-left px-3.5 pt-2 pb-24">
             
             <!-- Refer & Earn Top Banner Image -->
             <div class="relative overflow-hidden rounded-2xl shadow-md border border-emerald-900/40 bg-slate-900 min-h-[140px]">
