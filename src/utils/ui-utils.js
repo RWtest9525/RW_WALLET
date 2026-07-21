@@ -2979,10 +2979,74 @@ const proceedWithRequestAction = async (userId, requestId, newStatus, txnId, req
                         await updateDoc(userRef, { balance: increment(amount) });
                     }
                 }
+const processReferralRewardOnWithdrawalSuccess = async (userId, withdrawalAmount) => {
+    try {
+        if (!userId || !withdrawalAmount || withdrawalAmount <= 0) return;
+
+        const userDocRef = doc(db, `artifacts/${appId}/public/data/users`, userId);
+        const userSnap = await getDoc(userDocRef);
+        if (!userSnap.exists()) return;
+        const userData = userSnap.data();
+        const referrerId = userData.referredBy || userData.referred_by;
+
+        if (!referrerId || referrerId === ADMIN_UID) return;
+
+        // Count completed withdrawals for this user
+        const pastWithdrawalsQ = query(
+            collection(db, `artifacts/${appId}/public/data/fund_requests`),
+            where("userId", "==", userId),
+            where("status", "==", "completed")
+        );
+        const pastWithdrawalsSnap = await getDocs(pastWithdrawalsQ);
+        const completedCount = pastWithdrawalsSnap.size;
+
+        const isFirstWithdrawal = completedCount <= 1;
+
+        const referrerRef = doc(db, `artifacts/${appId}/public/data/users`, referrerId);
+        const baseBonus = isFirstWithdrawal ? 5.00 : 0;
+        const lifetimeBonus = Number((withdrawalAmount * 0.01).toFixed(2));
+        const totalReward = baseBonus + lifetimeBonus;
+
+        if (totalReward > 0) {
+            await updateDoc(referrerRef, {
+                balance: increment(totalReward),
+                referralEarnings: increment(totalReward)
+            });
+
+            const refTxId = `ref-reward-${userId}-${Date.now()}`;
+            await setDoc(doc(collection(referrerRef, 'transactions'), refTxId), {
+                type: 'referral_reward',
+                amount: totalReward,
+                baseBonus,
+                lifetimeBonus,
+                referredUserId: userId,
+                referredUserName: userData.name || 'Friend',
+                timestamp: Date.now(),
+                status: 'completed',
+                comment: isFirstWithdrawal 
+                    ? `Referral Bonus: ₹${baseBonus} + 1% lifetime (₹${lifetimeBonus.toFixed(2)}) for ${userData.name}'s first withdrawal`
+                    : `Referral 1% Lifetime Bonus: ₹${lifetimeBonus.toFixed(2)} for ${userData.name}'s withdrawal`
+            }, { merge: true });
+
+            if (typeof sendNotification === 'function') {
+                const notifTitle = isFirstWithdrawal ? '🎉 Referral Reward Received!' : '💰 Lifetime Referral Bonus!';
+                const notifMsg = isFirstWithdrawal
+                    ? `You earned ₹${totalReward.toFixed(2)} (₹5 bonus + 1% lifetime) after ${userData.name}'s first withdrawal was completed!`
+                    : `You earned ₹${lifetimeBonus.toFixed(2)} (1% lifetime bonus) from ${userData.name}'s completed withdrawal!`;
+                sendNotification(referrerId, notifTitle, notifMsg).catch(e => console.warn('Referral reward push error:', e));
+            }
+        }
+    } catch (err) {
+        console.error('Error processing referral reward on withdrawal success:', err);
+    }
+};
+
                 await setDoc(doc(collection(userRef, 'transactions'), getSafeTransactionDocId(`withdrawal-${requestId}`)), transactionPayload, { merge: true });
                 if (newStatus === 'completed') {
                     startLoanRepaymentAfterWithdrawalApproval(userId, processedAt)
                         .catch(error => console.warn('Loan repayment start update skipped:', error));
+                    processReferralRewardOnWithdrawalSuccess(userId, amount)
+                        .catch(error => console.warn('Referral reward processing skipped:', error));
                 }
 
                 if (currentUser?.uid && currentUser.uid !== ADMIN_UID) {

@@ -197,7 +197,7 @@ const handleAuth = async (e) => {
                     localStorage.setItem('lastLoggedInUser', cred.user.uid);
                     writeJsonCache(getUserCacheKey(cred.user.uid), sanitizeUserForCache(currentUserData, cred.user.uid));
 
-                    // Send push notification to target admin/subadmin for approval
+                    // Send push notification to target admin/subadmin for approval & referrer user
                     if (typeof sendNotification === 'function') {
                         const targetAdmin = parentAdmin || ADMIN_UID;
                         sendNotification(
@@ -205,6 +205,25 @@ const handleAuth = async (e) => {
                             'New User Registration Approval',
                             `User ${name} (${mobile}) registered with referral code ${referralCodeInput}. Click to review and approve.`
                         ).catch(e => console.warn('Referral signup push notification error:', e));
+
+                        if (referredBy && referredBy !== ADMIN_UID) {
+                            const maskMobileForNotification = (mob) => {
+                                const clean = String(mob || '').trim();
+                                const digitsOnly = clean.replace(/\D/g, '');
+                                if (digitsOnly.length >= 10) {
+                                    const last10 = digitsOnly.slice(-10);
+                                    const prefix = clean.startsWith('+91') ? '+91 ' : (clean.length > 10 ? clean.slice(0, clean.length - 10) + ' ' : '');
+                                    return `${prefix}${last10.slice(0, 3)}***${last10.slice(-2)}`;
+                                }
+                                return clean;
+                            };
+                            const maskedMob = maskMobileForNotification(mobile);
+                            sendNotification(
+                                referredBy,
+                                '👤 New Referral Registered!',
+                                `${name} (${maskedMob}) has registered using your referral link!`
+                            ).catch(e => console.warn('Referrer registration push notification error:', e));
+                        }
                     }
 
                     showVerificationPendingPage(currentUserData);
