@@ -3645,17 +3645,23 @@ const showReferEarnPage = () => {
     const referralCode = getProfileReferralCode();
     const referralLink = getProfileReferralLink(referralCode);
 
+    // Instant image preloader
+    ['/referral_banner.png', '/referral_howitworks_cards.png'].forEach(src => {
+        const img = new Image();
+        img.src = src;
+    });
+
     const content = `
         <div class="max-w-md mx-auto space-y-2.5 text-left px-1 pb-20">
             
             <!-- Refer & Earn Top Banner Image -->
-            <div class="relative overflow-hidden rounded-2xl shadow-md border border-emerald-900/40 bg-slate-900">
-                <img src="/referral_banner.png" alt="Refer & Earn - Invite Friends, Earn Together" class="w-full h-auto object-cover rounded-2xl block">
+            <div class="relative overflow-hidden rounded-2xl shadow-md border border-emerald-900/40 bg-slate-900 min-h-[140px]">
+                <img src="/referral_banner.png" alt="Refer & Earn - Invite Friends, Earn Together" loading="eager" fetchpriority="high" decoding="sync" class="w-full h-auto object-cover rounded-2xl block">
             </div>
 
             <!-- Refer & Earn Middle Premium Stats & How It Works Image Card -->
-            <div class="relative overflow-hidden rounded-2xl shadow-xs border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900">
-                <img src="/referral_howitworks_cards.png" alt="Referral Rewards & How It Works" class="w-full h-auto object-cover rounded-2xl block">
+            <div class="relative overflow-hidden rounded-2xl shadow-xs border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 min-h-[180px]">
+                <img src="/referral_howitworks_cards.png" alt="Referral Rewards & How It Works" loading="eager" fetchpriority="high" decoding="sync" class="w-full h-auto object-cover rounded-2xl block">
             </div>
 
             <!-- Referral Code & Actions Box (Redesigned Light Premium Style) -->
