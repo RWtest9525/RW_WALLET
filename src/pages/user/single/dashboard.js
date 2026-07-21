@@ -3869,41 +3869,42 @@ const showUserTaskPage = () => {
                 
                 const btn = document.getElementById('enable-notifications-btn');
                 if (btn) {
-                    btn.onclick = async () => {
+                    btn.onclick = () => {
                         btn.disabled = true;
                         btn.textContent = 'Requesting...';
                         
-                        // Race: permission request vs timeout (WebView may never show popup)
-                        let resolved = false;
-                        const permissionPromise = (async () => {
+                        window.OneSignalDeferred = window.OneSignalDeferred || [];
+                        window.OneSignalDeferred.push(async function(OneSignal) {
                             try {
-                                const result = await Notification.requestPermission();
-                                if (!resolved) {
-                                    resolved = true;
-                                    if (result === 'granted') {
-                                        showUserTaskPage();
-                                    } else {
-                                        // Denied — let user through anyway (WebView limitation)
-                                        showUserTaskPage();
-                                    }
+                                // Try OneSignal's Slidedown custom prompt first (safest for WebViews)
+                                await OneSignal.Slidedown.promptTrigger();
+                                console.log('OneSignal slidedown prompt triggered');
+                            } catch (err) {
+                                console.warn('OneSignal slidedown failed, trying native permission...', err);
+                                try {
+                                    await Notification.requestPermission();
+                                } catch (e) {
+                                    console.error('Native requestPermission failed:', e);
                                 }
-                            } catch (e) {
-                                console.error('Permission request error:', e);
-                                if (!resolved) {
-                                    resolved = true;
+                            }
+
+                            // Wait and check if user granted permission
+                            let attempts = 0;
+                            const checkInterval = setInterval(() => {
+                                attempts++;
+                                const isGranted = window.Notification && window.Notification.permission === 'granted';
+                                if (isGranted) {
+                                    clearInterval(checkInterval);
                                     showUserTaskPage();
+                                } else if (attempts >= 10) {
+                                    // Stop checking after 5 seconds if not granted
+                                    clearInterval(checkInterval);
+                                    btn.disabled = false;
+                                    btn.textContent = 'Enable Notifications';
+                                    showNotification('Please allow notifications to start doing tasks!');
                                 }
-                            }
-                        })();
-                        
-                        // If nothing happens in 3 seconds (WebView stuck), let user through
-                        setTimeout(() => {
-                            if (!resolved) {
-                                resolved = true;
-                                console.log('Notification permission timeout — WebView detected, bypassing gate');
-                                showUserTaskPage();
-                            }
-                        }, 3000);
+                            }, 500);
+                        });
                     };
                 }
                 return;
