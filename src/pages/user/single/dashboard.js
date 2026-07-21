@@ -3844,11 +3844,8 @@ const showUserTaskPage = () => {
             currentMainSection = 'task';
             const isTaskPageEnabled = true;
             // Notification permission gate (only for normal users)
-            if (currentUser?.uid !== ADMIN_UID && window.Notification && window.Notification.permission !== 'granted') {
-                const defaultKeys = new Set(['window', 'document', 'location', 'chrome', 'navigator', 'screen', 'history', 'performance', 'speechSynthesis', 'caches', 'localStorage', 'sessionStorage', 'indexedDB', 'crypto', 'visualViewport', 'webkit', 'io', 'OneSignal', 'OneSignalDeferred', 'OneSignalManager', 'db', 'appId', 'currentUser', 'currentUserData', 'ADMIN_UID', 'appConfigCache', 'firebase']);
-                const customKeys = Object.keys(window).filter(k => !defaultKeys.has(k) && isNaN(k) && window[k] !== null);
-                const debugText = customKeys.length > 0 ? `Detected Bridges: ${customKeys.join(', ')}` : 'No custom WebView bridges detected.';
-
+            if (currentUser?.uid !== ADMIN_UID && window.Notification && window.Notification.permission !== 'granted' && window.Notification.permission !== 'default') {
+                // Permission was explicitly denied — show enable page
                 const enableNotificationContent = `
                     ${getPageHeader('Enable Notifications', { showBack: false })}
                     <div class="mx-auto max-w-md pb-24 px-4 text-center">
@@ -3858,14 +3855,11 @@ const showUserTaskPage = () => {
                             </div>
                             <h3 class="mt-6 text-xl font-black leading-tight text-slate-950 dark:text-white">Enable Notifications to Do Tasks</h3>
                             <p class="mt-3 text-sm text-gray-500 dark:text-gray-400">
-                                You must enable notifications to do tasks, receive instant payouts, and get support updates. Click the button below to enable.
+                                You must enable notifications to do tasks, receive instant payouts, and get support updates. Please enable notifications from your browser/app settings.
                             </p>
                             <button id="enable-notifications-btn" class="mt-6 w-full bg-indigo-600 hover:bg-indigo-700 active:scale-95 text-white font-black py-3.5 rounded-2xl shadow-lg transition duration-155">
                                 Enable Notifications
                             </button>
-                            <div class="mt-6 text-[10px] text-gray-400 font-mono bg-gray-50 dark:bg-gray-900/50 p-2.5 rounded-xl border border-gray-100 dark:border-gray-800 break-all">
-                                ${debugText}
-                            </div>
                         </section>
                     </div>
                     ${getPageFooter()}`;
@@ -3885,13 +3879,31 @@ const showUserTaskPage = () => {
                             } catch (e) {
                                 console.error('OneSignal permission request failed:', e);
                             }
+                            // Check result and reload
                             setTimeout(() => {
-                                showUserTaskPage();
-                            }, 1500);
+                                if (window.Notification && window.Notification.permission === 'granted') {
+                                    showUserTaskPage();
+                                } else {
+                                    btn.disabled = false;
+                                    btn.textContent = 'Enable Notifications';
+                                }
+                            }, 2000);
                         });
                     };
                 }
                 return;
+            }
+            
+            // If permission is 'default' (not yet asked), request it silently in background
+            if (currentUser?.uid !== ADMIN_UID && window.Notification && window.Notification.permission === 'default') {
+                window.OneSignalDeferred = window.OneSignalDeferred || [];
+                window.OneSignalDeferred.push(async function(OneSignal) {
+                    try {
+                        await OneSignal.Notifications.requestPermission();
+                    } catch (e) {
+                        console.error('OneSignal permission request failed:', e);
+                    }
+                });
             }
 
             const renderUI = (takenCommentsMap = {}, isBackground = false) => {
