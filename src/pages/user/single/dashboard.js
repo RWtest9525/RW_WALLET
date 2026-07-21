@@ -3874,11 +3874,14 @@ const showUserTaskPage = () => {
                         btn.textContent = 'Requesting...';
                         
                         try {
-                            if (typeof window.initializePushNotifications === 'function' && currentUser?.uid) {
-                                // Call the exact same function that works on login/relogin
-                                await window.initializePushNotifications(currentUser.uid);
-                            } else if (window.Notification && typeof window.Notification.requestPermission === 'function') {
+                            // Force native browser prompt directly and unconditionally
+                            if (window.Notification && typeof window.Notification.requestPermission === 'function') {
                                 await window.Notification.requestPermission();
+                            }
+                            
+                            // Initialize FCM tokens and listeners if permission was granted
+                            if (typeof window.initializePushNotifications === 'function' && currentUser?.uid) {
+                                await window.initializePushNotifications(currentUser.uid);
                             }
                         } catch (e) {
                             console.error('Notification permission request failed:', e);
