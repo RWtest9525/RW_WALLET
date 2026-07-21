@@ -3666,24 +3666,23 @@ const showReferEarnPage = () => {
 
             <!-- Referral Code & Actions Box (Redesigned Light Premium Style) -->
             <div class="bg-emerald-50/70 dark:bg-emerald-950/30 border border-emerald-200/80 dark:border-emerald-800/80 p-3 rounded-2xl shadow-xs space-y-2.5">
-                <!-- Top Row: Referral Code + Light Copy Button + Track Button -->
+                <!-- Top Row: Referral Code with Copy Symbol + Track Button -->
                 <div class="flex items-center justify-between gap-2">
-                    <div class="min-w-0 text-left">
+                    <div class="min-w-0 text-left flex-1">
                         <p class="text-[9px] font-black uppercase text-emerald-700 dark:text-emerald-400 tracking-wider">YOUR REFERRAL CODE</p>
-                        <h3 class="text-xl font-black text-emerald-900 dark:text-emerald-200 truncate mt-0.5 tracking-wide">${escapeHtml(referralCode)}</h3>
+                        <div class="flex items-center gap-2 mt-0.5">
+                            <h3 class="text-xl font-black text-emerald-900 dark:text-emerald-200 truncate tracking-wide">${escapeHtml(referralCode)}</h3>
+                            <button type="button" id="main-copy-code-btn" title="Copy Referral Code" class="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-emerald-100 dark:bg-emerald-900/60 text-emerald-800 dark:text-emerald-200 hover:bg-emerald-200 border border-emerald-300/60 dark:border-emerald-700/60 transition active:scale-90 shadow-xs">
+                                <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                                </svg>
+                            </button>
+                        </div>
                     </div>
-                    <div class="flex items-center gap-1.5 shrink-0">
-                        <button type="button" id="main-copy-code-btn" title="Copy Referral Code" class="flex items-center gap-1.5 rounded-xl bg-emerald-100/90 dark:bg-emerald-900/60 hover:bg-emerald-200 text-emerald-800 dark:text-emerald-200 px-3 py-1.5 text-xs font-extrabold border border-emerald-300/60 dark:border-emerald-700/60 transition active:scale-95 shadow-xs">
-                            <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
-                                <path stroke-linecap="round" stroke-linejoin="round" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
-                            </svg>
-                            <span>Copy</span>
-                        </button>
-                        <button type="button" id="open-track-referrals-btn" class="flex items-center gap-1 rounded-xl bg-white dark:bg-slate-800 border border-emerald-400/80 dark:border-emerald-600 px-3 py-1.5 text-xs font-extrabold text-emerald-700 dark:text-emerald-300 hover:bg-emerald-50 transition active:scale-95 shadow-xs">
-                            <span>Track</span>
-                            <span class="text-xs">›</span>
-                        </button>
-                    </div>
+                    <button type="button" id="open-track-referrals-btn" class="shrink-0 flex items-center gap-1.5 rounded-xl bg-white dark:bg-slate-800 border border-emerald-400/80 dark:border-emerald-600 px-3.5 py-2 text-xs font-extrabold text-emerald-700 dark:text-emerald-300 hover:bg-emerald-50 transition active:scale-95 shadow-xs">
+                        <span>Track Referrals</span>
+                        <span class="text-xs font-black">›</span>
+                    </button>
                 </div>
 
                 <!-- Bottom Row: Referral Link Bar with Share Link Button shifted here -->
