@@ -2570,23 +2570,45 @@ function registerRoutes(app, { d1, r2 }) {
       let userRecord;
       const cleanMobile = mobile ? mobile.replace(/\D/g, '').slice(-10) : '';
 
+      const createParams = {
+        email,
+        password,
+        displayName: name
+      };
+      if (cleanMobile && cleanMobile.length === 10) {
+        createParams.phoneNumber = `+91${cleanMobile}`;
+      }
+
       try {
-        userRecord = await admin.auth().createUser({
-          email,
-          password,
-          displayName: name,
-          phoneNumber: mobile ? (mobile.startsWith('+') ? mobile : `+91${mobile}`) : undefined
-        });
+        userRecord = await admin.auth().createUser(createParams);
         uid = userRecord.uid;
       } catch (authErr) {
-        if (authErr.code === 'auth/email-already-exists' || (authErr.message && authErr.message.includes('already in use'))) {
+        if (authErr.code === 'auth/invalid-phone-number' || authErr.code === 'auth/phone-number-already-exists') {
+          console.warn('[CreateSubAdmin] Retrying creation without phone number:', authErr.message);
+          delete createParams.phoneNumber;
+          userRecord = await admin.auth().createUser(createParams);
+          uid = userRecord.uid;
+        } else if (authErr.code === 'auth/email-already-exists' || (authErr.message && authErr.message.includes('already in use'))) {
           userRecord = await admin.auth().getUserByEmail(email);
           uid = userRecord.uid;
-          await admin.auth().updateUser(uid, {
+          const updateParams = {
             password,
-            displayName: name,
-            phoneNumber: mobile ? (mobile.startsWith('+') ? mobile : `+91${mobile}`) : undefined
-          });
+            displayName: name
+          };
+          if (cleanMobile && cleanMobile.length === 10) {
+            updateParams.phoneNumber = `+91${cleanMobile}`;
+          }
+          try {
+            await admin.auth().updateUser(uid, updateParams);
+          } catch (updErr) {
+            if (updErr.code === 'auth/invalid-phone-number' || updErr.code === 'auth/phone-number-already-exists') {
+              console.warn('[CreateSubAdmin] Retrying update without phone number:', updErr.message);
+              delete updateParams.phoneNumber;
+              await admin.auth().updateUser(uid, updateParams);
+            } else {
+              throw updErr;
+            }
+          }
         } else {
           throw authErr;
         }

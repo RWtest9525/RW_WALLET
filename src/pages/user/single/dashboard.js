@@ -3874,9 +3874,21 @@ const showUserTaskPage = () => {
                         btn.textContent = 'Requesting...';
                         
                         try {
-                            // Force native browser prompt directly and unconditionally
+                            // Bulletproof notification wrapper (handles callback-based and promise-based WebViews)
                             if (window.Notification && typeof window.Notification.requestPermission === 'function') {
-                                await window.Notification.requestPermission();
+                                await new Promise((resolve) => {
+                                    try {
+                                        const returnedPromise = window.Notification.requestPermission((result) => {
+                                            resolve(result);
+                                        });
+                                        if (returnedPromise && typeof returnedPromise.then === 'function') {
+                                            returnedPromise.then(resolve).catch(() => resolve(window.Notification.permission));
+                                        }
+                                    } catch (err) {
+                                        console.error('Promise/callback check error:', err);
+                                        resolve(window.Notification.permission);
+                                    }
+                                });
                             }
                             
                             // Initialize FCM tokens and listeners if permission was granted
