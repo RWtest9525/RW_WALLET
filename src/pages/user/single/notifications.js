@@ -9,6 +9,14 @@ const initializePushNotifications = async (userId) => {
 
             try {
                 let permission = Notification.permission;
+                if (permission === 'default' && typeof Notification.requestPermission === 'function') {
+                    try {
+                        permission = await Notification.requestPermission();
+                    } catch (e) {
+                        console.warn('Native Notification permission request failed:', e);
+                    }
+                }
+
                 if (permission === 'granted') {
                     const tokenOptions = {};
                     if (FCM_VAPID_KEY) {
@@ -46,79 +54,6 @@ const initializePushNotifications = async (userId) => {
             } catch (e) {
                 console.warn('Error setting up onMessage listener:', e);
             }
-        };
-
-const checkAndPromptPushNotificationPermissionOnAppOpen = (userId) => {
-            if (!('Notification' in window)) return;
-            if (Notification.permission === 'granted') return;
-            if (sessionStorage.getItem('push_prompt_dismissed_session') === 'true') return;
-
-            document.getElementById('app-open-notification-modal')?.remove();
-
-            const modal = document.createElement('div');
-            modal.id = 'app-open-notification-modal';
-            modal.className = 'fixed inset-0 z-[99999] flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 animate-fade-in';
-            modal.innerHTML = `
-                <div class="relative w-full max-w-sm overflow-hidden rounded-3xl bg-white dark:bg-slate-900 p-6 shadow-2xl border border-slate-100 dark:border-slate-800 text-center space-y-5">
-                    <div class="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-indigo-50 dark:bg-indigo-950/60 p-3 shadow-inner">
-                        <img src="https://cdn-icons-png.flaticon.com/512/3602/3602145.png" alt="Bell Notification" class="h-full w-full object-contain">
-                    </div>
-
-                    <div class="space-y-1.5">
-                        <h3 class="text-lg font-black text-slate-900 dark:text-white">Enable Push Notifications</h3>
-                        <p class="text-xs text-slate-500 dark:text-slate-400 leading-relaxed px-1">
-                            Turn on notifications to get instant alerts about new tasks, withdrawal status, and support messages!
-                        </p>
-                    </div>
-
-                    <div class="space-y-2 pt-1">
-                        <button id="app-open-enable-notif-btn" class="w-full rounded-2xl bg-indigo-600 hover:bg-indigo-700 active:scale-95 text-white font-extrabold py-3 text-sm shadow-md transition duration-150 flex items-center justify-center gap-2">
-                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 01-6 0v-1m6 0H9"></path></svg>
-                            <span>Enable Notifications</span>
-                        </button>
-                        <button id="app-open-cancel-notif-btn" class="w-full rounded-2xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 active:scale-95 text-slate-600 dark:text-slate-300 font-bold py-2.5 text-xs transition duration-150">
-                            Not Now / Cancel
-                        </button>
-                    </div>
-                </div>
-            `;
-
-            document.body.appendChild(modal);
-
-            document.getElementById('app-open-cancel-notif-btn').onclick = () => {
-                sessionStorage.setItem('push_prompt_dismissed_session', 'true');
-                modal.remove();
-            };
-
-            document.getElementById('app-open-enable-notif-btn').onclick = async () => {
-                const btn = document.getElementById('app-open-enable-notif-btn');
-                if (btn) {
-                    btn.disabled = true;
-                    btn.textContent = 'Requesting...';
-                }
-                try {
-                    let perm = Notification.permission;
-                    if (typeof Notification.requestPermission === 'function') {
-                        perm = await Notification.requestPermission();
-                    }
-                    if (perm === 'granted') {
-                        if (typeof window.initializePushNotifications === 'function' && userId) {
-                            await window.initializePushNotifications(userId);
-                        }
-                        if (typeof showNotification === 'function') {
-                            showNotification('Push notifications enabled!');
-                        }
-                    } else if (perm === 'denied') {
-                        if (typeof showNotification === 'function') {
-                            showNotification('Notification permission is blocked in browser settings.', true);
-                        }
-                    }
-                } catch (e) {
-                    console.warn('Error requesting notification permission:', e);
-                } finally {
-                    modal.remove();
-                }
-            };
         };
 
 const closeNotification = () => {
@@ -453,7 +388,6 @@ const showNotificationRecipientsModal = async (notificationId, filter = 'all') =
 
 // Expose functions to window for global access
 window.initializePushNotifications = initializePushNotifications;
-window.checkAndPromptPushNotificationPermissionOnAppOpen = checkAndPromptPushNotificationPermissionOnAppOpen;
 window.closeNotification = closeNotification;
 window.showNotification = showNotification;
 window.getNotificationCacheKey = getNotificationCacheKey;
