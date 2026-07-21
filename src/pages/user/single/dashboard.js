@@ -3072,11 +3072,15 @@ const fetchRealReferralsData = async (userUid) => {
             const fundQ = query(
                 collection(db, `artifacts/${appId}/public/data/fund_requests`),
                 where("userId", "==", userId),
-                where("status", "==", "completed"),
-                orderBy("requestedAt", "asc")
+                where("status", "==", "completed")
             );
             const fundSnap = await getDocs(fundQ).catch(() => ({ docs: [] }));
             const completedWithdrawals = (fundSnap.docs || []).map(doc => doc.data());
+            completedWithdrawals.sort((a, b) => {
+                const tA = getSafeDate(a.requestedAt || a.processedAt || a.createdAt)?.getTime() || 0;
+                const tB = getSafeDate(b.requestedAt || b.processedAt || b.createdAt)?.getTime() || 0;
+                return tA - tB;
+            });
 
             const isSuccessful = completedWithdrawals.length > 0;
             const referralBonus = isSuccessful ? 5.00 : 0;
@@ -3359,8 +3363,14 @@ window.showShareReferralModal = (code = getProfileReferralCode()) => {
 window.showTrackReferralsPage = async (filter = 'all') => {
     if (!ensureUserSessionReady()) return;
 
-    showLoadingState('Loading your referrals...');
-    const referrals = await fetchRealReferralsData(currentUser?.uid);
+    let referrals = [];
+    try {
+        showLoadingState('Loading your referrals...');
+        referrals = await fetchRealReferralsData(currentUser?.uid);
+    } catch (err) {
+        console.error('Error fetching referrals for track page:', err);
+        referrals = [];
+    }
 
     const filteredList = referrals.filter(item => {
         if (filter === 'all') return true;
@@ -3678,7 +3688,7 @@ const showReferEarnPage = () => {
                             </button>
                         </div>
                     </div>
-                    <button type="button" id="open-track-referrals-btn" class="shrink-0 flex items-center gap-1.5 rounded-xl bg-white dark:bg-slate-800 border border-emerald-400/80 dark:border-emerald-600 px-3.5 py-2 text-xs font-extrabold text-emerald-700 dark:text-emerald-300 hover:bg-emerald-50 transition active:scale-95 shadow-xs">
+                    <button type="button" id="open-track-referrals-btn" onclick="window.showTrackReferralsPage()" class="shrink-0 flex items-center gap-1.5 rounded-xl bg-white dark:bg-slate-800 border border-emerald-400/80 dark:border-emerald-600 px-3.5 py-2 text-xs font-extrabold text-emerald-700 dark:text-emerald-300 hover:bg-emerald-50 transition active:scale-95 shadow-xs">
                         <span>Track Referrals</span>
                         <span class="text-xs font-black">›</span>
                     </button>
