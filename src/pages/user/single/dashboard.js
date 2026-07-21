@@ -3248,7 +3248,7 @@ const getProfileReferralCode = () => {
 };
 
 const getProfileReferralLink = (code = getProfileReferralCode()) => {
-    return `${window.location.origin}/?ref=${code}`;
+    return `https://yourbrand.link/?ref=${code}`;
 };
 
 window.showShareReferralModal = (code = getProfileReferralCode()) => {

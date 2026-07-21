@@ -101,7 +101,7 @@ const handleAuth = async (e) => {
                     if (!/^\d{10}$/.test(mobile)) {
                         throw new Error('Mobile number must be exactly 10 digits.');
                     }
-                    const referralCodeInput = document.getElementById('referral_code');
+                    const referralCodeInput = document.getElementById('referral_code') || document.getElementById('referral-code');
                     const referralCode = referralCodeInput ? referralCodeInput.value.trim() : '';
                     if (!referralCode) {
                         throw new Error('Referral code is mandatory.');
