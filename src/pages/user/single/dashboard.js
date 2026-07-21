@@ -3548,31 +3548,42 @@ const showReferEarnPage = () => {
                 </div>
             </div>
 
-            <!-- 3 Stat Cards Row -->
+            <!-- 3 Stat Cards Row (Left Symbol + Right Text) -->
             <div class="grid grid-cols-3 gap-2">
-                <div class="bg-emerald-50/80 dark:bg-emerald-950/30 border border-emerald-200/60 dark:border-emerald-900/40 rounded-xl p-2.5 text-center shadow-xs">
-                    <div class="mx-auto flex h-7 w-7 rounded-full shrink-0 items-center justify-center bg-emerald-100 dark:bg-emerald-900/50 text-emerald-600 mb-1">
-                        <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M3 10h18M7 15h1m4 0h1m-7 4h12a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>
+                <!-- Card 1: YOU GET -->
+                <div class="bg-emerald-50/90 dark:bg-emerald-950/40 border border-emerald-200/80 dark:border-emerald-900/50 rounded-xl p-2.5 flex items-center gap-2 shadow-xs">
+                    <div class="w-7 h-7 min-w-[28px] min-h-[28px] rounded-full shrink-0 aspect-square flex items-center justify-center bg-emerald-100 dark:bg-emerald-900/60 text-emerald-600">
+                        <svg class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M3 10h18M7 15h1m4 0h1m-7 4h12a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>
                     </div>
-                    <span class="text-[9px] font-black uppercase text-emerald-700 dark:text-emerald-300 tracking-wider">YOU GET</span>
-                    <h4 class="text-base font-black text-emerald-700 dark:text-emerald-300 mt-0.5">${rewardText}</h4>
-                    <p class="text-[8px] font-bold text-slate-500 dark:text-slate-400">Per Referral</p>
+                    <div class="min-w-0 text-left">
+                        <span class="text-[9px] font-black uppercase text-emerald-700 dark:text-emerald-300 tracking-wider block leading-none">YOU GET</span>
+                        <h4 class="text-sm font-black text-emerald-800 dark:text-emerald-300 mt-0.5 leading-none">${rewardText}</h4>
+                        <p class="text-[8px] font-bold text-slate-500 dark:text-slate-400 mt-0.5 leading-tight truncate">Per Referral</p>
+                    </div>
                 </div>
-                <div class="bg-blue-50/80 dark:bg-blue-950/30 border border-blue-200/60 dark:border-blue-900/40 rounded-xl p-2.5 text-center shadow-xs">
-                    <div class="mx-auto flex h-7 w-7 rounded-full shrink-0 items-center justify-center bg-blue-100 dark:bg-blue-900/50 text-blue-600 mb-1">
-                        <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"/></svg>
+
+                <!-- Card 2: FRIEND GETS -->
+                <div class="bg-blue-50/90 dark:bg-blue-950/40 border border-blue-200/80 dark:border-blue-900/50 rounded-xl p-2.5 flex items-center gap-2 shadow-xs">
+                    <div class="w-7 h-7 min-w-[28px] min-h-[28px] rounded-full shrink-0 aspect-square flex items-center justify-center bg-blue-100 dark:bg-blue-900/60 text-blue-600">
+                        <svg class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"/></svg>
                     </div>
-                    <span class="text-[9px] font-black uppercase text-blue-700 dark:text-blue-300 tracking-wider">FRIEND GETS</span>
-                    <h4 class="text-base font-black text-blue-700 dark:text-blue-300 mt-0.5">${rewardText}</h4>
-                    <p class="text-[8px] font-bold text-slate-500 dark:text-slate-400">After 1st Withdraw</p>
+                    <div class="min-w-0 text-left">
+                        <span class="text-[9px] font-black uppercase text-blue-700 dark:text-blue-300 tracking-wider block leading-none">FRIEND GETS</span>
+                        <h4 class="text-sm font-black text-blue-800 dark:text-blue-300 mt-0.5 leading-none">${rewardText}</h4>
+                        <p class="text-[8px] font-bold text-slate-500 dark:text-slate-400 mt-0.5 leading-tight truncate">After 1st Withdraw</p>
+                    </div>
                 </div>
-                <div class="bg-orange-50/80 dark:bg-orange-950/30 border border-orange-200/60 dark:border-orange-900/40 rounded-xl p-2.5 text-center shadow-xs">
-                    <div class="mx-auto flex h-7 w-7 rounded-full shrink-0 items-center justify-center bg-orange-100 dark:bg-orange-900/50 text-orange-600 mb-1">
-                        <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M11 3.055A9.001 9.001 0 1020.945 13H11V3.055z"/><path stroke-linecap="round" stroke-linejoin="round" d="M20.488 9H15V3.512A9.025 9.025 0 0120.488 9z"/></svg>
+
+                <!-- Card 3: LIFETIME -->
+                <div class="bg-orange-50/90 dark:bg-orange-950/40 border border-orange-200/80 dark:border-orange-900/50 rounded-xl p-2.5 flex items-center gap-2 shadow-xs">
+                    <div class="w-7 h-7 min-w-[28px] min-h-[28px] rounded-full shrink-0 aspect-square flex items-center justify-center bg-orange-100 dark:bg-orange-900/60 text-orange-600">
+                        <svg class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M11 3.055A9.001 9.001 0 1020.945 13H11V3.055z"/><path stroke-linecap="round" stroke-linejoin="round" d="M20.488 9H15V3.512A9.025 9.025 0 0120.488 9z"/></svg>
                     </div>
-                    <span class="text-[9px] font-black uppercase text-orange-700 dark:text-orange-300 tracking-wider">LIFETIME</span>
-                    <h4 class="text-base font-black text-orange-700 dark:text-orange-300 mt-0.5">1%</h4>
-                    <p class="text-[8px] font-bold text-slate-500 dark:text-slate-400">Of Friend Withdraw</p>
+                    <div class="min-w-0 text-left">
+                        <span class="text-[9px] font-black uppercase text-orange-700 dark:text-orange-300 tracking-wider block leading-none">LIFETIME</span>
+                        <h4 class="text-sm font-black text-orange-800 dark:text-orange-300 mt-0.5 leading-none">1%</h4>
+                        <p class="text-[8px] font-bold text-slate-500 dark:text-slate-400 mt-0.5 leading-tight truncate">Of Friend Withdraw</p>
+                    </div>
                 </div>
             </div>
 
@@ -3587,7 +3598,7 @@ const showReferEarnPage = () => {
                 <div class="grid grid-cols-4 gap-1.5 text-center relative">
                     <!-- Step 1 -->
                     <div class="flex flex-col items-center space-y-1">
-                        <div class="h-8 w-8 rounded-full shrink-0 bg-emerald-50 dark:bg-emerald-950/50 text-emerald-600 flex items-center justify-center border border-emerald-200/50 shadow-xs">
+                        <div class="w-8 h-8 min-w-[32px] min-h-[32px] rounded-full shrink-0 aspect-square bg-emerald-50 dark:bg-emerald-950/50 text-emerald-600 flex items-center justify-center border border-emerald-200/50 shadow-xs">
                             <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z"/></svg>
                         </div>
                         <span class="text-[9px] font-black text-emerald-600 dark:text-emerald-400 uppercase">01</span>
@@ -3597,7 +3608,7 @@ const showReferEarnPage = () => {
 
                     <!-- Step 2 -->
                     <div class="flex flex-col items-center space-y-1">
-                        <div class="h-8 w-8 rounded-full shrink-0 bg-blue-50 dark:bg-blue-950/50 text-blue-600 flex items-center justify-center border border-blue-200/50 shadow-xs">
+                        <div class="w-8 h-8 min-w-[32px] min-h-[32px] rounded-full shrink-0 aspect-square bg-blue-50 dark:bg-blue-950/50 text-blue-600 flex items-center justify-center border border-blue-200/50 shadow-xs">
                             <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z"/></svg>
                         </div>
                         <span class="text-[9px] font-black text-blue-600 dark:text-blue-400 uppercase">02</span>
@@ -3607,7 +3618,7 @@ const showReferEarnPage = () => {
 
                     <!-- Step 3 -->
                     <div class="flex flex-col items-center space-y-1">
-                        <div class="h-8 w-8 rounded-full shrink-0 bg-purple-50 dark:bg-purple-950/50 text-purple-600 flex items-center justify-center border border-purple-200/50 shadow-xs">
+                        <div class="w-8 h-8 min-w-[32px] min-h-[32px] rounded-full shrink-0 aspect-square bg-purple-50 dark:bg-purple-950/50 text-purple-600 flex items-center justify-center border border-purple-200/50 shadow-xs">
                             <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M19 14l-7 7m0 0l-7-7m7 7V3"/></svg>
                         </div>
                         <span class="text-[9px] font-black text-purple-600 dark:text-purple-400 uppercase">03</span>
@@ -3617,7 +3628,7 @@ const showReferEarnPage = () => {
 
                     <!-- Step 4 -->
                     <div class="flex flex-col items-center space-y-1">
-                        <div class="h-8 w-8 rounded-full shrink-0 bg-orange-50 dark:bg-orange-950/50 text-orange-600 flex items-center justify-center border border-orange-200/50 shadow-xs">
+                        <div class="w-8 h-8 min-w-[32px] min-h-[32px] rounded-full shrink-0 aspect-square bg-orange-50 dark:bg-orange-950/50 text-orange-600 flex items-center justify-center border border-orange-200/50 shadow-xs">
                             <span class="text-sm font-black">%</span>
                         </div>
                         <span class="text-[9px] font-black text-orange-600 dark:text-orange-400 uppercase">04</span>
@@ -3627,35 +3638,44 @@ const showReferEarnPage = () => {
                 </div>
             </div>
 
-            <!-- Referral Code & Actions Box -->
-            <div class="bg-emerald-50/70 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800 p-3 rounded-2xl shadow-xs space-y-2">
+            <!-- Referral Code & Actions Box (Redesigned Light Premium Style) -->
+            <div class="bg-emerald-50/70 dark:bg-emerald-950/30 border border-emerald-200/80 dark:border-emerald-800/80 p-3 rounded-2xl shadow-xs space-y-2.5">
+                <!-- Top Row: Referral Code + Light Copy Button + Track Button -->
                 <div class="flex items-center justify-between gap-2">
                     <div class="min-w-0 text-left">
                         <p class="text-[9px] font-black uppercase text-emerald-700 dark:text-emerald-400 tracking-wider">YOUR REFERRAL CODE</p>
-                        <h3 class="text-lg font-black text-emerald-800 dark:text-emerald-300 truncate mt-0.5">${escapeHtml(referralCode)}</h3>
-                        <p class="text-[10px] font-mono text-emerald-700/80 dark:text-emerald-300/80 truncate mt-0.5">${escapeHtml(referralLink)}</p>
+                        <h3 class="text-xl font-black text-emerald-900 dark:text-emerald-200 truncate mt-0.5 tracking-wide">${escapeHtml(referralCode)}</h3>
                     </div>
                     <div class="flex items-center gap-1.5 shrink-0">
-                        <button type="button" id="main-copy-code-btn" title="Copy Referral Code" class="flex h-9 w-9 items-center justify-center rounded-xl bg-white dark:bg-slate-800 text-emerald-600 dark:text-emerald-300 shadow-xs border border-emerald-200 dark:border-emerald-800 hover:scale-105 active:scale-95 transition">
-                            <svg class="h-4.5 w-4.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
+                        <button type="button" id="main-copy-code-btn" title="Copy Referral Code" class="flex items-center gap-1.5 rounded-xl bg-emerald-100/90 dark:bg-emerald-900/60 hover:bg-emerald-200 text-emerald-800 dark:text-emerald-200 px-3 py-1.5 text-xs font-extrabold border border-emerald-300/60 dark:border-emerald-700/60 transition active:scale-95 shadow-xs">
+                            <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
                                 <path stroke-linecap="round" stroke-linejoin="round" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
                             </svg>
+                            <span>Copy</span>
                         </button>
-                        <button type="button" id="main-share-link-btn" title="Share Link" class="flex items-center gap-1 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white px-3 py-2 text-xs font-black shadow-xs transition active:scale-95">
-                            <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z"/></svg>
-                            <span>Share</span>
-                        </button>
-                        <button type="button" id="open-track-referrals-btn" class="flex items-center gap-1 rounded-xl bg-white dark:bg-slate-800 border border-emerald-600 px-3 py-2 text-xs font-black text-emerald-700 dark:text-emerald-300 hover:bg-emerald-50 transition shadow-xs active:scale-95">
+                        <button type="button" id="open-track-referrals-btn" class="flex items-center gap-1 rounded-xl bg-white dark:bg-slate-800 border border-emerald-400/80 dark:border-emerald-600 px-3 py-1.5 text-xs font-extrabold text-emerald-700 dark:text-emerald-300 hover:bg-emerald-50 transition active:scale-95 shadow-xs">
                             <span>Track</span>
                             <span class="text-xs">›</span>
                         </button>
                     </div>
                 </div>
+
+                <!-- Bottom Row: Referral Link Bar with Share Link Button shifted here -->
+                <div class="flex items-center justify-between gap-2 pt-2 border-t border-emerald-200/60 dark:border-emerald-800/60">
+                    <div class="min-w-0 flex-1 text-left">
+                        <p class="text-[9px] font-black uppercase text-slate-400 dark:text-slate-400 tracking-wider">REFERRAL LINK</p>
+                        <p class="text-xs font-mono font-semibold text-emerald-800 dark:text-emerald-300 truncate">${escapeHtml(referralLink)}</p>
+                    </div>
+                    <button type="button" id="main-share-link-btn" title="Share Link" class="shrink-0 flex items-center gap-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white px-3.5 py-1.5 text-xs font-black shadow-xs transition active:scale-95">
+                        <svg class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z"/></svg>
+                        <span>Share Link</span>
+                    </button>
+                </div>
             </div>
 
-            <!-- Bottom Auto Rewards Banner -->
+            <!-- Bottom Auto Rewards Banner (Perfect Circle Checkmark) -->
             <div class="rounded-xl bg-emerald-50/80 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800/60 p-2.5 flex items-center gap-2.5 text-[10px] font-bold text-emerald-800 dark:text-emerald-200 shadow-xs">
-                <div class="flex h-5 w-5 rounded-full shrink-0 items-center justify-center bg-emerald-500 text-white font-black text-xs">✓</div>
+                <div class="w-6 h-6 min-w-[24px] min-h-[24px] rounded-full shrink-0 aspect-square flex items-center justify-center bg-emerald-500 text-white font-black text-xs shadow-xs">✓</div>
                 <span>Rewards will be added automatically after your friend's first withdrawal.</span>
             </div>
         </div>
