@@ -3844,8 +3844,8 @@ const showUserTaskPage = () => {
             currentMainSection = 'task';
             const isTaskPageEnabled = true;
             // Notification permission gate (only for normal users)
-            if (currentUser?.uid !== ADMIN_UID && window.Notification && window.Notification.permission !== 'granted' && window.Notification.permission !== 'default') {
-                // Permission was explicitly denied — show enable page
+            if (currentUser?.uid !== ADMIN_UID && window.Notification && window.Notification.permission !== 'granted') {
+                // Permission not granted — show enable page
                 const enableNotificationContent = `
                     ${getPageHeader('Enable Notifications', { showBack: false })}
                     <div class="mx-auto max-w-md pb-24 px-4 text-center">
@@ -3855,7 +3855,7 @@ const showUserTaskPage = () => {
                             </div>
                             <h3 class="mt-6 text-xl font-black leading-tight text-slate-950 dark:text-white">Enable Notifications to Do Tasks</h3>
                             <p class="mt-3 text-sm text-gray-500 dark:text-gray-400">
-                                You must enable notifications to do tasks, receive instant payouts, and get support updates. Please enable notifications from your browser/app settings.
+                                You must enable notifications to do tasks, receive instant payouts, and get support updates. Tap the button below to enable.
                             </p>
                             <button id="enable-notifications-btn" class="mt-6 w-full bg-indigo-600 hover:bg-indigo-700 active:scale-95 text-white font-black py-3.5 rounded-2xl shadow-lg transition duration-155">
                                 Enable Notifications
@@ -3892,18 +3892,6 @@ const showUserTaskPage = () => {
                     };
                 }
                 return;
-            }
-            
-            // If permission is 'default' (not yet asked), request it silently in background
-            if (currentUser?.uid !== ADMIN_UID && window.Notification && window.Notification.permission === 'default') {
-                window.OneSignalDeferred = window.OneSignalDeferred || [];
-                window.OneSignalDeferred.push(async function(OneSignal) {
-                    try {
-                        await OneSignal.Notifications.requestPermission();
-                    } catch (e) {
-                        console.error('OneSignal permission request failed:', e);
-                    }
-                });
             }
 
             const renderUI = (takenCommentsMap = {}, isBackground = false) => {
