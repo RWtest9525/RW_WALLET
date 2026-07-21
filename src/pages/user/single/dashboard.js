@@ -3124,6 +3124,20 @@ const MOCK_REFERRALS_DATA = [
     }
 ];
 
+const maskUserMobile = (mobile = '') => {
+    const clean = String(mobile || '').trim();
+    if (!clean) return 'N/A';
+    const digitsOnly = clean.replace(/\D/g, '');
+    if (digitsOnly.length >= 10) {
+        const last10 = digitsOnly.slice(-10);
+        const prefix = clean.startsWith('+91') ? '+91 ' : (clean.length > 10 ? clean.slice(0, clean.length - 10) + ' ' : '');
+        const first3 = last10.slice(0, 3);
+        const last2 = last10.slice(-2);
+        return `${prefix}${first3}*****${last2}`;
+    }
+    return clean;
+};
+
 const getProfileReferralCode = () => {
     const rawReferralSeed = String(
         currentUserData?.referralCode ||
@@ -3151,9 +3165,9 @@ window.showShareReferralModal = (code = getProfileReferralCode()) => {
             <h3 class="text-base font-black text-gray-900 dark:text-white">Share Referral Code</h3>
             
             <!-- Code Container -->
-            <div class="flex items-center justify-between gap-3 bg-emerald-50/70 dark:bg-emerald-950/30 border-2 border-emerald-300 dark:border-emerald-700 p-4 rounded-2xl">
-                <span class="text-3xl font-black text-emerald-600 dark:text-emerald-300 tracking-wider">${escapeHtml(code)}</span>
-                <button type="button" id="modal-copy-code-btn" class="flex h-11 w-11 items-center justify-center rounded-xl bg-white dark:bg-slate-800 text-emerald-600 dark:text-emerald-300 shadow-sm border border-emerald-200 dark:border-emerald-800 hover:scale-105 active:scale-95 transition">
+            <div class="flex items-center justify-between gap-3 bg-emerald-50/70 dark:bg-emerald-950/30 border-2 border-emerald-300 dark:border-emerald-700 p-3.5 rounded-2xl">
+                <span class="text-2xl font-black text-emerald-600 dark:text-emerald-300 tracking-wider">${escapeHtml(code)}</span>
+                <button type="button" id="modal-copy-code-btn" class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white dark:bg-slate-800 text-emerald-600 dark:text-emerald-300 shadow-sm border border-emerald-200 dark:border-emerald-800 hover:scale-105 active:scale-95 transition">
                     <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
                         <path stroke-linecap="round" stroke-linejoin="round" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
                     </svg>
@@ -3163,50 +3177,50 @@ window.showShareReferralModal = (code = getProfileReferralCode()) => {
             <p class="text-xs text-gray-500 dark:text-gray-400 font-medium">Share your code and earn rewards when your friends join and withdraw.</p>
 
             <!-- Social Share Grid -->
-            <div class="grid grid-cols-5 gap-2 pt-2">
-                <a href="https://api.whatsapp.com/send?text=${encodeURIComponent(shareText)}" target="_blank" class="flex flex-col items-center gap-1.5 p-2 rounded-2xl hover:bg-gray-100 dark:hover:bg-gray-750 transition">
-                    <div class="flex h-12 w-12 items-center justify-center rounded-full bg-emerald-500 text-white shadow-md">
-                        <svg class="h-6 w-6 fill-current" viewBox="0 0 24 24"><path d="M.057 24l1.687-6.163c-1.041-1.804-1.588-3.849-1.587-5.946.003-6.556 5.338-11.891 11.893-11.891 3.181.001 6.167 1.24 8.413 3.488 2.245 2.248 3.481 5.236 3.48 8.414-.003 6.557-5.338 11.892-11.893 11.892-1.99-.001-3.951-.5-5.688-1.448l-6.305 1.654zm6.597-3.807c1.676.995 3.276 1.591 5.392 1.592 5.448 0 9.886-4.434 9.889-9.885.002-5.462-4.415-9.89-9.881-9.892-5.452 0-9.887 4.434-9.889 9.884-.001 2.225.651 3.891 1.746 5.634l-1.157 4.228 4.228-1.157z"/></svg>
+            <div class="grid grid-cols-5 gap-2 pt-1">
+                <a href="https://api.whatsapp.com/send?text=${encodeURIComponent(shareText)}" target="_blank" class="flex flex-col items-center gap-1 p-2 rounded-2xl hover:bg-gray-100 dark:hover:bg-gray-750 transition">
+                    <div class="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-emerald-500 text-white shadow-md">
+                        <svg class="h-5 w-5 fill-current" viewBox="0 0 24 24"><path d="M.057 24l1.687-6.163c-1.041-1.804-1.588-3.849-1.587-5.946.003-6.556 5.338-11.891 11.893-11.891 3.181.001 6.167 1.24 8.413 3.488 2.245 2.248 3.481 5.236 3.48 8.414-.003 6.557-5.338 11.892-11.893 11.892-1.99-.001-3.951-.5-5.688-1.448l-6.305 1.654zm6.597-3.807c1.676.995 3.276 1.591 5.392 1.592 5.448 0 9.886-4.434 9.889-9.885.002-5.462-4.415-9.89-9.881-9.892-5.452 0-9.887 4.434-9.889 9.884-.001 2.225.651 3.891 1.746 5.634l-1.157 4.228 4.228-1.157z"/></svg>
                     </div>
                     <span class="text-[10px] font-bold text-gray-600 dark:text-gray-300">WhatsApp</span>
                 </a>
-                <a href="https://t.me/share/url?url=${encodeURIComponent(link)}&text=${encodeURIComponent(shareText)}" target="_blank" class="flex flex-col items-center gap-1.5 p-2 rounded-2xl hover:bg-gray-100 dark:hover:bg-gray-750 transition">
-                    <div class="flex h-12 w-12 items-center justify-center rounded-full bg-sky-500 text-white shadow-md">
-                        <svg class="h-6 w-6 fill-current" viewBox="0 0 24 24"><path d="M12 0c-6.627 0-12 5.373-12 12s5.373 12 12 12 12-5.373 12-12-5.373-12-12-12zm5.894 8.221l-1.97 9.28c-.145.658-.537.818-1.084.508l-3-2.21-1.446 1.394c-.16.16-.295.295-.605.295l.213-3.053 5.56-5.023c.242-.213-.054-.333-.373-.121l-6.871 4.326-2.962-.924c-.643-.204-.657-.643.136-.953l11.57-4.461c.537-.194 1.006.128.832.941z"/></svg>
+                <a href="https://t.me/share/url?url=${encodeURIComponent(link)}&text=${encodeURIComponent(shareText)}" target="_blank" class="flex flex-col items-center gap-1 p-2 rounded-2xl hover:bg-gray-100 dark:hover:bg-gray-750 transition">
+                    <div class="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-sky-500 text-white shadow-md">
+                        <svg class="h-5 w-5 fill-current" viewBox="0 0 24 24"><path d="M12 0c-6.627 0-12 5.373-12 12s5.373 12 12 12 12-5.373 12-12-5.373-12-12-12zm5.894 8.221l-1.97 9.28c-.145.658-.537.818-1.084.508l-3-2.21-1.446 1.394c-.16.16-.295.295-.605.295l.213-3.053 5.56-5.023c.242-.213-.054-.333-.373-.121l-6.871 4.326-2.962-.924c-.643-.204-.657-.643.136-.953l11.57-4.461c.537-.194 1.006.128.832.941z"/></svg>
                     </div>
                     <span class="text-[10px] font-bold text-gray-600 dark:text-gray-300">Telegram</span>
                 </a>
-                <a href="#" id="modal-share-instagram" class="flex flex-col items-center gap-1.5 p-2 rounded-2xl hover:bg-gray-100 dark:hover:bg-gray-750 transition">
-                    <div class="flex h-12 w-12 items-center justify-center rounded-full bg-gradient-to-tr from-amber-500 via-rose-500 to-purple-600 text-white shadow-md">
-                        <svg class="h-6 w-6 fill-current" viewBox="0 0 24 24"><path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zm0-2.163c-3.259 0-3.667.014-4.947.072-4.358.2-6.78 2.618-6.98 6.98-.059 1.281-.073 1.689-.073 4.948 0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98 1.281.058 1.689.072 4.948.072 3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98-1.281-.059-1.69-.073-4.949-.073zm0 5.838c-3.403 0-6.162 2.759-6.162 6.162s2.759 6.163 6.162 6.163 6.162-2.759 6.162-6.163c0-3.403-2.759-6.162-6.162-6.162zm0 10.162c-2.209 0-4-1.79-4-4 0-2.209 1.791-4 4-4s4 1.791 4 4c0 2.21-1.791 4-4 4zm6.406-11.845c-.796 0-1.441.645-1.441 1.44s.645 1.44 1.441 1.44c.795 0 1.439-.645 1.439-1.44s-.644-1.44-1.439-1.44z"/></svg>
+                <a href="#" id="modal-share-instagram" class="flex flex-col items-center gap-1 p-2 rounded-2xl hover:bg-gray-100 dark:hover:bg-gray-750 transition">
+                    <div class="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-gradient-to-tr from-amber-500 via-rose-500 to-purple-600 text-white shadow-md">
+                        <svg class="h-5 w-5 fill-current" viewBox="0 0 24 24"><path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zm0-2.163c-3.259 0-3.667.014-4.947.072-4.358.2-6.78 2.618-6.98 6.98-.059 1.281-.073 1.689-.073 4.948 0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98 1.281.058 1.689.072 4.948.072 3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98-1.281-.059-1.69-.073-4.949-.073zm0 5.838c-3.403 0-6.162 2.759-6.162 6.162s2.759 6.163 6.162 6.163 6.162-2.759 6.162-6.163c0-3.403-2.759-6.162-6.162-6.162zm0 10.162c-2.209 0-4-1.79-4-4 0-2.209 1.791-4 4-4s4 1.791 4 4c0 2.21-1.791 4-4 4zm6.406-11.845c-.796 0-1.441.645-1.441 1.44s.645 1.44 1.441 1.44c.795 0 1.439-.645 1.439-1.44s-.644-1.44-1.439-1.44z"/></svg>
                     </div>
                     <span class="text-[10px] font-bold text-gray-600 dark:text-gray-300">Instagram</span>
                 </a>
-                <a href="https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(link)}" target="_blank" class="flex flex-col items-center gap-1.5 p-2 rounded-2xl hover:bg-gray-100 dark:hover:bg-gray-750 transition">
-                    <div class="flex h-12 w-12 items-center justify-center rounded-full bg-blue-600 text-white shadow-md">
-                        <svg class="h-6 w-6 fill-current" viewBox="0 0 24 24"><path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/></svg>
+                <a href="https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(link)}" target="_blank" class="flex flex-col items-center gap-1 p-2 rounded-2xl hover:bg-gray-100 dark:hover:bg-gray-750 transition">
+                    <div class="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-blue-600 text-white shadow-md">
+                        <svg class="h-5 w-5 fill-current" viewBox="0 0 24 24"><path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/></svg>
                     </div>
                     <span class="text-[10px] font-bold text-gray-600 dark:text-gray-300">Facebook</span>
                 </a>
-                <button type="button" id="modal-share-more" class="flex flex-col items-center gap-1.5 p-2 rounded-2xl hover:bg-gray-100 dark:hover:bg-gray-750 transition">
-                    <div class="flex h-12 w-12 items-center justify-center rounded-full bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-200 shadow-md">
-                        <svg class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M5 12h.01M12 12h.01M19 12h.01M6 12a1 1 0 11-2 0 1 1 0 012 0zm7 0a1 1 0 11-2 0 1 1 0 012 0zm7 0a1 1 0 11-2 0 1 1 0 012 0z"/></svg>
+                <button type="button" id="modal-share-more" class="flex flex-col items-center gap-1 p-2 rounded-2xl hover:bg-gray-100 dark:hover:bg-gray-750 transition">
+                    <div class="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-200 shadow-md">
+                        <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M5 12h.01M12 12h.01M19 12h.01M6 12a1 1 0 11-2 0 1 1 0 012 0zm7 0a1 1 0 11-2 0 1 1 0 012 0zm7 0a1 1 0 11-2 0 1 1 0 012 0z"/></svg>
                     </div>
                     <span class="text-[10px] font-bold text-gray-600 dark:text-gray-300">More</span>
                 </button>
             </div>
 
-            <button type="button" id="modal-native-share-btn" class="w-full flex items-center justify-center gap-2 rounded-2xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-300 dark:border-emerald-700 py-3.5 text-sm font-black text-emerald-700 dark:text-emerald-300 hover:bg-emerald-100 transition active:scale-98">
-                <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
+            <button type="button" id="modal-native-share-btn" class="w-full flex items-center justify-center gap-2 rounded-2xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-300 dark:border-emerald-700 py-3 text-sm font-black text-emerald-700 dark:text-emerald-300 hover:bg-emerald-100 transition active:scale-98">
+                <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
                     <path stroke-linecap="round" stroke-linejoin="round" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
                 </svg>
                 <span>Share Link</span>
             </button>
 
             <!-- Link Box -->
-            <div class="space-y-1.5 text-left pt-1">
+            <div class="space-y-1 text-left pt-1">
                 <label class="text-[10px] font-black uppercase text-gray-400 tracking-wider">OR INVITE VIA LINK</label>
-                <div class="flex items-center gap-2 bg-gray-100 dark:bg-gray-700 p-2.5 rounded-xl border border-gray-200 dark:border-gray-600">
+                <div class="flex items-center gap-2 bg-gray-100 dark:bg-gray-700 p-2 rounded-xl border border-gray-200 dark:border-gray-600">
                     <input type="text" readonly value="${escapeHtml(link)}" class="w-full bg-transparent text-xs font-mono font-semibold text-gray-800 dark:text-gray-200 outline-none truncate">
                     <button type="button" id="modal-copy-link-btn" class="shrink-0 flex items-center gap-1 rounded-lg bg-white dark:bg-gray-800 px-3 py-1.5 text-xs font-bold text-slate-800 dark:text-white shadow-sm border border-gray-200 dark:border-gray-600 hover:bg-gray-50 active:scale-95 transition">
                         <span>Copy</span>
@@ -3217,7 +3231,7 @@ window.showShareReferralModal = (code = getProfileReferralCode()) => {
     `;
 
     renderModal('Share Referral Code', modalHtml, `
-        <button onclick="window.closeModal()" class="w-full rounded-xl bg-gray-100 dark:bg-gray-700 py-3 text-sm font-extrabold text-gray-700 dark:text-gray-200">Close</button>
+        <button onclick="window.closeModal()" class="w-full rounded-xl bg-gray-100 dark:bg-gray-700 py-2.5 text-sm font-extrabold text-gray-700 dark:text-gray-200">Close</button>
     `, 'max-w-md');
 
     const copyCode = () => {
@@ -3273,24 +3287,24 @@ const showTrackReferralsPage = (filter = 'all') => {
     const totalEarnings = referrals.reduce((sum, x) => sum + (x.totalEarned || 0), 0);
 
     const listHtml = filteredList.map(item => `
-        <div class="track-referral-item flex items-center justify-between gap-3 p-4 bg-white dark:bg-slate-800 rounded-2xl border border-slate-150 dark:border-slate-700/80 shadow-sm transition hover:shadow-md cursor-pointer active:scale-98" onclick="window.showReferralDetailPage('${item.id}')">
-            <div class="flex items-center gap-3.5 min-w-0">
-                <img src="${item.avatar}" alt="${escapeHtml(item.name)}" class="h-12 w-12 rounded-full object-cover border border-slate-200 dark:border-slate-700 bg-white p-0.5 shrink-0">
+        <div class="track-referral-item flex items-center justify-between gap-3 p-3 bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700/80 shadow-xs transition hover:shadow-sm cursor-pointer active:scale-98" onclick="window.showReferralDetailPage('${item.id}')">
+            <div class="flex items-center gap-3 min-w-0">
+                <img src="${item.avatar}" alt="${escapeHtml(item.name)}" class="h-10 w-10 rounded-full object-cover border border-slate-200 dark:border-slate-700 bg-white p-0.5 shrink-0">
                 <div class="min-w-0 text-left space-y-0.5">
                     <div class="flex items-center gap-2">
-                        <h4 class="text-base font-black text-slate-900 dark:text-white truncate">${escapeHtml(item.name)}</h4>
-                        <span class="rounded-full px-2 py-0.5 text-[10px] font-black border ${item.status === 'successful' ? 'bg-emerald-50 dark:bg-emerald-950/60 border-emerald-300 dark:border-emerald-700 text-emerald-700 dark:text-emerald-300' : 'bg-amber-50 dark:bg-amber-950/60 border-amber-300 dark:border-amber-700 text-amber-700 dark:text-amber-300'}">${escapeHtml(item.statusLabel)}</span>
+                        <h4 class="text-sm font-black text-slate-900 dark:text-white truncate">${escapeHtml(item.name)}</h4>
+                        <span class="rounded-full px-2 py-0.5 text-[9px] font-black border ${item.status === 'successful' ? 'bg-emerald-50 dark:bg-emerald-950/60 border-emerald-300 dark:border-emerald-700 text-emerald-700 dark:text-emerald-300' : 'bg-amber-50 dark:bg-amber-950/60 border-amber-300 dark:border-amber-700 text-amber-700 dark:text-amber-300'}">${escapeHtml(item.statusLabel)}</span>
                     </div>
-                    <p class="text-xs font-semibold text-slate-500 dark:text-slate-400 truncate">${escapeHtml(item.mobile)} • ${item.joinedAt} Joined</p>
+                    <p class="text-[11px] font-semibold text-slate-500 dark:text-slate-400 truncate">${escapeHtml(maskUserMobile(item.mobile))} • ${item.joinedAt}</p>
                 </div>
             </div>
             <div class="flex items-center gap-2 shrink-0 text-right">
                 <div>
-                    <p class="text-sm font-black ${item.status === 'successful' ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-400 dark:text-slate-500'}">${item.bonusText}</p>
-                    <p class="text-[10px] font-bold text-slate-400 dark:text-slate-500">${item.lifetimeText}</p>
+                    <p class="text-xs font-black ${item.status === 'successful' ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-400 dark:text-slate-500'}">${item.bonusText}</p>
+                    <p class="text-[9px] font-bold text-slate-400 dark:text-slate-500">${item.lifetimeText}</p>
                 </div>
-                <div class="flex h-8 w-8 items-center justify-center rounded-xl bg-gray-100 dark:bg-gray-700 text-gray-400">
-                    <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/></svg>
+                <div class="flex h-7 w-7 rounded-full shrink-0 items-center justify-center bg-gray-100 dark:bg-gray-700 text-gray-400">
+                    <svg class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/></svg>
                 </div>
             </div>
         </div>
@@ -3304,83 +3318,79 @@ const showTrackReferralsPage = (filter = 'all') => {
                 </svg>
             </button>
             <h2 class="text-base font-black text-gray-900 dark:text-white">Track Referrals</h2>
-            <button type="button" onclick="showNotification('Filtering by date & status')" class="flex h-9 w-9 items-center justify-center rounded-xl bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-200 hover:bg-gray-200 transition active:scale-90" aria-label="Filter">
-                <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                    <path stroke-linecap="round" stroke-linejoin="round" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
-                </svg>
-            </button>
+            <div class="w-9"></div>
         </div>
 
-        <div class="max-w-lg mx-auto p-4 space-y-4 text-left pb-28">
+        <div class="max-w-md mx-auto p-3 space-y-3 text-left pb-24">
             <!-- 4 Stat Grid Cards -->
-            <div class="grid grid-cols-2 gap-3">
-                <div class="bg-white dark:bg-slate-800 p-4 rounded-2xl border border-slate-150 dark:border-slate-700/80 shadow-sm flex items-center gap-3">
-                    <div class="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-emerald-50 dark:bg-emerald-950/50 text-emerald-600 border border-emerald-200/50">
-                        <svg class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"/></svg>
+            <div class="grid grid-cols-2 gap-2.5">
+                <div class="bg-white dark:bg-slate-800 p-3 rounded-xl border border-slate-200 dark:border-slate-700/80 shadow-xs flex items-center gap-2.5">
+                    <div class="flex h-9 w-9 rounded-full shrink-0 items-center justify-center bg-emerald-50 dark:bg-emerald-950/50 text-emerald-600 border border-emerald-200/50">
+                        <svg class="h-4.5 w-4.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"/></svg>
                     </div>
                     <div>
-                        <p class="text-[11px] font-bold text-slate-400 dark:text-slate-400">Total Referrals</p>
-                        <h3 class="text-2xl font-black text-emerald-600 dark:text-emerald-400 mt-0.5">${totalCount}</h3>
+                        <p class="text-[10px] font-bold text-slate-400 dark:text-slate-400">Total Referrals</p>
+                        <h3 class="text-xl font-black text-emerald-600 dark:text-emerald-400 mt-0.5">${totalCount}</h3>
                     </div>
                 </div>
-                <div class="bg-white dark:bg-slate-800 p-4 rounded-2xl border border-slate-150 dark:border-slate-700/80 shadow-sm flex items-center gap-3">
-                    <div class="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-blue-50 dark:bg-blue-950/50 text-blue-600 border border-blue-200/50">
-                        <svg class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                <div class="bg-white dark:bg-slate-800 p-3 rounded-xl border border-slate-200 dark:border-slate-700/80 shadow-xs flex items-center gap-2.5">
+                    <div class="flex h-9 w-9 rounded-full shrink-0 items-center justify-center bg-blue-50 dark:bg-blue-950/50 text-blue-600 border border-blue-200/50">
+                        <svg class="h-4.5 w-4.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
                     </div>
                     <div>
-                        <p class="text-[11px] font-bold text-slate-400 dark:text-slate-400">Successful</p>
-                        <h3 class="text-2xl font-black text-blue-600 dark:text-blue-400 mt-0.5">${successCount}</h3>
+                        <p class="text-[10px] font-bold text-slate-400 dark:text-slate-400">Successful</p>
+                        <h3 class="text-xl font-black text-blue-600 dark:text-blue-400 mt-0.5">${successCount}</h3>
                     </div>
                 </div>
-                <div class="bg-white dark:bg-slate-800 p-4 rounded-2xl border border-slate-150 dark:border-slate-700/80 shadow-sm flex items-center gap-3">
-                    <div class="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-amber-50 dark:bg-amber-950/50 text-amber-600 border border-amber-200/50">
-                        <svg class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                <div class="bg-white dark:bg-slate-800 p-3 rounded-xl border border-slate-200 dark:border-slate-700/80 shadow-xs flex items-center gap-2.5">
+                    <div class="flex h-9 w-9 rounded-full shrink-0 items-center justify-center bg-amber-50 dark:bg-amber-950/50 text-amber-600 border border-amber-200/50">
+                        <svg class="h-4.5 w-4.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
                     </div>
                     <div>
-                        <p class="text-[11px] font-bold text-slate-400 dark:text-slate-400">Pending</p>
-                        <h3 class="text-2xl font-black text-amber-600 dark:text-amber-400 mt-0.5">${pendingCount}</h3>
+                        <p class="text-[10px] font-bold text-slate-400 dark:text-slate-400">Pending</p>
+                        <h3 class="text-xl font-black text-amber-600 dark:text-amber-400 mt-0.5">${pendingCount}</h3>
                     </div>
                 </div>
-                <div class="bg-white dark:bg-slate-800 p-4 rounded-2xl border border-slate-150 dark:border-slate-700/80 shadow-sm flex items-center gap-3">
-                    <div class="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-purple-50 dark:bg-purple-950/50 text-purple-600 border border-purple-200/50">
-                        <span class="text-xl font-black">₹</span>
+                <div class="bg-white dark:bg-slate-800 p-3 rounded-xl border border-slate-200 dark:border-slate-700/80 shadow-xs flex items-center gap-2.5">
+                    <div class="flex h-9 w-9 rounded-full shrink-0 items-center justify-center bg-purple-50 dark:bg-purple-950/50 text-purple-600 border border-purple-200/50">
+                        <span class="text-base font-black">₹</span>
                     </div>
                     <div>
-                        <p class="text-[11px] font-bold text-slate-400 dark:text-slate-400">Total Earnings</p>
-                        <h3 class="text-2xl font-black text-purple-600 dark:text-purple-400 mt-0.5">₹${totalEarnings}</h3>
+                        <p class="text-[10px] font-bold text-slate-400 dark:text-slate-400">Total Earnings</p>
+                        <h3 class="text-xl font-black text-purple-600 dark:text-purple-400 mt-0.5">₹${totalEarnings}</h3>
                     </div>
                 </div>
             </div>
 
             <!-- Filter Tabs -->
-            <div class="flex space-x-2 overflow-x-auto pb-1 pt-2">
-                <button type="button" onclick="window.showTrackReferralsPage('all')" class="rounded-xl px-4 py-2 text-xs font-black transition ${filter === 'all' ? 'bg-emerald-600 text-white shadow-sm' : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700'}">All (${totalCount})</button>
-                <button type="button" onclick="window.showTrackReferralsPage('successful')" class="rounded-xl px-4 py-2 text-xs font-black transition ${filter === 'successful' ? 'bg-emerald-600 text-white shadow-sm' : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700'}">Successful (${successCount})</button>
-                <button type="button" onclick="window.showTrackReferralsPage('pending')" class="rounded-xl px-4 py-2 text-xs font-black transition ${filter === 'pending' ? 'bg-emerald-600 text-white shadow-sm' : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700'}">Pending (${pendingCount})</button>
-                <button type="button" onclick="window.showTrackReferralsPage('inactive')" class="rounded-xl px-4 py-2 text-xs font-black transition ${filter === 'inactive' ? 'bg-emerald-600 text-white shadow-sm' : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700'}">Inactive (10)</button>
+            <div class="flex space-x-1.5 overflow-x-auto pb-0.5 pt-1">
+                <button type="button" onclick="window.showTrackReferralsPage('all')" class="rounded-lg px-3 py-1.5 text-[11px] font-black transition ${filter === 'all' ? 'bg-emerald-600 text-white shadow-xs' : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700'}">All (${totalCount})</button>
+                <button type="button" onclick="window.showTrackReferralsPage('successful')" class="rounded-lg px-3 py-1.5 text-[11px] font-black transition ${filter === 'successful' ? 'bg-emerald-600 text-white shadow-xs' : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700'}">Successful (${successCount})</button>
+                <button type="button" onclick="window.showTrackReferralsPage('pending')" class="rounded-lg px-3 py-1.5 text-[11px] font-black transition ${filter === 'pending' ? 'bg-emerald-600 text-white shadow-xs' : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700'}">Pending (${pendingCount})</button>
+                <button type="button" onclick="window.showTrackReferralsPage('inactive')" class="rounded-lg px-3 py-1.5 text-[11px] font-black transition ${filter === 'inactive' ? 'bg-emerald-600 text-white shadow-xs' : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700'}">Inactive (10)</button>
             </div>
 
             <!-- Referrals List -->
-            <div class="space-y-3">
+            <div class="space-y-2">
                 ${listHtml}
             </div>
         </div>
 
         <!-- Sticky Bottom Bar -->
-        <div class="fixed bottom-0 inset-x-0 bg-white/95 dark:bg-gray-900/95 backdrop-blur-md border-t border-slate-200 dark:border-slate-800 p-4 z-40">
-            <div class="max-w-lg mx-auto flex items-center justify-between gap-3">
-                <div class="flex items-center gap-4 text-left">
+        <div class="fixed bottom-0 inset-x-0 bg-white/95 dark:bg-gray-900/95 backdrop-blur-md border-t border-slate-200 dark:border-slate-800 p-3 z-40">
+            <div class="max-w-md mx-auto flex items-center justify-between gap-3">
+                <div class="flex items-center gap-3 text-left">
                     <div>
-                        <p class="text-[10px] font-bold text-slate-400 dark:text-slate-400">Available Earnings</p>
-                        <p class="text-base font-black text-emerald-600 dark:text-emerald-400">₹120.00</p>
+                        <p class="text-[9px] font-bold text-slate-400 dark:text-slate-400">Available Earnings</p>
+                        <p class="text-sm font-black text-emerald-600 dark:text-emerald-400">₹120.00</p>
                     </div>
-                    <div class="h-8 w-px bg-slate-200 dark:bg-slate-700"></div>
+                    <div class="h-6 w-px bg-slate-200 dark:bg-slate-700"></div>
                     <div>
-                        <p class="text-[10px] font-bold text-slate-400 dark:text-slate-400">Total Withdrawn</p>
-                        <p class="text-base font-black text-slate-700 dark:text-slate-200">₹360.00</p>
+                        <p class="text-[9px] font-bold text-slate-400 dark:text-slate-400">Total Withdrawn</p>
+                        <p class="text-sm font-black text-slate-700 dark:text-slate-200">₹360.00</p>
                     </div>
                 </div>
-                <button type="button" onclick="window.showWithdrawalPage ? window.showWithdrawalPage() : showNotification('Opening withdrawal...')" class="shrink-0 flex items-center gap-2 rounded-2xl bg-emerald-600 hover:bg-emerald-500 text-white px-5 py-3 text-xs font-black shadow-md transition active:scale-95">
+                <button type="button" onclick="window.showWithdrawalPage ? window.showWithdrawalPage() : showNotification('Opening withdrawal...')" class="shrink-0 flex items-center gap-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white px-4 py-2.5 text-xs font-black shadow-xs transition active:scale-95">
                     <span>🚀 Withdraw Earnings</span>
                 </button>
             </div>
@@ -3389,6 +3399,288 @@ const showTrackReferralsPage = (filter = 'all') => {
     `;
 
     showPage(content, { keepBottomNav: false });
+};
+
+window.showReferralDetailPage = (referralId = 'ref-1') => {
+    if (!ensureUserSessionReady()) return;
+    const item = MOCK_REFERRALS_DATA.find(x => x.id === referralId) || MOCK_REFERRALS_DATA[0];
+
+    const content = `
+        <div class="sticky top-0 z-30 flex items-center justify-between border-b border-gray-200 dark:border-gray-800 bg-white/95 dark:bg-gray-900/95 px-4 py-3 backdrop-blur-md">
+            <button type="button" onclick="window.showTrackReferralsPage()" class="flex h-9 w-9 items-center justify-center rounded-xl bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-200 hover:bg-gray-200 transition active:scale-90" aria-label="Back">
+                <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7" />
+                </svg>
+            </button>
+            <h2 class="text-base font-black text-gray-900 dark:text-white">Referral Detail</h2>
+            <div class="w-9"></div>
+        </div>
+
+        <div class="max-w-md mx-auto p-3 space-y-3 text-left pb-16">
+            <!-- User Header Card -->
+            <div class="flex items-center gap-3 bg-white dark:bg-slate-800 p-4 rounded-xl border border-slate-200 dark:border-slate-700/80 shadow-xs">
+                <img src="${item.avatar}" alt="${escapeHtml(item.name)}" class="h-14 w-14 rounded-full object-cover border-2 border-emerald-500 bg-white p-0.5 shrink-0">
+                <div class="min-w-0 flex-1 space-y-0.5">
+                    <div class="flex items-center justify-between gap-2">
+                        <h3 class="text-base font-black text-slate-900 dark:text-white truncate">${escapeHtml(item.name)}</h3>
+                        <span class="rounded-full px-2 py-0.5 text-[9px] font-black border ${item.status === 'successful' ? 'bg-emerald-50 dark:bg-emerald-950/60 border-emerald-300 dark:border-emerald-700 text-emerald-700 dark:text-emerald-300' : 'bg-amber-50 dark:bg-amber-950/60 border-amber-300 dark:border-amber-700 text-amber-700 dark:text-amber-300'}">${escapeHtml(item.statusLabel)}</span>
+                    </div>
+                    <p class="text-xs font-semibold text-slate-500 dark:text-slate-400 truncate">📱 ${escapeHtml(maskUserMobile(item.mobile))}</p>
+                    <p class="text-[11px] font-semibold text-slate-400 dark:text-slate-500 truncate">📅 Joined on ${item.joinedAt} • ${item.joinedTime}</p>
+                </div>
+            </div>
+
+            <!-- Earnings Summary Card -->
+            <div class="bg-white dark:bg-slate-800 p-4 rounded-xl border border-slate-200 dark:border-slate-700/80 shadow-xs space-y-2.5">
+                <h4 class="text-[10px] font-black uppercase tracking-wider text-slate-400 dark:text-slate-400">Earnings Summary</h4>
+                <div class="grid grid-cols-3 gap-2 pt-0.5 text-center">
+                    <div class="bg-emerald-50/70 dark:bg-emerald-950/30 p-2.5 rounded-xl border border-emerald-100 dark:border-emerald-800">
+                        <p class="text-[9px] font-bold text-slate-400 dark:text-slate-400">Referral Bonus</p>
+                        <p class="text-sm font-black text-emerald-600 dark:text-emerald-400 mt-0.5">₹${item.referralBonus.toFixed(2)}</p>
+                    </div>
+                    <div class="bg-blue-50/70 dark:bg-blue-950/30 p-2.5 rounded-xl border border-blue-100 dark:border-blue-800">
+                        <p class="text-[9px] font-bold text-slate-400 dark:text-slate-400">Lifetime Earnings</p>
+                        <p class="text-sm font-black text-blue-600 dark:text-blue-400 mt-0.5">₹${item.lifetimeEarnings.toFixed(2)}</p>
+                    </div>
+                    <div class="bg-purple-50/70 dark:bg-purple-950/30 p-2.5 rounded-xl border border-purple-100 dark:border-purple-800">
+                        <p class="text-[9px] font-bold text-slate-400 dark:text-slate-400">Total Earned</p>
+                        <p class="text-sm font-black text-purple-600 dark:text-purple-400 mt-0.5">₹${item.totalEarned.toFixed(2)}</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Activity Timeline -->
+            <div class="bg-white dark:bg-slate-800 p-4 rounded-xl border border-slate-200 dark:border-slate-700/80 shadow-xs space-y-3">
+                <h4 class="text-[10px] font-black uppercase tracking-wider text-slate-400 dark:text-slate-400">Activity Timeline</h4>
+                <div class="relative pl-6 space-y-5 before:absolute before:left-2.5 before:top-2 before:bottom-2 before:w-0.5 before:bg-emerald-200 dark:before:bg-emerald-900">
+                    
+                    <!-- Timeline Item 1 -->
+                    <div class="relative">
+                        <div class="absolute -left-6 top-0 flex h-5 w-5 rounded-full shrink-0 items-center justify-center bg-emerald-500 text-white text-[10px] font-black">✓</div>
+                        <p class="text-[10px] font-bold text-slate-400 dark:text-slate-400">${item.joinedAt} • ${item.joinedTime}</p>
+                        <h5 class="text-xs font-black text-slate-900 dark:text-white mt-0.5">Account Created</h5>
+                        <p class="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">User joined using your referral code</p>
+                    </div>
+
+                    ${item.firstWithdrawalAt ? `
+                    <!-- Timeline Item 2 -->
+                    <div class="relative">
+                        <div class="absolute -left-6 top-0 flex h-5 w-5 rounded-full shrink-0 items-center justify-center bg-emerald-500 text-white text-[10px] font-black">✓</div>
+                        <div class="flex items-center justify-between">
+                            <div>
+                                <p class="text-[10px] font-bold text-slate-400 dark:text-slate-400">${item.firstWithdrawalAt}</p>
+                                <h5 class="text-xs font-black text-slate-900 dark:text-white mt-0.5">First Withdrawal</h5>
+                                <p class="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">Friend completed first withdrawal</p>
+                            </div>
+                            <span class="text-xs font-black text-emerald-600 dark:text-emerald-400">+ ₹5.00</span>
+                        </div>
+                    </div>` : ''}
+
+                    ${item.latestLifetimeAt ? `
+                    <!-- Timeline Item 3 -->
+                    <div class="relative">
+                        <div class="absolute -left-6 top-0 flex h-5 w-5 rounded-full shrink-0 items-center justify-center bg-emerald-500 text-white text-[10px] font-black">✓</div>
+                        <div class="flex items-center justify-between">
+                            <div>
+                                <p class="text-[10px] font-bold text-slate-400 dark:text-slate-400">${item.latestLifetimeAt}</p>
+                                <h5 class="text-xs font-black text-slate-900 dark:text-white mt-0.5">Lifetime Bonus Earned</h5>
+                                <p class="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">You earned 1% of friend's withdrawal</p>
+                            </div>
+                            <span class="text-xs font-black text-emerald-600 dark:text-emerald-400">+ ₹${item.lifetimeEarnings.toFixed(2)}</span>
+                        </div>
+                    </div>` : ''}
+                </div>
+            </div>
+
+            <!-- Bottom Note -->
+            <div class="rounded-xl bg-emerald-50/80 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800 p-3 flex items-center gap-2.5 text-[11px] font-semibold text-emerald-800 dark:text-emerald-200">
+                <div class="flex h-5 w-5 rounded-full shrink-0 items-center justify-center bg-emerald-500 text-white text-[10px] font-black">⭐</div>
+                <span>You will continue to earn 1% on all future withdrawals of this friend.</span>
+            </div>
+        </div>
+        ${getPageFooter()}
+    `;
+
+    showPage(content, { keepBottomNav: false });
+};
+
+const showReferEarnPage = () => {
+    if (!ensureUserSessionReady()) return;
+    if (activeChatUnsubscribe) {
+        activeChatUnsubscribe();
+        activeChatUnsubscribe = null;
+    }
+    const reward = getReferralRewardAmount();
+    const rewardText = formatCurrency(reward).replace('.00', '');
+    const referralCode = getProfileReferralCode();
+    const referralLink = getProfileReferralLink(referralCode);
+
+    const content = `
+        <div class="max-w-md mx-auto space-y-2.5 text-left px-1 pb-20">
+            
+            <!-- Dark Green Poster Card Banner (Compact 1-screen fit) -->
+            <div class="relative overflow-hidden rounded-2xl bg-gradient-to-br from-[#053d28] via-[#094d33] to-[#022115] p-4 text-white shadow-md">
+                <!-- Background decorative circles -->
+                <div class="absolute -right-6 -top-6 h-28 w-28 rounded-full border border-white/10 bg-white/5 pointer-events-none"></div>
+
+                <!-- Header Top Bar inside poster -->
+                <div class="flex items-center justify-between">
+                    <span class="inline-flex items-center gap-1 rounded-full bg-emerald-500/20 px-2.5 py-0.5 text-[10px] font-black uppercase text-emerald-300 border border-emerald-400/30 backdrop-blur-md">
+                        🎁 REFER & EARN
+                    </span>
+                </div>
+
+                <!-- Poster Title & Graphic -->
+                <div class="relative flex items-center justify-between gap-3 mt-3">
+                    <div class="space-y-1 flex-1 min-w-0">
+                        <h2 class="text-xl sm:text-2xl font-black leading-tight tracking-tight text-white">
+                            Invite Friends.<br><span class="text-emerald-300">Earn</span> Together.
+                        </h2>
+                        <p class="text-[11px] text-emerald-100/80 max-w-[190px] font-medium leading-normal">
+                            You and your friend both get rewards after the first withdrawal.
+                        </p>
+                    </div>
+                    <!-- Graphic Gift Illustration -->
+                    <div class="relative shrink-0 flex items-center justify-center h-16 w-16">
+                        <div class="absolute inset-0 bg-emerald-400/20 rounded-full blur-lg"></div>
+                        <img src="${REFER_ICON_URL}" alt="Referral Gift" class="relative h-14 w-14 object-contain filter drop-shadow-[0_6px_10px_rgba(0,0,0,0.35)]">
+                    </div>
+                </div>
+            </div>
+
+            <!-- 3 Stat Cards Row -->
+            <div class="grid grid-cols-3 gap-2">
+                <div class="bg-emerald-50/80 dark:bg-emerald-950/30 border border-emerald-200/60 dark:border-emerald-900/40 rounded-xl p-2.5 text-center shadow-xs">
+                    <div class="mx-auto flex h-7 w-7 rounded-full shrink-0 items-center justify-center bg-emerald-100 dark:bg-emerald-900/50 text-emerald-600 mb-1">
+                        <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M3 10h18M7 15h1m4 0h1m-7 4h12a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>
+                    </div>
+                    <span class="text-[9px] font-black uppercase text-emerald-700 dark:text-emerald-300 tracking-wider">YOU GET</span>
+                    <h4 class="text-base font-black text-emerald-700 dark:text-emerald-300 mt-0.5">${rewardText}</h4>
+                    <p class="text-[8px] font-bold text-slate-500 dark:text-slate-400">Per Referral</p>
+                </div>
+                <div class="bg-blue-50/80 dark:bg-blue-950/30 border border-blue-200/60 dark:border-blue-900/40 rounded-xl p-2.5 text-center shadow-xs">
+                    <div class="mx-auto flex h-7 w-7 rounded-full shrink-0 items-center justify-center bg-blue-100 dark:bg-blue-900/50 text-blue-600 mb-1">
+                        <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"/></svg>
+                    </div>
+                    <span class="text-[9px] font-black uppercase text-blue-700 dark:text-blue-300 tracking-wider">FRIEND GETS</span>
+                    <h4 class="text-base font-black text-blue-700 dark:text-blue-300 mt-0.5">${rewardText}</h4>
+                    <p class="text-[8px] font-bold text-slate-500 dark:text-slate-400">After 1st Withdraw</p>
+                </div>
+                <div class="bg-orange-50/80 dark:bg-orange-950/30 border border-orange-200/60 dark:border-orange-900/40 rounded-xl p-2.5 text-center shadow-xs">
+                    <div class="mx-auto flex h-7 w-7 rounded-full shrink-0 items-center justify-center bg-orange-100 dark:bg-orange-900/50 text-orange-600 mb-1">
+                        <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M11 3.055A9.001 9.001 0 1020.945 13H11V3.055z"/><path stroke-linecap="round" stroke-linejoin="round" d="M20.488 9H15V3.512A9.025 9.025 0 0120.488 9z"/></svg>
+                    </div>
+                    <span class="text-[9px] font-black uppercase text-orange-700 dark:text-orange-300 tracking-wider">LIFETIME</span>
+                    <h4 class="text-base font-black text-orange-700 dark:text-orange-300 mt-0.5">1%</h4>
+                    <p class="text-[8px] font-bold text-slate-500 dark:text-slate-400">Of Friend Withdraw</p>
+                </div>
+            </div>
+
+            <!-- How It Works (Horizontal Stepper) -->
+            <div class="bg-white dark:bg-slate-800 rounded-2xl p-3 border border-slate-200 dark:border-slate-800 shadow-xs space-y-2 text-center">
+                <div class="flex items-center justify-center gap-2">
+                    <div class="h-px bg-slate-200 dark:bg-slate-700 flex-1"></div>
+                    <span class="text-[10px] font-black uppercase text-slate-400 tracking-widest">How it works</span>
+                    <div class="h-px bg-slate-200 dark:bg-slate-700 flex-1"></div>
+                </div>
+                
+                <div class="grid grid-cols-4 gap-1.5 text-center relative">
+                    <!-- Step 1 -->
+                    <div class="flex flex-col items-center space-y-1">
+                        <div class="h-8 w-8 rounded-full shrink-0 bg-emerald-50 dark:bg-emerald-950/50 text-emerald-600 flex items-center justify-center border border-emerald-200/50 shadow-xs">
+                            <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z"/></svg>
+                        </div>
+                        <span class="text-[9px] font-black text-emerald-600 dark:text-emerald-400 uppercase">01</span>
+                        <h5 class="text-[10px] font-black text-slate-900 dark:text-white leading-tight">Share Code</h5>
+                        <p class="text-[8px] font-medium text-slate-400 leading-tight">Send code to friend</p>
+                    </div>
+
+                    <!-- Step 2 -->
+                    <div class="flex flex-col items-center space-y-1">
+                        <div class="h-8 w-8 rounded-full shrink-0 bg-blue-50 dark:bg-blue-950/50 text-blue-600 flex items-center justify-center border border-blue-200/50 shadow-xs">
+                            <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z"/></svg>
+                        </div>
+                        <span class="text-[9px] font-black text-blue-600 dark:text-blue-400 uppercase">02</span>
+                        <h5 class="text-[10px] font-black text-slate-900 dark:text-white leading-tight">Friend Joins</h5>
+                        <p class="text-[8px] font-medium text-slate-400 leading-tight">They sign up</p>
+                    </div>
+
+                    <!-- Step 3 -->
+                    <div class="flex flex-col items-center space-y-1">
+                        <div class="h-8 w-8 rounded-full shrink-0 bg-purple-50 dark:bg-purple-950/50 text-purple-600 flex items-center justify-center border border-purple-200/50 shadow-xs">
+                            <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M19 14l-7 7m0 0l-7-7m7 7V3"/></svg>
+                        </div>
+                        <span class="text-[9px] font-black text-purple-600 dark:text-purple-400 uppercase">03</span>
+                        <h5 class="text-[10px] font-black text-slate-900 dark:text-white leading-tight">1st Withdraw</h5>
+                        <p class="text-[8px] font-medium text-slate-400 leading-tight">Friend withdraws</p>
+                    </div>
+
+                    <!-- Step 4 -->
+                    <div class="flex flex-col items-center space-y-1">
+                        <div class="h-8 w-8 rounded-full shrink-0 bg-orange-50 dark:bg-orange-950/50 text-orange-600 flex items-center justify-center border border-orange-200/50 shadow-xs">
+                            <span class="text-sm font-black">%</span>
+                        </div>
+                        <span class="text-[9px] font-black text-orange-600 dark:text-orange-400 uppercase">04</span>
+                        <h5 class="text-[10px] font-black text-slate-900 dark:text-white leading-tight">You Earn</h5>
+                        <p class="text-[8px] font-medium text-slate-400 leading-tight">Get ₹5 + 1% bonus</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Referral Code & Actions Box -->
+            <div class="bg-emerald-50/70 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800 p-3 rounded-2xl shadow-xs space-y-2">
+                <div class="flex items-center justify-between gap-2">
+                    <div class="min-w-0 text-left">
+                        <p class="text-[9px] font-black uppercase text-emerald-700 dark:text-emerald-400 tracking-wider">YOUR REFERRAL CODE</p>
+                        <h3 class="text-lg font-black text-emerald-800 dark:text-emerald-300 truncate mt-0.5">${escapeHtml(referralCode)}</h3>
+                        <p class="text-[10px] font-mono text-emerald-700/80 dark:text-emerald-300/80 truncate mt-0.5">${escapeHtml(referralLink)}</p>
+                    </div>
+                    <div class="flex items-center gap-1.5 shrink-0">
+                        <button type="button" id="main-copy-code-btn" title="Copy Referral Code" class="flex h-9 w-9 items-center justify-center rounded-xl bg-white dark:bg-slate-800 text-emerald-600 dark:text-emerald-300 shadow-xs border border-emerald-200 dark:border-emerald-800 hover:scale-105 active:scale-95 transition">
+                            <svg class="h-4.5 w-4.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                            </svg>
+                        </button>
+                        <button type="button" id="main-share-link-btn" title="Share Link" class="flex items-center gap-1 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white px-3 py-2 text-xs font-black shadow-xs transition active:scale-95">
+                            <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z"/></svg>
+                            <span>Share</span>
+                        </button>
+                        <button type="button" id="open-track-referrals-btn" class="flex items-center gap-1 rounded-xl bg-white dark:bg-slate-800 border border-emerald-600 px-3 py-2 text-xs font-black text-emerald-700 dark:text-emerald-300 hover:bg-emerald-50 transition shadow-xs active:scale-95">
+                            <span>Track</span>
+                            <span class="text-xs">›</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Bottom Auto Rewards Banner -->
+            <div class="rounded-xl bg-emerald-50/80 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800/60 p-2.5 flex items-center gap-2.5 text-[10px] font-bold text-emerald-800 dark:text-emerald-200 shadow-xs">
+                <div class="flex h-5 w-5 rounded-full shrink-0 items-center justify-center bg-emerald-500 text-white font-black text-xs">✓</div>
+                <span>Rewards will be added automatically after your friend's first withdrawal.</span>
+            </div>
+        </div>
+        ${getPageFooter()}
+    `;
+
+    showPage(content, { keepBottomNav: true, returnTo: currentUser?.uid === ADMIN_UID ? 'admin' : 'home' });
+    currentMainSection = 'refer';
+    setBottomNavActive('bottom-refer-btn');
+
+    document.getElementById('main-copy-code-btn')?.addEventListener('click', () => {
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(referralCode).then(() => showNotification('Referral code copied to clipboard!'));
+        } else {
+            showNotification(`Referral Code: ${referralCode}`);
+        }
+    });
+
+    document.getElementById('main-share-link-btn')?.addEventListener('click', () => {
+        window.showShareReferralModal(referralCode);
+    });
+
+    document.getElementById('open-track-referrals-btn')?.addEventListener('click', () => {
+        window.showTrackReferralsPage();
+    });
 };
 
 window.showReferralDetailPage = (referralId = 'ref-1') => {
@@ -3494,179 +3786,7 @@ window.showReferralDetailPage = (referralId = 'ref-1') => {
     showPage(content, { keepBottomNav: false });
 };
 
-const showReferEarnPage = () => {
-    if (!ensureUserSessionReady()) return;
-    if (activeChatUnsubscribe) {
-        activeChatUnsubscribe();
-        activeChatUnsubscribe = null;
-    }
-    const reward = getReferralRewardAmount();
-    const rewardText = formatCurrency(reward).replace('.00', '');
-    const referralCode = getProfileReferralCode();
-    const referralLink = getProfileReferralLink(referralCode);
 
-    const content = `
-        <div class="max-w-lg mx-auto space-y-4 text-left px-1 pb-24">
-            
-            <!-- Dark Green Poster Card Banner -->
-            <div class="relative overflow-hidden rounded-3xl bg-gradient-to-br from-[#053d28] via-[#094d33] to-[#022115] p-6 text-white shadow-xl">
-                <!-- Background decorative circles -->
-                <div class="absolute -right-8 -top-8 h-36 w-36 rounded-full border border-white/10 bg-white/5 pointer-events-none"></div>
-                <div class="absolute -right-4 top-20 h-24 w-24 rounded-full border border-white/10 pointer-events-none"></div>
-
-                <!-- Header Top Bar inside poster -->
-                <div class="flex items-center justify-between">
-                    <span class="inline-flex items-center gap-1.5 rounded-full bg-emerald-500/20 px-3.5 py-1 text-[11px] font-black uppercase text-emerald-300 border border-emerald-400/30 backdrop-blur-md">
-                        🎁 REFER & EARN
-                    </span>
-                    <button type="button" onclick="window.showNotificationsPage ? window.showNotificationsPage() : showNotification('Notifications')" class="flex h-9 w-9 items-center justify-center rounded-full bg-white/10 text-white hover:bg-white/20 transition">
-                        <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                            <path stroke-linecap="round" stroke-linejoin="round" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
-                        </svg>
-                    </button>
-                </div>
-
-                <!-- Poster Title & Graphic -->
-                <div class="relative flex items-center justify-between gap-4 mt-5">
-                    <div class="space-y-1.5 flex-1">
-                        <h2 class="text-2xl sm:text-3xl font-black leading-tight tracking-tight text-white">
-                            Invite Friends.<br><span class="text-emerald-300">Earn</span> Together.
-                        </h2>
-                        <p class="text-xs sm:text-sm text-emerald-100/80 max-w-[220px] font-medium leading-relaxed">
-                            You and your friend both get rewards after the first withdrawal.
-                        </p>
-                    </div>
-                    <!-- Graphic Gift Illustration -->
-                    <div class="relative shrink-0 flex items-center justify-center h-24 w-24">
-                        <div class="absolute inset-0 bg-emerald-400/20 rounded-full blur-xl animate-pulse"></div>
-                        <img src="${REFER_ICON_URL}" alt="Referral Gift" class="relative h-20 w-20 object-contain filter drop-shadow-[0_10px_15px_rgba(0,0,0,0.4)] hover:scale-105 transition">
-                    </div>
-                </div>
-            </div>
-
-            <!-- 3 Stat Cards Row -->
-            <div class="grid grid-cols-3 gap-2.5">
-                <div class="bg-emerald-50/80 dark:bg-emerald-950/30 border border-emerald-200/60 dark:border-emerald-900/40 rounded-2xl p-3 text-center shadow-xs">
-                    <div class="mx-auto flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-100 dark:bg-emerald-900/50 text-emerald-600 mb-1.5">
-                        <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M3 10h18M7 15h1m4 0h1m-7 4h12a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>
-                    </div>
-                    <span class="text-[10px] font-black uppercase text-emerald-700 dark:text-emerald-300 tracking-wider">YOU GET</span>
-                    <h4 class="text-xl font-black text-emerald-700 dark:text-emerald-300 mt-0.5">${rewardText}</h4>
-                    <p class="text-[9px] font-bold text-slate-500 dark:text-slate-400">Per Referral</p>
-                </div>
-                <div class="bg-blue-50/80 dark:bg-blue-950/30 border border-blue-200/60 dark:border-blue-900/40 rounded-2xl p-3 text-center shadow-xs">
-                    <div class="mx-auto flex h-9 w-9 items-center justify-center rounded-xl bg-blue-100 dark:bg-blue-900/50 text-blue-600 mb-1.5">
-                        <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"/></svg>
-                    </div>
-                    <span class="text-[10px] font-black uppercase text-blue-700 dark:text-blue-300 tracking-wider">FRIEND GETS</span>
-                    <h4 class="text-xl font-black text-blue-700 dark:text-blue-300 mt-0.5">${rewardText}</h4>
-                    <p class="text-[9px] font-bold text-slate-500 dark:text-slate-400">After First Withdrawal</p>
-                </div>
-                <div class="bg-orange-50/80 dark:bg-orange-950/30 border border-orange-200/60 dark:border-orange-900/40 rounded-2xl p-3 text-center shadow-xs">
-                    <div class="mx-auto flex h-9 w-9 items-center justify-center rounded-xl bg-orange-100 dark:bg-orange-900/50 text-orange-600 mb-1.5">
-                        <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M11 3.055A9.001 9.001 0 1020.945 13H11V3.055z"/><path stroke-linecap="round" stroke-linejoin="round" d="M20.488 9H15V3.512A9.025 9.025 0 0120.488 9z"/></svg>
-                    </div>
-                    <span class="text-[10px] font-black uppercase text-orange-700 dark:text-orange-300 tracking-wider">LIFETIME</span>
-                    <h4 class="text-xl font-black text-orange-700 dark:text-orange-300 mt-0.5">1%</h4>
-                    <p class="text-[9px] font-bold text-slate-500 dark:text-slate-400">Of Friend's Withdrawals</p>
-                </div>
-            </div>
-
-            <!-- How It Works (Horizontal Stepper) -->
-            <div class="bg-white dark:bg-slate-800 rounded-3xl p-5 border border-slate-150 dark:border-slate-700/80 shadow-sm space-y-4 text-center">
-                <div class="flex items-center justify-center gap-3">
-                    <div class="h-px bg-slate-200 dark:bg-slate-700 flex-1"></div>
-                    <span class="text-xs font-black uppercase text-slate-400 tracking-widest">How it works</span>
-                    <div class="h-px bg-slate-200 dark:bg-slate-700 flex-1"></div>
-                </div>
-                
-                <div class="grid grid-cols-4 gap-2 text-center relative pt-1">
-                    <!-- Step 1 -->
-                    <div class="flex flex-col items-center space-y-1.5">
-                        <div class="h-12 w-12 rounded-2xl bg-emerald-50 dark:bg-emerald-950/50 text-emerald-600 flex items-center justify-center border border-emerald-200/50 shadow-xs">
-                            <svg class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z"/></svg>
-                        </div>
-                        <span class="text-[10px] font-black text-emerald-600 dark:text-emerald-400 uppercase">01</span>
-                        <h5 class="text-xs font-black text-slate-900 dark:text-white leading-tight">Share Code</h5>
-                        <p class="text-[9px] font-semibold text-slate-400 leading-tight">Send your referral code to friends</p>
-                    </div>
-
-                    <!-- Step 2 -->
-                    <div class="flex flex-col items-center space-y-1.5">
-                        <div class="h-12 w-12 rounded-2xl bg-blue-50 dark:bg-blue-950/50 text-blue-600 flex items-center justify-center border border-blue-200/50 shadow-xs">
-                            <svg class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z"/></svg>
-                        </div>
-                        <span class="text-[10px] font-black text-blue-600 dark:text-blue-400 uppercase">02</span>
-                        <h5 class="text-xs font-black text-slate-900 dark:text-white leading-tight">Friend Joins</h5>
-                        <p class="text-[9px] font-semibold text-slate-400 leading-tight">They sign up using your code</p>
-                    </div>
-
-                    <!-- Step 3 -->
-                    <div class="flex flex-col items-center space-y-1.5">
-                        <div class="h-12 w-12 rounded-2xl bg-purple-50 dark:bg-purple-950/50 text-purple-600 flex items-center justify-center border border-purple-200/50 shadow-xs">
-                            <svg class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M19 14l-7 7m0 0l-7-7m7 7V3"/></svg>
-                        </div>
-                        <span class="text-[10px] font-black text-purple-600 dark:text-purple-400 uppercase">03</span>
-                        <h5 class="text-xs font-black text-slate-900 dark:text-white leading-tight">First Withdrawal</h5>
-                        <p class="text-[9px] font-semibold text-slate-400 leading-tight">When your friend withdraws first time</p>
-                    </div>
-
-                    <!-- Step 4 -->
-                    <div class="flex flex-col items-center space-y-1.5">
-                        <div class="h-12 w-12 rounded-2xl bg-orange-50 dark:bg-orange-950/50 text-orange-600 flex items-center justify-center border border-orange-200/50 shadow-xs">
-                            <span class="text-xl font-black">%</span>
-                        </div>
-                        <span class="text-[10px] font-black text-orange-600 dark:text-orange-400 uppercase">04</span>
-                        <h5 class="text-xs font-black text-slate-900 dark:text-white leading-tight">You Earn</h5>
-                        <p class="text-[9px] font-semibold text-slate-400 leading-tight">You get ₹5 + 1% lifetime bonus</p>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Referral Code & Action Box -->
-            <div class="flex items-center justify-between gap-3">
-                <!-- Code Card -->
-                <div class="flex-1 flex items-center justify-between gap-3 bg-emerald-50/70 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800 p-3.5 rounded-2xl shadow-xs">
-                    <div class="min-w-0 text-left">
-                        <p class="text-[10px] font-black uppercase text-emerald-700 dark:text-emerald-400 tracking-wider">YOUR REFERRAL CODE</p>
-                        <h3 class="text-xl font-black text-emerald-800 dark:text-emerald-300 truncate mt-0.5">${escapeHtml(referralCode)}</h3>
-                    </div>
-                    <button type="button" id="main-copy-code-btn" class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white dark:bg-slate-800 text-emerald-600 dark:text-emerald-300 shadow-sm border border-emerald-200 dark:border-emerald-800 hover:scale-105 active:scale-95 transition">
-                        <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
-                            <path stroke-linecap="round" stroke-linejoin="round" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
-                        </svg>
-                    </button>
-                </div>
-
-                <!-- Track Referrals Button -->
-                <button type="button" id="open-track-referrals-btn" class="shrink-0 flex items-center gap-2 rounded-2xl bg-white dark:bg-slate-800 border-2 border-emerald-600 px-4 py-3.5 text-xs font-black text-emerald-700 dark:text-emerald-400 hover:bg-emerald-50 transition shadow-sm active:scale-95">
-                    <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>
-                    <span>Track Referrals</span>
-                    <span class="text-sm">›</span>
-                </button>
-            </div>
-
-            <!-- Bottom Auto Rewards Banner -->
-            <div class="rounded-2xl bg-emerald-50/80 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800/60 p-3.5 flex items-center gap-3 text-xs font-bold text-emerald-800 dark:text-emerald-200 shadow-xs">
-                <div class="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-emerald-500 text-white font-black text-sm">✓</div>
-                <span>Rewards will be added automatically after your friend's first withdrawal.</span>
-            </div>
-        </div>
-        ${getPageFooter()}
-    `;
-
-    showPage(content, { keepBottomNav: true, returnTo: currentUser?.uid === ADMIN_UID ? 'admin' : 'home' });
-    currentMainSection = 'refer';
-    setBottomNavActive('bottom-refer-btn');
-
-    document.getElementById('main-copy-code-btn')?.addEventListener('click', () => {
-        window.showShareReferralModal(referralCode);
-    });
-
-    document.getElementById('open-track-referrals-btn')?.addEventListener('click', () => {
-        window.showTrackReferralsPage();
-    });
-};
 
 const showUserTaskPageLegacy = () => {
             if (!ensureUserSessionReady()) return;
