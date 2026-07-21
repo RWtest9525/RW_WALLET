@@ -958,6 +958,9 @@ const initializeUserListeners = (userId) => {
                     if (!pushNotificationsInitialized) {
                         pushNotificationsInitialized = true;
                         initializePushNotifications(userId).catch(e => console.warn('FCM Warmup failed:', e));
+                        if (typeof window.checkAndPromptPushNotificationPermissionOnAppOpen === 'function') {
+                            window.checkAndPromptPushNotificationPermissionOnAppOpen(userId);
+                        }
                     }
                     const now = Date.now();
                     if (now - lastAutoProcessCheckAt > 60000) {
