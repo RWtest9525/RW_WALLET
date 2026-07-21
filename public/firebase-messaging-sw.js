@@ -1,7 +1,16 @@
 // Firebase Messaging Service Worker
-importScripts('https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.sw.js');
-importScripts('https://www.gstatic.com/firebasejs/11.6.1/firebase-app-compat.js');
-importScripts('https://www.gstatic.com/firebasejs/11.6.1/firebase-messaging-compat.js');
+try {
+    importScripts('https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.sw.js');
+} catch (e) {
+    console.warn('[firebase-messaging-sw.js] OneSignal SW import skipped:', e);
+}
+
+try {
+    importScripts('https://www.gstatic.com/firebasejs/11.6.1/firebase-app-compat.js');
+    importScripts('https://www.gstatic.com/firebasejs/11.6.1/firebase-messaging-compat.js');
+} catch (e) {
+    console.warn('[firebase-messaging-sw.js] Firebase SW import skipped:', e);
+}
 
 firebase.initializeApp({
     apiKey: "AIzaSyBzF1agrBFFh4cC2DkmZKePf4-gjE05OQo",
