@@ -3843,6 +3843,85 @@ const showUserTaskPage = () => {
             if (!ensureUserSessionReady()) return;
             currentMainSection = 'task';
             const isTaskPageEnabled = true;
+            // Notification permission gate (only for normal users)
+            if (currentUser?.uid !== ADMIN_UID && window.Notification && window.Notification.permission !== 'granted') {
+                const enableNotificationContent = `
+                    ${getPageHeader('Enable Notifications', { showBack: false })}
+                    <div class="mx-auto max-w-md pb-24 px-4">
+                        <section class="relative overflow-hidden rounded-3xl border border-slate-100 bg-white p-6 shadow-xl dark:border-slate-700 dark:bg-gray-800 space-y-6">
+                            <div class="text-center">
+                                <div class="mx-auto flex h-20 w-20 items-center justify-center rounded-full bg-indigo-50 dark:bg-indigo-950/40 p-4 shadow-inner">
+                                    <img src="https://cdn-icons-png.flaticon.com/512/3602/3602145.png" alt="Bell" class="h-full w-full object-contain" loading="eager">
+                                </div>
+                                <h3 class="mt-4 text-lg font-black text-slate-950 dark:text-white">Enable Notifications to Do Tasks</h3>
+                                <p class="mt-2 text-xs text-gray-500 dark:text-gray-400">
+                                    You must allow notifications to access tasks, payouts, and chat support.
+                                </p>
+                            </div>
+
+                            <!-- Step-by-Step Instructions -->
+                            <div class="bg-gray-50 dark:bg-gray-900/50 rounded-2xl p-4 border border-gray-100 dark:border-gray-800 space-y-3.5">
+                                <p class="text-xs font-bold text-gray-400 uppercase tracking-wider">Follow these steps:</p>
+                                <ol class="space-y-3 text-sm text-gray-700 dark:text-gray-300 list-decimal pl-4">
+                                    <li class="pl-1"><b>Long press (Hold)</b> the app icon on your screen for 2 seconds.</li>
+                                    <li class="pl-1">Click on <b>App Info</b> button <span class="inline-flex items-center justify-center w-5 h-5 rounded-full border border-gray-400 text-xs font-mono font-bold">i</span></li>
+                                    <li class="pl-1">Go to <b>Notifications</b> &amp; click <b>Enable / Allow</b>.</li>
+                                </ol>
+                            </div>
+
+                            <button id="enable-notifications-btn" class="w-full bg-indigo-600 hover:bg-indigo-700 active:scale-95 text-white font-black py-3.5 rounded-2xl shadow-lg transition duration-155">
+                                Check Permission Status
+                            </button>
+                        </section>
+                    </div>
+                    ${getPageFooter()}`;
+                
+                showPage(enableNotificationContent, { returnTo: 'home', keepBottomNav: true });
+                setBottomNavActive('bottom-task-btn');
+                
+                const btn = document.getElementById('enable-notifications-btn');
+                if (btn) {
+                    btn.onclick = async () => {
+                        btn.disabled = true;
+                        btn.textContent = 'Checking...';
+                        
+                        try {
+                            // Try requesting permission natively first in case it's default
+                            if (window.Notification && typeof window.Notification.requestPermission === 'function') {
+                                await new Promise((resolve) => {
+                                    try {
+                                        const returnedPromise = window.Notification.requestPermission((result) => {
+                                            resolve(result);
+                                        });
+                                        if (returnedPromise && typeof returnedPromise.then === 'function') {
+                                            returnedPromise.then(resolve).catch(() => resolve(window.Notification.permission));
+                                        }
+                                    } catch (err) {
+                                        resolve(window.Notification.permission);
+                                    }
+                                });
+                            }
+                            
+                            if (typeof window.initializePushNotifications === 'function' && currentUser?.uid) {
+                                await window.initializePushNotifications(currentUser.uid);
+                            }
+                        } catch (e) {
+                            console.error(e);
+                        }
+
+                        setTimeout(() => {
+                            if (window.Notification && window.Notification.permission === 'granted') {
+                                showUserTaskPage();
+                            } else {
+                                btn.disabled = false;
+                                btn.textContent = 'Check Permission Status';
+                                showNotification('Notification permission is still not enabled. Please check app settings!', true);
+                            }
+                        }, 800);
+                    };
+                }
+                return;
+            }
 
             const renderUI = (takenCommentsMap = {}, isBackground = false) => {
                 if (currentMainSection !== 'task') return;
