@@ -708,10 +708,7 @@ const showAdminSupportProfileModal = () => {
             </div>
         </div>
     `, `
-        <div class="flex gap-2 w-full">
-            <button onclick="window.closeModal()" class="flex-1 rounded-xl bg-gray-100 dark:bg-gray-700 py-3 text-sm font-extrabold text-gray-700 dark:text-gray-200">Cancel</button>
-            <button id="modal-save-support-btn" class="flex-1 rounded-xl bg-purple-600 hover:bg-purple-700 text-white py-3 text-sm font-black shadow-md">Save Support Profile</button>
-        </div>
+        <button id="modal-save-support-btn" class="w-full rounded-xl bg-purple-600 hover:bg-purple-700 text-white py-3 text-sm font-black shadow-md">Save Support Profile</button>
     `, 'max-w-md');
 
     bindWebsiteLinkControls();
