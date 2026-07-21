@@ -3009,7 +3009,6 @@ const processReferralRewardOnWithdrawalSuccess = async (userId, withdrawalAmount
 
         if (totalReward > 0) {
             await updateDoc(referrerRef, {
-                balance: increment(totalReward),
                 referralEarnings: increment(totalReward)
             });
 

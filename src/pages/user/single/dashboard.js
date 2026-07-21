@@ -3036,93 +3036,185 @@ const showHomeMainPage = () => {
             setBottomNavActive('bottom-home-btn');
         };
 
-const MOCK_REFERRALS_DATA = [
-    {
-        id: 'ref-1',
-        name: 'Aman Verma',
-        mobile: '+91 98765 43210',
-        avatar: 'https://cdn-icons-png.flaticon.com/512/4140/4140048.png',
-        joinedAt: '28 May 2026',
-        joinedTime: '10:30 AM',
-        status: 'successful',
-        statusLabel: 'Successful',
-        bonusText: '₹5.00',
-        lifetimeText: '+ 1% Lifetime',
-        referralBonus: 5.00,
-        lifetimeEarnings: 2.50,
-        totalEarned: 7.50,
-        firstWithdrawalAt: '30 May 2026 • 02:15 PM',
-        latestLifetimeAt: '02 Jun 2026 • 11:20 AM'
-    },
-    {
-        id: 'ref-2',
-        name: 'Pooja Singh',
-        mobile: '+91 91234 56789',
-        avatar: 'https://cdn-icons-png.flaticon.com/512/4140/4140047.png',
-        joinedAt: '26 May 2026',
-        joinedTime: '04:15 PM',
-        status: 'successful',
-        statusLabel: 'Successful',
-        bonusText: '₹5.00',
-        lifetimeText: '+ 1% Lifetime',
-        referralBonus: 5.00,
-        lifetimeEarnings: 1.80,
-        totalEarned: 6.80,
-        firstWithdrawalAt: '28 May 2026 • 01:10 PM',
-        latestLifetimeAt: '01 Jun 2026 • 09:40 AM'
-    },
-    {
-        id: 'ref-3',
-        name: 'Rohit Sharma',
-        mobile: '+91 87654 32109',
-        avatar: 'https://cdn-icons-png.flaticon.com/512/4140/4140051.png',
-        joinedAt: '25 May 2026',
-        joinedTime: '11:20 AM',
-        status: 'pending',
-        statusLabel: 'Pending',
-        bonusText: '₹0.00',
-        lifetimeText: 'Waiting for first withdrawal',
-        referralBonus: 0,
-        lifetimeEarnings: 0,
-        totalEarned: 0,
-        firstWithdrawalAt: null,
-        latestLifetimeAt: null
-    },
-    {
-        id: 'ref-4',
-        name: 'Vikash Kumar',
-        mobile: '+91 90123 45678',
-        avatar: 'https://cdn-icons-png.flaticon.com/512/4140/4140037.png',
-        joinedAt: '24 May 2026',
-        joinedTime: '02:45 PM',
-        status: 'pending',
-        statusLabel: 'Pending',
-        bonusText: '₹0.00',
-        lifetimeText: 'Waiting for first withdrawal',
-        referralBonus: 0,
-        lifetimeEarnings: 0,
-        totalEarned: 0,
-        firstWithdrawalAt: null,
-        latestLifetimeAt: null
-    },
-    {
-        id: 'ref-5',
-        name: 'Neha Patel',
-        mobile: '+91 93456 78901',
-        avatar: 'https://cdn-icons-png.flaticon.com/512/4140/4140049.png',
-        joinedAt: '23 May 2026',
-        joinedTime: '09:10 AM',
-        status: 'successful',
-        statusLabel: 'Successful',
-        bonusText: '₹5.00',
-        lifetimeText: '+ 1% Lifetime',
-        referralBonus: 5.00,
-        lifetimeEarnings: 3.20,
-        totalEarned: 8.20,
-        firstWithdrawalAt: '25 May 2026 • 06:30 PM',
-        latestLifetimeAt: '03 Jun 2026 • 05:15 PM'
+let realReferralsCache = [];
+
+const fetchRealReferralsData = async (userUid) => {
+    try {
+        if (!userUid) return [];
+
+        const refQ1 = query(
+            collection(db, `artifacts/${appId}/public/data/users`),
+            where("referredBy", "==", userUid)
+        );
+        const refQ2 = query(
+            collection(db, `artifacts/${appId}/public/data/users`),
+            where("referred_by", "==", userUid)
+        );
+
+        const [snap1, snap2] = await Promise.all([
+            getDocs(refQ1).catch(() => ({ docs: [] })),
+            getDocs(refQ2).catch(() => ({ docs: [] }))
+        ]);
+
+        const userDocsMap = new Map();
+        [...(snap1.docs || []), ...(snap2.docs || [])].forEach(d => {
+            userDocsMap.set(d.id, { id: d.id, ...d.data() });
+        });
+
+        const referredUsers = Array.from(userDocsMap.values());
+        if (referredUsers.length === 0) {
+            realReferralsCache = [];
+            return [];
+        }
+
+        const realReferrals = await Promise.all(referredUsers.map(async (u) => {
+            const userId = u.id || u.uid;
+            const fundQ = query(
+                collection(db, `artifacts/${appId}/public/data/fund_requests`),
+                where("userId", "==", userId),
+                where("status", "==", "completed"),
+                orderBy("requestedAt", "asc")
+            );
+            const fundSnap = await getDocs(fundQ).catch(() => ({ docs: [] }));
+            const completedWithdrawals = (fundSnap.docs || []).map(doc => doc.data());
+
+            const isSuccessful = completedWithdrawals.length > 0;
+            const referralBonus = isSuccessful ? 5.00 : 0;
+            
+            let lifetimeEarnings = 0;
+            completedWithdrawals.forEach(w => {
+                const amt = Number(w.amount || 0);
+                lifetimeEarnings += amt * 0.01;
+            });
+            lifetimeEarnings = Number(lifetimeEarnings.toFixed(2));
+            const totalEarned = Number((referralBonus + lifetimeEarnings).toFixed(2));
+
+            const joinedDateObj = getSafeDate(u.createdAt || u.signupRequestedAt) || new Date();
+            const joinedAt = formatDate(joinedDateObj).split(' ')[0] || 'N/A';
+            const joinedTime = getTimeFromTimestamp(joinedDateObj) || 'N/A';
+
+            let firstWithdrawalAt = null;
+            let latestLifetimeAt = null;
+
+            if (completedWithdrawals.length > 0) {
+                const firstWd = completedWithdrawals[0];
+                const firstWdDate = getSafeDate(firstWd.requestedAt || firstWd.processedAt || firstWd.createdAt);
+                firstWithdrawalAt = `${formatDate(firstWdDate).split(' ')[0]} • ${getTimeFromTimestamp(firstWdDate)}`;
+
+                const lastWd = completedWithdrawals[completedWithdrawals.length - 1];
+                const lastWdDate = getSafeDate(lastWd.requestedAt || lastWd.processedAt || lastWd.createdAt);
+                latestLifetimeAt = `${formatDate(lastWdDate).split(' ')[0]} • ${getTimeFromTimestamp(lastWdDate)}`;
+            }
+
+            return {
+                id: userId,
+                name: u.name || u.userName || 'User',
+                mobile: u.mobile || u.phoneNumber || '',
+                avatar: u.avatar || u.profileImage || 'https://cdn-icons-png.flaticon.com/512/4140/4140048.png',
+                joinedAt,
+                joinedTime,
+                status: isSuccessful ? 'successful' : 'pending',
+                statusLabel: isSuccessful ? 'Successful' : 'Pending',
+                bonusText: `₹${referralBonus.toFixed(2)}`,
+                lifetimeText: isSuccessful ? `+ 1% Lifetime (₹${lifetimeEarnings.toFixed(2)})` : 'Waiting for first withdrawal',
+                referralBonus,
+                lifetimeEarnings,
+                totalEarned,
+                firstWithdrawalAt,
+                latestLifetimeAt
+            };
+        }));
+
+        realReferralsCache = realReferrals;
+        return realReferrals;
+    } catch (error) {
+        console.error('Error fetching real referrals data:', error);
+        realReferralsCache = [];
+        return [];
     }
-];
+};
+
+window.handleWithdrawReferralEarnings = async () => {
+    const currentReferralBalance = Number(currentUserData?.referralEarnings || 0);
+    const MIN_REFERRAL_WITHDRAWAL = 50;
+
+    if (currentReferralBalance < MIN_REFERRAL_WITHDRAWAL) {
+        return showNotification(`Minimum referral withdrawal amount is ₹50. Your available referral balance is ₹${currentReferralBalance.toFixed(2)}.`, true);
+    }
+
+    renderModal(
+        'Withdraw Referral Earnings',
+        `<div class="space-y-4 text-left">
+            <div class="bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800 p-3.5 rounded-xl space-y-1">
+                <p class="text-xs text-emerald-700 dark:text-emerald-300 font-semibold">Available Referral Balance:</p>
+                <p class="text-2xl font-black text-emerald-600 dark:text-emerald-400">₹${currentReferralBalance.toFixed(2)}</p>
+            </div>
+            <div class="space-y-1.5">
+                <label class="text-xs font-bold text-gray-700 dark:text-gray-300">Enter Amount to Transfer to Main Wallet (Min ₹50):</label>
+                <input type="number" id="referral-transfer-amount-input" value="${currentReferralBalance.toFixed(2)}" min="50" max="${currentReferralBalance}" step="1" class="w-full px-4 py-3 bg-gray-100 dark:bg-gray-700 rounded-xl text-base font-bold text-gray-900 dark:text-white outline-none focus:ring-2 focus:ring-emerald-500">
+                <p class="text-[11px] text-gray-500 dark:text-gray-400">This amount will be transferred directly into your Main Wallet Balance.</p>
+            </div>
+        </div>`,
+        `<button onclick="window.closeModal()" class="px-4 py-2.5 text-xs font-bold bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-200 rounded-xl">Cancel</button>
+         <button id="confirm-referral-transfer-btn" class="px-5 py-2.5 text-xs font-black bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl shadow-xs">Transfer to Main Wallet</button>`,
+        'max-w-md'
+    );
+
+    document.getElementById('confirm-referral-transfer-btn').onclick = async () => {
+        const amountInput = document.getElementById('referral-transfer-amount-input');
+        const amount = Number(amountInput ? amountInput.value : 0);
+
+        if (isNaN(amount) || amount < MIN_REFERRAL_WITHDRAWAL) {
+            return showNotification(`Minimum transfer amount is ₹${MIN_REFERRAL_WITHDRAWAL}.`, true);
+        }
+        if (amount > currentReferralBalance) {
+            return showNotification(`Transfer amount cannot exceed your available referral balance (₹${currentReferralBalance.toFixed(2)}).`, true);
+        }
+
+        const btn = document.getElementById('confirm-referral-transfer-btn');
+        if (btn) {
+            btn.disabled = true;
+            btn.textContent = 'Transferring...';
+        }
+
+        try {
+            const userRef = doc(db, `artifacts/${appId}/public/data/users`, currentUser.uid);
+            await updateDoc(userRef, {
+                referralEarnings: increment(-amount),
+                referralTransferred: increment(amount),
+                balance: increment(amount)
+            });
+
+            const txId = `ref-transfer-${Date.now()}`;
+            await setDoc(doc(collection(userRef, 'transactions'), txId), {
+                type: 'referral_transfer',
+                amount: amount,
+                timestamp: Date.now(),
+                status: 'completed',
+                comment: `Transferred ₹${amount.toFixed(2)} from Referral Earnings to Main Wallet Balance`
+            }, { merge: true });
+
+            currentUserData.referralEarnings = Math.max(0, (currentUserData.referralEarnings || 0) - amount);
+            currentUserData.referralTransferred = (currentUserData.referralTransferred || 0) + amount;
+            currentUserData.balance = (currentUserData.balance || 0) + amount;
+            writeJsonCache(getUserCacheKey(currentUser.uid), sanitizeUserForCache(currentUserData, currentUser.uid));
+
+            window.closeModal();
+            showNotification(`🎉 Transferred ₹${amount.toFixed(2)} to your Main Wallet Balance!`);
+
+            if (typeof window.showTrackReferralsPage === 'function') {
+                window.showTrackReferralsPage();
+            }
+        } catch (error) {
+            console.error('Error transferring referral balance:', error);
+            showNotification('Transfer failed. Please try again.', true);
+            if (btn) {
+                btn.disabled = false;
+                btn.textContent = 'Transfer to Main Wallet';
+            }
+        }
+    };
+};
 
 const maskUserMobile = (mobile = '') => {
     const clean = String(mobile || '').trim();
@@ -3266,15 +3358,16 @@ window.showShareReferralModal = (code = getProfileReferralCode()) => {
     });
 };
 
-const showTrackReferralsPage = (filter = 'all') => {
+const showTrackReferralsPage = async (filter = 'all') => {
     if (!ensureUserSessionReady()) return;
-    const referrals = MOCK_REFERRALS_DATA;
-    
+
+    showLoadingState('Loading your referrals...');
+    const referrals = await fetchRealReferralsData(currentUser?.uid);
+
     const filteredList = referrals.filter(item => {
         if (filter === 'all') return true;
         if (filter === 'successful') return item.status === 'successful';
         if (filter === 'pending') return item.status === 'pending';
-        if (filter === 'inactive') return item.status === 'inactive';
         return true;
     });
 
@@ -3282,8 +3375,18 @@ const showTrackReferralsPage = (filter = 'all') => {
     const successCount = referrals.filter(x => x.status === 'successful').length;
     const pendingCount = referrals.filter(x => x.status === 'pending').length;
     const totalEarnings = referrals.reduce((sum, x) => sum + (x.totalEarned || 0), 0);
+    const availableEarnings = Number(currentUserData?.referralEarnings || 0);
+    const totalTransferred = Number(currentUserData?.referralTransferred || 0);
 
-    const listHtml = filteredList.map(item => `
+    const listHtml = filteredList.length === 0 ? `
+        <div class="bg-white dark:bg-slate-800 p-8 rounded-2xl border border-slate-200 dark:border-slate-700/80 text-center space-y-2">
+            <div class="flex h-12 w-12 mx-auto items-center justify-center rounded-full bg-slate-100 dark:bg-slate-700 text-slate-400">
+                <svg class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"/></svg>
+            </div>
+            <h4 class="text-sm font-black text-slate-800 dark:text-white">No Referrals Found</h4>
+            <p class="text-xs text-slate-500 dark:text-slate-400">Share your referral code/link to start earning bonuses when friends join!</p>
+        </div>
+    ` : filteredList.map(item => `
         <div class="track-referral-item flex items-center justify-between gap-3 p-3 bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700/80 shadow-xs transition hover:shadow-sm cursor-pointer active:scale-98" onclick="window.showReferralDetailPage('${item.id}')">
             <div class="flex items-center gap-3 min-w-0">
                 <img src="${item.avatar}" alt="${escapeHtml(item.name)}" class="h-10 w-10 rounded-full object-cover border border-slate-200 dark:border-slate-700 bg-white p-0.5 shrink-0">
@@ -3354,7 +3457,7 @@ const showTrackReferralsPage = (filter = 'all') => {
                     </div>
                     <div>
                         <p class="text-[10px] font-bold text-slate-400 dark:text-slate-400">Total Earnings</p>
-                        <h3 class="text-xl font-black text-purple-600 dark:text-purple-400 mt-0.5">₹${totalEarnings}</h3>
+                        <h3 class="text-xl font-black text-purple-600 dark:text-purple-400 mt-0.5">₹${totalEarnings.toFixed(2)}</h3>
                     </div>
                 </div>
             </div>
@@ -3364,7 +3467,6 @@ const showTrackReferralsPage = (filter = 'all') => {
                 <button type="button" onclick="window.showTrackReferralsPage('all')" class="rounded-lg px-3 py-1.5 text-[11px] font-black transition ${filter === 'all' ? 'bg-emerald-600 text-white shadow-xs' : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700'}">All (${totalCount})</button>
                 <button type="button" onclick="window.showTrackReferralsPage('successful')" class="rounded-lg px-3 py-1.5 text-[11px] font-black transition ${filter === 'successful' ? 'bg-emerald-600 text-white shadow-xs' : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700'}">Successful (${successCount})</button>
                 <button type="button" onclick="window.showTrackReferralsPage('pending')" class="rounded-lg px-3 py-1.5 text-[11px] font-black transition ${filter === 'pending' ? 'bg-emerald-600 text-white shadow-xs' : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700'}">Pending (${pendingCount})</button>
-                <button type="button" onclick="window.showTrackReferralsPage('inactive')" class="rounded-lg px-3 py-1.5 text-[11px] font-black transition ${filter === 'inactive' ? 'bg-emerald-600 text-white shadow-xs' : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700'}">Inactive (10)</button>
             </div>
 
             <!-- Referrals List -->
@@ -3379,16 +3481,16 @@ const showTrackReferralsPage = (filter = 'all') => {
                 <div class="flex items-center gap-3 text-left">
                     <div>
                         <p class="text-[9px] font-bold text-slate-400 dark:text-slate-400">Available Earnings</p>
-                        <p class="text-sm font-black text-emerald-600 dark:text-emerald-400">₹120.00</p>
+                        <p class="text-sm font-black text-emerald-600 dark:text-emerald-400">₹${availableEarnings.toFixed(2)}</p>
                     </div>
                     <div class="h-6 w-px bg-slate-200 dark:bg-slate-700"></div>
                     <div>
-                        <p class="text-[9px] font-bold text-slate-400 dark:text-slate-400">Total Withdrawn</p>
-                        <p class="text-sm font-black text-slate-700 dark:text-slate-200">₹360.00</p>
+                        <p class="text-[9px] font-bold text-slate-400 dark:text-slate-400">Main Wallet Transferred</p>
+                        <p class="text-sm font-black text-slate-700 dark:text-slate-200">₹${totalTransferred.toFixed(2)}</p>
                     </div>
                 </div>
-                <button type="button" onclick="window.showWithdrawalPage ? window.showWithdrawalPage() : showNotification('Opening withdrawal...')" class="shrink-0 flex items-center gap-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white px-4 py-2.5 text-xs font-black shadow-xs transition active:scale-95">
-                    <span>🚀 Withdraw Earnings</span>
+                <button type="button" onclick="window.handleWithdrawReferralEarnings()" class="shrink-0 flex items-center gap-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white px-4 py-2.5 text-xs font-black shadow-xs transition active:scale-95">
+                    <span>🚀 Transfer to Main Wallet (Min ₹50)</span>
                 </button>
             </div>
         </div>
@@ -3398,9 +3500,20 @@ const showTrackReferralsPage = (filter = 'all') => {
     showPage(content, { keepBottomNav: false });
 };
 
-window.showReferralDetailPage = (referralId = 'ref-1') => {
+window.showReferralDetailPage = async (referralId = 'ref-1') => {
     if (!ensureUserSessionReady()) return;
-    const item = MOCK_REFERRALS_DATA.find(x => x.id === referralId) || MOCK_REFERRALS_DATA[0];
+    
+    let item = realReferralsCache.find(x => x.id === referralId);
+    if (!item) {
+        showLoadingState('Loading referral details...');
+        await fetchRealReferralsData(currentUser?.uid);
+        item = realReferralsCache.find(x => x.id === referralId);
+    }
+
+    if (!item) {
+        showNotification('Referral detail not found.', true);
+        return window.showTrackReferralsPage();
+    }
 
     const content = `
         <div class="sticky top-0 z-30 flex items-center justify-between border-b border-gray-200 dark:border-gray-800 bg-white/95 dark:bg-gray-900/95 px-4 py-3 backdrop-blur-md">
