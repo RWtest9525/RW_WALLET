@@ -332,9 +332,7 @@ window.showProfilePhotoSelectionModal = (currentAvatar, onSelect) => {
         </div>
     `;
 
-    renderModal('Choose Profile Photo', modalGridHtml, `
-        <button onclick="window.closeModal()" class="w-full rounded-xl bg-gray-100 dark:bg-gray-700 py-3 text-sm font-extrabold text-gray-700 dark:text-gray-200">Cancel</button>
-    `, 'max-w-md');
+    renderModal('Choose Profile Photo', modalGridHtml, '', 'max-w-md');
 
     const uploadBtn = document.getElementById('upload-custom-avatar-btn');
     const fileInput = document.getElementById('custom-avatar-file-input');
