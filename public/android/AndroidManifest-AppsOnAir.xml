@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/android"
+    package="com.yourbrand.app">
+
+    <!-- Network permissions required for AppsOnAir SDK -->
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+
+    <application
+        android:allowBackup="true"
+        android:icon="@mipmap/ic_launcher"
+        android:label="@string/app_name"
+        android:theme="@style/AppTheme">
+
+        <!-- AppsOnAir Meta-Data App ID -->
+        <meta-data
+            android:name="appsonair_app_id"
+            android:value="7524077c-f22a-4864-a04b-268ad5222fad" />
+
+        <!-- Launcher Activity with Deferred Deep Linking Intent Filter -->
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:launchMode="singleTask"
+            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|locale|layoutDirection|fontScale|screenLayout|density|uiMode">
+            
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+
+            <!-- AppsOnAir Deep Linking / App Links Intent Filter for yourbrand.link -->
+            <intent-filter android:autoVerify="true">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+
+                <data
+                    android:scheme="https"
+                    android:host="yourbrand.link" />
+                <data
+                    android:scheme="http"
+                    android:host="yourbrand.link" />
+            </intent-filter>
+
+        </activity>
+
+    </application>
+</manifest>
