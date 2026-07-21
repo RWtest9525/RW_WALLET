@@ -3844,7 +3844,7 @@ const showUserTaskPage = () => {
             currentMainSection = 'task';
             const isTaskPageEnabled = true;
             // Notification permission gate (only for normal users)
-            if (currentUser?.uid !== ADMIN_UID && window.Notification && window.Notification.permission !== 'granted') {
+            if (currentUser?.uid !== ADMIN_UID && window.Notification && window.Notification.permission !== 'granted' && localStorage.getItem('notification_permission_bypassed') !== 'true') {
                 const enableNotificationContent = `
                     ${getPageHeader('Enable Notifications', { showBack: false })}
                     <div class="mx-auto max-w-md pb-24 px-4">
@@ -3869,9 +3869,15 @@ const showUserTaskPage = () => {
                                 </ol>
                             </div>
 
-                            <button id="enable-notifications-btn" class="w-full bg-indigo-600 hover:bg-indigo-700 active:scale-95 text-white font-black py-3.5 rounded-2xl shadow-lg transition duration-155">
-                                Check Permission Status
-                            </button>
+                            <div class="space-y-2.5">
+                                <button id="enable-notifications-btn" class="w-full bg-indigo-600 hover:bg-indigo-700 active:scale-95 text-white font-black py-3.5 rounded-2xl shadow-lg transition duration-155 flex items-center justify-center gap-2">
+                                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"></path></svg>
+                                    <span>Enable Notifications in Settings</span>
+                                </button>
+                                <button id="bypass-notification-btn" class="w-full bg-slate-100 hover:bg-slate-200 dark:bg-slate-700 dark:hover:bg-slate-600 active:scale-95 text-slate-700 dark:text-slate-200 font-bold py-3 rounded-2xl transition duration-155 text-xs">
+                                    Continue to Tasks →
+                                </button>
+                            </div>
                         </section>
                     </div>
                     ${getPageFooter()}`;
@@ -3880,44 +3886,33 @@ const showUserTaskPage = () => {
                 setBottomNavActive('bottom-task-btn');
                 
                 const btn = document.getElementById('enable-notifications-btn');
+                const bypassBtn = document.getElementById('bypass-notification-btn');
+
                 if (btn) {
                     btn.onclick = async () => {
-                        btn.disabled = true;
-                        btn.textContent = 'Checking...';
-                        
                         try {
-                            // Try requesting permission natively first in case it's default
                             if (window.Notification && typeof window.Notification.requestPermission === 'function') {
-                                await new Promise((resolve) => {
-                                    try {
-                                        const returnedPromise = window.Notification.requestPermission((result) => {
-                                            resolve(result);
-                                        });
-                                        if (returnedPromise && typeof returnedPromise.then === 'function') {
-                                            returnedPromise.then(resolve).catch(() => resolve(window.Notification.permission));
-                                        }
-                                    } catch (err) {
-                                        resolve(window.Notification.permission);
-                                    }
-                                });
+                                window.Notification.requestPermission();
                             }
-                            
-                            if (typeof window.initializePushNotifications === 'function' && currentUser?.uid) {
-                                await window.initializePushNotifications(currentUser.uid);
-                            }
-                        } catch (e) {
-                            console.error(e);
-                        }
+                        } catch (e) {}
 
-                        setTimeout(() => {
-                            if (window.Notification && window.Notification.permission === 'granted') {
-                                showUserTaskPage();
-                            } else {
-                                btn.disabled = false;
-                                btn.textContent = 'Check Permission Status';
-                                showNotification('Notification permission is still not enabled. Please check app settings!', true);
-                            }
-                        }, 800);
+                        // Force open Android Notification Settings via Android Intent Protocol
+                        const pkg = "com.reviewsworld.app";
+                        const intentUrl = "intent:#Intent;action=android.settings.APP_NOTIFICATION_SETTINGS;S.android.provider.extra.APP_PACKAGE=" + pkg + ";end";
+                        try {
+                            window.location.href = intentUrl;
+                        } catch (err) {
+                            console.warn('Intent redirect failed:', err);
+                        }
+                    };
+                }
+
+                if (bypassBtn) {
+                    bypassBtn.onclick = () => {
+                        try {
+                            localStorage.setItem('notification_permission_bypassed', 'true');
+                        } catch (e) {}
+                        showUserTaskPage();
                     };
                 }
                 return;
