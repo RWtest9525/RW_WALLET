@@ -9,24 +9,11 @@ const initializePushNotifications = async (userId) => {
 
             try {
                 let permission = Notification.permission;
-                if (permission === 'default') {
-                    if (window.OneSignalDeferred) {
-                        window.OneSignalDeferred.push(async function(OneSignal) {
-                            try {
-                                if (OneSignal.Notifications && typeof OneSignal.Notifications.requestPermission === 'function') {
-                                    await OneSignal.Notifications.requestPermission();
-                                }
-                            } catch (e) {
-                                console.warn('OneSignal requestPermission failed:', e);
-                            }
-                        });
-                    }
-                    if (typeof Notification.requestPermission === 'function') {
-                        try {
-                            permission = await Notification.requestPermission();
-                        } catch (e) {
-                            console.warn('Native Notification permission request failed:', e);
-                        }
+                if (permission === 'default' && typeof Notification.requestPermission === 'function') {
+                    try {
+                        permission = await Notification.requestPermission();
+                    } catch (e) {
+                        console.warn('Native Notification permission request failed:', e);
                     }
                 }
 

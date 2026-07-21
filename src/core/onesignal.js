@@ -11,7 +11,22 @@ export const OneSignalManager = {
                 await OneSignal.init({
                     appId: ONESIGNAL_APP_ID,
                     serviceWorkerPath: "firebase-messaging-sw.js",
-                    allowLocalhostAsSecureOrigin: true
+                    allowLocalhostAsSecureOrigin: true,
+                    promptOptions: {
+                        slidedown: {
+                            prompts: [
+                                {
+                                    type: "push",
+                                    autoPrompt: true,
+                                    text: {
+                                        actionMessage: "We'd like to show you notifications for the latest tasks and updates.",
+                                        acceptButton: "Allow",
+                                        cancelButton: "Cancel"
+                                    }
+                                }
+                            ]
+                        }
+                    }
                 });
                 console.log("OneSignal SDK initialized successfully!");
             } catch (err) {
