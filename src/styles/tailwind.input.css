@@ -42,31 +42,31 @@
 
 .camera-btn {
     position: absolute;
-    right: 0px;
-    bottom: 0px;
-    width: 32px;
-    height: 32px;
-    border: 2.5px solid #ffffff;
+    right: 2px;
+    bottom: 2px;
+    width: 28px;
+    height: 28px;
+    border: 2px solid #ffffff;
     border-radius: 50%;
     background: #8b5cf6;
     color: #fff;
     display: flex;
     align-items: center;
     justify-content: center;
-    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.35);
+    box-shadow: 0 3px 8px rgba(0, 0, 0, 0.4);
     cursor: pointer;
     z-index: 10;
-    font-size: 14px;
+    font-size: 13px;
     line-height: 1;
     pointer-events: auto;
 }
 
 .camera-btn svg,
 .camera-btn i {
-    width: 16px !important;
-    height: 16px !important;
-    max-width: 16px !important;
-    max-height: 16px !important;
+    width: 14px !important;
+    height: 14px !important;
+    max-width: 14px !important;
+    max-height: 14px !important;
     color: #ffffff !important;
     flex-shrink: 0 !important;
     display: inline-block !important;
@@ -174,12 +174,19 @@
         height: 74px;
     }
     .camera-btn {
-        width: 28px;
-        height: 28px;
-        right: 0px;
-        bottom: 0px;
+        width: 24px;
+        height: 24px;
+        right: 1px;
+        bottom: 1px;
         border: 2px solid #ffffff;
-        font-size: 12px;
+        font-size: 11px;
+    }
+    .camera-btn svg,
+    .camera-btn i {
+        width: 12px !important;
+        height: 12px !important;
+        max-width: 12px !important;
+        max-height: 12px !important;
     }
     .name-row h2 {
         font-size: 20px;
