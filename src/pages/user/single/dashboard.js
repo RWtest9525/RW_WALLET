@@ -3869,26 +3869,22 @@ const showUserTaskPage = () => {
                 
                 const btn = document.getElementById('enable-notifications-btn');
                 if (btn) {
-                    btn.onclick = () => {
+                    btn.onclick = async () => {
                         btn.disabled = true;
                         btn.textContent = 'Requesting...';
-                        window.OneSignalDeferred = window.OneSignalDeferred || [];
-                        window.OneSignalDeferred.push(async function(OneSignal) {
-                            try {
-                                await OneSignal.Notifications.requestPermission();
-                            } catch (e) {
-                                console.error('OneSignal permission request failed:', e);
+                        try {
+                            // Use native browser API directly — more reliable than OneSignal deferred
+                            const permission = await Notification.requestPermission();
+                            if (permission === 'granted') {
+                                showUserTaskPage();
+                                return;
                             }
-                            // Check result and reload
-                            setTimeout(() => {
-                                if (window.Notification && window.Notification.permission === 'granted') {
-                                    showUserTaskPage();
-                                } else {
-                                    btn.disabled = false;
-                                    btn.textContent = 'Enable Notifications';
-                                }
-                            }, 2000);
-                        });
+                        } catch (e) {
+                            console.error('Notification permission request failed:', e);
+                        }
+                        // If still not granted, reset button
+                        btn.disabled = false;
+                        btn.textContent = 'Enable Notifications';
                     };
                 }
                 return;
