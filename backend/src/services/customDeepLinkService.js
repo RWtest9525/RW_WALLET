@@ -286,19 +286,28 @@ function registerDeepLinkRoutes(app) {
   app.get('/download-apk', async (req, res) => {
     try {
       const fs = require('fs');
+      // Try every possible path relative to project structure on Render
       const candidateDirs = [
         path.join(__dirname, '..', '..', '..', 'public', 'files'),
         path.join(__dirname, '..', '..', 'public', 'files'),
+        path.join(__dirname, '..', 'public', 'files'),
         path.join(process.cwd(), 'public', 'files'),
-        path.join(process.cwd(), 'files')
+        path.join(process.cwd(), '..', 'public', 'files'),
+        path.join(process.cwd(), 'files'),
+        path.join(process.cwd(), 'dist', 'files')
       ];
 
       let apkPath = null;
+      console.log('[GET /download-apk] __dirname:', __dirname);
+      console.log('[GET /download-apk] cwd:', process.cwd());
+
       for (const dir of candidateDirs) {
         if (fs.existsSync(dir)) {
           const files = fs.readdirSync(dir).filter(f => f.toLowerCase().endsWith('.apk'));
+          console.log(`[GET /download-apk] Found in ${dir}:`, files);
           if (files.length > 0) {
-            const preferred = files.find(f => f.toLowerCase() === 'app.apk') ||
+            const preferred = files.find(f => f.toLowerCase() === 'reviewsworld.apk') ||
+                              files.find(f => f.toLowerCase() === 'app.apk') ||
                               files.find(f => f.toLowerCase() === 'base.apk') ||
                               files[0];
             apkPath = path.join(dir, preferred);
@@ -308,7 +317,8 @@ function registerDeepLinkRoutes(app) {
       }
 
       if (!apkPath || !fs.existsSync(apkPath)) {
-        return res.status(404).send('APK file not found.');
+        console.error('[GET /download-apk] APK not found. Searched:', candidateDirs);
+        return res.status(404).send('APK file not found. Please contact admin.');
       }
 
       // Set proper content type so browser treats it as a known file type
