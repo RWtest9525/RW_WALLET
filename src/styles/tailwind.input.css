@@ -123,6 +123,11 @@
     word-break: break-word;
 }
 
+.info span.email-auto-shrink {
+    word-break: break-all;
+    max-width: 100%;
+}
+
 .info svg,
 .info i {
     width: 18px !important;

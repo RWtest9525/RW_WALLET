@@ -764,6 +764,19 @@ const showProfilePage = (focusMethod = '') => {
     const userDisplayName = currentUserData.name || (isAdminProfile ? 'REVIEWS WORLD ADMIN' : 'User');
     const userMobile = currentUserData.mobile || currentUserData.phoneNumber || 'Not Set';
     const userEmail = currentUserData.email || 'Not Set';
+    const emailLength = String(userEmail).length;
+    let emailClass = 'truncate';
+    if (emailLength > 32) {
+        emailClass = 'text-[10px] leading-tight break-all font-semibold email-auto-shrink';
+    } else if (emailLength > 26) {
+        emailClass = 'text-[11px] leading-snug break-all font-semibold email-auto-shrink';
+    } else if (emailLength > 21) {
+        emailClass = 'text-xs leading-snug break-all font-semibold email-auto-shrink';
+    } else if (emailLength > 17) {
+        emailClass = 'text-sm font-semibold truncate email-auto-shrink';
+    } else {
+        emailClass = 'truncate email-auto-shrink';
+    }
 
     const content = `
         ${getPageHeader('My Profile')}
@@ -806,7 +819,7 @@ const showProfilePage = (focusMethod = '') => {
                         <svg class="w-4.5 h-4.5 text-[#d7c3ff] shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
                             <path stroke-linecap="round" stroke-linejoin="round" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
                         </svg>
-                        <span class="truncate">${escapeHtml(userEmail)}</span>
+                        <span class="${emailClass}">${escapeHtml(userEmail)}</span>
                     </div>
 
                     <div class="joined">
