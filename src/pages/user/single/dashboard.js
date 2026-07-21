@@ -3585,18 +3585,19 @@ const showReferEarnPage = () => {
                 </div>
             </div>
 
-            <!-- How It Works (Horizontal Stepper) -->
-            <div class="bg-white dark:bg-slate-800 rounded-2xl p-3 border border-slate-200 dark:border-slate-800 shadow-xs space-y-2 text-center">
+            <!-- How It Works (Horizontal Stepper with Top Embedded Connected Lines) -->
+            <div class="bg-white dark:bg-slate-800 rounded-xl p-2.5 pt-2 border border-slate-200 dark:border-slate-800 shadow-xs text-center space-y-1.5">
+                <!-- Header with Left & Right border lines connected -->
                 <div class="flex items-center justify-center gap-2">
                     <div class="h-px bg-slate-200 dark:bg-slate-700 flex-1"></div>
-                    <span class="text-[10px] font-black uppercase text-slate-400 tracking-widest">How it works</span>
+                    <span class="text-[9px] font-black uppercase text-slate-400 dark:text-slate-400 tracking-widest shrink-0">HOW IT WORKS</span>
                     <div class="h-px bg-slate-200 dark:bg-slate-700 flex-1"></div>
                 </div>
                 
-                <div class="grid grid-cols-4 gap-1.5 text-center relative">
+                <div class="grid grid-cols-4 gap-1 text-center relative">
                     <!-- Step 1 -->
-                    <div class="flex flex-col items-center space-y-1">
-                        <div class="w-8 h-8 min-w-[32px] min-h-[32px] rounded-full shrink-0 aspect-square bg-emerald-50 dark:bg-emerald-950/50 text-emerald-600 flex items-center justify-center border border-emerald-200/50 shadow-xs">
+                    <div class="flex flex-col items-center space-y-0.5">
+                        <div class="shrink-0 flex items-center justify-center bg-emerald-50 dark:bg-emerald-950/50 text-emerald-600 border border-emerald-200/50 shadow-xs" style="width: 32px; height: 32px; min-width: 32px; min-height: 32px; max-width: 32px; max-height: 32px; border-radius: 50% !important;">
                             <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z"/></svg>
                         </div>
                         <span class="text-[9px] font-black text-emerald-600 dark:text-emerald-400 uppercase">01</span>
@@ -3605,8 +3606,8 @@ const showReferEarnPage = () => {
                     </div>
 
                     <!-- Step 2 -->
-                    <div class="flex flex-col items-center space-y-1">
-                        <div class="w-8 h-8 min-w-[32px] min-h-[32px] rounded-full shrink-0 aspect-square bg-blue-50 dark:bg-blue-950/50 text-blue-600 flex items-center justify-center border border-blue-200/50 shadow-xs">
+                    <div class="flex flex-col items-center space-y-0.5">
+                        <div class="shrink-0 flex items-center justify-center bg-blue-50 dark:bg-blue-950/50 text-blue-600 border border-blue-200/50 shadow-xs" style="width: 32px; height: 32px; min-width: 32px; min-height: 32px; max-width: 32px; max-height: 32px; border-radius: 50% !important;">
                             <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z"/></svg>
                         </div>
                         <span class="text-[9px] font-black text-blue-600 dark:text-blue-400 uppercase">02</span>
@@ -3615,8 +3616,8 @@ const showReferEarnPage = () => {
                     </div>
 
                     <!-- Step 3 -->
-                    <div class="flex flex-col items-center space-y-1">
-                        <div class="w-8 h-8 min-w-[32px] min-h-[32px] rounded-full shrink-0 aspect-square bg-purple-50 dark:bg-purple-950/50 text-purple-600 flex items-center justify-center border border-purple-200/50 shadow-xs">
+                    <div class="flex flex-col items-center space-y-0.5">
+                        <div class="shrink-0 flex items-center justify-center bg-purple-50 dark:bg-purple-950/50 text-purple-600 border border-purple-200/50 shadow-xs" style="width: 32px; height: 32px; min-width: 32px; min-height: 32px; max-width: 32px; max-height: 32px; border-radius: 50% !important;">
                             <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M19 14l-7 7m0 0l-7-7m7 7V3"/></svg>
                         </div>
                         <span class="text-[9px] font-black text-purple-600 dark:text-purple-400 uppercase">03</span>
@@ -3625,8 +3626,8 @@ const showReferEarnPage = () => {
                     </div>
 
                     <!-- Step 4 -->
-                    <div class="flex flex-col items-center space-y-1">
-                        <div class="w-8 h-8 min-w-[32px] min-h-[32px] rounded-full shrink-0 aspect-square bg-orange-50 dark:bg-orange-950/50 text-orange-600 flex items-center justify-center border border-orange-200/50 shadow-xs">
+                    <div class="flex flex-col items-center space-y-0.5">
+                        <div class="shrink-0 flex items-center justify-center bg-orange-50 dark:bg-orange-950/50 text-orange-600 border border-orange-200/50 shadow-xs" style="width: 32px; height: 32px; min-width: 32px; min-height: 32px; max-width: 32px; max-height: 32px; border-radius: 50% !important;">
                             <span class="text-sm font-black">%</span>
                         </div>
                         <span class="text-[9px] font-black text-orange-600 dark:text-orange-400 uppercase">04</span>
