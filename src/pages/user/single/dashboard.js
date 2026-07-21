@@ -3872,19 +3872,38 @@ const showUserTaskPage = () => {
                     btn.onclick = async () => {
                         btn.disabled = true;
                         btn.textContent = 'Requesting...';
-                        try {
-                            // Use native browser API directly — more reliable than OneSignal deferred
-                            const permission = await Notification.requestPermission();
-                            if (permission === 'granted') {
-                                showUserTaskPage();
-                                return;
+                        
+                        // Race: permission request vs timeout (WebView may never show popup)
+                        let resolved = false;
+                        const permissionPromise = (async () => {
+                            try {
+                                const result = await Notification.requestPermission();
+                                if (!resolved) {
+                                    resolved = true;
+                                    if (result === 'granted') {
+                                        showUserTaskPage();
+                                    } else {
+                                        // Denied — let user through anyway (WebView limitation)
+                                        showUserTaskPage();
+                                    }
+                                }
+                            } catch (e) {
+                                console.error('Permission request error:', e);
+                                if (!resolved) {
+                                    resolved = true;
+                                    showUserTaskPage();
+                                }
                             }
-                        } catch (e) {
-                            console.error('Notification permission request failed:', e);
-                        }
-                        // If still not granted, reset button
-                        btn.disabled = false;
-                        btn.textContent = 'Enable Notifications';
+                        })();
+                        
+                        // If nothing happens in 3 seconds (WebView stuck), let user through
+                        setTimeout(() => {
+                            if (!resolved) {
+                                resolved = true;
+                                console.log('Notification permission timeout — WebView detected, bypassing gate');
+                                showUserTaskPage();
+                            }
+                        }, 3000);
                     };
                 }
                 return;
