@@ -3230,9 +3230,7 @@ window.showShareReferralModal = (code = getProfileReferralCode()) => {
         </div>
     `;
 
-    renderModal('Share Referral Code', modalHtml, `
-        <button onclick="window.closeModal()" class="w-full rounded-xl bg-gray-100 dark:bg-gray-700 py-2.5 text-sm font-extrabold text-gray-700 dark:text-gray-200">Close</button>
-    `, 'max-w-md');
+    renderModal('Share Referral Code', modalHtml, '', 'max-w-md');
 
     const copyCode = () => {
         if (navigator.clipboard && navigator.clipboard.writeText) {
