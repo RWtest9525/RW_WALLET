@@ -3648,34 +3648,9 @@ const showReferEarnPage = () => {
     const content = `
         <div class="max-w-md mx-auto space-y-2.5 text-left px-1 pb-20">
             
-            <!-- Dark Green Poster Card Banner (Compact 1-screen fit) -->
-            <div class="relative overflow-hidden rounded-2xl bg-gradient-to-br from-[#053d28] via-[#094d33] to-[#022115] p-4 text-white shadow-md">
-                <!-- Background decorative circles -->
-                <div class="absolute -right-6 -top-6 h-28 w-28 rounded-full border border-white/10 bg-white/5 pointer-events-none"></div>
-
-                <!-- Header Top Bar inside poster -->
-                <div class="flex items-center justify-between">
-                    <span class="inline-flex items-center gap-1 rounded-full bg-emerald-500/20 px-2.5 py-0.5 text-[10px] font-black uppercase text-emerald-300 border border-emerald-400/30 backdrop-blur-md">
-                        🎁 REFER & EARN
-                    </span>
-                </div>
-
-                <!-- Poster Title & Graphic -->
-                <div class="relative flex items-center justify-between gap-3 mt-3">
-                    <div class="space-y-1 flex-1 min-w-0">
-                        <h2 class="text-xl sm:text-2xl font-black leading-tight tracking-tight text-white">
-                            Invite Friends.<br><span class="text-emerald-300">Earn</span> Together.
-                        </h2>
-                        <p class="text-[11px] text-emerald-100/80 max-w-[190px] font-medium leading-normal">
-                            You and your friend both get rewards after the first withdrawal.
-                        </p>
-                    </div>
-                    <!-- Graphic Gift Illustration -->
-                    <div class="relative shrink-0 flex items-center justify-center h-16 w-16">
-                        <div class="absolute inset-0 bg-emerald-400/20 rounded-full blur-lg"></div>
-                        <img src="${REFER_ICON_URL}" alt="Referral Gift" class="relative h-14 w-14 object-contain filter drop-shadow-[0_6px_10px_rgba(0,0,0,0.35)]">
-                    </div>
-                </div>
+            <!-- Refer & Earn Top Banner Image -->
+            <div class="relative overflow-hidden rounded-2xl shadow-md border border-emerald-900/40 bg-slate-900">
+                <img src="/referral_banner.png" alt="Refer & Earn - Invite Friends, Earn Together" class="w-full h-auto object-cover rounded-2xl block">
             </div>
 
             <!-- 3 Stat Cards Row (Left Symbol + Right Text) -->
