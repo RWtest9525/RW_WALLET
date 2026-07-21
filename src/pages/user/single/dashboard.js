@@ -3869,39 +3869,74 @@ const showUserTaskPage = () => {
                 
                 const btn = document.getElementById('enable-notifications-btn');
                 if (btn) {
-                    btn.onclick = () => {
+                    btn.onclick = async () => {
                         btn.disabled = true;
                         btn.textContent = 'Requesting...';
-                        
+
+                        let hasPrompted = false;
+
+                        // Helper to finish and check permission
+                        const finishRequest = () => {
+                            const isGranted = window.Notification && window.Notification.permission === 'granted';
+                            if (isGranted) {
+                                showUserTaskPage();
+                            } else {
+                                btn.disabled = false;
+                                btn.textContent = 'Enable Notifications';
+                                // If blocked, show helpful instruction instead of generic error
+                                if (window.Notification && window.Notification.permission === 'denied') {
+                                    showNotification('Notifications are blocked. Please enable them from site settings!');
+                                } else {
+                                    showNotification('Please allow notifications to start doing tasks!');
+                                }
+                            }
+                        };
+
+                        // 1. Try OneSignal first, but set a short timeout if OneSignal SDK hasn't loaded
+                        const oneSignalTimeout = setTimeout(async () => {
+                            if (!hasPrompted) {
+                                hasPrompted = true;
+                                console.log('OneSignal SDK load timeout, falling back to native prompt...');
+                                try {
+                                    if (window.Notification && typeof window.Notification.requestPermission === 'function') {
+                                        await window.Notification.requestPermission();
+                                    }
+                                } catch (e) {
+                                    console.error('Fallback native permission failed:', e);
+                                }
+                                finishRequest();
+                            }
+                        }, 1500);
+
                         window.OneSignalDeferred = window.OneSignalDeferred || [];
                         window.OneSignalDeferred.push(async function(OneSignal) {
+                            if (hasPrompted) return;
+                            hasPrompted = true;
+                            clearTimeout(oneSignalTimeout);
+
                             try {
-                                // Try OneSignal's Slidedown custom prompt first (safest for WebViews)
+                                // Try OneSignal's Slidedown custom prompt (best for WebViews)
                                 await OneSignal.Slidedown.promptTrigger();
                                 console.log('OneSignal slidedown prompt triggered');
                             } catch (err) {
                                 console.warn('OneSignal slidedown failed, trying native permission...', err);
                                 try {
-                                    await Notification.requestPermission();
+                                    if (window.Notification && typeof window.Notification.requestPermission === 'function') {
+                                        await window.Notification.requestPermission();
+                                    }
                                 } catch (e) {
                                     console.error('Native requestPermission failed:', e);
                                 }
                             }
 
-                            // Wait and check if user granted permission
-                            let attempts = 0;
-                            const checkInterval = setInterval(() => {
-                                attempts++;
+                            // Wait for permission state change
+                            let checks = 0;
+                            const interval = setInterval(() => {
+                                checks++;
                                 const isGranted = window.Notification && window.Notification.permission === 'granted';
-                                if (isGranted) {
-                                    clearInterval(checkInterval);
-                                    showUserTaskPage();
-                                } else if (attempts >= 10) {
-                                    // Stop checking after 5 seconds if not granted
-                                    clearInterval(checkInterval);
-                                    btn.disabled = false;
-                                    btn.textContent = 'Enable Notifications';
-                                    showNotification('Please allow notifications to start doing tasks!');
+                                if (isGranted || checks >= 10) {
+                                    clearInterval(interval);
+                                    finishRequest();
                                 }
                             }, 500);
                         });
