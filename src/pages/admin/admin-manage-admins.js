@@ -25,8 +25,8 @@ const showAdminManageAdminsPage = async () => {
                 <div class="bg-blue-50/70 dark:bg-blue-950/30 border border-blue-100 dark:border-blue-900/40 p-3 rounded-2xl shadow-xs">
                     <div class="flex items-center justify-between">
                         <span class="text-[11px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Total</span>
-                        <div class="h-6 w-6 rounded-lg bg-blue-100 dark:bg-blue-900/60 flex items-center justify-center text-blue-600 dark:text-blue-300 text-xs">
-                            <i class="fa-solid fa-users"></i>
+                        <div class="h-6 w-6 rounded-lg bg-blue-100 dark:bg-blue-900/60 flex items-center justify-center text-blue-600 dark:text-blue-300">
+                            <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"></path></svg>
                         </div>
                     </div>
                     <h4 id="stat-total-subadmins" class="text-xl font-black text-blue-600 dark:text-blue-400 mt-1">0</h4>
@@ -35,8 +35,8 @@ const showAdminManageAdminsPage = async () => {
                 <div class="bg-emerald-50/70 dark:bg-emerald-950/30 border border-emerald-100 dark:border-emerald-900/40 p-3 rounded-2xl shadow-xs">
                     <div class="flex items-center justify-between">
                         <span class="text-[11px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Active</span>
-                        <div class="h-6 w-6 rounded-lg bg-emerald-100 dark:bg-emerald-900/60 flex items-center justify-center text-emerald-600 dark:text-emerald-300 text-xs">
-                            <i class="fa-solid fa-shield-check"></i>
+                        <div class="h-6 w-6 rounded-lg bg-emerald-100 dark:bg-emerald-900/60 flex items-center justify-center text-emerald-600 dark:text-emerald-300">
+                            <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"></path></svg>
                         </div>
                     </div>
                     <h4 id="stat-active-subadmins" class="text-xl font-black text-emerald-600 dark:text-emerald-400 mt-1">0</h4>
@@ -45,8 +45,8 @@ const showAdminManageAdminsPage = async () => {
                 <div class="bg-amber-50/70 dark:bg-amber-950/30 border border-amber-100 dark:border-amber-900/40 p-3 rounded-2xl shadow-xs">
                     <div class="flex items-center justify-between">
                         <span class="text-[11px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Inactive</span>
-                        <div class="h-6 w-6 rounded-lg bg-amber-100 dark:bg-amber-900/60 flex items-center justify-center text-amber-600 dark:text-amber-300 text-xs">
-                            <i class="fa-solid fa-user-slash"></i>
+                        <div class="h-6 w-6 rounded-lg bg-amber-100 dark:bg-amber-900/60 flex items-center justify-center text-amber-600 dark:text-amber-300">
+                            <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636"></path></svg>
                         </div>
                     </div>
                     <h4 id="stat-inactive-subadmins" class="text-xl font-black text-amber-600 dark:text-amber-400 mt-1">0</h4>
@@ -55,8 +55,8 @@ const showAdminManageAdminsPage = async () => {
                 <div class="bg-purple-50/70 dark:bg-purple-950/30 border border-purple-100 dark:border-purple-900/40 p-3 rounded-2xl shadow-xs">
                     <div class="flex items-center justify-between">
                         <span class="text-[11px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Managed</span>
-                        <div class="h-6 w-6 rounded-lg bg-purple-100 dark:bg-purple-900/60 flex items-center justify-center text-purple-600 dark:text-purple-300 text-xs">
-                            <i class="fa-solid fa-users-gear"></i>
+                        <div class="h-6 w-6 rounded-lg bg-purple-100 dark:bg-purple-900/60 flex items-center justify-center text-purple-600 dark:text-purple-300">
+                            <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"></path></svg>
                         </div>
                     </div>
                     <h4 id="stat-users-managed" class="text-xl font-black text-purple-600 dark:text-purple-400 mt-1">0</h4>
@@ -69,10 +69,13 @@ const showAdminManageAdminsPage = async () => {
                     <svg class="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
                     <input type="text" id="subadmin-search-input" placeholder="Search sub-admin by name, email, code..." class="w-full pl-10 pr-3 py-2.5 bg-white dark:bg-slate-800 border border-gray-200 dark:border-gray-700 rounded-xl text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-blue-500 shadow-2xs text-gray-800 dark:text-gray-200">
                 </div>
-                <button type="button" id="subadmin-filter-toggle-btn" class="px-3.5 py-2.5 bg-white dark:bg-slate-800 border border-gray-200 dark:border-gray-700 rounded-xl text-xs font-extrabold text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-slate-700 flex items-center gap-1.5 shadow-2xs transition active:scale-95">
-                    <svg class="h-3.5 w-3.5 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.707 7.293A1 1 0 013 6.586V4z"></path></svg>
-                    <span>Filter</span>
-                </button>
+                <div class="relative shrink-0">
+                    <select id="subadmin-status-filter-select" class="px-3.5 py-2.5 bg-white dark:bg-slate-800 border border-gray-200 dark:border-gray-700 rounded-xl text-xs font-extrabold text-gray-700 dark:text-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 shadow-2xs cursor-pointer">
+                        <option value="all" selected>All Status</option>
+                        <option value="active">✓ Active Only</option>
+                        <option value="inactive">✕ Inactive Only</option>
+                    </select>
+                </div>
             </div>
 
             <!-- Add Sub-Admin Card (Hidden by default) -->
@@ -140,13 +143,10 @@ const showAdminManageAdminsPage = async () => {
         renderSubAdminsUI();
     });
 
-    document.getElementById('subadmin-filter-toggle-btn')?.addEventListener('click', () => {
-        if (subAdminStatusFilter === 'all') subAdminStatusFilter = 'active';
-        else if (subAdminStatusFilter === 'active') subAdminStatusFilter = 'inactive';
-        else subAdminStatusFilter = 'all';
+    document.getElementById('subadmin-status-filter-select')?.addEventListener('change', (e) => {
+        subAdminStatusFilter = e.target.value;
         subAdminCurrentPage = 1;
         renderSubAdminsUI();
-        showNotification(`Filter: ${subAdminStatusFilter.toUpperCase()}`);
     });
 
     document.getElementById('pag-prev-btn')?.addEventListener('click', () => {
