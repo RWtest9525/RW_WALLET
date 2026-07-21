@@ -164,12 +164,28 @@ function registerDeepLinkRoutes(app) {
         console.log(`[Cloudflare DeepLink] Saved IP ${clientIp} -> Ref ${refCode}`);
       }
 
-      // Serve /public/files/app.apk
-      const apkPath = path.join(__dirname, '..', '..', '..', 'public', 'files', 'app.apk');
+      const fs = require('fs');
+      const filesDir = path.join(__dirname, '..', '..', '..', 'public', 'files');
+      let targetApk = 'app.apk';
+      let apkPath = path.join(filesDir, 'app.apk');
+
+      if (!fs.existsSync(apkPath)) {
+        if (fs.existsSync(path.join(filesDir, 'base.apk'))) {
+          targetApk = 'base.apk';
+          apkPath = path.join(filesDir, 'base.apk');
+        } else {
+          const files = fs.readdirSync(filesDir).filter(f => f.endsWith('.apk'));
+          if (files.length > 0) {
+            targetApk = files[0];
+            apkPath = path.join(filesDir, targetApk);
+          }
+        }
+      }
+
       res.download(apkPath, 'app.apk', (err) => {
         if (err && !res.headersSent) {
           console.error('[GET /download] Download error:', err.message);
-          res.status(404).send('APK file not found on server.');
+          res.status(404).send('APK file not found on server. Please place base.apk or app.apk inside public/files/ folder.');
         }
       });
     } catch (error) {
