@@ -165,27 +165,41 @@ function registerDeepLinkRoutes(app) {
       }
 
       const fs = require('fs');
-      const filesDir = path.join(__dirname, '..', '..', '..', 'public', 'files');
-      let targetApk = 'app.apk';
-      let apkPath = path.join(filesDir, 'app.apk');
+      const candidateDirs = [
+        path.join(__dirname, '..', '..', '..', 'public', 'files'),
+        path.join(__dirname, '..', '..', 'public', 'files'),
+        path.join(process.cwd(), 'public', 'files'),
+        path.join(process.cwd(), 'files')
+      ];
 
-      if (!fs.existsSync(apkPath)) {
-        if (fs.existsSync(path.join(filesDir, 'base.apk'))) {
-          targetApk = 'base.apk';
-          apkPath = path.join(filesDir, 'base.apk');
-        } else {
-          const files = fs.readdirSync(filesDir).filter(f => f.endsWith('.apk'));
+      let apkPath = null;
+      let targetDir = null;
+
+      for (const dir of candidateDirs) {
+        if (fs.existsSync(dir)) {
+          const files = fs.readdirSync(dir).filter(f => f.toLowerCase().endsWith('.apk'));
           if (files.length > 0) {
-            targetApk = files[0];
-            apkPath = path.join(filesDir, targetApk);
+            // Priority: app.apk -> base.apk -> first .apk found
+            const preferred = files.find(f => f.toLowerCase() === 'app.apk') ||
+                              files.find(f => f.toLowerCase() === 'base.apk') ||
+                              files[0];
+            apkPath = path.join(dir, preferred);
+            targetDir = dir;
+            break;
           }
         }
       }
 
+      if (!apkPath || !fs.existsSync(apkPath)) {
+        console.error('[GET /download] No APK file found in candidate directories:', candidateDirs);
+        return res.status(404).send('APK file not found on server. Please place base.apk or app.apk inside public/files/ folder.');
+      }
+
+      console.log('[GET /download] Serving APK from:', apkPath);
       res.download(apkPath, 'app.apk', (err) => {
         if (err && !res.headersSent) {
           console.error('[GET /download] Download error:', err.message);
-          res.status(404).send('APK file not found on server. Please place base.apk or app.apk inside public/files/ folder.');
+          res.status(404).send('APK file download failed.');
         }
       });
     } catch (error) {
