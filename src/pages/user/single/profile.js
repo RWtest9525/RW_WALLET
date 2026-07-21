@@ -464,8 +464,8 @@ const showSavedPaymentMethodsPage = (focusMethod = '') => {
         return `
             <div class="flex items-center justify-between gap-3 p-4 bg-white dark:bg-slate-800 rounded-2xl border border-slate-150 dark:border-slate-700/80 shadow-sm transition hover:shadow-md">
                 <div class="flex items-center gap-3.5 min-w-0">
-                    <div class="relative flex h-12 w-12 shrink-0 items-center justify-center rounded-full border border-indigo-150 dark:border-indigo-800/60 bg-white p-1.5 shadow-sm overflow-hidden">
-                        <img src="${method.iconUrl}" alt="${escapeHtml(method.name)}" class="h-full w-full object-contain rounded-full">
+                    <div class="relative flex h-14 w-14 sm:h-16 sm:w-16 shrink-0 items-center justify-center rounded-2xl border border-slate-200/80 dark:border-slate-700 bg-white p-1 shadow-sm overflow-hidden">
+                        <img src="${method.iconUrl}" alt="${escapeHtml(method.name)}" class="h-full w-full object-contain rounded-xl">
                     </div>
                     <div class="min-w-0 text-left space-y-0.5">
                         <div class="flex items-center gap-2">
@@ -498,12 +498,6 @@ const showSavedPaymentMethodsPage = (focusMethod = '') => {
         <div class="max-w-lg mx-auto p-4 space-y-3 text-left">
             <div class="space-y-3">
                 ${methodsListHtml}
-            </div>
-            <div class="pt-3">
-                <button type="button" onclick="window.showEditPaymentMethodModal('')" class="w-full flex items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-purple-300 dark:border-purple-700 bg-purple-50/50 dark:bg-purple-950/20 py-3.5 text-sm font-black text-purple-700 dark:text-purple-300 hover:bg-purple-100/60 transition active:scale-98">
-                    <span class="text-lg">+</span>
-                    <span>Add New Method</span>
-                </button>
             </div>
         </div>
         ${getPageFooter()}`;

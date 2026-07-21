@@ -196,6 +196,17 @@ const handleAuth = async (e) => {
                     };
                     localStorage.setItem('lastLoggedInUser', cred.user.uid);
                     writeJsonCache(getUserCacheKey(cred.user.uid), sanitizeUserForCache(currentUserData, cred.user.uid));
+
+                    // Send push notification to target admin/subadmin for approval
+                    if (typeof sendNotification === 'function') {
+                        const targetAdmin = parentAdmin || ADMIN_UID;
+                        sendNotification(
+                            targetAdmin,
+                            'New User Registration Approval',
+                            `User ${name} (${mobile}) registered with referral code ${referralCodeInput}. Click to review and approve.`
+                        ).catch(e => console.warn('Referral signup push notification error:', e));
+                    }
+
                     showVerificationPendingPage(currentUserData);
                     setTimeout(() => initializeUserListeners(cred.user.uid), 100);
                     localSignupApprovalInProgress = false;

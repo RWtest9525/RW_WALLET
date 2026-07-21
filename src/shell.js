@@ -27,7 +27,7 @@ root.outerHTML = String.raw`
                             onerror="this.classList.add('hidden'); document.getElementById('auth-logo-fallback')?.classList.remove('hidden');">
                         <div>
                             <h2 class="text-2xl font-bold">Reviews World</h2>
-                            <p class="text-xs text-gray-500 dark:text-gray-400">Official Companion App</p>
+                            <p class="text-xs text-gray-500 dark:text-gray-400">Do task , Earn rewards !</p>
                         </div>
                     </div>
                     <h3 id="auth-title" class="text-xl font-bold text-center mb-2">Login to your Wallet</h3>
@@ -130,7 +130,7 @@ root.outerHTML = String.raw`
                         onerror="this.classList.add('hidden'); document.getElementById('header-logo-fallback')?.classList.remove('hidden');">
                     <div>
                         <h1 class="text-xl font-bold">Reviews World</h1>
-                        <p class="text-xs text-gray-500 dark:text-gray-400 mt-0.5">Official Companion App</p>
+                        <p class="text-xs text-gray-500 dark:text-gray-400 mt-0.5">Do task , Earn rewards !</p>
                     </div>
                 </div>
                 <div class="flex items-center gap-2">

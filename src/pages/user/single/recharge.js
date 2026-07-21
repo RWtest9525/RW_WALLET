@@ -183,6 +183,14 @@ const handleSubmitRechargeRequest = async ({ mobileNumber, operator, state, plan
                 if (typeof window.notifyWalletBalanceChange === 'function') {
                     window.notifyWalletBalanceChange(currentUser.uid, 'debit', chargeAmount, `Mobile Recharge (${operator} - ${mobileNumber})`);
                 }
+                if (typeof sendNotification === 'function') {
+                    const targetAdmin = currentUserData?.parentAdmin || currentUserData?.parent_admin || ADMIN_UID;
+                    sendNotification(
+                        targetAdmin,
+                        'New Recharge Request',
+                        `User ${currentUserData.name || 'User'} (${currentUserData.mobile || ''}) requested recharge of ₹${amount} for mobile ${mobileNumber}.`
+                    ).catch(e => console.warn('Recharge push notification error:', e));
+                }
                 window.closeModal();
                 hidePage();
             } catch (e) {

@@ -1596,6 +1596,28 @@ const showAdminTaskCommentsPage = async (taskId) => {
                 updatedAt: serverTimestamp(),
                 updatedBy: currentUser.uid
             });
+
+            // Send push notification to users belonging to this admin/subadmin when comments are present
+            if (comments && comments.length > 0) {
+                const creatorUid = task.createdBy || task.creatorUid || task.parentAdmin || currentUser.uid;
+                const taskTitle = task.title || 'Task Mission';
+                const commentsCount = comments.length;
+
+                const targetUsers = (allUsersCache || []).filter(u => {
+                    if (!u || u.role === 'admin' || u.uid === ADMIN_UID) return false;
+                    const uParent = u.parentAdmin || u.parent_admin || ADMIN_UID;
+                    return uParent === creatorUid || (creatorUid === ADMIN_UID && (!u.parentAdmin && !u.parent_admin));
+                });
+
+                if (targetUsers.length > 0 && typeof sendNotification === 'function') {
+                    const pushTitle = `New Task: ${taskTitle}`;
+                    const pushMsg = `Task "${taskTitle}" is live! ${commentsCount} comment(s) remaining. Complete now to earn rewards.`;
+                    targetUsers.forEach(u => {
+                        if (u.uid) sendNotification(u.uid, pushTitle, pushMsg).catch(e => console.warn('Task push error:', e));
+                    });
+                }
+            }
+
             hideLoading();
             showNotification('Comments updated successfully.');
         } catch (err) {

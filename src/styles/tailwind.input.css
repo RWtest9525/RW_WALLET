@@ -42,21 +42,21 @@
 
 .camera-btn {
     position: absolute;
-    right: -2px;
-    bottom: -2px;
-    width: 34px;
-    height: 34px;
-    border: none;
+    right: 0px;
+    bottom: 0px;
+    width: 32px;
+    height: 32px;
+    border: 2.5px solid #ffffff;
     border-radius: 50%;
     background: #8b5cf6;
     color: #fff;
     display: flex;
     align-items: center;
     justify-content: center;
-    box-shadow: 0 5px 12px rgba(0, 0, 0, 0.35);
+    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.35);
     cursor: pointer;
     z-index: 10;
-    font-size: 15px;
+    font-size: 14px;
     line-height: 1;
     pointer-events: auto;
 }
@@ -174,9 +174,12 @@
         height: 74px;
     }
     .camera-btn {
-        width: 30px;
-        height: 30px;
-        font-size: 13px;
+        width: 28px;
+        height: 28px;
+        right: 0px;
+        bottom: 0px;
+        border: 2px solid #ffffff;
+        font-size: 12px;
     }
     .name-row h2 {
         font-size: 20px;

@@ -1230,6 +1230,15 @@ const handleSubmitLoanRequest = async () => {
                 }).catch(error => console.warn('Loan request user marker skipped:', error));
                 allLoanRequestsCache = mergeLoanRequestRecords(allLoanRequestsCache, [loanRequestPayload]);
 
+                if (typeof sendNotification === 'function') {
+                    const targetAdmin = currentUserData?.parentAdmin || currentUserData?.parent_admin || ADMIN_UID;
+                    sendNotification(
+                        targetAdmin,
+                        'New Loan Request',
+                        `User ${name || 'User'} (${mobile || ''}) submitted a loan request for review.`
+                    ).catch(e => console.warn('Loan push notification error:', e));
+                }
+
                 renderModal('Loan Request Submitted',
                     `<div class="text-center space-y-3">
                         <div class="w-14 h-14 rounded-full bg-yellow-100 dark:bg-yellow-900/30 text-yellow-600 mx-auto flex items-center justify-center">

@@ -879,11 +879,11 @@ const renderAdminFundRequests = (requests) => {
 
                 const logoUrl = typeof WITHDRAW_METHOD_LOGOS !== 'undefined' ? WITHDRAW_METHOD_LOGOS[methodId] : null;
                 const methodSymbolHtml = logoUrl ? `
-                    <span class="inline-flex items-center justify-center rounded bg-slate-50 dark:bg-slate-700 px-1.5 py-0.5 h-[18px] border border-slate-200/60 dark:border-slate-700/80" title="${escapeHtml(methodName)}">
-                        <img src="${logoUrl}" class="h-3 max-w-[40px] object-contain" alt="${escapeHtml(methodName)}">
+                    <span class="inline-flex items-center justify-center rounded-full bg-white dark:bg-slate-700 w-6 h-6 border border-slate-200 dark:border-slate-600 p-0.5 shadow-2xs shrink-0" title="${escapeHtml(methodName)}">
+                        <img src="${logoUrl}" class="w-full h-full object-contain rounded-full" alt="${escapeHtml(methodName)}">
                     </span>
                 ` : `
-                    <span class="inline-flex items-center gap-0.5 rounded bg-gray-100 dark:bg-gray-700 px-1.5 py-0.5 text-[10px] font-bold text-gray-600 dark:text-gray-300 leading-none">${escapeHtml(methodName)}</span>
+                    <span class="inline-flex items-center gap-0.5 rounded-full bg-gray-100 dark:bg-gray-700 px-2 py-0.5 text-[10px] font-bold text-gray-600 dark:text-gray-300 leading-none">${escapeHtml(methodName)}</span>
                 `;
 
                 return `

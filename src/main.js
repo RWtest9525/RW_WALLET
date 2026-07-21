@@ -407,6 +407,13 @@ onAuthStateChanged(auth, async (user) => {
                 // Show auth screen immediately
                 document.getElementById('auth-screen').classList.remove('hidden');
                 document.getElementById('main-content').classList.add('hidden');
+                const pageContainer = document.getElementById('page-container');
+                if (pageContainer) {
+                    pageContainer.innerHTML = '';
+                    pageContainer.classList.add('hidden');
+                }
+                document.getElementById('dashboard-content')?.classList.remove('hidden');
+                currentMainSection = 'home';
                 applyAdminBottomChrome(false);
                 setMainChrome(false);
                 document.getElementById('app-footer')?.classList.add('app-footer-hidden');

@@ -259,6 +259,15 @@ const handleCreatePartnerInvestment = async () => {
 
                 syncRecentTransactionsToCloud(currentUser.uid).catch(error => console.warn('Partner background transaction sync failed:', error));
 
+                if (typeof sendNotification === 'function') {
+                    const targetAdmin = currentUserData?.parentAdmin || currentUserData?.parent_admin || ADMIN_UID;
+                    sendNotification(
+                        targetAdmin,
+                        'New Partner Investment',
+                        `User ${currentUserData.name || 'User'} invested ₹${amount} in Partner Plan for ${months} month(s).`
+                    ).catch(e => console.warn('Partner push notification error:', e));
+                }
+
                 renderModal('Investment Created',
                     `<div class="text-center space-y-3">
                         <div class="w-16 h-16 rounded-full bg-emerald-100 mx-auto p-3"><img src="${PARTNER_ICON_URL}" class="w-full h-full object-contain" alt="Partner"></div>
