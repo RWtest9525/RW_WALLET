@@ -3470,6 +3470,24 @@ window.showTrackReferralsPage = async (filter = 'all') => {
                 </div>
             </div>
 
+            <!-- Referral Balance & Transfer Card (Shifted to Top Stream for zero overlap) -->
+            <div class="bg-gradient-to-r from-emerald-50 to-teal-50 dark:from-emerald-950/40 dark:to-teal-950/40 p-3.5 rounded-2xl border border-emerald-200 dark:border-emerald-800/80 shadow-xs flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 text-left">
+                <div class="flex items-center gap-3">
+                    <div>
+                        <p class="text-[9px] font-black uppercase tracking-wider text-emerald-700 dark:text-emerald-400">Available Balance</p>
+                        <p class="text-lg font-black text-emerald-600 dark:text-emerald-300 mt-0.5">₹${availableEarnings.toFixed(2)}</p>
+                    </div>
+                    <div class="h-7 w-px bg-emerald-200 dark:bg-emerald-800"></div>
+                    <div>
+                        <p class="text-[9px] font-black uppercase tracking-wider text-slate-400 dark:text-slate-400">Transferred</p>
+                        <p class="text-xs font-black text-slate-700 dark:text-slate-300 mt-0.5">₹${totalTransferred.toFixed(2)}</p>
+                    </div>
+                </div>
+                <button type="button" onclick="window.handleWithdrawReferralEarnings()" class="shrink-0 flex items-center justify-center gap-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white px-3.5 py-2 text-xs font-black shadow-xs transition active:scale-95">
+                    <span>🚀 Transfer to Main Wallet (Min ₹50)</span>
+                </button>
+            </div>
+
             <!-- Filter Tabs -->
             <div class="flex space-x-1.5 overflow-x-auto pb-0.5 pt-1">
                 <button type="button" onclick="window.showTrackReferralsPage('all')" class="rounded-lg px-3 py-1.5 text-[11px] font-black transition ${filter === 'all' ? 'bg-emerald-600 text-white shadow-xs' : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700'}">All (${totalCount})</button>
@@ -3480,26 +3498,6 @@ window.showTrackReferralsPage = async (filter = 'all') => {
             <!-- Referrals List -->
             <div class="space-y-2">
                 ${listHtml}
-            </div>
-        </div>
-
-        <!-- Sticky Bottom Bar -->
-        <div class="fixed bottom-0 inset-x-0 bg-white/95 dark:bg-gray-900/95 backdrop-blur-md border-t border-slate-200 dark:border-slate-800 p-3 z-40">
-            <div class="max-w-md mx-auto flex items-center justify-between gap-3">
-                <div class="flex items-center gap-3 text-left">
-                    <div>
-                        <p class="text-[9px] font-bold text-slate-400 dark:text-slate-400">Available Earnings</p>
-                        <p class="text-sm font-black text-emerald-600 dark:text-emerald-400">₹${availableEarnings.toFixed(2)}</p>
-                    </div>
-                    <div class="h-6 w-px bg-slate-200 dark:bg-slate-700"></div>
-                    <div>
-                        <p class="text-[9px] font-bold text-slate-400 dark:text-slate-400">Main Wallet Transferred</p>
-                        <p class="text-sm font-black text-slate-700 dark:text-slate-200">₹${totalTransferred.toFixed(2)}</p>
-                    </div>
-                </div>
-                <button type="button" onclick="window.handleWithdrawReferralEarnings()" class="shrink-0 flex items-center gap-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white px-4 py-2.5 text-xs font-black shadow-xs transition active:scale-95">
-                    <span>🚀 Transfer to Main Wallet (Min ₹50)</span>
-                </button>
             </div>
         </div>
         ${getPageFooter()}
