@@ -3673,7 +3673,11 @@ const showReferEarnPage = () => {
 
             <!-- Bottom Auto Rewards Banner (Perfect Circle Checkmark) -->
             <div class="rounded-xl bg-emerald-50/80 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800/60 p-2.5 flex items-center gap-2.5 text-[10px] font-bold text-emerald-800 dark:text-emerald-200 shadow-xs">
-                <div class="w-6 h-6 min-w-[24px] min-h-[24px] rounded-full shrink-0 aspect-square flex items-center justify-center bg-emerald-500 text-white font-black text-xs shadow-xs">✓</div>
+                <div class="shrink-0 flex items-center justify-center bg-emerald-500 text-white shadow-xs" style="width: 22px; height: 22px; min-width: 22px; min-height: 22px; max-width: 22px; max-height: 22px; border-radius: 50% !important;">
+                    <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="3.5">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
+                    </svg>
+                </div>
                 <span>Rewards will be added automatically after your friend's first withdrawal.</span>
             </div>
         </div>
