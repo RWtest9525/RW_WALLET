@@ -120,8 +120,11 @@ const loadAdminChatsFromBackend = async ({ silent = false, retry = true, subscri
                     lastSenderId: chat.last_sender_id || '',
                     updatedAt: chat.updated_at || Date.now()
                 }));
-                if (currentUser?.uid !== ADMIN_UID) {
-                    chatList = chatList.filter(chat => chat.roomId && chat.roomId.endsWith(`_${currentUser.uid}`));
+                if (!checkIsOwner(currentUser, currentUserData)) {
+                    chatList = chatList.filter(chat => {
+                        if (!chat.roomId) return true;
+                        return chat.roomId.endsWith(`_${currentUser?.uid}`) || chat.roomId.includes(ADMIN_UID) || (chat.userId === ADMIN_UID);
+                    });
                 }
                 allSupportChatsCache = chatList;
                 refreshAdminChatUnreadCount();
@@ -142,22 +145,26 @@ const loadAdminChatsFromBackend = async ({ silent = false, retry = true, subscri
             }
         };
 
-const getAdminChatUserMeta = (user = {}) => ({
-            id: user.id || user.uid || '',
-            userId: user.id || user.uid || '',
-            userName: user.name || user.fullName || user.displayName || user.email || 'User',
-            userEmail: user.email || '',
-            userMobile: user.mobile || user.phoneNumber || user.phone || '',
-            userAvatar: user.profilePhoto || user.profile_photo || user.avatarUrl || user.avatar_url || ''
-        });
+const getAdminChatUserMeta = (user = {}) => {
+            const isMainOwner = user.id === ADMIN_UID || user.uid === ADMIN_UID || user.email === 'reviewsworld51@gmail.com' || user.email === 'reviewsworld01@gmail.com' || user.role === 'owner';
+            return {
+                id: user.id || user.uid || '',
+                userId: user.id || user.uid || '',
+                userName: isMainOwner ? (user.name || 'Main Owner (Admin)') : (user.name || user.fullName || user.displayName || user.email || 'User'),
+                userEmail: user.email || '',
+                userMobile: user.mobile || user.phoneNumber || user.phone || '',
+                userAvatar: user.profilePhoto || user.profile_photo || user.avatarUrl || user.avatar_url || ''
+            };
+        };
 
 const ensureAdminChatUsersLoaded = async () => {
             if (!hasAdminSessionReadyOrCached() || allUsersCache.length) return;
             try {
                 const usersSnap = await getDocs(query(collection(db, `artifacts/${appId}/public/data/users`)));
                 let list = usersSnap.docs.map(d => ({ id: d.id, ...d.data() }));
-                if (currentUser?.uid !== ADMIN_UID) {
-                    list = list.filter(u => u.parentAdmin === currentUser.uid || u.parent_admin === currentUser.uid);
+                const isOwner = checkIsOwner(currentUser, currentUserData);
+                if (!isOwner) {
+                    list = list.filter(u => (u.id === ADMIN_UID || u.uid === ADMIN_UID || u.email === 'reviewsworld51@gmail.com' || u.email === 'reviewsworld01@gmail.com' || u.role === 'owner') || u.parentAdmin === currentUser?.uid || u.parent_admin === currentUser?.uid);
                 }
                 allUsersCache = list;
             } catch (error) {
@@ -169,6 +176,7 @@ const renderAdminChatsList = () => {
             const list = document.getElementById('admin-chats-list');
             if (!list) return;
             const searchTerm = (document.getElementById('admin-chat-search')?.value || '').trim().toLowerCase();
+            const isOwner = checkIsOwner(currentUser, currentUserData);
             const chatsToRender = searchTerm
                 ? allSupportChatsCache.filter(chat => [
                     chat.userName,
@@ -178,13 +186,32 @@ const renderAdminChatsList = () => {
                 ].some(value => String(value || '').toLowerCase().includes(searchTerm)))
                 : allSupportChatsCache;
             const existingChatUserIds = new Set(allSupportChatsCache.map(chat => String(chat.userId || chat.id || '')));
+
+            let baseUsersForSearch = [...allUsersCache];
+            const hasOwnerInCache = baseUsersForSearch.some(u => u.id === ADMIN_UID || u.uid === ADMIN_UID || u.email === 'reviewsworld51@gmail.com' || u.email === 'reviewsworld01@gmail.com');
+            if (!isOwner && !hasOwnerInCache) {
+                baseUsersForSearch.push({
+                    id: ADMIN_UID,
+                    uid: ADMIN_UID,
+                    name: 'Main Owner (Admin)',
+                    email: 'reviewsworld51@gmail.com',
+                    role: 'owner'
+                });
+            }
+
             const usersToStartChat = searchTerm
-                ? allUsersCache
+                ? baseUsersForSearch
                     .filter(user => {
-                        if (currentUser?.uid === ADMIN_UID) {
-                            return user.id !== ADMIN_UID && user.uid !== ADMIN_UID;
+                        const uid = user.id || user.uid;
+                        if (isOwner) {
+                            return uid !== ADMIN_UID && user.role !== 'owner';
+                        } else {
+                            const isMainOwner = uid === ADMIN_UID || user.email === 'reviewsworld51@gmail.com' || user.email === 'reviewsworld01@gmail.com' || user.role === 'owner';
+                            if (isMainOwner) return true;
+                            if (user.role === 'admin' || user.role === 'subadmin') return false;
+                            const parent = user.parentAdmin || user.parent_admin;
+                            return parent === currentUser?.uid;
                         }
-                        return !isAdminUserRecord(user);
                     })
                     .map(getAdminChatUserMeta)
                     .filter(user => user.userId && !existingChatUserIds.has(String(user.userId)))
@@ -251,7 +278,8 @@ const renderAdminChatsList = () => {
             } else {
                 list.innerHTML = `
                     ${chatRows ? `<div class="space-y-3">${chatRows}</div>` : ''}
-                    ${userRows ? `<div class="pt-2">
+                    ${userRows ? `
+                    <div class="mt-4 pt-4 border-t border-gray-100 dark:border-gray-700">
                         <p class="px-1 pb-2 text-xs font-black uppercase tracking-wide text-gray-400 dark:text-gray-500">Users</p>
                         <div class="space-y-3">${userRows}</div>
                     </div>` : ''}`;
@@ -259,14 +287,15 @@ const renderAdminChatsList = () => {
             document.querySelectorAll('.admin-chat-row').forEach(row => {
                 row.onclick = () => {
                     const chat = allSupportChatsCache.find(item => (item.userId || item.id) === row.dataset.chatUserid);
-                    const searchedUser = allUsersCache.map(getAdminChatUserMeta).find(item => item.userId === row.dataset.chatUserid);
+                    const searchedUser = baseUsersForSearch.map(getAdminChatUserMeta).find(item => item.userId === row.dataset.chatUserid);
                     const chatMeta = chat || searchedUser || {};
-                    const roomId = chatMeta.roomId || getSupportRoomId(row.dataset.chatUserid, currentUser?.uid !== ADMIN_UID ? currentUser.uid : ADMIN_UID);
+                    const adminId = isOwner ? ADMIN_UID : currentUser?.uid;
+                    const roomId = chatMeta.roomId || getSupportRoomId(row.dataset.chatUserid, adminId);
                     markAdminSupportChatSeen(roomId, readSupportChatCache(roomId));
                     openSupportChatPage(row.dataset.chatUserid, 'admin', {
                         ...chatMeta,
                         roomId,
-                        adminId: currentUser?.uid !== ADMIN_UID ? currentUser.uid : ADMIN_UID
+                        adminId
                     });
                 };
             });
