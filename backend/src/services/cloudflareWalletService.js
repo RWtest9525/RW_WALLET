@@ -659,7 +659,18 @@ async function upsertChatRoom(d1, { roomId, userId, userName = '', userEmail = '
   );
 }
 
-async function listChatRooms(d1, { limit = 100 } = {}) {
+async function listChatRooms(d1, { limit = 100, parentAdmin = null } = {}) {
+  if (parentAdmin) {
+    return d1.all(
+      `SELECT cr.room_id, cr.user_id, cr.user_name, cr.user_email, cr.user_mobile, cr.last_message, cr.last_sender_id, cr.updated_at
+       FROM chat_rooms cr
+       LEFT JOIN users u ON (cr.user_id = u.id OR cr.user_id = u.firebase_uid)
+       WHERE cr.room_id LIKE ? OR u.parent_admin = ? OR cr.user_id = ?
+       ORDER BY cr.updated_at DESC
+       LIMIT ?`,
+      [`%_${parentAdmin}`, parentAdmin, ADMIN_UID, limit]
+    );
+  }
   return d1.all(
     `SELECT room_id, user_id, user_name, user_email, user_mobile, last_message, last_sender_id, updated_at
      FROM chat_rooms
@@ -3498,8 +3509,10 @@ ${memoriesContext}`
       return res.status(403).json({ ok: false, error: 'ADMIN_REQUIRED' });
     }
 
+    const isSubAdmin = req.auth.sub !== ADMIN_UID;
     const rooms = await listChatRooms(d1, {
-      limit: Math.min(Number(req.query.limit || 100), 300)
+      limit: Math.min(Number(req.query.limit || 100), 300),
+      parentAdmin: isSubAdmin ? req.auth.sub : null
     });
 
     res.json({ ok: true, chats: rooms });

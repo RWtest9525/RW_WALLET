@@ -12,7 +12,18 @@ const getAdminUsersCacheKey = () => {
 
 const applyAdminUsersCache = (users = []) => {
             if (!Array.isArray(users)) return;
-            const normalizedUsers = users.map(user => ({
+            const isOwner = checkIsOwner(currentUser, currentUserData);
+            const subAdminUid = currentUser?.uid || (typeof getCurrentUserId === 'function' ? getCurrentUserId() : '');
+
+            let filteredUsers = users;
+            if (!isOwner) {
+                filteredUsers = users.filter(u => 
+                    u.id === ADMIN_UID || u.uid === ADMIN_UID || u.role === 'admin' || u.role === 'subadmin' || u.role === 'owner' ||
+                    u.parentAdmin === subAdminUid || u.parent_admin === subAdminUid
+                );
+            }
+
+            const normalizedUsers = filteredUsers.map(user => ({
                 ...user,
                 mobile: getUserMobileValue(user),
                 phoneNumber: user.phoneNumber || getUserMobileValue(user)
@@ -30,7 +41,6 @@ const applyAdminUsersCache = (users = []) => {
             const fifteenDaysAgo = new Date();
             fifteenDaysAgo.setDate(fifteenDaysAgo.getDate() - 15);
 
-            const isOwner = checkIsOwner(currentUser, currentUserData);
             let otherUsers = allUsersCache.filter(u => !isAdminUserRecord(u));
             if (!isOwner) {
                 otherUsers = otherUsers.filter(u => u.parentAdmin === currentUser?.uid || u.parent_admin === currentUser?.uid);
