@@ -5,6 +5,11 @@ const isAdminUserRecord = (user = {}) => {
             return user.id === ADMIN_UID || user.uid === ADMIN_UID || email === 'reviewsworld01@gmail.com' || user.role === 'admin' || user.role === 'owner';
         };
 
+const getAdminUsersCacheKey = () => {
+    const uid = currentUser?.uid || getCachedSessionUserId() || 'guest';
+    return `rw_admin_users_cache_${uid}`;
+};
+
 const applyAdminUsersCache = (users = []) => {
             if (!Array.isArray(users)) return;
             const normalizedUsers = users.map(user => ({
@@ -13,7 +18,7 @@ const applyAdminUsersCache = (users = []) => {
                 phoneNumber: user.phoneNumber || getUserMobileValue(user)
             }));
             allUsersCache = normalizedUsers;
-            writeJsonCache(ADMIN_USERS_CACHE_KEY, normalizedUsers.map(user => ({
+            writeJsonCache(getAdminUsersCacheKey(), normalizedUsers.map(user => ({
                 ...user,
                 createdAt: timestampToMillis(user.createdAt),
                 webAppLastSeenAt: timestampToMillis(user.webAppLastSeenAt)
@@ -25,9 +30,10 @@ const applyAdminUsersCache = (users = []) => {
             const fifteenDaysAgo = new Date();
             fifteenDaysAgo.setDate(fifteenDaysAgo.getDate() - 15);
 
+            const isOwner = checkIsOwner(currentUser, currentUserData);
             let otherUsers = allUsersCache.filter(u => !isAdminUserRecord(u));
-            if (currentUserData?.role === 'admin') {
-                otherUsers = otherUsers.filter(u => u.parentAdmin === currentUser.uid || u.parent_admin === currentUser.uid);
+            if (!isOwner) {
+                otherUsers = otherUsers.filter(u => u.parentAdmin === currentUser?.uid || u.parent_admin === currentUser?.uid);
             }
             otherUsers.forEach(u => {
                     const balance = getUserAvailableBalance(u);
@@ -86,7 +92,7 @@ const applyAdminUsersCache = (users = []) => {
         };
 
 const hydrateAdminUsersFromCache = () => {
-            const cached = readJsonCache(ADMIN_USERS_CACHE_KEY);
+            const cached = readJsonCache(getAdminUsersCacheKey());
             if (!Array.isArray(cached) || !cached.length) return;
             applyAdminUsersCache(cached.map(user => ({
                 ...user,
@@ -96,7 +102,7 @@ const hydrateAdminUsersFromCache = () => {
         };
 
 const initializeAdminUsersRealtime = () => {
-            const isCurrentAdmin = currentUser?.uid === ADMIN_UID || currentUserData?.role === 'admin' || currentUserData?.role === 'owner';
+            const isCurrentAdmin = checkIsUserAdmin(currentUser, currentUserData);
             if (!isCurrentAdmin || adminUsersRealtimeStarted) return;
             adminUsersRealtimeStarted = true;
             const usersQuery = query(collection(db, `artifacts/${appId}/public/data/users`));
@@ -312,8 +318,9 @@ const updateAdminUserListView = () => {
             let usersToRender = allUsersCache.filter(u => !isAdminUserRecord(u) && (
                 !searchTerm || userMatchesSearch(u, searchTerm)
             ));
-            if (currentUserData?.role === 'admin') {
-                usersToRender = usersToRender.filter(u => u.parentAdmin === currentUser.uid || u.parent_admin === currentUser.uid);
+            const isOwner = checkIsOwner(currentUser, currentUserData);
+            if (!isOwner) {
+                usersToRender = usersToRender.filter(u => u.parentAdmin === currentUser?.uid || u.parent_admin === currentUser?.uid);
             }
 
             // Apply filter
@@ -619,7 +626,7 @@ const showUserActionsModal = (userId) => {
             if (!u) return;
 
             const balance = getUserAvailableBalance(u);
-            const isOwner = currentUserData?.role !== 'admin';
+            const isOwner = checkIsOwner(currentUser, currentUserData);
 
             const content = `
                 <div class="space-y-4 text-left">

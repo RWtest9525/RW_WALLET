@@ -191,10 +191,16 @@ const loadLocalWithdrawalHistory = async (filter = 'today', fromDate = null, toD
         let withdrawals = mergeWithdrawalHistoryRecords(firebaseRequests, cloudRequests, legacyWithdrawals);
 
         // Sub-admin Referred Users Filtering
-        if (currentUserData?.role === 'admin') {
+        const isOwner = checkIsOwner(currentUser, currentUserData);
+        if (!isOwner) {
             withdrawals = withdrawals.filter(w => {
                 const u = allUsersCache.find(user => (user.id || user.uid) === w.userId);
-                return u && (u.parentAdmin === currentUser.uid || u.parent_admin === currentUser.uid);
+                return u && (u.parentAdmin === currentUser?.uid || u.parent_admin === currentUser?.uid);
+            });
+        } else {
+            withdrawals = withdrawals.filter(w => {
+                const u = allUsersCache.find(user => (user.id || user.uid) === w.userId);
+                return !u || !u.parentAdmin || u.parentAdmin === ADMIN_UID || u.parent_admin === ADMIN_UID;
             });
         }
 

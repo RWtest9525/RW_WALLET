@@ -269,7 +269,7 @@ onAuthStateChanged(auth, async (user) => {
 
                 if (currentUser.uid !== ADMIN_UID && localSignupApprovalInProgress) return;
 
-                const isAdmin = currentUser.uid === ADMIN_UID || isImpersonating;
+                const isAdmin = checkIsUserAdmin(currentUser, currentUserData);
 
                 // INSTANT UNBLOCK: Show app UI immediately so user sees 0ms latency without any white screen delay
                 hideLoading();
@@ -882,8 +882,9 @@ document.addEventListener('DOMContentLoaded', function () {
             preloadLogoImages();
             // Check if user was previously logged in
             const savedUser = localStorage.getItem('lastLoggedInUser');
-            applyAdminBottomChrome(savedUser === ADMIN_UID);
-            if (savedUser === ADMIN_UID) {
+            const savedIsAdmin = checkIsUserAdmin(null, readJsonCache(getUserCacheKey(savedUser)));
+            applyAdminBottomChrome(savedIsAdmin);
+            if (savedIsAdmin) {
                 hydrateAdminDashboardMetricsFromCache();
                 hydrateAdminUsersFromCache();
             }

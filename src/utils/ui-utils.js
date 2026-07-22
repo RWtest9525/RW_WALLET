@@ -497,7 +497,7 @@ const hydrateUserFromCache = (userId) => {
             currentUserData = cached;
             document.getElementById('user-balance').textContent = formatCompactBalance(cached.balance || 0);
             updateDollarBalanceDisplay(cached.balance || 0);
-            if (effectiveUid === ADMIN_UID || isImpersonating) {
+            if (checkIsUserAdmin(currentUser, cached) || isImpersonating) {
                 document.getElementById('admin-wallet-balance').textContent = formatCompactBalance(cached.balance || 0);
             }
             return true;
@@ -701,6 +701,28 @@ const playSuccessSound = () => {};
 const playErrorSound = () => {};
 
 const getCachedSessionUserId = () => localStorage.getItem('lastLoggedInUser') || '';
+
+const checkIsOwner = (user = currentUser, userData = currentUserData) => {
+    if (user && (user.uid === ADMIN_UID || user.email === 'reviewsworld51@gmail.com' || user.email === 'reviewsworld01@gmail.com')) return true;
+    if (userData && (userData.role === 'owner' || userData.email === 'reviewsworld51@gmail.com' || userData.email === 'reviewsworld01@gmail.com')) return true;
+    const uid = user?.uid || userData?.uid || userData?.id || getCachedSessionUserId();
+    if (uid === ADMIN_UID) return true;
+    if (uid) {
+        const cached = readJsonCache(getUserCacheKey(uid));
+        if (cached && (cached.role === 'owner' || cached.email === 'reviewsworld51@gmail.com' || cached.email === 'reviewsworld01@gmail.com' || cached.id === ADMIN_UID || cached.uid === ADMIN_UID)) return true;
+    }
+    return false;
+};
+
+const checkIsUserAdmin = (user = currentUser, userData = currentUserData) => {
+    if (checkIsOwner(user, userData)) return true;
+    if (userData && (userData.role === 'admin' || userData.role === 'subadmin' || userData.isAdmin)) return true;
+    if (localStorage.getItem('impersonated_sub_admin_uid')) return true;
+    const uid = user?.uid || userData?.uid || userData?.id || getCachedSessionUserId();
+    if (!uid) return false;
+    const cached = readJsonCache(getUserCacheKey(uid));
+    return !!(cached && (cached.role === 'admin' || cached.role === 'subadmin' || cached.role === 'owner' || cached.isAdmin));
+};
 
 const ensureUserSessionReady = () => {
             if (currentUser) return true;
@@ -934,7 +956,7 @@ const initializeUserListeners = (userId) => {
                     );
                     const pageOpenedRecently = Date.now() - lastManualPageOpenAt < 15000;
                     if ((!pageIsOpen || document.getElementById('verification-pending-container')) && !pageOpenedRecently) {
-                        showApprovedDashboardAfterHold(userId === ADMIN_UID);
+                        showApprovedDashboardAfterHold(checkIsUserAdmin(currentUser, data));
                     }
                     if (!data.isFlagged && data.isDisabled && !data.dueLoanBlocked) {
                         updateDoc(userDocRef, {
@@ -965,8 +987,9 @@ const initializeUserListeners = (userId) => {
                         processDuePartnerInvestmentsForUser(userId).catch(e => console.error('Auto partner interest check failed:', e));
                         processDueLoansForUser(userId).catch(e => console.error('Auto loan debit check failed:', e));
                     }
-                    if (userId === ADMIN_UID) {
-                        document.getElementById('admin-wallet-balance').textContent = formatCompactBalance(data.balance);
+                    if (checkIsUserAdmin(currentUser, data)) {
+                        const adminBalanceEl = document.getElementById('admin-wallet-balance');
+                        if (adminBalanceEl) adminBalanceEl.textContent = formatCompactBalance(data.balance);
                     }
                 } else {
                     console.warn(`User document not found for ${userId} (snapshot listener)`);
@@ -3876,4 +3899,6 @@ async function notifyWalletBalanceChange(userId, type, amount, comment) {
 
 window.sendNotification = sendNotification;
 window.notifyWalletBalanceChange = notifyWalletBalanceChange;
+window.checkIsOwner = checkIsOwner;
+window.checkIsUserAdmin = checkIsUserAdmin;
 

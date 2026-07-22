@@ -4,7 +4,7 @@ const showAdminManageSettingsPage = async () => {
     if (!currentUser) return;
     await loadWithdrawalSettingsOnce(true);
 
-    const isOwner = currentUser?.uid === ADMIN_UID || currentUser?.email === 'reviewsworld01@gmail.com' || currentUserData?.role === 'owner';
+    const isOwner = checkIsOwner(currentUser, currentUserData);
     const referralReward = getReferralRewardAmount ? getReferralRewardAmount() : (appConfigCache.referralRewardAmount || 0);
 
     const mEnabled = appConfigCache.maintenanceEnabled || false;

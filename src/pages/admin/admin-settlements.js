@@ -2,7 +2,7 @@
 
 const showAdminSettlementPage = async () => {
     if (!currentUser) return;
-    const isOwner = currentUser.uid === ADMIN_UID || currentUserData?.role === 'owner';
+    const isOwner = checkIsOwner(currentUser, currentUserData);
 
     let content = '';
     if (isOwner) {

@@ -45,16 +45,22 @@ const importFirebaseFundRequestsForAdmin = async () => {
             if (document.getElementById('admin-recharge-requests-list-page')) renderAdminRechargeRequests(allRechargeRequestsCache);
         };
 
+const getAdminMetricsCacheKey = () => {
+    const uid = currentUser?.uid || getCachedSessionUserId() || 'guest';
+    return `rw_admin_dashboard_metrics_cache_${uid}`;
+};
+
 const readAdminDashboardMetricsCache = () => {
-            const cached = readJsonCache(ADMIN_DASHBOARD_METRICS_CACHE_KEY);
-            return cached && typeof cached === 'object' ? cached : {};
-        };
+    const cached = readJsonCache(getAdminMetricsCacheKey());
+    return cached && typeof cached === 'object' ? cached : {};
+};
 
 const rememberAdminDashboardMetrics = (partial = {}) => {
-            const next = { ...readAdminDashboardMetricsCache(), ...partial, cachedAt: Date.now() };
-            writeJsonCache(ADMIN_DASHBOARD_METRICS_CACHE_KEY, next);
-            return next;
-        };
+    const key = getAdminMetricsCacheKey();
+    const next = { ...readAdminDashboardMetricsCache(), ...partial, cachedAt: Date.now() };
+    writeJsonCache(key, next);
+    return next;
+};
 
 const applyAdminDashboardMetrics = (metrics = {}) => {
             if (!metrics || typeof metrics !== 'object') return;
@@ -110,26 +116,16 @@ const fetchAdminInvestmentsFromBackend = async () => {
         };
 
 const hasCachedAdminSession = () => {
-    const cachedUid = getCachedSessionUserId();
-    if (!cachedUid) return false;
-    if (cachedUid === ADMIN_UID) return true;
-    const cachedUser = readJsonCache(getUserCacheKey(cachedUid));
-    return cachedUser && (cachedUser.role === 'admin' || cachedUser.role === 'owner');
+    return checkIsUserAdmin(currentUser, currentUserData);
 };
 
 const hasAdminSessionReadyOrCached = () => {
-    const isCurrentAdmin = currentUser?.uid === ADMIN_UID || currentUserData?.role === 'admin' || currentUserData?.role === 'owner';
-    return isCurrentAdmin || hasCachedAdminSession();
+    return checkIsUserAdmin(currentUser, currentUserData);
 };
 
 const ensureAdminSessionReady = () => {
-    const isCurrentAdmin = currentUser?.uid === ADMIN_UID || currentUserData?.role === 'admin' || currentUserData?.role === 'owner';
+    const isCurrentAdmin = checkIsUserAdmin(currentUser, currentUserData);
     if (isCurrentAdmin) return true;
-    if (hasCachedAdminSession()) {
-        showAdminMainPage();
-        showNotification('Admin data is opening. Please wait a moment.', true, false);
-        return false;
-    }
     showNotification(currentUser ? 'Admin access only.' : 'Please login first.', true);
     return false;
 };
