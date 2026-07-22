@@ -2922,7 +2922,7 @@ function registerRoutes(app, { d1, r2 }) {
       });
 
       // 2. Update D1 SQLite database
-      await d1.query('UPDATE users SET parent_admin = ? WHERE id = ?', [newParentAdminId, targetUid]);
+      await d1.query('UPDATE users SET parent_admin = ? WHERE id = ? OR firebase_uid = ?', [newParentAdminId, targetUid, targetUid]);
 
       return res.json({ ok: true });
     } catch (err) {
