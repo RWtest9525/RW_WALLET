@@ -224,49 +224,37 @@ const renderAdminChatsList = () => {
                 : [];
 
             const chatRows = chatsToRender.map(chat => {
-                    const roomId = chat.roomId || getSupportRoomId(chat.userId || chat.id);
-                    const isUnread = (chat.lastSenderId || '') !== currentUser?.uid && timestampToMillis(chat.updatedAt) > Number(localStorage.getItem(getAdminSupportChatSeenKey(roomId)) || 0);
-                    
-                    const userProfile = allUsersCache.find(u => String(u.id || u.uid) === String(chat.userId || chat.id)) || {};
-                    const avatarUrl = userProfile.profilePhoto || userProfile.profile_photo || userProfile.avatarUrl || userProfile.avatar_url || chat.userAvatar || 'https://cdn-icons-png.flaticon.com/512/3135/3135715.png';
-                    const hasCustomAvatar = !!(userProfile.profilePhoto || userProfile.profile_photo || userProfile.avatarUrl || userProfile.avatar_url || chat.userAvatar);
-                    const avatarClass = hasCustomAvatar 
-                        ? "h-12 w-12 rounded-full object-cover border border-gray-100 dark:border-gray-700 bg-white" 
-                        : "h-12 w-12 rounded-full object-contain bg-blue-50 p-2 shadow-inner border border-gray-100 dark:border-gray-700";
+                    const isOwnerChat = chat.userId === ADMIN_UID || chat.id === ADMIN_UID || chat.roomId?.includes(ADMIN_UID);
+                    const displayName = isOwnerChat && !isOwner ? 'REVIEWS WORLD (Owner)' : (chat.userName || 'User');
+                    const displayEmail = isOwnerChat && !isOwner ? 'reviewsworld01@gmail.com' : (chat.userEmail || '');
+                    const avatarUrl = isOwnerChat ? 'https://cdn-icons-png.flaticon.com/512/3135/3135715.png' : (chat.userAvatar || 'https://cdn-icons-png.flaticon.com/512/3135/3135715.png');
 
                     return `
-                    <button data-chat-userid="${chat.userId || chat.id}" class="admin-chat-row w-full flex items-center gap-3 p-4 bg-white dark:bg-gray-800 border border-gray-100 dark:border-gray-700 rounded-2xl shadow-sm text-left hover:bg-gray-50 dark:hover:bg-gray-700/50 transition">
-                        <img src="${escapeHtml(avatarUrl)}" alt="${escapeHtml(chat.userName || 'User')}" class="${avatarClass}">
+                    <button data-chat-userid="${chat.userId || chat.id}" data-chat-source="cache" class="admin-chat-row w-full flex items-center gap-3 p-3.5 bg-white dark:bg-gray-800 border border-gray-100 dark:border-gray-700 rounded-2xl shadow-sm text-left hover:bg-gray-50 dark:hover:bg-gray-700/50 transition">
+                        <img src="${escapeHtml(avatarUrl)}" alt="${escapeHtml(displayName)}" class="h-11 w-11 rounded-full object-cover shrink-0">
                         <div class="flex-1 min-w-0">
                             <div class="flex items-center justify-between gap-2">
-                                <h3 class="font-bold truncate">${escapeHtml(chat.userName || 'User')}</h3>
-                                <div class="flex items-center gap-2">
-                                    ${isUnread ? '<span class="min-w-5 h-5 rounded-full bg-red-600 px-1.5 text-center text-[10px] font-black leading-5 text-white shadow">1</span>' : ''}
-                                    <span class="text-[10px] text-gray-400">${formatChatTime(chat.updatedAt)}</span>
-                                </div>
+                                <h3 class="font-bold text-sm truncate">${escapeHtml(displayName)}</h3>
+                                <span class="text-[10px] text-gray-400 shrink-0">${formatChatTime(chat.updatedAt)}</span>
                             </div>
-                            <p class="text-xs text-gray-400 dark:text-gray-500 truncate">${escapeHtml(chat.userMobile || chat.userEmail || '')}</p>
-                            <p class="text-sm ${isUnread ? 'font-bold text-gray-900 dark:text-white' : 'text-gray-500 dark:text-gray-400'} truncate">${escapeHtml(chat.lastMessage || 'No message')}</p>
+                            <p class="text-xs text-gray-500 dark:text-gray-400 truncate mt-0.5">${escapeHtml(displayEmail || chat.userMobile || '')}</p>
+                            <p class="text-xs text-gray-600 dark:text-gray-300 truncate mt-1">${escapeHtml(chat.lastMessage || 'No messages yet')}</p>
                         </div>
                     </button>`;
                 }).join('');
+
             const userRows = usersToStartChat.map(user => {
                     const avatarUrl = user.userAvatar || 'https://cdn-icons-png.flaticon.com/512/3135/3135715.png';
-                    const hasCustomAvatar = !!user.userAvatar;
-                    const avatarClass = hasCustomAvatar 
-                        ? "h-12 w-12 rounded-full object-cover border border-gray-150 dark:border-gray-700 bg-white" 
-                        : "h-12 w-12 rounded-full object-contain bg-white dark:bg-gray-800 p-2 shadow-inner border border-gray-150 dark:border-gray-700";
-
                     return `
                     <button data-chat-userid="${user.userId}" data-chat-source="user-search" class="admin-chat-row w-full flex items-center gap-3 p-4 bg-blue-50 dark:bg-blue-900/20 border border-blue-100 dark:border-blue-800 rounded-2xl shadow-sm text-left hover:bg-blue-100 dark:hover:bg-blue-900/40 transition">
-                        <img src="${escapeHtml(avatarUrl)}" alt="${escapeHtml(user.userName || 'User')}" class="${avatarClass}">
+                        <img src="${escapeHtml(avatarUrl)}" alt="${escapeHtml(user.userName || 'User')}" class="h-12 w-12 rounded-full object-cover shrink-0">
                         <div class="flex-1 min-w-0">
                             <div class="flex items-center justify-between gap-2">
                                 <h3 class="font-bold truncate">${escapeHtml(user.userName || 'User')}</h3>
                                 <span class="rounded-full bg-blue-600 px-2 py-1 text-[10px] font-black uppercase text-white">Start chat</span>
                             </div>
                             <p class="text-xs text-gray-500 dark:text-gray-400 truncate">${escapeHtml(user.userMobile || user.userEmail || '')}</p>
-                            <p class="text-sm text-blue-700 dark:text-blue-300 truncate">Send a new message to this user</p>
+                            <p class="text-sm text-blue-700 dark:text-blue-300 truncate">Send a new message</p>
                         </div>
                     </button>`;
                 }).join('');
@@ -286,16 +274,22 @@ const renderAdminChatsList = () => {
             }
             document.querySelectorAll('.admin-chat-row').forEach(row => {
                 row.onclick = () => {
-                    const chat = allSupportChatsCache.find(item => (item.userId || item.id) === row.dataset.chatUserid);
-                    const searchedUser = baseUsersForSearch.map(getAdminChatUserMeta).find(item => item.userId === row.dataset.chatUserid);
+                    const targetUserId = row.dataset.chatUserid;
+                    const chat = allSupportChatsCache.find(item => (item.userId || item.id) === targetUserId);
+                    const searchedUser = baseUsersForSearch.map(getAdminChatUserMeta).find(item => item.userId === targetUserId);
                     const chatMeta = chat || searchedUser || {};
-                    const adminId = isOwner ? ADMIN_UID : currentUser?.uid;
-                    const roomId = chatMeta.roomId || getSupportRoomId(row.dataset.chatUserid, adminId);
+                    const isTargetingOwner = !isOwner && (targetUserId === ADMIN_UID || chatMeta.userId === ADMIN_UID);
+
+                    const adminId = isOwner ? ADMIN_UID : subAdminUid;
+                    const roomId = chatMeta.roomId || getSupportRoomId(targetUserId, adminId);
                     markAdminSupportChatSeen(roomId, readSupportChatCache(roomId));
-                    openSupportChatPage(row.dataset.chatUserid, 'admin', {
+
+                    openSupportChatPage(targetUserId, isTargetingOwner ? 'user' : 'admin', {
                         ...chatMeta,
                         roomId,
-                        adminId
+                        adminId: isTargetingOwner ? ADMIN_UID : adminId,
+                        adminName: 'REVIEWS WORLD',
+                        adminEmail: 'reviewsworld01@gmail.com'
                     });
                 };
             });
