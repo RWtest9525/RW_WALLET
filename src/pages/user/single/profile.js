@@ -164,7 +164,7 @@ const syncProfilePhotoToDatabase = async (chosenUrl) => {
         writeJsonCache(getUserCacheKey(currentUser.uid), sanitizeUserForCache(currentUserData, currentUser.uid));
 
         const userRef = doc(db, `artifacts/${appId}/public/data/users`, currentUser.uid);
-        await updateDoc(userRef, { profilePhoto: chosenUrl });
+        await setDoc(userRef, { profilePhoto: chosenUrl }, { merge: true });
 
         // Update settings preview if open
         const settingsPreview = document.getElementById('settings-avatar-preview');
@@ -641,7 +641,7 @@ const showEditPaymentMethodModal = (methodId = 'upi') => {
             }
 
             const userRef = doc(db, `artifacts/${appId}/public/data/users`, currentUser.uid);
-            await updateDoc(userRef, updatePayload);
+            await setDoc(userRef, updatePayload, { merge: true });
 
             currentUserData = { ...(currentUserData || {}), ...updatePayload };
             writeJsonCache(getUserCacheKey(currentUser.uid), sanitizeUserForCache(currentUserData, currentUser.uid));
@@ -678,7 +678,7 @@ const showEditFullNameModal = () => {
         showNotification('Saving name...', false);
         try {
             const userRef = doc(db, `artifacts/${appId}/public/data/users`, currentUser.uid);
-            await updateDoc(userRef, { name: newName });
+            await setDoc(userRef, { name: newName }, { merge: true });
 
             currentUserData = { ...(currentUserData || {}), name: newName };
             writeJsonCache(getUserCacheKey(currentUser.uid), sanitizeUserForCache(currentUserData, currentUser.uid));
@@ -730,10 +730,10 @@ const showAdminSupportProfileModal = () => {
         showNotification('Saving support profile...', false);
         try {
             const userRef = doc(db, `artifacts/${appId}/public/data/users`, currentUser.uid);
-            await updateDoc(userRef, {
+            await setDoc(userRef, {
                 whatsappNumber,
                 websiteLinks
-            });
+            }, { merge: true });
 
             currentUserData = { ...(currentUserData || {}), whatsappNumber, websiteLinks };
             writeJsonCache(getUserCacheKey(currentUser.uid), sanitizeUserForCache(currentUserData, currentUser.uid));
