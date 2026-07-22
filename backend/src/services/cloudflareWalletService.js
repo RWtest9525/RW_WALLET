@@ -5869,15 +5869,23 @@ function registerSocketHandlers(io, { d1 }) {
             })();
           }
         } else {
-          // Send direct outside push notification to user (WhatsApp style)
+          // Send direct outside push notification to recipient (WhatsApp style)
           (async () => {
             try {
               const parts = roomId.replace(/^support_/, '').split('_');
               const recipientUserId = parts[0];
-              await sendOneSignalPush(d1, recipientUserId, '💬 Support Team Reply', `Admin: "${chatMessage.message.slice(0, 150)}"`, {
+              const senderUser = await d1.first('SELECT name FROM users WHERE id = ? LIMIT 1', [socket.user.sub]);
+              const senderName = senderUser?.name || 'Support Admin';
+              const customData = {
                 type: 'chat',
-                adminId: socket.user.sub
-              });
+                roomId: chatMessage.roomId,
+                userId: socket.user.sub,
+                userName: senderName
+              };
+              await sendOneSignalPush(d1, recipientUserId, `💬 Message from ${senderName}`, chatMessage.message.slice(0, 150), customData);
+              if (recipientUserId !== ADMIN_UID && parts[1] && parts[1] !== recipientUserId) {
+                await sendOneSignalPush(d1, parts[1], `💬 Message from ${senderName}`, chatMessage.message.slice(0, 150), customData);
+              }
             } catch (err) {
               console.error('Support chat user push failed:', err);
             }

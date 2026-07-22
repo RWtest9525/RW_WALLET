@@ -2402,20 +2402,25 @@ const renderMessageTicks = (message, isMine, viewerRole) => {
             return `<span class="${tickClass} font-bold tracking-[-3px] ml-1">✓✓</span>`;
         };
 
-const normalizeBackendMessage = (message) => ({
-            id: message.id || `${message.roomId || message.room_id || activeSupportRoomId}-${message.timestamp || message.createdAt || Date.now()}-${message.senderId || message.sender_id || ''}`,
-            roomId: message.roomId || message.room_id || activeSupportRoomId,
-            text: message.message || message.text || '',
-            senderId: message.senderId || message.sender_id || '',
-            senderRole: (message.senderId || message.sender_id) === ADMIN_UID ? 'admin' : 'user',
-            createdAt: message.timestamp || message.createdAt || Date.now(),
-            readAt: message.readAt
-                || ((message.senderId || message.sender_id) === ADMIN_UID
-                    ? (message.readByUserAt || message.read_by_user_at)
-                    : (message.readByAdminAt || message.read_by_admin_at))
-                || null,
-            clientMessageId: message.clientMessageId || message.client_message_id || null
-        });
+const normalizeBackendMessage = (message) => {
+            const senderId = message.senderId || message.sender_id || '';
+            const isSenderCurrent = senderId && currentUser?.uid && (senderId === currentUser.uid);
+            const isSenderAdmin = senderId === ADMIN_UID || message.senderRole === 'admin' || message.sender_role === 'admin' || (window.currentUserData && (window.currentUserData.role === 'admin' || window.currentUserData.role === 'owner') && isSenderCurrent);
+            return {
+                id: message.id || `${message.roomId || message.room_id || activeSupportRoomId}-${message.timestamp || message.createdAt || Date.now()}-${senderId}`,
+                roomId: message.roomId || message.room_id || activeSupportRoomId,
+                text: message.message || message.text || '',
+                senderId: senderId,
+                senderRole: isSenderAdmin ? 'admin' : (message.senderRole || message.sender_role || 'user'),
+                createdAt: message.timestamp || message.createdAt || Date.now(),
+                readAt: message.readAt
+                    || (isSenderAdmin
+                        ? (message.readByUserAt || message.read_by_user_at)
+                        : (message.readByAdminAt || message.read_by_admin_at))
+                    || null,
+                clientMessageId: message.clientMessageId || message.client_message_id || null
+            };
+        };
 
 const getNextMonthRepaymentDate = (fromDate = new Date()) => {
             const year = fromDate.getFullYear();

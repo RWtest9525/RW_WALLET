@@ -114,10 +114,26 @@ export const OneSignalManager = {
                 try {
                     console.log("OneSignal logging in external user:", userId);
                     await OneSignal.login(userId);
+                    if (OneSignal.Notifications && typeof OneSignal.Notifications.requestPermission === 'function') {
+                        await OneSignal.Notifications.requestPermission();
+                    }
                     console.log("OneSignal login completed successfully!");
                 } catch (err) {
                     console.error("OneSignal login error:", err);
                 }
+            }
+        });
+    },
+
+    requestPermission: () => {
+        window.OneSignalDeferred = window.OneSignalDeferred || [];
+        window.OneSignalDeferred.push(async function(OneSignal) {
+            try {
+                if (OneSignal.Notifications && typeof OneSignal.Notifications.requestPermission === 'function') {
+                    await OneSignal.Notifications.requestPermission();
+                }
+            } catch (err) {
+                console.error("OneSignal requestPermission error:", err);
             }
         });
     },
