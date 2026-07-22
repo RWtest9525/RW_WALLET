@@ -708,6 +708,54 @@ const getCurrentUserId = () => {
     return currentUser?.uid || window.currentUser?.uid || getCachedSessionUserId() || '';
 };
 
+const getResolvedSenderId = (message = {}) => {
+    let senderId = message.senderId || message.sender_id || '';
+    if (senderId) return String(senderId);
+
+    const roomId = message.roomId || message.room_id || (typeof activeSupportRoomId !== 'undefined' ? activeSupportRoomId : '');
+    if (roomId && roomId.startsWith('support_')) {
+        const parts = roomId.replace(/^support_/, '').split('_');
+        const roomUserId = parts[0];
+        const roomAdminId = parts[1] || ADMIN_UID;
+        const role = message.senderRole || message.sender_role || 'user';
+
+        if (roomUserId === ADMIN_UID) {
+            return role === 'user' ? roomAdminId : ADMIN_UID;
+        } else {
+            return role === 'user' ? roomUserId : roomAdminId;
+        }
+    }
+    return '';
+};
+
+const showNativePushNotification = (title, body, data = {}) => {
+    if (!('Notification' in window)) return;
+    if (Notification.permission === 'granted') {
+        try {
+            if (navigator.serviceWorker && navigator.serviceWorker.ready) {
+                navigator.serviceWorker.ready.then(reg => {
+                    reg.showNotification(title, {
+                        body: body,
+                        icon: '/notification_bell.png',
+                        badge: '/notification_bell.png',
+                        data: data
+                    });
+                });
+            } else {
+                new Notification(title, {
+                    body: body,
+                    icon: '/notification_bell.png',
+                    data: data
+                });
+            }
+        } catch (e) {
+            console.warn('Native notification failed:', e);
+        }
+    } else if (Notification.permission !== 'denied') {
+        Notification.requestPermission();
+    }
+};
+
 const checkIsOwner = (user = currentUser, userData = currentUserData) => {
     if (user && (user.uid === ADMIN_UID || user.email === 'reviewsworld51@gmail.com' || user.email === 'reviewsworld01@gmail.com')) return true;
     if (userData && (userData.role === 'owner' || userData.email === 'reviewsworld51@gmail.com' || userData.email === 'reviewsworld01@gmail.com')) return true;
@@ -3913,4 +3961,6 @@ window.notifyWalletBalanceChange = notifyWalletBalanceChange;
 window.checkIsOwner = checkIsOwner;
 window.checkIsUserAdmin = checkIsUserAdmin;
 window.getCurrentUserId = getCurrentUserId;
+window.getResolvedSenderId = getResolvedSenderId;
+window.showNativePushNotification = showNativePushNotification;
 

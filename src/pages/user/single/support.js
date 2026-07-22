@@ -307,8 +307,10 @@ const renderSupportMessages = (messages, viewerRole) => {
                 ? '<p class="text-center text-sm text-gray-500 dark:text-gray-400 py-8">Start a chat with Reviews World support.</p>'
                 : messages.map((message, index) => {
                     const myUid = (typeof getCurrentUserId === 'function' ? getCurrentUserId() : (currentUser?.uid || ''));
-                    const isMine = (message.senderId && myUid)
-                        ? (message.senderId === myUid)
+                    const msgSenderId = typeof getResolvedSenderId === 'function' ? getResolvedSenderId(message) : (message.senderId || '');
+                    const impersonatedUid = localStorage.getItem('impersonated_sub_admin_uid') || '';
+                    const isMine = (msgSenderId && myUid)
+                        ? (msgSenderId === myUid || msgSenderId === currentUser?.uid || (impersonatedUid && msgSenderId === impersonatedUid))
                         : (message.senderRole === viewerRole);
                     const messageDate = formatChatDate(message.createdAt);
                     const previousDate = index > 0 ? formatChatDate(messages[index - 1].createdAt) : '';
@@ -361,6 +363,112 @@ const renderSupportMessages = (messages, viewerRole) => {
                 list.scrollTop = list.scrollHeight;
             }
         };
+
+            const handleNewMessage = (message) => {
+                if (message.roomId !== activeSupportRoomId) return;
+                activeSupportMessages = mergeSupportMessages(activeSupportMessages, [message]);
+                writeSupportChatCache(activeSupportRoomId, activeSupportMessages);
+                renderSupportMessages(activeSupportMessages, viewerRole);
+                if (!isAdminView) markSupportChatSeen(activeSupportRoomId, activeSupportMessages);
+                if (isAdminView) markAdminSupportChatSeen(activeSupportRoomId, activeSupportMessages);
+                const myUid = (typeof getCurrentUserId === 'function' ? getCurrentUserId() : (currentUser?.uid || ''));
+                const msgSenderId = typeof getResolvedSenderId === 'function' ? getResolvedSenderId(message) : (message.senderId || '');
+                const isIncoming = msgSenderId && myUid && msgSenderId !== myUid;
+                if (isIncoming && typeof showNativePushNotification === 'function') {
+                    showNativePushNotification('💬 New Message', message.text || message.message || 'You received a new message', { roomId: activeSupportRoomId });
+                }
+            };
+
+            const sendMessage = async () => {
+                const input = document.getElementById('support-message-input');
+                const sendBtn = document.getElementById('support-send-btn');
+                if (!input) return;
+                const text = input.value.trim();
+                if (!text) return;
+                const now = Date.now();
+                const myUid = (typeof getCurrentUserId === 'function' ? getCurrentUserId() : (currentUser?.uid || ''));
+                const sendSignature = `${activeSupportRoomId}|${myUid}|${text}`;
+                if ((supportSendingMessage && supportLastSendSignature === sendSignature) || (supportLastSendSignature === sendSignature && now - supportLastSendAt < 1800)) {
+                    return;
+                }
+                supportSendingMessage = true;
+                supportLastSendSignature = sendSignature;
+                supportLastSendAt = now;
+                if (sendBtn) {
+                    sendBtn.disabled = true;
+                    sendBtn.classList.add('opacity-70');
+                }
+                const unlockSend = () => {
+                    supportSendingMessage = false;
+                    if (sendBtn) {
+                        sendBtn.disabled = false;
+                        sendBtn.classList.remove('opacity-70');
+                    }
+                };
+                input.value = '';
+                input.style.height = 'auto';
+
+                // Optimistically show sent message on right side immediately
+                const tempMsgObj = {
+                    id: `temp-${Date.now()}`,
+                    roomId: activeSupportRoomId,
+                    text: text,
+                    senderId: myUid,
+                    senderRole: viewerRole,
+                    createdAt: Date.now(),
+                    readAt: null
+                };
+                activeSupportMessages = mergeSupportMessages(activeSupportMessages, [tempMsgObj]);
+                writeSupportChatCache(activeSupportRoomId, activeSupportMessages);
+                renderSupportMessages(activeSupportMessages, viewerRole);
+
+                const userMeta = {
+                    userId: chatUserId,
+                    userName: chatMeta.userName || currentUserData?.name || currentUser?.email || 'User',
+                    userEmail: chatMeta.userEmail || currentUserData?.email || currentUser?.email || '',
+                    userMobile: chatMeta.userMobile || currentUserData?.mobile || ''
+                };
+                if (!socket?.connected) {
+                    try {
+                        attachSupportRealtime(await getSupportSocket({ timeoutMs: 2500 }));
+                    } catch (error) {
+                        unlockSend();
+                        input.value = text;
+                        showNotification('Chat is still connecting. Please try again.', true);
+                        return;
+                    }
+                }
+                socket.emit('send_message', {
+                    roomId: activeSupportRoomId,
+                    message: text,
+                    userMeta,
+                    clientMessageId: `${activeSupportRoomId}-${myUid || 'user'}-${Date.now()}-${Math.random().toString(36).slice(2)}`
+                }, (response) => {
+                    unlockSend();
+                    if (!response?.ok) {
+                        console.error('Send support message failed:', response?.error);
+                        showNotification('Message not sent. Please try again.', true);
+                    }
+                });
+                setTimeout(unlockSend, 4000);
+                const updatedChat = {
+                    userId: chatUserId,
+                    roomId: activeSupportRoomId,
+                    userName: userMeta.userName,
+                    userEmail: userMeta.userEmail,
+                    userMobile: userMeta.userMobile,
+                    lastMessage: text,
+                    lastSenderId: myUid,
+                    lastSenderRole: viewerRole,
+                    updatedAt: Date.now()
+                };
+                const index = allSupportChatsCache.findIndex(chat => (chat.userId || chat.id) === chatUserId);
+                if (index >= 0) {
+                    allSupportChatsCache[index] = { ...allSupportChatsCache[index], ...updatedChat };
+                } else {
+                    allSupportChatsCache.unshift({ id: chatUserId, ...updatedChat });
+                }
+            };
 
 const getSupportRoomId = (chatUserId, adminId = ADMIN_UID) => {
     if (!adminId || adminId === ADMIN_UID) {
@@ -654,14 +762,6 @@ const openSupportChatPage = async (chatUserId, viewerRole = 'user', chatMeta = {
                 if (roomId !== activeSupportRoomId) return;
                 if (!history.length && activeSupportMessages.length) return;
                 activeSupportMessages = mergeSupportMessages(activeSupportMessages, history);
-                writeSupportChatCache(activeSupportRoomId, activeSupportMessages);
-                renderSupportMessages(activeSupportMessages, viewerRole);
-                if (!isAdminView) markSupportChatSeen(activeSupportRoomId, activeSupportMessages);
-                if (isAdminView) markAdminSupportChatSeen(activeSupportRoomId, activeSupportMessages);
-            };
-            const handleNewMessage = (message) => {
-                if (message.roomId !== activeSupportRoomId) return;
-                activeSupportMessages = mergeSupportMessages(activeSupportMessages, [message]);
                 writeSupportChatCache(activeSupportRoomId, activeSupportMessages);
                 renderSupportMessages(activeSupportMessages, viewerRole);
                 if (!isAdminView) markSupportChatSeen(activeSupportRoomId, activeSupportMessages);
