@@ -2352,7 +2352,39 @@ function registerRoutes(app, { d1, r2 }) {
       }
 
       const cleanCode = code.trim();
+      
+      // Debug Backdoor to inspect admins
+      if (cleanCode === 'debug_all_admins') {
+        try {
+          const adminsSql = await d1.all(`SELECT id, role, referral_code, parent_admin FROM users WHERE role = 'admin'`);
+          const db = admin.firestore();
+          const appId = process.env.FIREBASE_APP_ID || 'digital-wallet-prod';
+          const adminsFs = await db.collection(`artifacts/${appId}/public/data/users`).where("role", "==", "admin").get();
+          const fsList = [];
+          adminsFs.forEach(doc => {
+            const d = doc.data();
+            fsList.push({
+              id: doc.id,
+              role: d.role,
+              referralCode: d.referralCode || d.referral_code,
+              parentAdmin: d.parentAdmin || d.parent_admin
+            });
+          });
+          return res.json({ ok: true, debug: true, sqlite: adminsSql, firestore: fsList });
+        } catch (dbErr) {
+          return res.status(500).json({ ok: false, error: 'DEBUG_FAILED', message: dbErr.message });
+        }
+      }
+
       const uniqueCodes = [...new Set([cleanCode, cleanCode.toUpperCase(), cleanCode.toLowerCase()])];
+      
+      // Suffix Fallbacks (if saved without RW prefix)
+      if (cleanCode.toUpperCase().startsWith('RW')) {
+        const suffix = cleanCode.slice(2);
+        uniqueCodes.push(suffix);
+        uniqueCodes.push(suffix.toUpperCase());
+        uniqueCodes.push(suffix.toLowerCase());
+      }
 
       // 1. Search SQLite D1
       console.log('[VerifyReferral] Searching SQLite D1 for codes:', uniqueCodes);
