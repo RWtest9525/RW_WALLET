@@ -702,6 +702,12 @@ const playErrorSound = () => {};
 
 const getCachedSessionUserId = () => localStorage.getItem('lastLoggedInUser') || '';
 
+const getCurrentUserId = () => {
+    const impersonatedUid = localStorage.getItem('impersonated_sub_admin_uid');
+    if (impersonatedUid) return impersonatedUid;
+    return currentUser?.uid || window.currentUser?.uid || getCachedSessionUserId() || '';
+};
+
 const checkIsOwner = (user = currentUser, userData = currentUserData) => {
     if (user && (user.uid === ADMIN_UID || user.email === 'reviewsworld51@gmail.com' || user.email === 'reviewsworld01@gmail.com')) return true;
     if (userData && (userData.role === 'owner' || userData.email === 'reviewsworld51@gmail.com' || userData.email === 'reviewsworld01@gmail.com')) return true;
@@ -3906,4 +3912,5 @@ window.sendNotification = sendNotification;
 window.notifyWalletBalanceChange = notifyWalletBalanceChange;
 window.checkIsOwner = checkIsOwner;
 window.checkIsUserAdmin = checkIsUserAdmin;
+window.getCurrentUserId = getCurrentUserId;
 

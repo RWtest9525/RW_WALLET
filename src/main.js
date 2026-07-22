@@ -212,6 +212,8 @@ onAuthStateChanged(auth, async (user) => {
                     };
                     currentUserData = { ...impUserData, ...currentUserData };
                     backendAuthToken = impToken;
+                    window.currentUser = currentUser;
+                    window.currentUserData = currentUserData;
 
                     const switchBtn = document.getElementById('impersonation-switch-btn');
                     if (switchBtn) {
@@ -226,6 +228,8 @@ onAuthStateChanged(auth, async (user) => {
                     document.getElementById('impersonation-banner')?.remove();
                 } else {
                     currentUser = user;
+                    window.currentUser = currentUser;
+                    window.currentUserData = currentUserData;
                     const switchBtn = document.getElementById('impersonation-switch-btn');
                     if (switchBtn) {
                         switchBtn.classList.add('hidden');
@@ -246,22 +250,26 @@ onAuthStateChanged(auth, async (user) => {
                     localStorage.removeItem('impersonated_sub_admin_token');
                     localStorage.removeItem('impersonated_sub_admin_data');
 
-                    const ownerUid = localStorage.getItem('original_owner_uid');
+                    const ownerUid = localStorage.getItem('original_owner_uid') || user.uid;
                     if (ownerUid) {
                         localStorage.removeItem('original_owner_uid');
                         localStorage.removeItem('original_owner_email');
                         localStorage.removeItem('original_owner_token');
                         localStorage.removeItem('original_owner_data');
                     }
+                    if (window.OneSignalManager && ownerUid) {
+                        window.OneSignalManager.login(ownerUid);
+                    }
                     showNotification('Switched back to Owner successfully!');
                     window.location.reload();
                 };
 
-                localStorage.setItem('lastLoggedInUser', user.uid);
+                localStorage.setItem('lastLoggedInUser', isImpersonating ? localStorage.getItem('impersonated_sub_admin_uid') : user.uid);
 
                 // OneSignal user identification
                 if (window.OneSignalManager) {
-                    window.OneSignalManager.login(user.uid);
+                    const effectivePushId = isImpersonating ? localStorage.getItem('impersonated_sub_admin_uid') : user.uid;
+                    window.OneSignalManager.login(effectivePushId);
                     if (user.email) {
                         window.OneSignalManager.setEmail(user.email);
                     }

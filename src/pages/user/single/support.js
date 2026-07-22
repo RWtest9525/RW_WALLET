@@ -306,8 +306,9 @@ const renderSupportMessages = (messages, viewerRole) => {
             list.innerHTML = messages.length === 0
                 ? '<p class="text-center text-sm text-gray-500 dark:text-gray-400 py-8">Start a chat with Reviews World support.</p>'
                 : messages.map((message, index) => {
-                    const isMine = (message.senderId && currentUser?.uid)
-                        ? (message.senderId === currentUser.uid)
+                    const myUid = (typeof getCurrentUserId === 'function' ? getCurrentUserId() : (currentUser?.uid || ''));
+                    const isMine = (message.senderId && myUid)
+                        ? (message.senderId === myUid)
                         : (message.senderRole === viewerRole);
                     const messageDate = formatChatDate(message.createdAt);
                     const previousDate = index > 0 ? formatChatDate(messages[index - 1].createdAt) : '';
