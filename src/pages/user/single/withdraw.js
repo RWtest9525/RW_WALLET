@@ -1926,9 +1926,9 @@ let handleWithdrawRequest = async (amount, method, methodName) => {
         if (typeof window.sendNotification === 'function') {
             const adminId = currentUserData?.parentAdmin || currentUserData?.parent_admin || ADMIN_UID;
             const notificationMsg = `User ${currentUserData?.name || 'User'} (${currentUserData?.mobile || ''}) requested ₹${amount} via ${resolvedMethodName}.`;
-            window.sendNotification(adminId, 'New Withdrawal Request', notificationMsg);
+            window.sendNotification(adminId, 'New Withdrawal Request', notificationMsg, { type: 'admin_withdrawal' });
             if (adminId !== ADMIN_UID) {
-                window.sendNotification(ADMIN_UID, 'New Withdrawal Request', notificationMsg);
+                window.sendNotification(ADMIN_UID, 'New Withdrawal Request', notificationMsg, { type: 'admin_withdrawal' });
             }
         }
 

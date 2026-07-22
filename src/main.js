@@ -431,6 +431,19 @@ onAuthStateChanged(auth, async (user) => {
                     checkAndOpenTxn();
                 }
 
+                // Check for pending admin withdrawal notifications clicked during cold-start/launch
+                if (window.pendingAdminWithdrawalNotification) {
+                    window.pendingAdminWithdrawalNotification = false;
+                    const checkAndOpenAdminWithdrawal = () => {
+                        if (typeof window.showAdminWithdrawalsPage === 'function') {
+                            window.showAdminWithdrawalsPage();
+                        } else {
+                            setTimeout(checkAndOpenAdminWithdrawal, 100);
+                        }
+                    };
+                    checkAndOpenAdminWithdrawal();
+                }
+
             } else {
                 currentUser = null;
                 backendAuthToken = '';

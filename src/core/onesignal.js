@@ -72,6 +72,12 @@ export const OneSignalManager = {
                             } else {
                                 window.pendingTransactionNotification = true;
                             }
+                        } else if (data.type === 'admin_withdrawal') {
+                            if (window.currentUser && typeof window.showAdminWithdrawalsPage === 'function') {
+                                window.showAdminWithdrawalsPage();
+                            } else {
+                                window.pendingAdminWithdrawalNotification = true;
+                            }
                         }
                     }
                 });
