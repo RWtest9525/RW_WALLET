@@ -30,6 +30,9 @@ let initializeAdminListeners = () => {
 
             setTimeout(() => {
                 loadAdminChatsFromBackend({ silent: true }).catch(error => console.warn("Admin: Cloudflare support chat warmup skipped:", error));
+                if (typeof window.getSupportSocket === 'function') {
+                    window.getSupportSocket({ timeoutMs: 4000 }).catch(e => console.warn("Admin background socket pre-connect failed:", e));
+                }
             }, 2500);
         };
 

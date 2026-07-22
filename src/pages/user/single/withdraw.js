@@ -850,7 +850,7 @@ const notifyWithdrawalStatus = ({ userId, status, amount, txnId, requestId, reje
         sendSystemNotificationToUser({ userId, title, message });
         
         if (typeof window.sendNotification === 'function') {
-            window.sendNotification(userId, title, message);
+            window.sendNotification(userId, title, message, { type: 'transaction' });
         }
     } else {
         const title = 'Withdrawal Rejected';
@@ -863,7 +863,7 @@ const notifyWithdrawalStatus = ({ userId, status, amount, txnId, requestId, reje
         sendSystemNotificationToUser({ userId, title, message });
 
         if (typeof window.sendNotification === 'function') {
-            window.sendNotification(userId, title, message);
+            window.sendNotification(userId, title, message, { type: 'transaction' });
         }
     }
 };

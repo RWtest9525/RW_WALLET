@@ -328,9 +328,9 @@ const proceedWithRechargeAction = async (userId, requestId, newStatus, txnId, re
                 showNotification(`Recharge request has been ${newStatus === 'completed' ? 'completed' : 'rejected'}.`);
                 if (typeof window.sendNotification === 'function') {
                     if (newStatus === 'completed') {
-                        window.sendNotification(userId, 'Recharge Completed', `Your recharge of ₹${reqData.amount || ''} for mobile ${reqData.mobileNumber || ''} is successful. Txn ID: ${txnId || 'N/A'}`);
+                        window.sendNotification(userId, 'Recharge Completed', `Your recharge of ₹${reqData.amount || ''} for mobile ${reqData.mobileNumber || ''} is successful. Txn ID: ${txnId || 'N/A'}`, { type: 'transaction' });
                     } else {
-                        window.sendNotification(userId, 'Recharge Rejected', `Your recharge of ₹${reqData.amount || ''} was rejected. Reason: ${rejectionReason || 'Not specified'}. ₹${reqData.chargeAmount} refunded to your wallet.`);
+                        window.sendNotification(userId, 'Recharge Rejected', `Your recharge of ₹${reqData.amount || ''} was rejected. Reason: ${rejectionReason || 'Not specified'}. ₹${reqData.chargeAmount} refunded to your wallet.`, { type: 'transaction' });
                         if (typeof window.notifyWalletBalanceChange === 'function') {
                             window.notifyWalletBalanceChange(userId, 'credit', reqData.chargeAmount, 'Recharge Refund');
                         }

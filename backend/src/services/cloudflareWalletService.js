@@ -892,7 +892,7 @@ function normalizeNotificationRow(row = {}) {
   };
 }
 
-async function createNotification(d1, { title = '', message = '', audience = 'selected', recipients = [], senderId = ADMIN_UID }) {
+async function createNotification(d1, { title = '', message = '', audience = 'selected', recipients = [], senderId = ADMIN_UID, data = null }) {
   const cleanMessage = String(message || '').trim().slice(0, 4000);
   if (!cleanMessage) throw new Error('MESSAGE_REQUIRED');
 
@@ -911,7 +911,7 @@ async function createNotification(d1, { title = '', message = '', audience = 'se
   );
 
   if (audience === 'all') {
-    sendOneSignalPush(d1, 'all', title, cleanMessage).catch((err) => console.error('[OneSignal] Broadcast push failed:', err));
+    sendOneSignalPush(d1, 'all', title, cleanMessage, data).catch((err) => console.error('[OneSignal] Broadcast push failed:', err));
   } else if (uniqueRecipients.length > 0) {
     const chunkSize = 25;
     for (let index = 0; index < uniqueRecipients.length; index += chunkSize) {
@@ -924,7 +924,7 @@ async function createNotification(d1, { title = '', message = '', audience = 'se
         params
       );
     }
-    sendOneSignalPush(d1, uniqueRecipients, title, cleanMessage).catch((err) => console.error('[OneSignal] Targeted push failed:', err));
+    sendOneSignalPush(d1, uniqueRecipients, title, cleanMessage, data).catch((err) => console.error('[OneSignal] Targeted push failed:', err));
   }
 
   return { id, title: String(title || '').trim().slice(0, 160), message: cleanMessage, audience, createdAt, expiresAt, deliveredCount: uniqueRecipients.length };
@@ -1071,17 +1071,21 @@ async function postOneSignalApi(payload, apiKey) {
   return lastResult;
 }
 
-async function sendOneSignalPush(d1OrTarget, targetOrTitle, titleOrMessage, messageOnly) {
+async function sendOneSignalPush(d1OrTarget, targetOrTitle, titleOrMessage, messageOnly, customData) {
   let d1 = null;
   let target = d1OrTarget;
   let title = targetOrTitle;
   let message = titleOrMessage;
+  let extraData = customData;
 
   if (d1OrTarget && typeof d1OrTarget.query === 'function') {
     d1 = d1OrTarget;
     target = targetOrTitle;
     title = titleOrMessage;
     message = messageOnly;
+    extraData = customData;
+  } else {
+    extraData = messageOnly;
   }
 
   const appId = process.env.ONESIGNAL_APP_ID || '465e22bd-8540-437b-ba7b-efa14ef4069f';
@@ -1097,12 +1101,16 @@ async function sendOneSignalPush(d1OrTarget, targetOrTitle, titleOrMessage, mess
 
   try {
     if (target === 'all' || target === 'broadcast') {
-      const result = await postOneSignalApi({
+      const payloadBroadcast = {
         app_id: appId,
         included_segments: ['Subscribed Users', 'All'],
         headings: { en: cleanTitle },
         contents: { en: cleanMsg }
-      }, apiKey);
+      };
+      if (extraData) {
+        payloadBroadcast.data = extraData;
+      }
+      const result = await postOneSignalApi(payloadBroadcast, apiKey);
       console.log('[OneSignal] Broadcast push result:', result);
       return result;
     }
@@ -1110,7 +1118,7 @@ async function sendOneSignalPush(d1OrTarget, targetOrTitle, titleOrMessage, mess
     const externalIds = await resolveUserOneSignalIds(d1, target);
     if (!externalIds.length) return;
 
-    const reqV11 = postOneSignalApi({
+    const payloadV11 = {
       app_id: appId,
       include_aliases: { external_id: externalIds },
       target_channel: 'push',
@@ -1118,9 +1126,12 @@ async function sendOneSignalPush(d1OrTarget, targetOrTitle, titleOrMessage, mess
       contents: { en: cleanMsg },
       priority: 10,
       ttl: 259200
-    }, apiKey);
+    };
+    if (extraData) {
+      payloadV11.data = extraData;
+    }
 
-    const reqLegacy = postOneSignalApi({
+    const payloadLegacy = {
       app_id: appId,
       include_external_user_ids: externalIds,
       channel_for_external_user_ids: 'push',
@@ -1128,36 +1139,34 @@ async function sendOneSignalPush(d1OrTarget, targetOrTitle, titleOrMessage, mess
       contents: { en: cleanMsg },
       priority: 10,
       ttl: 259200
-    }, apiKey);
+    };
+    if (extraData) {
+      payloadLegacy.data = extraData;
+    }
 
-    const reqSubscribed = postOneSignalApi({
-      app_id: appId,
-      included_segments: ['Subscribed Users', 'All'],
-      headings: { en: cleanTitle },
-      contents: { en: cleanMsg },
-      priority: 10,
-      ttl: 259200
-    }, apiKey);
-
-    const [resV11, resLegacy, resSub] = await Promise.all([reqV11, reqLegacy, reqSubscribed]);
-    console.log(`[OneSignal] Push sent to ${JSON.stringify(externalIds)}. v11 res:`, resV11, 'legacy res:', resLegacy, 'subscribed res:', resSub);
-    return resV11 || resLegacy || resSub;
+    const [resV11, resLegacy] = await Promise.all([
+      postOneSignalApi(payloadV11, apiKey),
+      postOneSignalApi(payloadLegacy, apiKey)
+    ]);
+    console.log(`[OneSignal] Push sent to ${JSON.stringify(externalIds)}. v11 res:`, resV11, 'legacy res:', resLegacy);
+    return resV11 || resLegacy;
   } catch (err) {
     console.error('[OneSignal] Push failed:', err);
   }
 }
 
-async function sendNotification(d1, userId, title, message) {
+async function sendNotification(d1, userId, title, message, customData = null) {
   try {
     await createNotification(d1, {
       title,
       message,
       audience: 'selected',
-      recipients: [userId]
+      recipients: [userId],
+      data: customData
     });
   } catch (err) {
     console.error(`Failed to save notification to DB for ${userId}:`, err);
-    await sendOneSignalPush(d1, userId, title, message);
+    await sendOneSignalPush(d1, userId, title, message, customData);
   }
 }
 
@@ -3292,12 +3301,12 @@ ${memoriesContext}`
   });
 
   app.post('/api/notifications/send', requireHttpAuth, async (req, res) => {
-    const { userId, title, message } = req.body;
+    const { userId, title, message, data } = req.body;
     if (!userId || !title || !message) {
       return res.status(400).json({ ok: false, error: 'MISSING_FIELDS' });
     }
     try {
-      await sendNotification(d1, userId, title, message);
+      await sendNotification(d1, userId, title, message, data);
       res.json({ ok: true });
     } catch (err) {
       console.error('sendNotification endpoint failed:', err);
@@ -5627,9 +5636,16 @@ function registerSocketHandlers(io, { d1 }) {
                 const parentAdmin = senderUser?.parent_admin || ADMIN_UID;
                 const senderName = senderUser?.name || userMeta.userName || 'User';
                 
-                await sendOneSignalPush(d1, parentAdmin, `💬 New Message from ${senderName}`, chatMessage.message.slice(0, 150));
+                const customData = {
+                  type: 'chat',
+                  roomId: chatMessage.roomId,
+                  userId: socket.user.sub,
+                  userName: senderName
+                };
+
+                await sendOneSignalPush(d1, parentAdmin, `💬 New Message from ${senderName}`, chatMessage.message.slice(0, 150), customData);
                 if (parentAdmin !== ADMIN_UID) {
-                  await sendOneSignalPush(d1, ADMIN_UID, `💬 New Message from ${senderName}`, chatMessage.message.slice(0, 150));
+                  await sendOneSignalPush(d1, ADMIN_UID, `💬 New Message from ${senderName}`, chatMessage.message.slice(0, 150), customData);
                 }
               } catch (err) {
                 console.error('Support chat admin push failed:', err);
@@ -5640,8 +5656,12 @@ function registerSocketHandlers(io, { d1 }) {
           // Send direct outside push notification to user (WhatsApp style)
           (async () => {
             try {
-              const recipientUserId = roomId.replace(/^support_/, '');
-              await sendOneSignalPush(d1, recipientUserId, '💬 Support Team Reply', `Admin: "${chatMessage.message.slice(0, 150)}"`);
+              const parts = roomId.replace(/^support_/, '').split('_');
+              const recipientUserId = parts[0];
+              await sendOneSignalPush(d1, recipientUserId, '💬 Support Team Reply', `Admin: "${chatMessage.message.slice(0, 150)}"`, {
+                type: 'chat',
+                adminId: socket.user.sub
+              });
             } catch (err) {
               console.error('Support chat user push failed:', err);
             }

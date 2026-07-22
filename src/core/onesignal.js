@@ -41,6 +41,43 @@ export const OneSignalManager = {
             } catch (err) {
                 console.error("OneSignal subscription observer error:", err);
             }
+
+            // Register notification click listener
+            try {
+                OneSignal.Notifications.addEventListener("click", (event) => {
+                    console.log("OneSignal Notification Clicked:", event);
+                    const data = event.notification?.additionalData;
+                    if (data) {
+                        if (data.type === 'chat') {
+                            if (window.currentUser && typeof window.openSupportChatPage === 'function') {
+                                const currentUser = window.currentUser;
+                                const ADMIN_UID = window.ADMIN_UID || 'REVIEWS_WORLD_ADMIN';
+                                const isAdmin = currentUser.uid === ADMIN_UID || (window.currentUserData && (window.currentUserData.role === 'admin' || window.currentUserData.isAdmin));
+                                if (isAdmin) {
+                                    window.openSupportChatPage(data.userId, 'admin', {
+                                        roomId: data.roomId,
+                                        userName: data.userName || 'User'
+                                    });
+                                } else {
+                                    window.openSupportChatPage(currentUser.uid, 'user', {
+                                        adminId: data.adminId || ADMIN_UID
+                                    });
+                                }
+                            } else {
+                                window.pendingChatNotification = data;
+                            }
+                        } else if (data.type === 'transaction') {
+                            if (window.currentUser && typeof window.showAllTransactionsPage === 'function') {
+                                window.showAllTransactionsPage();
+                            } else {
+                                window.pendingTransactionNotification = true;
+                            }
+                        }
+                    }
+                });
+            } catch (err) {
+                console.error("OneSignal click listener error:", err);
+            }
         });
     },
 

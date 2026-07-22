@@ -3841,7 +3841,7 @@ window.showForgotPasswordModal = showForgotPasswordModal;
 window.handleForgotPassword = handleForgotPassword;
 window.checkAppVersion = checkAppVersion;
 
-async function sendNotification(userId, title, message) {
+async function sendNotification(userId, title, message, customData = null) {
     try {
         const token = await getBackendAuthToken().catch(() => null);
         if (!token) return;
@@ -3852,7 +3852,7 @@ async function sendNotification(userId, title, message) {
                 'Content-Type': 'application/json',
                 'Authorization': `Bearer ${token}`
             },
-            body: JSON.stringify({ userId, title, message })
+            body: JSON.stringify({ userId, title, message, data: customData })
         });
         const result = await response.json().catch(() => ({}));
         console.log(`[Notification] Sent to ${userId}. Status:`, result);

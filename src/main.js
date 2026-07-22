@@ -369,6 +369,17 @@ onAuthStateChanged(auth, async (user) => {
                         if (typeof window.loadUserTaskHistory === 'function') {
                             window.loadUserTaskHistory().catch(e => console.warn('Silent prefetch of task history skipped:', e));
                         }
+
+                        // Preload Socket.io client script and connect in background for instant chat
+                        if (typeof window.loadSocketIoClient === 'function') {
+                            window.loadSocketIoClient()
+                                .then(() => {
+                                    if (typeof window.getSupportSocket === 'function') {
+                                        window.getSupportSocket({ timeoutMs: 4000 }).catch(e => console.warn('Silent socket warmup connection failed:', e));
+                                    }
+                                })
+                                .catch(e => console.warn('Silent Socket.io script load failed:', e));
+                        }
                     } catch (err) {
                         console.error("Error initializing user listeners:", err);
                     }
@@ -382,6 +393,42 @@ onAuthStateChanged(auth, async (user) => {
                     } catch (err) {
                         console.error("Error initializing admin listeners:", err);
                     }
+                }
+
+                // Check for pending chat notifications clicked during cold-start/launch
+                if (window.pendingChatNotification) {
+                    const data = window.pendingChatNotification;
+                    window.pendingChatNotification = null;
+                    const checkAndOpen = () => {
+                        if (typeof window.openSupportChatPage === 'function') {
+                            if (isAdmin) {
+                                window.openSupportChatPage(data.userId, 'admin', {
+                                    roomId: data.roomId,
+                                    userName: data.userName || 'User'
+                                });
+                            } else {
+                                window.openSupportChatPage(currentUser.uid, 'user', {
+                                    adminId: data.adminId || ADMIN_UID
+                                });
+                            }
+                        } else {
+                            setTimeout(checkAndOpen, 100);
+                        }
+                    };
+                    checkAndOpen();
+                }
+
+                // Check for pending transaction notifications clicked during cold-start/launch
+                if (window.pendingTransactionNotification) {
+                    window.pendingTransactionNotification = false;
+                    const checkAndOpenTxn = () => {
+                        if (typeof window.showAllTransactionsPage === 'function') {
+                            window.showAllTransactionsPage();
+                        } else {
+                            setTimeout(checkAndOpenTxn, 100);
+                        }
+                    };
+                    checkAndOpenTxn();
                 }
 
             } else {
