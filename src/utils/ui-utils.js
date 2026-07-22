@@ -2512,8 +2512,9 @@ const runAfterFirstPaint = (callback) => {
 
 const getPendingSignupUsers = () => {
     let list = allUsersCache.filter(u => !isAdminUserRecord(u) && isUserApprovalPending(u));
-    if (currentUserData?.role === 'admin') {
-        list = list.filter(u => u.parentAdmin === currentUser.uid || u.parent_admin === currentUser.uid);
+    if (!checkIsOwner(currentUser, currentUserData)) {
+        const subAdminUid = currentUser?.uid || (typeof getCurrentUserId === 'function' ? getCurrentUserId() : '');
+        list = list.filter(u => u.parentAdmin === subAdminUid || u.parent_admin === subAdminUid);
     }
     return list;
 };
@@ -2528,7 +2529,8 @@ const isNewSignupUser = (user = {}) =>
 const getSignupUserCategory = (user = {}) => isNewSignupUser(user) ? 'New Web User' : 'Old User';
 
 const handleSignupApprovalAction = async (userId, action) => {
-            if (currentUser?.uid !== ADMIN_UID) return showNotification('Admin access only.', true);
+            const isCurrentAdmin = checkIsUserAdmin(currentUser, currentUserData);
+            if (!isCurrentAdmin) return showNotification('Admin access only.', true);
             const userRef = doc(db, `artifacts/${appId}/public/data/users`, userId);
             try {
                 // Optimistically update the cache and re-render the list immediately
