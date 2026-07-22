@@ -2507,6 +2507,48 @@ function registerRoutes(app, { d1, r2 }) {
           referralCode: matchedUser?.referral_code || firestoreUser?.referralCode,
           parentAdmin: matchedUser?.parent_admin || firestoreUser?.parentAdmin
         };
+        
+        // Climb the referral chain in Firestore to find the parent admin if referrer is a user
+        if (finalReferrer.role !== 'admin') {
+          let currentParent = finalReferrer.parentAdmin;
+          if (!currentParent || currentParent === ADMIN_UID) {
+            console.log('[VerifyReferral] Climbing referral chain in Firestore...');
+            let currId = finalReferrer.id;
+            let depth = 0;
+            const db = admin.firestore();
+            const appId = process.env.FIREBASE_APP_ID || 'digital-wallet-prod';
+            
+            while (currId && depth < 5) {
+              try {
+                const uDoc = await db.doc(`artifacts/${appId}/public/data/users/${currId}`).get();
+                if (uDoc.exists) {
+                  const uData = uDoc.data();
+                  if (uData.role === 'admin') {
+                    currentParent = currId;
+                    break;
+                  }
+                  const nextReferrer = uData.referredBy || uData.referred_by || null;
+                  if (!nextReferrer) {
+                    const pAdmin = uData.parentAdmin || uData.parent_admin || null;
+                    if (pAdmin && pAdmin !== ADMIN_UID) {
+                      currentParent = pAdmin;
+                    }
+                    break;
+                  }
+                  currId = nextReferrer;
+                } else {
+                  break;
+                }
+              } catch (fsErr) {
+                console.error('[VerifyReferral] Firestore chain climb error:', fsErr);
+                break;
+              }
+              depth++;
+            }
+          }
+          finalReferrer.parentAdmin = currentParent || ADMIN_UID;
+        }
+        
         return res.json({ ok: true, exists: true, referrer: finalReferrer });
       }
 

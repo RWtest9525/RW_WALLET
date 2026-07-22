@@ -214,9 +214,9 @@ const handleAuth = async (e) => {
                     writeJsonCache(getUserCacheKey(cred.user.uid), sanitizeUserForCache(currentUserData, cred.user.uid));
 
                     // Send push notification to target admin/subadmin for approval & referrer user
-                    if (typeof sendNotification === 'function') {
+                    if (typeof window.sendNotification === 'function') {
                         const targetAdmin = parentAdmin || ADMIN_UID;
-                        sendNotification(
+                        window.sendNotification(
                             targetAdmin,
                             'New User Registration Approval',
                             `User ${name} (${mobile}) registered with referral code ${referralCodeInput}. Click to review and approve.`,
@@ -235,7 +235,7 @@ const handleAuth = async (e) => {
                                 return clean;
                             };
                             const maskedMob = maskMobileForNotification(mobile);
-                            sendNotification(
+                            window.sendNotification(
                                 referredBy,
                                 '👤 New Referral Registered!',
                                 `${name} (${maskedMob}) has registered using your referral link!`
