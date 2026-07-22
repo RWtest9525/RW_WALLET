@@ -118,6 +118,7 @@ const getOwnerProfile = () => {
 
 const loadAdminChatsFromBackend = async ({ silent = false, retry = true, subscribeRealtime = false } = {}) => {
             if (!hasAdminSessionReadyOrCached()) return;
+            await ensureAdminChatUsersLoaded();
             try {
                 const token = await getBackendAuthToken();
                 const response = await fetchWithTimeout(`${BACKEND_BASE_URL}/api/admin/chats?limit=200`, {
@@ -333,7 +334,7 @@ const renderAdminChatsList = () => {
                     const roomId = chatMeta.roomId || getSupportRoomId(targetUserId, adminId);
                     markAdminSupportChatSeen(roomId, readSupportChatCache(roomId));
 
-                    openSupportChatPage(targetUserId, isTargetingOwner ? 'user' : 'admin', {
+                    openSupportChatPage(targetUserId, 'admin', {
                         ...chatMeta,
                         roomId,
                         adminId: isTargetingOwner ? ADMIN_UID : adminId,
