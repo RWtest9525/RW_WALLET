@@ -98,6 +98,24 @@ const subscribeAdminChatRooms = async (chats = allSupportChatsCache) => {
             });
         };
 
+const getOwnerProfile = () => {
+    const ownerUser = (typeof allUsersCache !== 'undefined' && Array.isArray(allUsersCache))
+        ? allUsersCache.find(u => 
+            u.id === ADMIN_UID || u.uid === ADMIN_UID || 
+            u.email === 'reviewsworld51@gmail.com' || u.email === 'reviewsworld01@gmail.com' || 
+            u.role === 'owner'
+        )
+        : null;
+    return {
+        id: ADMIN_UID,
+        userId: ADMIN_UID,
+        userName: ownerUser?.name || ownerUser?.displayName || 'REVIEWS WORLD',
+        userEmail: ownerUser?.email || 'reviewsworld01@gmail.com',
+        userMobile: ownerUser?.mobile || ownerUser?.phoneNumber || '',
+        userAvatar: ownerUser?.profilePhoto || ownerUser?.profile_photo || ownerUser?.avatarUrl || ownerUser?.avatar_url || 'https://cdn-icons-png.flaticon.com/512/3135/3135715.png'
+    };
+};
+
 const loadAdminChatsFromBackend = async ({ silent = false, retry = true, subscribeRealtime = false } = {}) => {
             if (!hasAdminSessionReadyOrCached()) return;
             try {
@@ -121,10 +139,39 @@ const loadAdminChatsFromBackend = async ({ silent = false, retry = true, subscri
                     updatedAt: chat.updated_at || Date.now()
                 }));
                 if (!checkIsOwner(currentUser, currentUserData)) {
+                    const subAdminUid = currentUser?.uid || (typeof getCurrentUserId === 'function' ? getCurrentUserId() : '');
                     chatList = chatList.filter(chat => {
-                        if (!chat.roomId) return true;
-                        return chat.roomId.endsWith(`_${currentUser?.uid}`) || chat.roomId.includes(ADMIN_UID) || (chat.userId === ADMIN_UID);
+                        const cUserId = chat.userId || chat.id;
+                        if (cUserId === ADMIN_UID || chat.roomId?.includes(ADMIN_UID)) return true;
+                        const u = allUsersCache.find(user => (user.id || user.uid) === cUserId);
+                        return u && (u.parentAdmin === subAdminUid || u.parent_admin === subAdminUid);
                     });
+
+                    const ownerProfile = getOwnerProfile();
+                    const ownerRoomId = getSupportRoomId(ADMIN_UID, subAdminUid);
+                    const existingOwnerIndex = chatList.findIndex(c => c.userId === ADMIN_UID || c.id === ADMIN_UID || c.roomId === ownerRoomId);
+
+                    if (existingOwnerIndex >= 0) {
+                        chatList[existingOwnerIndex] = {
+                            ...chatList[existingOwnerIndex],
+                            userName: ownerProfile.userName,
+                            userEmail: ownerProfile.userEmail,
+                            userAvatar: ownerProfile.userAvatar
+                        };
+                    } else {
+                        chatList.unshift({
+                            id: ADMIN_UID,
+                            userId: ADMIN_UID,
+                            roomId: ownerRoomId,
+                            userName: ownerProfile.userName,
+                            userEmail: ownerProfile.userEmail,
+                            userMobile: ownerProfile.userMobile,
+                            userAvatar: ownerProfile.userAvatar,
+                            lastMessage: 'Tap to chat with REVIEWS WORLD support',
+                            lastSenderId: '',
+                            updatedAt: Date.now()
+                        });
+                    }
                 }
                 allSupportChatsCache = chatList;
                 refreshAdminChatUnreadCount();
@@ -147,13 +194,14 @@ const loadAdminChatsFromBackend = async ({ silent = false, retry = true, subscri
 
 const getAdminChatUserMeta = (user = {}) => {
             const isMainOwner = user.id === ADMIN_UID || user.uid === ADMIN_UID || user.email === 'reviewsworld51@gmail.com' || user.email === 'reviewsworld01@gmail.com' || user.role === 'owner';
+            const ownerProfile = isMainOwner ? getOwnerProfile() : null;
             return {
                 id: user.id || user.uid || '',
                 userId: user.id || user.uid || '',
-                userName: isMainOwner ? (user.name || 'Main Owner (Admin)') : (user.name || user.fullName || user.displayName || user.email || 'User'),
-                userEmail: user.email || '',
-                userMobile: user.mobile || user.phoneNumber || user.phone || '',
-                userAvatar: user.profilePhoto || user.profile_photo || user.avatarUrl || user.avatar_url || ''
+                userName: isMainOwner ? ownerProfile.userName : (user.name || user.fullName || user.displayName || user.email || 'User'),
+                userEmail: isMainOwner ? ownerProfile.userEmail : (user.email || ''),
+                userMobile: isMainOwner ? ownerProfile.userMobile : (user.mobile || user.phoneNumber || user.phone || ''),
+                userAvatar: isMainOwner ? ownerProfile.userAvatar : (user.profilePhoto || user.profile_photo || user.avatarUrl || user.avatar_url || '')
             };
         };
 
@@ -164,7 +212,8 @@ const ensureAdminChatUsersLoaded = async () => {
                 let list = usersSnap.docs.map(d => ({ id: d.id, ...d.data() }));
                 const isOwner = checkIsOwner(currentUser, currentUserData);
                 if (!isOwner) {
-                    list = list.filter(u => (u.id === ADMIN_UID || u.uid === ADMIN_UID || u.email === 'reviewsworld51@gmail.com' || u.email === 'reviewsworld01@gmail.com' || u.role === 'owner') || u.parentAdmin === currentUser?.uid || u.parent_admin === currentUser?.uid);
+                    const subAdminUid = currentUser?.uid || (typeof getCurrentUserId === 'function' ? getCurrentUserId() : '');
+                    list = list.filter(u => (u.id === ADMIN_UID || u.uid === ADMIN_UID || u.email === 'reviewsworld51@gmail.com' || u.email === 'reviewsworld01@gmail.com' || u.role === 'owner') || u.parentAdmin === subAdminUid || u.parent_admin === subAdminUid);
                 }
                 allUsersCache = list;
             } catch (error) {
@@ -177,6 +226,8 @@ const renderAdminChatsList = () => {
             if (!list) return;
             const searchTerm = (document.getElementById('admin-chat-search')?.value || '').trim().toLowerCase();
             const isOwner = checkIsOwner(currentUser, currentUserData);
+            const subAdminUid = currentUser?.uid || (typeof getCurrentUserId === 'function' ? getCurrentUserId() : '');
+            
             const chatsToRender = searchTerm
                 ? allSupportChatsCache.filter(chat => [
                     chat.userName,
@@ -185,49 +236,46 @@ const renderAdminChatsList = () => {
                     chat.lastMessage
                 ].some(value => String(value || '').toLowerCase().includes(searchTerm)))
                 : allSupportChatsCache;
-            const existingChatUserIds = new Set(allSupportChatsCache.map(chat => String(chat.userId || chat.id || '')));
 
             let baseUsersForSearch = [...allUsersCache];
+            if (!isOwner) {
+                baseUsersForSearch = baseUsersForSearch.filter(u => 
+                    (u.id === ADMIN_UID || u.uid === ADMIN_UID || u.email === 'reviewsworld51@gmail.com' || u.email === 'reviewsworld01@gmail.com' || u.role === 'owner') || u.parentAdmin === subAdminUid || u.parent_admin === subAdminUid
+                );
+            }
+
             const hasOwnerInCache = baseUsersForSearch.some(u => u.id === ADMIN_UID || u.uid === ADMIN_UID || u.email === 'reviewsworld51@gmail.com' || u.email === 'reviewsworld01@gmail.com');
             if (!isOwner && !hasOwnerInCache) {
+                const ownerProfile = getOwnerProfile();
                 baseUsersForSearch.push({
                     id: ADMIN_UID,
                     uid: ADMIN_UID,
-                    name: 'Main Owner (Admin)',
-                    email: 'reviewsworld51@gmail.com',
-                    role: 'owner'
+                    name: ownerProfile.userName,
+                    email: ownerProfile.userEmail,
+                    role: 'owner',
+                    profilePhoto: ownerProfile.userAvatar
                 });
             }
 
+            const existingChatUserIds = new Set(allSupportChatsCache.map(chat => String(chat.userId || chat.id || '')));
+
             const usersToStartChat = searchTerm
                 ? baseUsersForSearch
-                    .filter(user => {
-                        const uid = user.id || user.uid;
-                        if (isOwner) {
-                            return uid !== ADMIN_UID && user.role !== 'owner';
-                        } else {
-                            const isMainOwner = uid === ADMIN_UID || user.email === 'reviewsworld51@gmail.com' || user.email === 'reviewsworld01@gmail.com' || user.role === 'owner';
-                            if (isMainOwner) return true;
-                            if (user.role === 'admin' || user.role === 'subadmin') return false;
-                            const parent = user.parentAdmin || user.parent_admin;
-                            return parent === currentUser?.uid;
-                        }
-                    })
+                    .filter(u => !existingChatUserIds.has(String(u.id || u.uid || '')))
                     .map(getAdminChatUserMeta)
-                    .filter(user => user.userId && !existingChatUserIds.has(String(user.userId)))
                     .filter(user => [
                         user.userName,
                         user.userEmail,
                         user.userMobile
                     ].some(value => String(value || '').toLowerCase().includes(searchTerm)))
-                    .slice(0, 20)
                 : [];
 
             const chatRows = chatsToRender.map(chat => {
                     const isOwnerChat = chat.userId === ADMIN_UID || chat.id === ADMIN_UID || chat.roomId?.includes(ADMIN_UID);
-                    const displayName = isOwnerChat && !isOwner ? 'REVIEWS WORLD (Owner)' : (chat.userName || 'User');
-                    const displayEmail = isOwnerChat && !isOwner ? 'reviewsworld01@gmail.com' : (chat.userEmail || '');
-                    const avatarUrl = isOwnerChat ? 'https://cdn-icons-png.flaticon.com/512/3135/3135715.png' : (chat.userAvatar || 'https://cdn-icons-png.flaticon.com/512/3135/3135715.png');
+                    const ownerProfile = isOwnerChat ? getOwnerProfile() : null;
+                    const displayName = isOwnerChat && !isOwner ? ownerProfile.userName : (chat.userName || 'User');
+                    const displayEmail = isOwnerChat && !isOwner ? ownerProfile.userEmail : (chat.userEmail || '');
+                    const avatarUrl = isOwnerChat && !isOwner ? ownerProfile.userAvatar : (chat.userAvatar || 'https://cdn-icons-png.flaticon.com/512/3135/3135715.png');
 
                     return `
                     <button data-chat-userid="${chat.userId || chat.id}" data-chat-source="cache" class="admin-chat-row w-full flex items-center gap-3 p-3.5 bg-white dark:bg-gray-800 border border-gray-100 dark:border-gray-700 rounded-2xl shadow-sm text-left hover:bg-gray-50 dark:hover:bg-gray-700/50 transition">
@@ -279,6 +327,7 @@ const renderAdminChatsList = () => {
                     const searchedUser = baseUsersForSearch.map(getAdminChatUserMeta).find(item => item.userId === targetUserId);
                     const chatMeta = chat || searchedUser || {};
                     const isTargetingOwner = !isOwner && (targetUserId === ADMIN_UID || chatMeta.userId === ADMIN_UID);
+                    const ownerProfile = getOwnerProfile();
 
                     const adminId = isOwner ? ADMIN_UID : subAdminUid;
                     const roomId = chatMeta.roomId || getSupportRoomId(targetUserId, adminId);
@@ -288,8 +337,9 @@ const renderAdminChatsList = () => {
                         ...chatMeta,
                         roomId,
                         adminId: isTargetingOwner ? ADMIN_UID : adminId,
-                        adminName: 'REVIEWS WORLD',
-                        adminEmail: 'reviewsworld01@gmail.com'
+                        adminName: isTargetingOwner ? ownerProfile.userName : 'REVIEWS WORLD',
+                        adminEmail: isTargetingOwner ? ownerProfile.userEmail : 'reviewsworld01@gmail.com',
+                        adminLogo: isTargetingOwner ? ownerProfile.userAvatar : undefined
                     });
                 };
             });
