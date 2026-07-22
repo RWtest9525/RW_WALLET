@@ -3331,6 +3331,91 @@ const handleEditUserBalance = async (userId) => {
             }
         };
 
+const showTransferUserModal = (userId) => {
+            const user = allUsersCache.find(u => u.id === userId);
+            if (!user) return showNotification('Error: User not found.', true);
+
+            const isOwner = checkIsOwner(currentUser, currentUserData);
+            if (!isOwner) return showNotification('Unauthorized: Only the owner can transfer users.', true);
+
+            const currentParentId = user.parentAdmin || user.parent_admin || ADMIN_UID;
+            const subAdmins = allUsersCache.filter(u => (u.role === 'admin' || u.role === 'subadmin') && u.id !== ADMIN_UID);
+
+            let subAdminOptions = `<option value="${ADMIN_UID}" ${currentParentId === ADMIN_UID ? 'selected' : ''}>Owner (reviewsworld51@gmail.com)</option>`;
+            subAdmins.forEach(sa => {
+                const saName = sa.name || 'Sub-Admin';
+                const saEmail = sa.email || '';
+                const saLabel = `${saName} (${saEmail})`;
+                subAdminOptions += `<option value="${sa.id || sa.uid}" ${currentParentId === (sa.id || sa.uid) ? 'selected' : ''}>${escapeHtml(saLabel)}</option>`;
+            });
+
+            const content = `
+                <div class="space-y-4 text-left">
+                    <p class="text-xs text-gray-500 dark:text-gray-400">Select the sub-admin to transfer this user's panel to. All pending approvals and transactions of this user will be routed to the selected admin's panel.</p>
+                    <div class="bg-gray-100 dark:bg-gray-700 p-3 rounded-xl border border-gray-150 dark:border-gray-650">
+                        <p class="font-bold text-gray-900 dark:text-white text-sm">${escapeHtml(user.name || 'No Name')}</p>
+                        <p class="text-xs text-gray-500 dark:text-gray-400 mt-0.5">${escapeHtml(user.email || '')}</p>
+                    </div>
+                    <div class="space-y-1">
+                        <label class="text-xs font-black uppercase text-gray-400">Select New Admin/Panel:</label>
+                        <select id="transfer-admin-select" class="w-full px-3.5 py-2.5 bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-xl focus:outline-none focus:ring-2 focus:ring-amber-500 text-xs font-semibold">
+                            ${subAdminOptions}
+                        </select>
+                    </div>
+                </div>`;
+
+            const actions = `
+                <button onclick="window.closeModal()" class="px-4 py-2 text-xs font-bold bg-gray-200 dark:bg-gray-750 text-gray-700 dark:text-gray-300 rounded-xl hover:bg-gray-200 dark:hover:bg-gray-700 transition">Cancel</button>
+                <button id="modal-transfer-submit-btn" class="px-4 py-2 text-xs font-black bg-amber-600 text-white rounded-xl hover:bg-amber-700 transition">Transfer User</button>`;
+
+            renderModal('Transfer User Panel', content, actions, 'max-w-md');
+
+            document.getElementById('modal-transfer-submit-btn').onclick = async () => {
+                const newParentAdminId = document.getElementById('transfer-admin-select').value;
+                if (!newParentAdminId) return showNotification('Please select a valid admin.', true);
+                
+                if (newParentAdminId === currentParentId) {
+                    showNotification('User is already assigned to this admin/panel.', true);
+                    window.closeModal();
+                    return;
+                }
+
+                const submitBtn = document.getElementById('modal-transfer-submit-btn');
+                if (submitBtn) { submitBtn.disabled = true; submitBtn.textContent = 'Transferring...'; }
+
+                try {
+                    const token = await getBackendAuthToken();
+                    const res = await fetch(`${BACKEND_BASE_URL}/api/admin/transfer-user-parent`, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Authorization': `Bearer ${token}`
+                        },
+                        body: JSON.stringify({ targetUid: userId, newParentAdminId })
+                    });
+
+                    const data = await res.json();
+                    if (!res.ok || !data.ok) throw new Error(data.error || 'Failed to transfer user');
+
+                    showNotification('User transferred successfully!');
+                    
+                    // Update local cache
+                    allUsersCache = allUsersCache.map(u => (u.id === userId || u.uid === userId) ? { ...u, parentAdmin: newParentAdminId, parent_admin: newParentAdminId } : u);
+                    applyAdminUsersCache(allUsersCache);
+                    
+                    // Refresh view
+                    if (typeof updateAdminUserListView === 'function') {
+                        updateAdminUserListView();
+                    }
+
+                    window.closeModal();
+                } catch (err) {
+                    showNotification(err.message, true);
+                    if (submitBtn) { submitBtn.disabled = false; submitBtn.textContent = 'Transfer User'; }
+                }
+            };
+        };
+
 const handleToggleProUser = (userId, currentlyPro) => {
             const user = allUsersCache.find(u => u.id === userId);
             if (!user) return showNotification('Error: User not found.', true);
@@ -3909,6 +3994,7 @@ window.handleRequestAction = handleRequestAction;
 window.proceedWithRequestAction = proceedWithRequestAction;
 window.handleDeleteUser = handleDeleteUser;
 window.showEditUserBalanceModal = showEditUserBalanceModal;
+window.showTransferUserModal = showTransferUserModal;
 window.handleEditUserBalance = handleEditUserBalance;
 window.handleToggleProUser = handleToggleProUser;
 window.handlePromoteUserTaskTier = handlePromoteUserTaskTier;

@@ -661,6 +661,12 @@ document.body.addEventListener('click', (e) => {
                     showEditUserBalanceModal(userid);
                     break;
 
+                case 'transfer-user':
+                    if (window.showTransferUserModal) {
+                        window.showTransferUserModal(userid);
+                    }
+                    break;
+
                 case 'view-user-dashboard':
                     showAdminUserDashboardPage(userid);
                     break;

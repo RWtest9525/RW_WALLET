@@ -115,32 +115,10 @@ const handleAuth = async (e) => {
                     let parentAdmin = ADMIN_UID;
                     let referredBy = null;
 
-                    if (referralCode.toUpperCase().startsWith('RWADMIN')) {
-                        // Check if admin exists in Firestore users
-                        const adminQ = query(
-                            collection(db, `artifacts/${appId}/public/data/users`),
-                            where("role", "==", "admin"),
-                            where("referralCode", "==", referralCode.toUpperCase())
-                        );
-                        const adminSnap = await getDocs(adminQ);
-                        if (adminSnap.empty && referralCode.toUpperCase() !== 'RWADMIN01' && referralCode.toUpperCase() !== 'RWADMIN02') {
-                            // Check referral_code fallback
-                            const adminQ2 = query(
-                                collection(db, `artifacts/${appId}/public/data/users`),
-                                where("role", "==", "admin"),
-                                where("referral_code", "==", referralCode.toUpperCase())
-                            );
-                            const adminSnap2 = await getDocs(adminQ2);
-                            if (adminSnap2.empty) {
-                                throw new Error('Invalid Admin referral code.');
-                            } else {
-                                parentAdmin = adminSnap2.docs[0].id;
-                            }
-                        } else if (!adminSnap.empty) {
-                            parentAdmin = adminSnap.docs[0].id;
-                        } else {
-                            parentAdmin = ADMIN_UID;
-                        }
+                    const referralCodeUpper = referralCode.toUpperCase();
+                    if (referralCodeUpper === 'RWADMIN01' || referralCodeUpper === 'RWADMIN02') {
+                        parentAdmin = ADMIN_UID;
+                        referredBy = null;
                     } else {
                         // Verify referral code using backend API
                         console.log("Verifying referral code via backend API...");
@@ -150,15 +128,16 @@ const handleAuth = async (e) => {
                         }
                         const resData = await response.json();
                         if (!resData.ok || !resData.exists) {
-                            throw new Error('Invalid user referral code. Please check and try again.');
+                            throw new Error('Invalid referral code. Please check and try again.');
                         }
                         const referrer = resData.referrer;
-                        referredBy = referrer.id;
                         
                         // If referrer is an admin/subadmin, they are the direct parent admin!
-                        if (referrer.role === 'admin') {
+                        if (referrer.role === 'admin' || referrer.role === 'subadmin') {
                             parentAdmin = referrer.id;
+                            referredBy = null;
                         } else {
+                            referredBy = referrer.id;
                             parentAdmin = referrer.parentAdmin || ADMIN_UID;
                         }
                     }

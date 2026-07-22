@@ -662,6 +662,9 @@ const showUserActionsModal = (userId) => {
                         <button data-action="toggle-pro-user" data-userid="${u.id}" data-pro="${u.isProProfile || false}" onclick="window.closeModal()" class="w-full text-center px-4 py-3 rounded-xl bg-indigo-50 dark:bg-indigo-950/20 text-indigo-700 dark:text-indigo-300 font-bold text-sm border border-indigo-100/50 hover:bg-indigo-100/50 transition">
                             ✨ ${u.isProProfile ? 'Remove Pro Status' : 'Make Pro Profile'}
                         </button>
+                        <button data-action="transfer-user" data-userid="${u.id}" onclick="window.closeModal()" class="w-full text-center px-4 py-3 rounded-xl bg-amber-50 dark:bg-amber-950/20 text-amber-700 dark:text-amber-300 font-bold text-sm border border-amber-100/50 hover:bg-amber-100/50 transition">
+                            🔄 Transfer User Panel
+                        </button>
                         ` : ''}
                         
                         <button data-action="promote-user-tier" data-userid="${u.id}" data-tier="${getTaskTier(u)}" onclick="window.closeModal()" class="w-full text-center px-4 py-3 rounded-xl bg-purple-50 dark:bg-purple-950/20 text-purple-700 dark:text-purple-300 font-bold text-sm border border-purple-100/50 hover:bg-purple-100/50 transition">

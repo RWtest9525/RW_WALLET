@@ -2897,48 +2897,37 @@ function registerRoutes(app, { d1, r2 }) {
   });
 
   app.post('/api/admin/impersonate-sub-admin', requireHttpAuth, async (req, res) => {
+    return res.status(403).json({ ok: false, error: 'IMPERSONATION_DISABLED' });
+  });
+
+  app.post('/api/admin/transfer-user-parent', requireHttpAuth, async (req, res) => {
     if (req.auth.sub !== ADMIN_UID && req.auth.role !== 'owner') {
-      return res.status(403).json({ ok: false, error: 'ONLY_OWNER_CAN_IMPERSONATE_SUB_ADMINS' });
+      return res.status(403).json({ ok: false, error: 'ONLY_OWNER_CAN_TRANSFER_USERS' });
     }
 
-    const { targetUid } = req.body;
-    if (!targetUid) return res.status(400).json({ ok: false, error: 'TARGET_UID_REQUIRED' });
+    const { targetUid, newParentAdminId } = req.body;
+    if (!targetUid || !newParentAdminId) {
+      return res.status(400).json({ ok: false, error: 'TARGET_UID_AND_NEW_PARENT_ADMIN_ID_REQUIRED' });
+    }
 
     try {
       const db = admin.firestore();
       const appId = process.env.FIREBASE_APP_ID || 'digital-wallet-prod';
-      const targetUserDoc = await db.doc(`artifacts/${appId}/public/data/users/${targetUid}`).get();
-      if (!targetUserDoc.exists) {
-        return res.status(404).json({ ok: false, error: 'SUB_ADMIN_NOT_FOUND' });
-      }
 
-      const targetUserData = targetUserDoc.data();
-      if (targetUserData.role !== 'admin') {
-        return res.status(400).json({ ok: false, error: 'TARGET_USER_IS_NOT_SUB_ADMIN' });
-      }
-
-      const targetDbUser = await findUserByEmail(d1, targetUserData.email);
-      if (!targetDbUser) {
-        return res.status(404).json({ ok: false, error: 'SUB_ADMIN_NOT_FOUND_IN_DB' });
-      }
-
-      const token = createAppToken(targetDbUser);
-
-      return res.json({
-        ok: true,
-        token,
-        user: {
-          id: targetDbUser.id,
-          email: targetDbUser.email,
-          firebaseUid: targetDbUser.firebase_uid,
-          name: targetDbUser.name || '',
-          mobile: targetDbUser.mobile || ''
-        },
-        userData: targetUserData
+      // 1. Update Firestore
+      const userRef = db.doc(`artifacts/${appId}/public/data/users/${targetUid}`);
+      await userRef.update({
+        parentAdmin: newParentAdminId,
+        parent_admin: newParentAdminId
       });
+
+      // 2. Update D1 SQLite database
+      await d1.query('UPDATE users SET parent_admin = ? WHERE id = ?', [newParentAdminId, targetUid]);
+
+      return res.json({ ok: true });
     } catch (err) {
-      console.error('Impersonation failed:', err);
-      return res.status(500).json({ ok: false, error: err.message || 'IMPERSONATION_FAILED' });
+      console.error('[TransferUserParent] Error:', err);
+      return res.status(500).json({ ok: false, error: err.message || 'FAILED_TO_TRANSFER_USER' });
     }
   });
 
