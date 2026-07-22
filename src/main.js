@@ -301,7 +301,15 @@ onAuthStateChanged(auth, async (user) => {
                 });
 
                 if (userDocSnap?.exists()) {
-                    const approvalBlocked = await enforceCurrentUserApproval(currentUser.uid, userDocRef, userDocSnap.data()).catch(error => {
+                    const userData = userDocSnap.data();
+                    if (!userData.referralCode && !userData.referral_code) {
+                        const generatedCode = `RW${currentUser.uid.slice(0, 6).toUpperCase()}`;
+                        updateDoc(userDocRef, { referralCode: generatedCode }).catch(e => console.warn("Failed to auto-repair referralCode in Firestore:", e));
+                        userData.referralCode = generatedCode;
+                        if (currentUserData) currentUserData.referralCode = generatedCode;
+                    }
+                    
+                    const approvalBlocked = await enforceCurrentUserApproval(currentUser.uid, userDocRef, userData).catch(error => {
                         console.error('Approval enforcement failed:', error);
                         return false;
                     });

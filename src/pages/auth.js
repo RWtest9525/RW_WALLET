@@ -161,6 +161,20 @@ const handleAuth = async (e) => {
                             console.log("Signup referral validation fallback query empty:", userSnap2.empty);
                             if (!userSnap2.empty) {
                                 referrerDoc = userSnap2.docs[0];
+                            } else if (referralCode.toUpperCase().startsWith('RW') && referralCode.length === 8) {
+                                // Fallback: Search all admins by UID prefix matching the referral code suffix
+                                const codeSuffix = referralCode.slice(2).toUpperCase();
+                                console.log("Signup referral validation admin prefix search suffix:", codeSuffix);
+                                const adminQ = query(
+                                    collection(db, `artifacts/${appId}/public/data/users`),
+                                    where("role", "==", "admin")
+                                );
+                                const adminSnap = await getDocs(adminQ);
+                                const matchedAdmin = adminSnap.docs.find(doc => doc.id.slice(0, 6).toUpperCase() === codeSuffix);
+                                if (matchedAdmin) {
+                                    console.log("Signup referral validation admin prefix search matched UID:", matchedAdmin.id);
+                                    referrerDoc = matchedAdmin;
+                                }
                             }
                         }
 
@@ -169,7 +183,13 @@ const handleAuth = async (e) => {
                         }
                         const referrerData = referrerDoc.data();
                         referredBy = referrerDoc.id;
-                        parentAdmin = referrerData.parentAdmin || referrerData.parent_admin || ADMIN_UID;
+                        
+                        // If referrer is an admin/subadmin, they are the direct parent admin!
+                        if (referrerData.role === 'admin') {
+                            parentAdmin = referrerDoc.id;
+                        } else {
+                            parentAdmin = referrerData.parentAdmin || referrerData.parent_admin || ADMIN_UID;
+                        }
                     }
 
                     const existingMobileUser = await findExistingUserByMobile(mobile);
