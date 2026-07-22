@@ -1157,45 +1157,110 @@ const handleWithdrawConfirmation = (amount, method, methodName) => {
         `<div class="withdraw-confirm-shell">
                     <div class="withdraw-confirm-hero">
                         <span class="withdraw-confirm-icon">
-                            <svg xmlns="http://www.w3.org/2000/svg" class="h-7 w-7" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-                                <path d="M12 3v12"></path>
-                                <path d="m7 10 5 5 5-5"></path>
-                                <path d="M5 21h14"></path>
+                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                                <polyline points="7 10 12 15 17 10"></polyline>
+                                <line x1="12" y1="15" x2="12" y2="3"></line>
                             </svg>
                         </span>
                         <p class="withdraw-confirm-kicker">Admin approval required</p>
                         <h4>Confirm withdrawal</h4>
-                        <span>Txn ID after approval.</span>
+                        <span>Txn ID will be generated after admin approval.</span>
                     </div>
                     <div class="withdraw-confirm-amount">
-                        <span>Amount</span>
+                        <div class="withdraw-confirm-amount-label-wrapper">
+                            <div class="withdraw-confirm-amount-icon">
+                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                                    <path d="M21 12V7a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2H3"></path>
+                                </svg>
+                            </div>
+                            <span>Amount</span>
+                        </div>
                         <strong>${formatCurrency(amount)}</strong>
                     </div>
                     <div class="withdraw-confirm-details">
-                        <div>
-                            <span>Method</span>
+                        <!-- Row 1: Method -->
+                        <div class="withdraw-confirm-details-row">
+                            <div class="withdraw-confirm-row-left">
+                                <div class="withdraw-confirm-row-icon bg-purple-50 dark:bg-purple-950/40 text-purple-600 dark:text-purple-400">
+                                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="h-5 w-5">
+                                        <rect x="1" y="4" width="22" height="16" rx="2" ry="2"></rect>
+                                        <line x1="1" y1="10" x2="23" y2="10"></line>
+                                    </svg>
+                                </div>
+                                <span>Method</span>
+                            </div>
                             <strong>${escapeHtml(methodName)}</strong>
                         </div>
-                        <div>
-                            <span>Payout details</span>
-                            <strong class="break-words text-right">${escapeHtml(methodDetails)}</strong>
+                        <!-- Row 2: Payout details -->
+                        <div class="withdraw-confirm-details-row">
+                            <div class="withdraw-confirm-row-left">
+                                <div class="withdraw-confirm-row-icon bg-blue-50 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400">
+                                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="h-5 w-5">
+                                        <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
+                                        <circle cx="12" cy="7" r="4"></circle>
+                                    </svg>
+                                </div>
+                                <span>Payout details</span>
+                            </div>
+                            <strong>${escapeHtml(methodDetails)}</strong>
                         </div>
-                        <div>
-                            <span>Wallet balance</span>
+                        <!-- Row 3: Wallet balance -->
+                        <div class="withdraw-confirm-details-row">
+                            <div class="withdraw-confirm-row-left">
+                                <div class="withdraw-confirm-row-icon bg-green-50 dark:bg-green-950/40 text-green-600 dark:text-green-400">
+                                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="h-5 w-5">
+                                        <path d="M21 12V7a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2H3"></path>
+                                    </svg>
+                                </div>
+                                <span>Wallet balance</span>
+                            </div>
                             <strong>${formatCurrency(walletBalance)}</strong>
                         </div>
-                        <div>
-                            <span>Available balance</span>
+                        <!-- Row 4: Available balance -->
+                        <div class="withdraw-confirm-details-row">
+                            <div class="withdraw-confirm-row-left">
+                                <div class="withdraw-confirm-row-icon bg-amber-50 dark:bg-amber-950/40 text-amber-600 dark:text-amber-550">
+                                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="h-5 w-5">
+                                        <path d="M21 12V7a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2H3"></path>
+                                    </svg>
+                                </div>
+                                <span>Available balance</span>
+                            </div>
                             <strong>${formatCurrency(spendableBalance)}</strong>
                         </div>
-                        <div class="withdraw-confirm-balance-after">
-                            <span>Balance after</span>
-                            <strong>${formatCurrency(balanceAfter)}</strong>
+                        <!-- Row 5: Balance after -->
+                        <div class="withdraw-confirm-details-row">
+                            <div class="withdraw-confirm-row-left">
+                                <div class="withdraw-confirm-row-icon bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-450">
+                                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="h-5 w-5">
+                                        <path d="M6 12a4 4 0 0 1 4-4h4a4 4 0 0 1 4 4v5a4 4 0 0 1-4 4h-4a4 4 0 0 1-4-4v-5z"></path>
+                                        <path d="M12 8V4m0 0a2 2 0 1 0-2-2h4a2 2 0 1 0-2 2z"></path>
+                                        <path d="M9 11h6"></path>
+                                        <path d="M9 14h4.5a1.5 1.5 0 0 1 0 3H9"></path>
+                                    </svg>
+                                </div>
+                                <span>Balance after</span>
+                            </div>
+                            <strong class="purple-val">${formatCurrency(balanceAfter)}</strong>
                         </div>
                     </div>
                 </div>`,
-        `<button onclick="window.closeModal()" class="withdraw-cancel-btn">Cancel</button>
-                 <button id="final-withdraw-btn" class="withdraw-submit-btn">Confirm</button>`,
+        `<button onclick="window.closeModal()" class="withdraw-cancel-btn">
+                     <svg xmlns="http://www.w3.org/2000/svg" class="h-4.5 w-4.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                         <circle cx="12" cy="12" r="10"></circle>
+                         <line x1="15" y1="9" x2="9" y2="15"></line>
+                         <line x1="9" y1="9" x2="15" y2="15"></line>
+                     </svg>
+                     Cancel
+                 </button>
+                 <button id="final-withdraw-btn" class="withdraw-submit-btn">
+                     <svg xmlns="http://www.w3.org/2000/svg" class="h-4.5 w-4.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                         <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
+                         <polyline points="22 4 12 14.01 9 11.01"></polyline>
+                     </svg>
+                     Confirm
+                 </button>`,
         'max-w-md', true
     );
     document.getElementById('final-withdraw-btn').onclick = async () => {
