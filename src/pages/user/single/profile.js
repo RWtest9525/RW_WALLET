@@ -1548,7 +1548,7 @@ const handleUpdateProfile = async () => {
 
             try {
                 const userRef = doc(db, `artifacts/${appId}/public/data/users`, currentUser.uid);
-                await updateDoc(userRef, profileUpdate);
+                await setDoc(userRef, profileUpdate, { merge: true });
                 currentUserData = { ...(currentUserData || {}), ...profileUpdate };
                 writeJsonCache(getUserCacheKey(currentUser.uid), sanitizeUserForCache(currentUserData, currentUser.uid));
                 showNotification('Profile updated successfully!');
