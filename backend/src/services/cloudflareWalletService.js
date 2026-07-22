@@ -2358,7 +2358,7 @@ function registerRoutes(app, { d1, r2 }) {
       console.log('[VerifyReferral] Searching SQLite D1 for codes:', uniqueCodes);
       let matchedUser = null;
       for (const c of uniqueCodes) {
-        const users = await d1.query(`SELECT id, role, referral_code, parent_admin FROM users WHERE referral_code = ?`, [c]);
+        const users = await d1.all(`SELECT id, role, referral_code, parent_admin FROM users WHERE referral_code = ?`, [c]);
         if (users && users.length > 0) {
           matchedUser = users[0];
           break;
@@ -2369,7 +2369,7 @@ function registerRoutes(app, { d1, r2 }) {
       if (!matchedUser && cleanCode.toUpperCase().startsWith('RW') && cleanCode.length === 8) {
         const codeSuffix = cleanCode.slice(2).toUpperCase();
         console.log('[VerifyReferral] Fallback: Searching SQLite D1 for admin UID prefix:', codeSuffix);
-        const admins = await d1.query(`SELECT id, role, referral_code, parent_admin FROM users WHERE role = 'admin'`);
+        const admins = await d1.all(`SELECT id, role, referral_code, parent_admin FROM users WHERE role = 'admin'`);
         if (admins && admins.length > 0) {
           const match = admins.find(a => String(a.id).slice(0, 6).toUpperCase() === codeSuffix);
           if (match) {
