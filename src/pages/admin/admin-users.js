@@ -136,6 +136,7 @@ const showAdminUsersPageWithFilter = (filter) => {
         };
 
 const showAdminUsersPage = () => {
+    const isOwner = checkIsOwner(currentUser, currentUserData);
     const pendingUsers = getPendingSignupUsers()
         .sort((a, b) => timestampToMillis(b.signupRequestedAt || b.createdAt) - timestampToMillis(a.signupRequestedAt || a.createdAt));
     const newPendingCount = pendingUsers.filter(isNewSignupUser).length;
@@ -213,6 +214,7 @@ const showAdminUsersPage = () => {
                                 <button data-action="view-user-dashboard" data-userid="${user.id || user.uid}" class="px-3 py-2 rounded-lg bg-blue-600 text-white text-xs font-black hover:bg-blue-700">View</button>
                                 <button data-action="approve-signup-user" data-userid="${user.id || user.uid}" class="px-3 py-2 rounded-lg bg-emerald-600 text-white text-xs font-black hover:bg-emerald-700">Approve</button>
                                 <button data-action="cancel-signup-user" data-userid="${user.id || user.uid}" data-username="${escapeHtml(user.name || user.email || 'User')}" class="px-3 py-2 rounded-lg bg-red-600 text-white text-xs font-black hover:bg-red-700">Cancel</button>
+                                ${isOwner ? `<button data-action="transfer-user" data-userid="${user.id || user.uid}" class="px-3 py-2 rounded-lg bg-amber-500 text-slate-900 text-xs font-black hover:bg-amber-600">Transfer</button>` : ''}
                             </div>
                         </div>
                     `;

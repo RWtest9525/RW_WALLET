@@ -310,6 +310,23 @@ onAuthStateChanged(auth, async (user) => {
 
                 if (userDocSnap?.exists()) {
                     const userData = userDocSnap.data();
+
+                    // Update global state and cache
+                    currentUserData = { uid: currentUser.uid, id: currentUser.uid, email: currentUser.email, ...userData };
+                    window.currentUserData = currentUserData;
+                    writeJsonCache(getUserCacheKey(currentUser.uid), sanitizeUserForCache(currentUserData, currentUser.uid));
+
+                    // Re-evaluate admin status and update layout/navigation
+                    const updatedIsAdmin = checkIsUserAdmin(currentUser, currentUserData);
+                    applyAdminBottomChrome(updatedIsAdmin);
+
+                    if (updatedIsAdmin && !shouldPreserveOpenPage && !shouldPreserveHydratedDashboard) {
+                        setBottomNavActive('bottom-admin-btn');
+                        if (typeof window.showAdminMainPage === 'function') {
+                            window.showAdminMainPage();
+                        }
+                    }
+
                     if (!userData.referralCode && !userData.referral_code) {
                         const generatedCode = `RW${currentUser.uid.slice(0, 6).toUpperCase()}`;
                         updateDoc(userDocRef, { referralCode: generatedCode }).catch(e => console.warn("Failed to auto-repair referralCode in Firestore:", e));
