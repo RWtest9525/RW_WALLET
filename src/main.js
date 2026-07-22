@@ -444,6 +444,22 @@ onAuthStateChanged(auth, async (user) => {
                     checkAndOpenAdminWithdrawal();
                 }
 
+                // Check for pending task notifications clicked during cold-start/launch
+                if (window.pendingTaskNotification) {
+                    const data = window.pendingTaskNotification;
+                    window.pendingTaskNotification = null;
+                    const checkAndOpenTask = () => {
+                        if (data.taskId && typeof window.showUserTaskDetailsPage === 'function') {
+                            window.showUserTaskDetailsPage(data.taskId);
+                        } else if (typeof window.showUserTaskPage === 'function') {
+                            window.showUserTaskPage();
+                        } else {
+                            setTimeout(checkAndOpenTask, 100);
+                        }
+                    };
+                    checkAndOpenTask();
+                }
+
             } else {
                 currentUser = null;
                 backendAuthToken = '';

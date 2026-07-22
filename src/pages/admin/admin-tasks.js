@@ -1613,7 +1613,7 @@ const showAdminTaskCommentsPage = async (taskId) => {
                     const pushTitle = `New Task: ${taskTitle}`;
                     const pushMsg = `Task "${taskTitle}" is live! ${commentsCount} comment(s) remaining. Complete now to earn rewards.`;
                     targetUsers.forEach(u => {
-                        if (u.uid) sendNotification(u.uid, pushTitle, pushMsg).catch(e => console.warn('Task push error:', e));
+                        if (u.uid) sendNotification(u.uid, pushTitle, pushMsg, { type: 'task', taskId: task.id || '' }).catch(e => console.warn('Task push error:', e));
                     });
                 }
             }

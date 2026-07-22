@@ -78,6 +78,16 @@ export const OneSignalManager = {
                             } else {
                                 window.pendingAdminWithdrawalNotification = true;
                             }
+                        } else if (data.type === 'task') {
+                            if (window.currentUser) {
+                                if (data.taskId && typeof window.showUserTaskDetailsPage === 'function') {
+                                    window.showUserTaskDetailsPage(data.taskId);
+                                } else if (typeof window.showUserTaskPage === 'function') {
+                                    window.showUserTaskPage();
+                                }
+                            } else {
+                                window.pendingTaskNotification = data;
+                            }
                         }
                     }
                 });
