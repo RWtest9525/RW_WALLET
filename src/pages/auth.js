@@ -120,24 +120,49 @@ const handleAuth = async (e) => {
                         );
                         const adminSnap = await getDocs(adminQ);
                         if (adminSnap.empty && referralCode.toUpperCase() !== 'RWADMIN01' && referralCode.toUpperCase() !== 'RWADMIN02') {
-                            throw new Error('Invalid Admin referral code.');
-                        }
-                        if (!adminSnap.empty) {
+                            // Check referral_code fallback
+                            const adminQ2 = query(
+                                collection(db, `artifacts/${appId}/public/data/users`),
+                                where("role", "==", "admin"),
+                                where("referral_code", "==", referralCode.toUpperCase())
+                            );
+                            const adminSnap2 = await getDocs(adminQ2);
+                            if (adminSnap2.empty) {
+                                throw new Error('Invalid Admin referral code.');
+                            } else {
+                                parentAdmin = adminSnap2.docs[0].id;
+                            }
+                        } else if (!adminSnap.empty) {
                             parentAdmin = adminSnap.docs[0].id;
                         } else {
                             parentAdmin = ADMIN_UID;
                         }
                     } else {
-                        // Check if user exists in Firestore users
+                        // Check if user/subadmin exists in Firestore users
+                        let referrerDoc = null;
+                        const uniqueCodes = [...new Set([referralCode, referralCode.toUpperCase(), referralCode.toLowerCase()])];
+
                         const userQ = query(
                             collection(db, `artifacts/${appId}/public/data/users`),
-                            where("referralCode", "==", referralCode)
+                            where("referralCode", "in", uniqueCodes)
                         );
                         const userSnap = await getDocs(userQ);
-                        if (userSnap.empty) {
+                        if (!userSnap.empty) {
+                            referrerDoc = userSnap.docs[0];
+                        } else {
+                            const userQ2 = query(
+                                collection(db, `artifacts/${appId}/public/data/users`),
+                                where("referral_code", "in", uniqueCodes)
+                            );
+                            const userSnap2 = await getDocs(userQ2);
+                            if (!userSnap2.empty) {
+                                referrerDoc = userSnap2.docs[0];
+                            }
+                        }
+
+                        if (!referrerDoc) {
                             throw new Error('Invalid user referral code. Please check and try again.');
                         }
-                        const referrerDoc = userSnap.docs[0];
                         const referrerData = referrerDoc.data();
                         referredBy = referrerDoc.id;
                         parentAdmin = referrerData.parentAdmin || referrerData.parent_admin || ADMIN_UID;
