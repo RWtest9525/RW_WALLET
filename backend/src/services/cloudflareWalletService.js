@@ -2343,6 +2343,100 @@ setInterval(() => {
 }, 60000).unref?.();
 
 function registerRoutes(app, { d1, r2 }) {
+  // ── Public Referral Code Verification ─────────────────────────────────────
+  app.get('/api/auth/verify-referral', async (req, res) => {
+    try {
+      const { code } = req.query;
+      if (!code) {
+        return res.status(400).json({ ok: false, error: 'MISSING_CODE' });
+      }
+
+      const cleanCode = code.trim();
+      const uniqueCodes = [...new Set([cleanCode, cleanCode.toUpperCase(), cleanCode.toLowerCase()])];
+
+      // 1. Search SQLite D1
+      console.log('[VerifyReferral] Searching SQLite D1 for codes:', uniqueCodes);
+      let matchedUser = null;
+      for (const c of uniqueCodes) {
+        const users = await d1.query(`SELECT id, role, referral_code, parent_admin FROM users WHERE referral_code = ?`, [c]);
+        if (users && users.length > 0) {
+          matchedUser = users[0];
+          break;
+        }
+      }
+
+      // Fallback: Check by UID prefix in SQLite
+      if (!matchedUser && cleanCode.toUpperCase().startsWith('RW') && cleanCode.length === 8) {
+        const codeSuffix = cleanCode.slice(2).toUpperCase();
+        console.log('[VerifyReferral] Fallback: Searching SQLite D1 for admin UID prefix:', codeSuffix);
+        const admins = await d1.query(`SELECT id, role, referral_code, parent_admin FROM users WHERE role = 'admin'`);
+        if (admins && admins.length > 0) {
+          const match = admins.find(a => String(a.id).slice(0, 6).toUpperCase() === codeSuffix);
+          if (match) {
+            matchedUser = match;
+          }
+        }
+      }
+
+      // 2. Search Firestore
+      console.log('[VerifyReferral] Searching Firestore...');
+      const db = admin.firestore();
+      const appId = process.env.FIREBASE_APP_ID || 'digital-wallet-prod';
+      
+      let firestoreUser = null;
+      let referrerDoc = null;
+
+      const userQ = db.collection(`artifacts/${appId}/public/data/users`).where("referralCode", "in", uniqueCodes);
+      const userSnap = await userQ.get();
+      if (!userSnap.empty) {
+        referrerDoc = userSnap.docs[0];
+      } else {
+        const userQ2 = db.collection(`artifacts/${appId}/public/data/users`).where("referral_code", "in", uniqueCodes);
+        const userSnap2 = await userQ2.get();
+        if (!userSnap2.empty) {
+          referrerDoc = userSnap2.docs[0];
+        }
+      }
+
+      if (!referrerDoc && cleanCode.toUpperCase().startsWith('RW') && cleanCode.length === 8) {
+        const codeSuffix = cleanCode.slice(2).toUpperCase();
+        const adminQ = db.collection(`artifacts/${appId}/public/data/users`).where("role", "==", "admin");
+        const adminSnap = await adminQ.get();
+        const matched = adminSnap.docs.find(doc => doc.id.slice(0, 6).toUpperCase() === codeSuffix);
+        if (matched) {
+          referrerDoc = matched;
+        }
+      }
+
+      if (referrerDoc) {
+        const d = referrerDoc.data();
+        firestoreUser = {
+          id: referrerDoc.id,
+          role: d.role,
+          referralCode: d.referralCode || d.referral_code,
+          parentAdmin: d.parentAdmin || d.parent_admin
+        };
+      }
+
+      console.log('[VerifyReferral] Match Results:', { sqlite: matchedUser, firestore: firestoreUser });
+
+      if (matchedUser || firestoreUser) {
+        const finalReferrer = {
+          id: matchedUser?.id || firestoreUser?.id,
+          role: matchedUser?.role || firestoreUser?.role,
+          referralCode: matchedUser?.referral_code || firestoreUser?.referralCode,
+          parentAdmin: matchedUser?.parent_admin || firestoreUser?.parentAdmin
+        };
+        return res.json({ ok: true, exists: true, referrer: finalReferrer });
+      }
+
+      return res.json({ ok: true, exists: false });
+    } catch (e) {
+      console.error('[VerifyReferral] Error:', e);
+      return res.status(500).json({ ok: false, error: 'SERVER_ERROR', message: e.message });
+    }
+  });
+
   // ── Partner Investment Endpoints ─────────────────────────────────────────
   app.post('/api/partner-investments', requireHttpAuth, async (req, res) => {
     try {

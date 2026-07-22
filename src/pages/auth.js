@@ -138,57 +138,24 @@ const handleAuth = async (e) => {
                             parentAdmin = ADMIN_UID;
                         }
                     } else {
-                        let referrerDoc = null;
-                        const uniqueCodes = [...new Set([referralCode, referralCode.toUpperCase(), referralCode.toLowerCase()])];
-                        console.log("Signup referral validation path:", `artifacts/${appId}/public/data/users`);
-                        console.log("Signup referral validation parameters:", { referralCode, uniqueCodes });
-                        
-                        const userQ = query(
-                            collection(db, `artifacts/${appId}/public/data/users`),
-                            where("referralCode", "in", uniqueCodes)
-                        );
-                        const userSnap = await getDocs(userQ);
-                        console.log("Signup referral validation primary query empty:", userSnap.empty);
-                        
-                        if (!userSnap.empty) {
-                            referrerDoc = userSnap.docs[0];
-                        } else {
-                            const userQ2 = query(
-                                collection(db, `artifacts/${appId}/public/data/users`),
-                                where("referral_code", "in", uniqueCodes)
-                            );
-                            const userSnap2 = await getDocs(userQ2);
-                            console.log("Signup referral validation fallback query empty:", userSnap2.empty);
-                            if (!userSnap2.empty) {
-                                referrerDoc = userSnap2.docs[0];
-                            } else if (referralCode.toUpperCase().startsWith('RW') && referralCode.length === 8) {
-                                // Fallback: Search all admins by UID prefix matching the referral code suffix
-                                const codeSuffix = referralCode.slice(2).toUpperCase();
-                                console.log("Signup referral validation admin prefix search suffix:", codeSuffix);
-                                const adminQ = query(
-                                    collection(db, `artifacts/${appId}/public/data/users`),
-                                    where("role", "==", "admin")
-                                );
-                                const adminSnap = await getDocs(adminQ);
-                                const matchedAdmin = adminSnap.docs.find(doc => doc.id.slice(0, 6).toUpperCase() === codeSuffix);
-                                if (matchedAdmin) {
-                                    console.log("Signup referral validation admin prefix search matched UID:", matchedAdmin.id);
-                                    referrerDoc = matchedAdmin;
-                                }
-                            }
+                        // Verify referral code using backend API
+                        console.log("Verifying referral code via backend API...");
+                        const response = await fetch(`${BACKEND_BASE_URL}/api/auth/verify-referral?code=${encodeURIComponent(referralCode)}`);
+                        if (!response.ok) {
+                            throw new Error('Failed to verify referral code. Please try again.');
                         }
-
-                        if (!referrerDoc) {
+                        const resData = await response.json();
+                        if (!resData.ok || !resData.exists) {
                             throw new Error('Invalid user referral code. Please check and try again.');
                         }
-                        const referrerData = referrerDoc.data();
-                        referredBy = referrerDoc.id;
+                        const referrer = resData.referrer;
+                        referredBy = referrer.id;
                         
                         // If referrer is an admin/subadmin, they are the direct parent admin!
-                        if (referrerData.role === 'admin') {
-                            parentAdmin = referrerDoc.id;
+                        if (referrer.role === 'admin') {
+                            parentAdmin = referrer.id;
                         } else {
-                            parentAdmin = referrerData.parentAdmin || referrerData.parent_admin || ADMIN_UID;
+                            parentAdmin = referrer.parentAdmin || ADMIN_UID;
                         }
                     }
 
