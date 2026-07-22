@@ -460,6 +460,22 @@ onAuthStateChanged(auth, async (user) => {
                     checkAndOpenTask();
                 }
 
+                // Check for pending user approval notifications clicked during cold-start/launch
+                if (window.pendingUserApprovalNotification) {
+                    window.pendingUserApprovalNotification = false;
+                    const checkAndOpenUserApproval = () => {
+                        if (typeof window.showAdminUsersPage === 'function') {
+                            window.showAdminUsersPage();
+                            if (typeof window.switchUsersTab === 'function') {
+                                window.switchUsersTab('approvals');
+                            }
+                        } else {
+                            setTimeout(checkAndOpenUserApproval, 100);
+                        }
+                    };
+                    checkAndOpenUserApproval();
+                }
+
             } else {
                 currentUser = null;
                 backendAuthToken = '';

@@ -203,7 +203,8 @@ const handleAuth = async (e) => {
                         sendNotification(
                             targetAdmin,
                             'New User Registration Approval',
-                            `User ${name} (${mobile}) registered with referral code ${referralCodeInput}. Click to review and approve.`
+                            `User ${name} (${mobile}) registered with referral code ${referralCodeInput}. Click to review and approve.`,
+                            { type: 'user_approval', userId: cred.user.uid }
                         ).catch(e => console.warn('Referral signup push notification error:', e));
 
                         if (referredBy && referredBy !== ADMIN_UID) {

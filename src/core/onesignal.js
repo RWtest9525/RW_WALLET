@@ -88,6 +88,15 @@ export const OneSignalManager = {
                             } else {
                                 window.pendingTaskNotification = data;
                             }
+                        } else if (data.type === 'user_approval') {
+                            if (window.currentUser && typeof window.showAdminUsersPage === 'function') {
+                                window.showAdminUsersPage();
+                                if (typeof window.switchUsersTab === 'function') {
+                                    window.switchUsersTab('approvals');
+                                }
+                            } else {
+                                window.pendingUserApprovalNotification = true;
+                            }
                         }
                     }
                 });
