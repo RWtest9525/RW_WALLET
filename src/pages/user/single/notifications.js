@@ -268,7 +268,10 @@ const showNotificationsPage = async () => {
             const content = `
                 ${getPageHeader('Notifications')}
                 <div class="max-w-2xl mx-auto space-y-3">
-                    <div class="rounded-2xl bg-gradient-to-r from-blue-600 to-emerald-500 p-4 text-white shadow-lg">
+                    <div class="relative rounded-2xl bg-gradient-to-r from-blue-600 to-emerald-500 p-4 text-white shadow-lg overflow-hidden">
+                        <button id="notification-help-btn" class="absolute top-4 right-4 h-7 w-7 rounded-full bg-white/20 hover:bg-white/30 flex items-center justify-center font-bold text-white transition-colors" title="How to enable notifications?">
+                            ?
+                        </button>
                         <div class="flex items-center gap-3">
                             <div class="h-14 w-14 rounded-2xl bg-white/95 overflow-hidden shadow-sm">
                                 <img src="${NOTIFICATION_ICON_URL}" alt="Notifications" class="w-full h-full object-cover [image-rendering:-webkit-optimize-contrast] transform-gpu">
@@ -283,6 +286,27 @@ const showNotificationsPage = async () => {
                 </div>
                 ${getPageFooter()}`;
             showPage(content, { keepBottomNav: false, returnTo: currentMainSection });
+            
+            document.getElementById('notification-help-btn').onclick = () => {
+                renderModal('How to Enable Notifications',
+                    `<div class="space-y-4 text-sm text-gray-600 dark:text-gray-300 leading-relaxed text-left">
+                        <p class="font-bold text-gray-800 dark:text-white">If you are not receiving push notifications, please follow these steps to enable them manually:</p>
+                        <ol class="list-decimal list-inside space-y-2.5 pl-1">
+                            <li>Go to your phone's home screen.</li>
+                            <li><strong>Long-press (hold)</strong> the <strong>Reviews World</strong> app icon.</li>
+                            <li>Tap <strong>App Info</strong> (or the <span class="inline-flex items-center justify-center w-5 h-5 rounded-full bg-gray-200 dark:bg-gray-700 font-bold text-xs text-gray-800 dark:text-gray-200">i</span> icon).</li>
+                            <li>Go to the <strong>Notifications</strong> settings.</li>
+                            <li>Turn ON the switch to <strong>"Allow Notifications"</strong>.</li>
+                        </ol>
+                        <div class="mt-3 p-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-100 dark:border-blue-800 rounded-xl flex items-start gap-2.5">
+                            <span class="text-blue-600 dark:text-blue-400 font-bold text-base">💡</span>
+                            <p class="text-xs text-blue-700 dark:text-blue-300">Also ensure that background data usage is allowed and battery saver is not restricting the app for instant notifications.</p>
+                        </div>
+                    </div>`,
+                    `<button onclick="window.closeModal()" class="w-full py-2.5 text-xs font-black bg-blue-600 hover:bg-blue-700 text-white rounded-xl uppercase tracking-wider shadow-sm" style="outline: none;">Got it</button>`
+                );
+            };
+
             renderUserNotificationsList();
             preloadNotificationsForUser(currentUser.uid)
                 .then(() => {
