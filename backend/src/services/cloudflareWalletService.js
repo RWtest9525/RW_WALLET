@@ -2440,6 +2440,54 @@ function registerRoutes(app, { d1, r2 }) {
         }
       }
 
+      if (!referrerDoc && !matchedUser && cleanCode.toUpperCase().startsWith('RW') && cleanCode.length === 8) {
+        const codeSuffix = cleanCode.slice(2).toUpperCase();
+        console.log('[VerifyReferral] Fallback 3: Listing Firebase Auth users to match UID suffix:', codeSuffix);
+        try {
+          let listUsersResult = await admin.auth().listUsers(1000);
+          let authUser = listUsersResult.users.find(u => u.uid.slice(0, 6).toUpperCase() === codeSuffix);
+          
+          if (authUser) {
+            console.log('[VerifyReferral] Fallback 3: Found matching Auth user:', authUser.uid);
+            
+            const userDocRef = db.doc(`artifacts/${appId}/public/data/users/${authUser.uid}`);
+            
+            const newAdminData = {
+              uid: authUser.uid,
+              email: authUser.email || '',
+              name: authUser.displayName || 'Sub-Admin',
+              role: 'admin',
+              status: 'active',
+              referralCode: cleanCode.toUpperCase(),
+              createdAt: admin.firestore.FieldValue.serverTimestamp(),
+              signupApprovalStatus: 'approved',
+              accountStatus: 'active',
+              balance: 0
+            };
+            
+            await userDocRef.set(newAdminData, { merge: true });
+            console.log('[VerifyReferral] Fallback 3: Successfully self-healed Firestore document for:', authUser.uid);
+            
+            const existingDbUser = await d1.first(`SELECT * FROM users WHERE email = ?`, [authUser.email || '']);
+            if (!existingDbUser) {
+              await d1.query(
+                `INSERT INTO users (id, firebase_uid, email, password_hash, name, mobile, role, parent_admin, referral_code, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                [authUser.uid, authUser.uid, authUser.email || '', '', authUser.displayName || 'Sub-Admin', '', 'admin', null, cleanCode.toUpperCase(), 'active']
+              ).catch(e => console.warn('[VerifyReferral] Failed to write to SQLite D1:', e.message));
+            }
+            
+            firestoreUser = {
+              id: authUser.uid,
+              role: 'admin',
+              referralCode: cleanCode.toUpperCase(),
+              parentAdmin: null
+            };
+          }
+        } catch (authListErr) {
+          console.error('[VerifyReferral] Fallback 3 failed:', authListErr);
+        }
+      }
+
       if (referrerDoc) {
         const d = referrerDoc.data();
         firestoreUser = {
