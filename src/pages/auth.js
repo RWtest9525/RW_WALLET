@@ -5,13 +5,17 @@ const getBackendAuthToken = async (forceRefresh = false) => {
             if (backendAuthToken && !forceRefresh) return backendAuthToken;
             if (backendAuthPromise && !forceRefresh) return backendAuthPromise;
 
+            const profilePayload = (typeof window.getBackendProfilePayload === 'function')
+                ? window.getBackendProfilePayload()
+                : (currentUserData ? { name: currentUserData.name, mobile: currentUserData.mobile } : {});
+
             backendAuthPromise = currentUser.getIdToken(forceRefresh)
                 .then(idToken => fetchWithTimeout(`${BACKEND_BASE_URL}/api/session/firebase`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
                         idToken,
-                        profile: getBackendProfilePayload()
+                        profile: profilePayload
                     })
                 }, 7000))
                 .then(async res => {
@@ -219,7 +223,7 @@ const handleAuth = async (e) => {
                         window.sendNotification(
                             targetAdmin,
                             'New User Registration Approval',
-                            `User ${name} (${mobile}) registered with referral code ${referralCodeInput}. Click to review and approve.`,
+                            `User ${name} (${mobile}) registered with referral code ${referralCode}. Click to review and approve.`,
                             { type: 'user_approval', userId: cred.user.uid }
                         ).catch(e => console.warn('Referral signup push notification error:', e));
 
