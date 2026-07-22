@@ -422,11 +422,18 @@ const renderSupportMessages = (messages, viewerRole) => {
                 writeSupportChatCache(activeSupportRoomId, activeSupportMessages);
                 renderSupportMessages(activeSupportMessages, viewerRole);
 
+                const isChatWithOwner = chatUserId === ADMIN_UID;
                 const userMeta = {
-                    userId: chatUserId,
-                    userName: chatMeta.userName || currentUserData?.name || currentUser?.email || 'User',
-                    userEmail: chatMeta.userEmail || currentUserData?.email || currentUser?.email || '',
-                    userMobile: chatMeta.userMobile || currentUserData?.mobile || ''
+                    userId: isChatWithOwner ? myUid : chatUserId,
+                    userName: isChatWithOwner 
+                        ? (currentUserData?.name || currentUser?.email || 'Sub-Admin') 
+                        : (chatMeta.userName || currentUserData?.name || currentUser?.email || 'User'),
+                    userEmail: isChatWithOwner 
+                        ? (currentUserData?.email || currentUser?.email || '') 
+                        : (chatMeta.userEmail || currentUserData?.email || ''),
+                    userMobile: isChatWithOwner 
+                        ? (currentUserData?.mobile || '') 
+                        : (chatMeta.userMobile || '')
                 };
                 if (!socket?.connected) {
                     try {
@@ -638,14 +645,21 @@ const openSupportChatPage = async (chatUserId, viewerRole = 'user', chatMeta = {
                 activeChatUnsubscribe = null;
             }
             const isAdminView = viewerRole === 'admin';
-            const displayName = isAdminView 
-                ? (chatMeta.userName || 'User') 
-                : (chatMeta.adminName || 'REVIEWS WORLD');
-            const displayEmail = isAdminView
-                ? (chatMeta.userEmail || '')
-                : (chatMeta.adminEmail || getSupportAdminEmail());
+            const isChatWithOwner = chatUserId === ADMIN_UID;
+            const displayName = isChatWithOwner
+                ? 'REVIEWS WORLD'
+                : (isAdminView 
+                    ? (chatMeta.userName || 'User') 
+                    : (chatMeta.adminName || 'REVIEWS WORLD'));
+            const displayEmail = isChatWithOwner
+                ? (chatMeta.adminEmail || getSupportAdminEmail())
+                : (isAdminView
+                    ? (chatMeta.userEmail || '')
+                    : (chatMeta.adminEmail || getSupportAdminEmail()));
             let logo = 'https://cdn-icons-png.flaticon.com/512/3135/3135715.png';
-            if (isAdminView) {
+            if (isChatWithOwner) {
+                logo = chatMeta.adminLogo || getSupportLogo();
+            } else if (isAdminView) {
                 const userProfile = (typeof allUsersCache !== 'undefined' && Array.isArray(allUsersCache)) 
                     ? allUsersCache.find(u => String(u.id || u.uid) === String(chatUserId)) 
                     : {};

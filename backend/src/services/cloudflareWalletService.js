@@ -5873,7 +5873,12 @@ function registerSocketHandlers(io, { d1 }) {
           (async () => {
             try {
               const parts = roomId.replace(/^support_/, '').split('_');
-              const recipientUserId = parts[0];
+              const roomUserId = parts[0];
+              const roomAdminId = parts[1] || ADMIN_UID;
+              let recipientUserId = roomUserId;
+              if (socket.user.sub === roomUserId) {
+                recipientUserId = roomAdminId;
+              }
               const senderUser = await d1.first('SELECT name FROM users WHERE id = ? LIMIT 1', [socket.user.sub]);
               const senderName = senderUser?.name || 'Support Admin';
               const customData = {
@@ -5882,9 +5887,11 @@ function registerSocketHandlers(io, { d1 }) {
                 userId: socket.user.sub,
                 userName: senderName
               };
-              await sendOneSignalPush(d1, recipientUserId, `💬 Message from ${senderName}`, chatMessage.message.slice(0, 150), customData);
-              if (recipientUserId !== ADMIN_UID && parts[1] && parts[1] !== recipientUserId) {
-                await sendOneSignalPush(d1, parts[1], `💬 Message from ${senderName}`, chatMessage.message.slice(0, 150), customData);
+              if (recipientUserId && recipientUserId !== socket.user.sub) {
+                await sendOneSignalPush(d1, recipientUserId, `💬 Message from ${senderName}`, chatMessage.message.slice(0, 150), customData);
+              }
+              if (roomAdminId !== ADMIN_UID && recipientUserId !== ADMIN_UID && socket.user.sub !== ADMIN_UID) {
+                await sendOneSignalPush(d1, ADMIN_UID, `💬 Message from ${senderName}`, chatMessage.message.slice(0, 150), customData);
               }
             } catch (err) {
               console.error('Support chat user push failed:', err);
