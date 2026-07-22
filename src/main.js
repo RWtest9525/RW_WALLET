@@ -320,6 +320,16 @@ onAuthStateChanged(auth, async (user) => {
                     const updatedIsAdmin = checkIsUserAdmin(currentUser, currentUserData);
                     applyAdminBottomChrome(updatedIsAdmin);
 
+                    if (updatedIsAdmin) {
+                        if (typeof window.initializeAdminListeners === 'function' && !window.adminUsersRealtimeStarted) {
+                            try {
+                                window.initializeAdminListeners();
+                            } catch (err) {
+                                console.error("Error initializing admin listeners:", err);
+                            }
+                        }
+                    }
+
                     if (updatedIsAdmin && !shouldPreserveOpenPage && !shouldPreserveHydratedDashboard) {
                         setBottomNavActive('bottom-admin-btn');
                         if (typeof window.showAdminMainPage === 'function') {
