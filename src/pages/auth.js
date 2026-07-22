@@ -325,3 +325,49 @@ window.getBackendAuthToken = getBackendAuthToken;
 window.hasCachedLoginSession = hasCachedLoginSession;
 window.handleAuth = handleAuth;
 window.toggleAuthMode = toggleAuthMode;
+
+window.debugQueryReferralCode = async (code) => {
+    console.log("=== Debugging Referral Code ===", code);
+    try {
+        const appId = window.appId || 'digital-wallet-prod';
+        console.log("appId is:", appId);
+        
+        const possibleCodes = [code, code.toUpperCase(), code.toLowerCase()];
+        const uniqueCodes = [...new Set(possibleCodes)];
+        
+        console.log("Checking in collection:", `artifacts/${appId}/public/data/users`);
+        
+        const q1 = query(
+            collection(db, `artifacts/${appId}/public/data/users`),
+            where("referralCode", "in", uniqueCodes)
+        );
+        const snap1 = await getDocs(q1);
+        console.log(`Query by referralCode found ${snap1.size} docs:`);
+        snap1.forEach(doc => {
+            console.log(`Doc ID: ${doc.id}, Data:`, doc.data());
+        });
+
+        const q2 = query(
+            collection(db, `artifacts/${appId}/public/data/users`),
+            where("referral_code", "in", uniqueCodes)
+        );
+        const snap2 = await getDocs(q2);
+        console.log(`Query by referral_code found ${snap2.size} docs:`);
+        snap2.forEach(doc => {
+            console.log(`Doc ID: ${doc.id}, Data:`, doc.data());
+        });
+        
+        const q3 = query(
+            collection(db, `artifacts/${appId}/public/data/users`),
+            where("role", "==", "admin")
+        );
+        const snap3 = await getDocs(q3);
+        console.log(`Query for all admins found ${snap3.size} docs:`);
+        snap3.forEach(doc => {
+            console.log(`Doc ID: ${doc.id}, Data:`, doc.data());
+        });
+
+    } catch (e) {
+        console.error("Debug query failed:", e);
+    }
+};
