@@ -138,15 +138,18 @@ const handleAuth = async (e) => {
                             parentAdmin = ADMIN_UID;
                         }
                     } else {
-                        // Check if user/subadmin exists in Firestore users
                         let referrerDoc = null;
                         const uniqueCodes = [...new Set([referralCode, referralCode.toUpperCase(), referralCode.toLowerCase()])];
-
+                        console.log("Signup referral validation path:", `artifacts/${appId}/public/data/users`);
+                        console.log("Signup referral validation parameters:", { referralCode, uniqueCodes });
+                        
                         const userQ = query(
                             collection(db, `artifacts/${appId}/public/data/users`),
                             where("referralCode", "in", uniqueCodes)
                         );
                         const userSnap = await getDocs(userQ);
+                        console.log("Signup referral validation primary query empty:", userSnap.empty);
+                        
                         if (!userSnap.empty) {
                             referrerDoc = userSnap.docs[0];
                         } else {
@@ -155,6 +158,7 @@ const handleAuth = async (e) => {
                                 where("referral_code", "in", uniqueCodes)
                             );
                             const userSnap2 = await getDocs(userQ2);
+                            console.log("Signup referral validation fallback query empty:", userSnap2.empty);
                             if (!userSnap2.empty) {
                                 referrerDoc = userSnap2.docs[0];
                             }
