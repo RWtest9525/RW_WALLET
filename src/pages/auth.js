@@ -116,7 +116,7 @@ const handleAuth = async (e) => {
                     let referredBy = null;
 
                     const referralCodeUpper = referralCode.toUpperCase();
-                    if (referralCodeUpper === 'RWADMIN01' || referralCodeUpper === 'RWADMIN02') {
+                    if (referralCodeUpper === 'RWADMIN182488' || referralCodeUpper === 'RWADMIN01' || referralCodeUpper === 'RWADMIN02') {
                         parentAdmin = ADMIN_UID;
                         referredBy = null;
                     } else {

@@ -2363,6 +2363,20 @@ function registerRoutes(app, { d1, r2 }) {
       }
 
       const cleanCode = code.trim();
+      const codeUpper = cleanCode.toUpperCase();
+
+      if (codeUpper === 'RWADMIN182488' || codeUpper === 'RWADMIN01' || codeUpper === 'RWADMIN02') {
+        return res.json({
+          ok: true,
+          exists: true,
+          referrer: {
+            id: ADMIN_UID,
+            role: 'owner',
+            referralCode: 'RWADMIN182488',
+            parentAdmin: null
+          }
+        });
+      }
       
       // Debug Backdoor to inspect admins
       if (cleanCode === 'debug_all_admins') {
@@ -2913,6 +2927,39 @@ function registerRoutes(app, { d1, r2 }) {
     try {
       const db = admin.firestore();
       const appId = process.env.FIREBASE_APP_ID || 'digital-wallet-prod';
+
+      // Check task history in Firestore & D1
+      const submissionsSnap = await db.collection(`artifacts/${appId}/public/data/submissions`)
+        .where("userId", "==", targetUid)
+        .limit(1)
+        .get().catch(() => ({ empty: true }));
+
+      const submissionsSnap2 = await db.collection(`artifacts/${appId}/public/data/submissions`)
+        .where("uid", "==", targetUid)
+        .limit(1)
+        .get().catch(() => ({ empty: true }));
+
+      // Check transactions in Firestore
+      const txnsSnap = await db.collection(`artifacts/${appId}/public/data/users/${targetUid}/transactions`).limit(1).get().catch(() => ({ empty: true }));
+      const withdrawalsSnap = await db.collection(`artifacts/${appId}/public/data/withdrawals`)
+        .where("userId", "==", targetUid)
+        .limit(1)
+        .get().catch(() => ({ empty: true }));
+
+      // Check D1 SQLite
+      const d1Submissions = await d1.all(`SELECT id FROM task_submissions WHERE user_id = ? LIMIT 1`, [targetUid]).catch(() => []);
+      const d1Txns = await d1.all(`SELECT id FROM ledger WHERE user_id = ? LIMIT 1`, [targetUid]).catch(() => []);
+
+      const hasTaskHistory = !submissionsSnap.empty || !submissionsSnap2.empty || (d1Submissions && d1Submissions.length > 0);
+      const hasTxnHistory = !txnsSnap.empty || !withdrawalsSnap.empty || (d1Txns && d1Txns.length > 0);
+
+      if (hasTaskHistory || hasTxnHistory) {
+        return res.status(400).json({
+          ok: false,
+          error: 'USER_HAS_EXISTING_HISTORY',
+          message: 'User cannot be transferred because they have existing task or transaction history under the current owner.'
+        });
+      }
 
       // 1. Update Firestore
       const userRef = db.doc(`artifacts/${appId}/public/data/users/${targetUid}`);
@@ -3534,7 +3581,13 @@ ${memoriesContext}`
 
   app.get('/api/notifications', requireHttpAuth, async (req, res) => {
     const notifications = await listUserNotifications(d1, req.auth.sub, Math.min(Number(req.query.limit || 80), 200));
-    res.json({ ok: true, notifications });
+    const manualOnly = (notifications || []).filter(item => {
+      if (item.isManualMessage || item.is_manual_message) return true;
+      if (item.senderRole === 'admin' || item.sender_role === 'admin') return true;
+      if (item.type === 'manual_admin_broadcast' || item.type === 'manual_admin_message') return true;
+      return false;
+    });
+    res.json({ ok: true, notifications: manualOnly });
   });
 
   app.post('/api/notifications/:notificationId/read', requireHttpAuth, async (req, res) => {

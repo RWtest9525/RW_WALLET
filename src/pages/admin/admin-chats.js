@@ -139,8 +139,9 @@ const loadAdminChatsFromBackend = async ({ silent = false, retry = true, subscri
                     lastSenderId: chat.last_sender_id || '',
                     updatedAt: chat.updated_at || Date.now()
                 }));
-                if (!checkIsOwner(currentUser, currentUserData)) {
-                    const subAdminUid = currentUser?.uid || (typeof getCurrentUserId === 'function' ? getCurrentUserId() : '');
+                const isOwner = checkIsOwner(currentUser, currentUserData);
+                const subAdminUid = currentUser?.uid || (typeof getCurrentUserId === 'function' ? getCurrentUserId() : '');
+                if (!isOwner) {
                     chatList = chatList.filter(chat => {
                         const cUserId = chat.userId || chat.id;
                         if (cUserId === ADMIN_UID || chat.roomId?.includes(ADMIN_UID)) return true;
@@ -173,6 +174,14 @@ const loadAdminChatsFromBackend = async ({ silent = false, retry = true, subscri
                             updatedAt: Date.now()
                         });
                     }
+                } else {
+                    chatList = chatList.filter(chat => {
+                        const cUserId = chat.userId || chat.id;
+                        const u = allUsersCache.find(user => (user.id || user.uid) === cUserId);
+                        if (!u) return true; // Keep chat room if user record isn't in cache
+                        if (u.role === 'admin' || u.role === 'subadmin' || u.role === 'owner') return true;
+                        return !u.parentAdmin || u.parentAdmin === ADMIN_UID || u.parent_admin === ADMIN_UID || u.parentAdmin === subAdminUid || u.parent_admin === subAdminUid;
+                    });
                 }
                 allSupportChatsCache = chatList;
                 refreshAdminChatUnreadCount();

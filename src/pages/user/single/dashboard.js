@@ -3234,17 +3234,16 @@ const maskUserMobile = (mobile = '') => {
 };
 
 const getProfileReferralCode = () => {
-    const rawReferralSeed = String(
-        currentUserData?.referralCode ||
-        currentUserData?.referCode ||
-        currentUserData?.inviteCode ||
-        currentUserData?.mobile ||
-        currentUser?.uid ||
-        'RW182488'
-    ).replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
-    return rawReferralSeed.startsWith('RW')
-        ? rawReferralSeed.slice(0, 12)
-        : `RW${rawReferralSeed.slice(-6) || '182488'}`;
+    const isOwner = currentUser?.email === 'reviewsworld01@gmail.com' || currentUser?.uid === ADMIN_UID;
+    if (isOwner) return 'RWADMIN182488';
+
+    const existingCode = currentUserData?.referralCode || currentUserData?.referral_code || currentUserData?.referCode || currentUserData?.inviteCode;
+    if (existingCode && String(existingCode).trim()) {
+        return String(existingCode).trim().toUpperCase();
+    }
+
+    const rawSeed = String(currentUserData?.mobile || currentUser?.uid || '182488').replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
+    return `RW${rawSeed.slice(-6)}`;
 };
 
 const getProfileReferralLink = (code = getProfileReferralCode()) => {

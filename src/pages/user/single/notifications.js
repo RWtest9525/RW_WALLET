@@ -177,10 +177,14 @@ const updateNotificationUnreadBadge = () => {
             badge.classList.toggle('hidden', notificationUnreadCount <= 0);
         };
 
+const isManualAdminNotification = (item = {}) => {
+    return !!(item.isManualMessage || item.is_manual_message || item.senderRole === 'admin' || item.sender_role === 'admin' || item.type === 'manual_admin_broadcast' || item.type === 'manual_admin_message');
+};
+
 const refreshNotificationUnreadCount = (notifications = notificationsCache) => {
-            notificationUnreadCount = notifications.filter(item => !item.readAt && item.expiresAt > Date.now() && !isChatNotificationItem(item)).length;
-            updateNotificationUnreadBadge();
-        };
+    notificationUnreadCount = notifications.filter(item => !item.readAt && item.expiresAt > Date.now() && !isChatNotificationItem(item) && isManualAdminNotification(item)).length;
+    updateNotificationUnreadBadge();
+};
 
 const fetchUserNotifications = async () => {
             const token = await getBackendAuthToken();
@@ -238,7 +242,7 @@ const markNotificationRead = async (notificationId) => {
 const renderUserNotificationsList = () => {
             const list = document.getElementById('user-notifications-list');
             if (!list) return;
-            const notifications = notificationsCache.filter(item => item.expiresAt > Date.now() && !isChatNotificationItem(item));
+            const notifications = notificationsCache.filter(item => item.expiresAt > Date.now() && !isChatNotificationItem(item) && isManualAdminNotification(item));
             list.innerHTML = notifications.length
                 ? notifications.map(item => `
                     <article class="rounded-2xl border ${item.readAt ? 'border-gray-100 dark:border-gray-700 bg-white dark:bg-gray-800' : 'border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-900/20'} p-4 shadow-sm">

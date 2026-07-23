@@ -44,6 +44,8 @@ const applyAdminUsersCache = (users = []) => {
             let otherUsers = allUsersCache.filter(u => !isAdminUserRecord(u));
             if (!isOwner) {
                 otherUsers = otherUsers.filter(u => u.parentAdmin === currentUser?.uid || u.parent_admin === currentUser?.uid);
+            } else {
+                otherUsers = otherUsers.filter(u => !u.parentAdmin || u.parentAdmin === ADMIN_UID || u.parent_admin === ADMIN_UID || u.parentAdmin === currentUser?.uid || u.parent_admin === currentUser?.uid);
             }
             otherUsers.forEach(u => {
                     const balance = getUserAvailableBalance(u);
@@ -333,6 +335,8 @@ const updateAdminUserListView = () => {
             const isOwner = checkIsOwner(currentUser, currentUserData);
             if (!isOwner) {
                 usersToRender = usersToRender.filter(u => u.parentAdmin === currentUser?.uid || u.parent_admin === currentUser?.uid);
+            } else {
+                usersToRender = usersToRender.filter(u => !u.parentAdmin || u.parentAdmin === ADMIN_UID || u.parent_admin === ADMIN_UID || u.parentAdmin === currentUser?.uid || u.parent_admin === currentUser?.uid);
             }
 
             // Apply filter

@@ -889,8 +889,12 @@ const getBanDetails = (data = {}) => {
             };
         };
 
-const isUserApprovalPending = (data = {}) =>
-            data.approvalStatus === 'pending' || data.signupApprovalStatus === 'pending' || data.accountStatus === 'pending_approval';
+const isUserApprovalPending = (data = {}) => {
+    if (data.approvalStatus === 'approved' || data.signupApprovalStatus === 'approved' || data.accountStatus === 'active' || data.isApproved === true) {
+        return false;
+    }
+    return data.approvalStatus === 'pending' || data.signupApprovalStatus === 'pending' || data.accountStatus === 'pending_approval';
+};
 
 const isUserApprovalRejected = (data = {}) =>
             data.approvalStatus === 'rejected' || data.signupApprovalStatus === 'rejected' || data.accountStatus === 'rejected';
