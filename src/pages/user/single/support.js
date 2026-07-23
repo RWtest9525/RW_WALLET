@@ -429,7 +429,7 @@ const renderSupportMessages = (messages, viewerRole) => {
 
                 // Trigger Web Push Notification for the recipient
                 const targetPushUserId = viewerRole === 'admin' 
-                    ? chatUserId 
+                    ? extractUserIdFromRoomId(activeSupportRoomId, chatUserId) 
                     : (chatMeta.adminId || currentUserData?.parentAdmin || currentUserData?.parent_admin || ADMIN_UID);
 
                 if (targetPushUserId) {
@@ -443,7 +443,13 @@ const renderSupportMessages = (messages, viewerRole) => {
                             body: JSON.stringify({
                                 targetUserId: targetPushUserId,
                                 title: viewerRole === 'admin' ? 'New Message from Admin' : `New Message from ${currentUserData?.name || 'User'}`,
-                                message: text
+                                message: text,
+                                customData: {
+                                    type: 'chat',
+                                    userId: myUid,
+                                    adminId: viewerRole === 'admin' ? (currentUser?.uid || '') : (chatMeta.adminId || ADMIN_UID),
+                                    roomId: activeSupportRoomId
+                                }
                             })
                         }).catch(err => console.warn('Push notification trigger error:', err));
                     }).catch(() => {});
@@ -503,6 +509,16 @@ const renderSupportMessages = (messages, viewerRole) => {
                     allSupportChatsCache.unshift({ id: chatUserId, ...updatedChat });
                 }
             };
+
+const extractUserIdFromRoomId = (roomId = '', fallbackUserId = '') => {
+    if (fallbackUserId && typeof fallbackUserId === 'string' && !fallbackUserId.includes('_') && fallbackUserId !== 'undefined') {
+        return fallbackUserId;
+    }
+    if (!roomId) return fallbackUserId || '';
+    const clean = String(roomId).replace(/^support_/, '');
+    const parts = clean.split('_');
+    return parts[0] || clean;
+};
 
 const getSupportRoomId = (chatUserId, adminId = ADMIN_UID) => {
     if (!adminId || adminId === ADMIN_UID) {
