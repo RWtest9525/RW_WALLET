@@ -298,6 +298,9 @@ const markChatMessagesRead = async (messageDocs, readerRole) => {
                 await batch.commit();
             }
         };
+let isMultiSelectMode = false;
+const selectedMessageIds = new Set();
+
 const renderSupportMessages = (messages, viewerRole) => {
             const list = document.getElementById('support-chat-messages');
             if (!list) return;
@@ -335,9 +338,19 @@ const renderSupportMessages = (messages, viewerRole) => {
                         `;
                     }
 
+                    const isSelected = selectedMessageIds.has(message.id);
+                    const selectionCheckHtml = isMultiSelectMode
+                        ? `<div class="flex items-center justify-center pr-2 pl-2 shrink-0 select-none">
+                               <div class="h-5 w-5 rounded-full border-2 flex items-center justify-center transition-all ${isSelected ? 'bg-blue-600 border-blue-600 text-white shadow-sm' : 'border-gray-300 dark:border-gray-600 bg-transparent'}">
+                                   ${isSelected ? '<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="3" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"></path></svg>' : ''}
+                               </div>
+                           </div>`
+                        : '';
+
                     return `
                         ${dateDivider}
-                        <div class="flex ${isMine ? 'justify-end' : 'justify-start'}" data-message-id="${message.id}">
+                        <div class="flex items-center ${isMine ? 'justify-end' : 'justify-start'} py-0.5" data-message-id="${message.id}">
+                            ${!isMine ? selectionCheckHtml : ''}
                             <div class="support-chat-bubble w-fit max-w-[82%] px-3 py-1.5 shadow-sm cursor-pointer select-none rounded-2xl ${isMine ? 'chat-bubble-user bg-emerald-50 dark:bg-emerald-900/40 text-gray-900 dark:text-white border border-emerald-100 dark:border-emerald-800' : 'chat-bubble-admin bg-white dark:bg-gray-800 text-gray-900 dark:text-white border border-gray-100 dark:border-gray-700'}" data-msg-id="${message.id}" data-is-mine="${isMine}">
                                 <span class="text-sm leading-5 break-words align-baseline whitespace-pre-wrap block" id="msg-text-content-${message.id}">${escapeHtml(message.text || '')}</span>
                                 ${inspectBtnHtml}
@@ -346,6 +359,7 @@ const renderSupportMessages = (messages, viewerRole) => {
                                     ${renderMessageTicks(message, isMine, viewerRole)}
                                 </span>
                             </div>
+                            ${isMine ? selectionCheckHtml : ''}
                         </div>`;
                 }).join('');
 
@@ -362,15 +376,71 @@ const renderSupportMessages = (messages, viewerRole) => {
                 });
             }
 
-            // Bind message bubble click handlers for deletion
+            const toggleBubbleSelection = (msgId) => {
+                if (selectedMessageIds.has(msgId)) {
+                    selectedMessageIds.delete(msgId);
+                } else {
+                    selectedMessageIds.add(msgId);
+                }
+                renderSupportMessages(messages, viewerRole);
+            };
+
+            // Bind message bubble click and hold handlers
             list.querySelectorAll('.support-chat-bubble').forEach(bubble => {
+                const msgId = Number(bubble.dataset.msgId);
+                const isMsgMine = bubble.dataset.isMine === 'true';
+
+                // Right click for Laptop/Desktop
+                bubble.oncontextmenu = (e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    if (isMultiSelectMode) {
+                        toggleBubbleSelection(msgId);
+                        return;
+                    }
+                    window.showSupportMessageContextMenu(msgId, isMsgMine, viewerRole);
+                };
+
+                // Simple click
                 bubble.onclick = (e) => {
                     e.stopPropagation();
-                    const msgId = Number(bubble.dataset.msgId);
-                    const isMsgMine = bubble.dataset.isMine === 'true';
-                    window.showDeleteSupportMessageModal(msgId, isMsgMine, viewerRole);
+                    if (isMultiSelectMode) {
+                        toggleBubbleSelection(msgId);
+                    }
                 };
+
+                // Long Press (1 second) for Mobile/Touch devices
+                let pressTimer;
+                let isMove = false;
+
+                const startPress = () => {
+                    if (isMultiSelectMode) return;
+                    isMove = false;
+                    pressTimer = setTimeout(() => {
+                        if (!isMove) {
+                            if (navigator.vibrate) navigator.vibrate(40);
+                            window.showSupportMessageContextMenu(msgId, isMsgMine, viewerRole);
+                        }
+                    }, 900);
+                };
+
+                const endPress = () => {
+                    clearTimeout(pressTimer);
+                };
+
+                bubble.addEventListener('touchstart', startPress, { passive: true });
+                bubble.addEventListener('touchend', endPress, { passive: true });
+                bubble.addEventListener('touchcancel', endPress, { passive: true });
+                bubble.addEventListener('touchmove', () => {
+                    isMove = true;
+                    clearTimeout(pressTimer);
+                }, { passive: true });
             });
+
+            // Update bottom floating actions multi-select bar
+            if (typeof window.updateMultiSelectBar === 'function') {
+                window.updateMultiSelectBar(viewerRole);
+            }
 
             if (wasNearBottom) {
                 list.scrollTop = list.scrollHeight;
@@ -695,6 +765,8 @@ const preloadSupportChatForUser = async (userId = currentUser?.uid) => {
 
 const openSupportChatPage = async (chatUserId, viewerRole = 'user', chatMeta = {}) => {
             window.activeChatUserId = chatUserId;
+            isMultiSelectMode = false;
+            selectedMessageIds.clear();
             if (activeChatUnsubscribe) {
                 activeChatUnsubscribe();
                 activeChatUnsubscribe = null;
@@ -756,6 +828,8 @@ const openSupportChatPage = async (chatUserId, viewerRole = 'user', chatMeta = {
                 </div>
                 ${getPageFooter()}`;
             const goBackFromSupportChat = () => {
+                isMultiSelectMode = false;
+                selectedMessageIds.clear();
                 if (activeChatUnsubscribe) {
                     activeChatUnsubscribe();
                     activeChatUnsubscribe = null;
@@ -1828,3 +1902,145 @@ const showDeleteSupportMessageModal = (messageId, isMine, viewerRole) => {
 };
 
 window.showDeleteSupportMessageModal = showDeleteSupportMessageModal;
+
+const updateMultiSelectBar = (viewerRole) => {
+    const composer = document.getElementById('support-chat-composer');
+    let bar = document.getElementById('support-chat-multiselect-bar');
+    
+    if (!isMultiSelectMode) {
+        if (composer) composer.classList.remove('hidden');
+        if (bar) bar.remove();
+        return;
+    }
+    
+    if (composer) composer.classList.add('hidden');
+    
+    if (!bar) {
+        bar = document.createElement('div');
+        bar.id = 'support-chat-multiselect-bar';
+        bar.className = 'shrink-0 flex items-center justify-between gap-3 p-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] border-t border-gray-150 dark:border-gray-750 bg-white dark:bg-gray-800 transition-all';
+        composer.parentNode.insertBefore(bar, composer.nextSibling);
+    }
+    
+    const count = selectedMessageIds.size;
+    
+    let canDeleteForEveryone = count > 0;
+    if (canDeleteForEveryone && viewerRole !== 'admin') {
+        const allMsgMine = Array.from(selectedMessageIds).every(id => {
+            const bubble = document.querySelector(`.support-chat-bubble[data-msg-id="${id}"]`);
+            return bubble && bubble.dataset.isMine === 'true';
+        });
+        if (!allMsgMine) {
+            canDeleteForEveryone = false;
+        }
+    }
+    
+    bar.innerHTML = `
+        <div class="flex items-center gap-2">
+            <button id="multiselect-cancel-btn" class="h-8 px-3 rounded-full bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-xs font-black text-gray-700 dark:text-gray-200 transition">✕ Cancel</button>
+            <span id="multiselect-count-text" class="text-xs font-bold text-gray-600 dark:text-gray-300">${count} selected</span>
+        </div>
+        <div class="flex items-center gap-2">
+            <button id="multiselect-delete-me-btn" ${count === 0 ? 'disabled' : ''} class="h-9 px-3 rounded-xl bg-gray-100 hover:bg-gray-200 dark:bg-gray-700 dark:hover:bg-gray-650 text-xs font-black text-gray-800 dark:text-white transition flex items-center gap-1 ${count === 0 ? 'opacity-50 pointer-events-none' : ''}">🗑️ Delete for me</button>
+            ${canDeleteForEveryone ? `
+            <button id="multiselect-delete-everyone-btn" class="h-9 px-3 rounded-xl bg-rose-50 hover:bg-rose-100 dark:bg-rose-950/30 dark:hover:bg-rose-950/50 text-xs font-black text-rose-600 dark:text-rose-400 transition flex items-center gap-1">🌍 Delete for everyone</button>
+            ` : ''}
+        </div>
+    `;
+    
+    bar.querySelector('#multiselect-cancel-btn').onclick = () => {
+        isMultiSelectMode = false;
+        selectedMessageIds.clear();
+        renderSupportMessages(activeSupportMessages, viewerRole);
+    };
+    
+    const deleteMeBtn = bar.querySelector('#multiselect-delete-me-btn');
+    if (deleteMeBtn && count > 0) {
+        deleteMeBtn.onclick = () => {
+            const myUid = (typeof getCurrentUserId === 'function' ? getCurrentUserId() : (currentUser?.uid || ''));
+            const deletedIds = JSON.parse(localStorage.getItem(`deleted_message_ids_${myUid}`) || '[]');
+            selectedMessageIds.forEach(id => deletedIds.push(id));
+            localStorage.setItem(`deleted_message_ids_${myUid}`, JSON.stringify(deletedIds));
+            
+            showNotification(`${count} messages deleted for you.`);
+            isMultiSelectMode = false;
+            selectedMessageIds.clear();
+            renderSupportMessages(activeSupportMessages, viewerRole);
+        };
+    }
+    
+    const deleteEveryoneBtn = bar.querySelector('#multiselect-delete-everyone-btn');
+    if (deleteEveryoneBtn && canDeleteForEveryone) {
+        deleteEveryoneBtn.onclick = async () => {
+            const socket = window.activeSupportSocket;
+            const countToDelete = selectedMessageIds.size;
+            showNotification(`Deleting ${countToDelete} messages...`, false);
+            
+            const promises = Array.from(selectedMessageIds).map(messageId => {
+                return new Promise(async (resolve) => {
+                    if (socket && socket.connected) {
+                        socket.emit('delete_message', { roomId: activeSupportRoomId, messageId }, (res) => {
+                            resolve(res && res.ok);
+                        });
+                    } else {
+                        try {
+                            const token = await getBackendAuthToken();
+                            const response = await fetchWithTimeout(`${BACKEND_BASE_URL}/api/chats/${encodeURIComponent(activeSupportRoomId)}/messages/${messageId}`, {
+                                method: 'DELETE',
+                                headers: {
+                                    'Content-Type': 'application/json',
+                                    'Authorization': `Bearer ${token}`
+                                }
+                            }, 4000);
+                            const res = await response.json().catch(() => ({}));
+                            resolve(response.ok && res.ok);
+                        } catch (e) {
+                            resolve(false);
+                        }
+                    }
+                });
+            });
+            
+            await Promise.all(promises);
+            showNotification(`${countToDelete} messages deleted for everyone.`);
+            
+            activeSupportMessages = activeSupportMessages.filter(msg => !selectedMessageIds.has(msg.id));
+            writeSupportChatCache(activeSupportRoomId, activeSupportMessages);
+            
+            isMultiSelectMode = false;
+            selectedMessageIds.clear();
+            renderSupportMessages(activeSupportMessages, viewerRole);
+        };
+    }
+};
+
+const showSupportMessageContextMenu = (messageId, isMine, viewerRole) => {
+    renderModal('Message Options', `
+        <div class="space-y-3 py-1">
+            <button id="context-delete-btn" class="w-full py-3.5 bg-rose-50 hover:bg-rose-100 dark:bg-rose-950/20 dark:hover:bg-rose-950/40 rounded-2xl text-sm font-extrabold text-rose-600 dark:text-rose-400 transition flex items-center justify-center gap-2">
+                🗑️ Delete Message
+            </button>
+            <button id="context-select-btn" class="w-full py-3.5 bg-blue-50 hover:bg-blue-100 dark:bg-blue-950/20 dark:hover:bg-blue-950/40 rounded-2xl text-sm font-extrabold text-blue-600 dark:text-blue-400 transition flex items-center justify-center gap-2">
+                📝 Select Multiple
+            </button>
+        </div>
+    `, `
+        <button onclick="window.closeModal()" class="w-full rounded-2xl bg-gray-100 dark:bg-gray-700 py-3 text-sm font-extrabold text-gray-700 dark:text-gray-200">Cancel</button>
+    `, 'max-w-xs');
+
+    document.getElementById('context-delete-btn').onclick = () => {
+        window.closeModal();
+        window.showDeleteSupportMessageModal(messageId, isMine, viewerRole);
+    };
+
+    document.getElementById('context-select-btn').onclick = () => {
+        window.closeModal();
+        isMultiSelectMode = true;
+        selectedMessageIds.clear();
+        selectedMessageIds.add(messageId);
+        renderSupportMessages(activeSupportMessages, viewerRole);
+    };
+};
+
+window.updateMultiSelectBar = updateMultiSelectBar;
+window.showSupportMessageContextMenu = showSupportMessageContextMenu;
