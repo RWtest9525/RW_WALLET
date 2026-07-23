@@ -379,11 +379,11 @@ const showAdminUserDashboardPage = async (userId) => {
             adminViewedUserProfile = user;
 
             const parentAdminId = user.parentAdmin || user.parent_admin || '';
-            let subAdminName = 'Reviews World';
+            let subAdminName = 'Owner (Review World)';
             if (parentAdminId && parentAdminId !== ADMIN_UID) {
                 const subAdmin = allUsersCache.find(u => u.id === parentAdminId || u.uid === parentAdminId);
                 if (subAdmin) {
-                    subAdminName = subAdmin.name || 'Sub-Admin';
+                    subAdminName = subAdmin.name ? `${subAdmin.name} (${subAdmin.email || 'Sub-Admin'})` : (subAdmin.email || 'Sub-Admin');
                 } else {
                     subAdminName = 'Sub-Admin (' + parentAdminId.slice(0, 6) + ')';
                 }
@@ -393,7 +393,7 @@ const showAdminUserDashboardPage = async (userId) => {
             let referrerName = 'Direct Signup';
             if (referrerId) {
                 const referrer = allUsersCache.find(u => u.id === referrerId || u.uid === referrerId);
-                referrerName = referrer ? (referrer.name || 'User') : 'User (' + referrerId.slice(0, 6) + ')';
+                referrerName = referrer ? (referrer.name || referrer.email || 'User') : 'User (' + referrerId.slice(0, 6) + ')';
             }
 
             const content = `
@@ -413,20 +413,20 @@ const showAdminUserDashboardPage = async (userId) => {
                         </div>
 
                         <!-- Sub-Admin and Referral Details Grid -->
-                        <div class="mt-4 pt-3 border-t border-slate-100 dark:border-slate-700/80 grid grid-cols-2 gap-3 text-xs">
-                            <div>
-                                <span class="text-gray-400 dark:text-gray-500 block font-semibold">Sub-Admin</span>
-                                <p class="font-bold text-gray-700 dark:text-gray-300 capitalize">Member under: <span class="text-blue-600 dark:text-blue-400 font-extrabold">${escapeHtml(subAdminName)}</span></p>
+                        <div class="mt-4 pt-3 border-t border-slate-100 dark:border-slate-700/80 grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                            <div class="rounded-xl bg-blue-50/70 dark:bg-blue-950/30 border border-blue-100 dark:border-blue-900/50 p-3">
+                                <span class="text-[10px] font-black uppercase text-blue-600 dark:text-blue-400 tracking-wider block mb-1">Managed Under Admin</span>
+                                <p class="font-extrabold text-sm text-blue-950 dark:text-blue-100">👑 ${escapeHtml(subAdminName)}</p>
                             </div>
-                            <div>
-                                <span class="text-gray-400 dark:text-gray-500 block font-semibold">Referred By</span>
-                                <p class="font-bold text-gray-700 dark:text-gray-300 capitalize">${escapeHtml(referrerName)}</p>
+                            <div class="rounded-xl bg-gray-50/70 dark:bg-gray-800/50 border border-gray-100 dark:border-gray-700 p-3">
+                                <span class="text-[10px] font-black uppercase text-gray-400 dark:text-gray-500 tracking-wider block mb-1">Referred By User</span>
+                                <p class="font-bold text-xs text-gray-700 dark:text-gray-300">${escapeHtml(referrerName)}</p>
                             </div>
-                            <div>
+                            <div class="p-2">
                                 <span class="text-gray-400 dark:text-gray-500 block font-semibold">Join Date</span>
                                 <p class="font-bold text-gray-700 dark:text-gray-300">${user.createdAt ? formatDateDDMMYY(user.createdAt) : 'N/A'}</p>
                             </div>
-                            <div>
+                            <div class="p-2">
                                 <span class="text-gray-400 dark:text-gray-500 block font-semibold">Last Active</span>
                                 <p class="font-bold text-gray-700 dark:text-gray-300">${user.webAppLastSeenAt ? formatDateDDMMYY(user.webAppLastSeenAt) : 'N/A'}</p>
                             </div>
@@ -651,6 +651,12 @@ const renderAdminUserTransactions = () => {
                                 ${hasBalanceRisk ? `<p class="mt-1 inline-flex rounded-full bg-red-100 dark:bg-red-900/30 px-2 py-0.5 text-[10px] font-black uppercase text-red-700 dark:text-red-200">Risk: requested more than available balance</p>` : ''}
                             </div>
                             <div class="text-right shrink-0">
+                                <p class="font-black ${amountClass}">${sign}${formatCurrencyAbs(item.amount || 0)}</p>
+                                <p class="text-[10px] uppercase text-gray-400">${escapeHtml(item.status || 'completed')}</p>
+                            </div>
+                        </div>
+                    </div>`;
+            }).join('') : '<p class="text-center text-gray-500 py-6">No transactions found.</p>';
         };
 
 const showUserActionsModal = (userId) => {
