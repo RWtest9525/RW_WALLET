@@ -1131,6 +1131,59 @@ async function sendOneSignalPush(d1OrTarget, targetOrTitle, titleOrMessage, mess
     const externalIds = await resolveUserOneSignalIds(d1, target);
     if (!externalIds.length) return;
 
+    // Resolve direct OneSignal player IDs from Firestore user profiles
+    const playerIds = [];
+    try {
+      if (admin.apps && admin.apps.length > 0) {
+        for (const extId of externalIds) {
+          const userDoc = await admin.firestore().doc(`artifacts/${appId}/public/data/users/${extId}`).get();
+          if (userDoc.exists) {
+            const uData = userDoc.data() || {};
+            const pid = uData.onesignalPlayerId || uData.onesignal_player_id || null;
+            if (pid && typeof pid === 'string' && pid.trim()) {
+              playerIds.push(pid.trim());
+            }
+          }
+        }
+      }
+    } catch (e) {
+      console.warn('[OneSignal] Firestore player ID lookup failed:', e);
+    }
+
+    if (playerIds.length > 0) {
+      // 1. Target via subscription IDs (v11 API)
+      const payloadSubIds = {
+        app_id: appId,
+        include_subscription_ids: playerIds,
+        headings: { en: cleanTitle },
+        contents: { en: cleanMsg },
+        priority: 10,
+        ttl: 259200
+      };
+      if (extraData) {
+        payloadSubIds.data = extraData;
+      }
+      postOneSignalApi(payloadSubIds, apiKey).then(r => {
+        console.log(`[OneSignal] Direct Player ID (v11 sub) Push sent successfully:`, r);
+      }).catch(() => {});
+
+      // 2. Target via legacy player IDs API
+      const payloadPlayerIds = {
+        app_id: appId,
+        include_player_ids: playerIds,
+        headings: { en: cleanTitle },
+        contents: { en: cleanMsg },
+        priority: 10,
+        ttl: 259200
+      };
+      if (extraData) {
+        payloadPlayerIds.data = extraData;
+      }
+      postOneSignalApi(payloadPlayerIds, apiKey).then(r => {
+        console.log(`[OneSignal] Direct Player ID (legacy) Push sent successfully:`, r);
+      }).catch(() => {});
+    }
+
     const payloadV11 = {
       app_id: appId,
       include_aliases: { external_id: externalIds },

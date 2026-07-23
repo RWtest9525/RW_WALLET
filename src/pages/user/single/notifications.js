@@ -1,3 +1,33 @@
+const saveDeviceTokenToDb = async (token) => {
+    const userId = (typeof getCurrentUserId === 'function' ? getCurrentUserId() : (currentUser?.uid || ''));
+    if (!userId || !token) return;
+    try {
+        const userDocRef = doc(db, `artifacts/${appId}/public/data/users`, userId);
+        const updateData = {};
+        if (token.includes('-')) {
+            updateData.onesignalPlayerId = token;
+        } else {
+            updateData.fcmToken = token;
+        }
+        updateData.deviceTokenUpdatedAt = serverTimestamp();
+        await updateDoc(userDocRef, updateData).catch(() => {});
+        console.log("Device token saved to Firestore:", token);
+    } catch (err) {
+        console.warn("Failed to save device token:", err);
+    }
+};
+window.saveDeviceTokenToDb = saveDeviceTokenToDb;
+
+window.setNotificationToken = async (token) => {
+    console.log("Native notification token callback:", token);
+    if (token) await saveDeviceTokenToDb(token);
+};
+
+window.setOneSignalPlayerId = async (playerId) => {
+    console.log("Native OneSignal player ID callback:", playerId);
+    if (playerId) await saveDeviceTokenToDb(playerId);
+};
+
 const initializePushNotifications = async (userId) => {
             try {
                 if (window.OneSignalManager && userId) {
@@ -5,6 +35,17 @@ const initializePushNotifications = async (userId) => {
                 }
             } catch (e) {
                 console.warn('OneSignal login inside initializePushNotifications failed:', e);
+            }
+
+            if (window.JSInterface && userId) {
+                try {
+                    if (typeof window.JSInterface.getRegistrationId === 'function') {
+                        const token = window.JSInterface.getRegistrationId();
+                        if (token) {
+                            await saveDeviceTokenToDb(token);
+                        }
+                    }
+                } catch (e) {}
             }
 
             if (!messaging) return;
