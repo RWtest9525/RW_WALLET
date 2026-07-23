@@ -188,15 +188,23 @@ const getAdminChatUserMeta = (user = {}) => {
             };
         };
 
-const ensureAdminChatUsersLoaded = async () => {
-            if (!hasAdminSessionReadyOrCached() || allUsersCache.length) return;
+const ensureAdminChatUsersLoaded = async (forceRefresh = false) => {
+            if (!hasAdminSessionReadyOrCached()) return;
+            const isOwner = checkIsOwner(currentUser, currentUserData);
+            const subAdminUid = currentUser?.uid || (typeof getCurrentUserId === 'function' ? getCurrentUserId() : '');
+
+            if (!forceRefresh && allUsersCache.length > 0) {
+                if (!isOwner) {
+                    allUsersCache = allUsersCache.filter(u => String(u.parentAdmin || u.parent_admin || '') === String(subAdminUid));
+                }
+                return;
+            }
+
             try {
                 const usersSnap = await getDocs(query(collection(db, `artifacts/${appId}/public/data/users`)));
                 let list = usersSnap.docs.map(d => ({ id: d.id, ...d.data() }));
-                const isOwner = checkIsOwner(currentUser, currentUserData);
                 if (!isOwner) {
-                    const subAdminUid = currentUser?.uid || (typeof getCurrentUserId === 'function' ? getCurrentUserId() : '');
-                    list = list.filter(u => u.parentAdmin === subAdminUid || u.parent_admin === subAdminUid);
+                    list = list.filter(u => String(u.parentAdmin || u.parent_admin || '') === String(subAdminUid));
                 }
                 allUsersCache = list;
             } catch (error) {
@@ -211,7 +219,7 @@ const renderAdminChatsList = () => {
             const isOwner = checkIsOwner(currentUser, currentUserData);
             const subAdminUid = currentUser?.uid || (typeof getCurrentUserId === 'function' ? getCurrentUserId() : '');
             
-            const chatsToRender = searchTerm
+            let chatsToRender = searchTerm
                 ? allSupportChatsCache.filter(chat => [
                     chat.userName,
                     chat.userEmail,
@@ -220,24 +228,20 @@ const renderAdminChatsList = () => {
                 ].some(value => String(value || '').toLowerCase().includes(searchTerm)))
                 : allSupportChatsCache;
 
+            if (!isOwner) {
+                chatsToRender = chatsToRender.filter(chat => {
+                    const cUserId = chat.userId || chat.id;
+                    if (cUserId === ADMIN_UID) return false;
+                    const u = allUsersCache.find(user => (user.id || user.uid) === cUserId);
+                    return u && String(u.parentAdmin || u.parent_admin || '') === String(subAdminUid);
+                });
+            }
+
             let baseUsersForSearch = [...allUsersCache];
             if (!isOwner) {
                 baseUsersForSearch = baseUsersForSearch.filter(u => 
-                    u.parentAdmin === subAdminUid || u.parent_admin === subAdminUid
+                    String(u.parentAdmin || u.parent_admin || '') === String(subAdminUid)
                 );
-            }
-
-            const hasOwnerInCache = baseUsersForSearch.some(u => u.id === ADMIN_UID || u.uid === ADMIN_UID || u.email === 'reviewsworld51@gmail.com' || u.email === 'reviewsworld01@gmail.com');
-            if (!isOwner && !hasOwnerInCache) {
-                const ownerProfile = getOwnerProfile();
-                baseUsersForSearch.push({
-                    id: ADMIN_UID,
-                    uid: ADMIN_UID,
-                    name: ownerProfile.userName,
-                    email: ownerProfile.userEmail,
-                    role: 'owner',
-                    profilePhoto: ownerProfile.userAvatar
-                });
             }
 
             const existingChatUserIds = new Set(allSupportChatsCache.map(chat => String(chat.userId || chat.id || '')));
@@ -342,8 +346,10 @@ const showAdminChatsPage = () => {
             setBottomNavActive('bottom-settings-btn');
             document.getElementById('admin-chat-search').addEventListener('input', renderAdminChatsList);
             renderAdminChatsList();
-            loadAdminChatsFromBackend({ silent: false, subscribeRealtime: false });
-            ensureAdminChatUsersLoaded().then(renderAdminChatsList);
+            ensureAdminChatUsersLoaded(true).then(() => {
+                loadAdminChatsFromBackend({ silent: false, subscribeRealtime: false });
+                renderAdminChatsList();
+            });
         };
 
 // Expose functions to window for global access

@@ -664,11 +664,11 @@ async function listChatRooms(d1, { limit = 100, parentAdmin = null } = {}) {
     return d1.all(
       `SELECT cr.room_id, cr.user_id, cr.user_name, cr.user_email, cr.user_mobile, cr.last_message, cr.last_sender_id, cr.updated_at
        FROM chat_rooms cr
-       LEFT JOIN users u ON (cr.user_id = u.id OR cr.user_id = u.firebase_uid)
-       WHERE cr.room_id LIKE ? OR u.parent_admin = ? OR cr.user_id = ?
+       INNER JOIN users u ON (cr.user_id = u.id OR cr.user_id = u.firebase_uid)
+       WHERE u.parent_admin = ?
        ORDER BY cr.updated_at DESC
        LIMIT ?`,
-      [`%_${parentAdmin}`, parentAdmin, ADMIN_UID, limit]
+      [parentAdmin, limit]
     );
   }
   return d1.all(
