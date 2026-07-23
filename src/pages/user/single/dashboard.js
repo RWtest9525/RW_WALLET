@@ -351,6 +351,24 @@ const renderTransactionItem = (item, isFullPage = false) => {
             const clickableClass = hasDetailKey ? 'tx-item-clickable cursor-pointer' : '';
             const dataKey = hasDetailKey ? `data-key="${item.key}"` : '';
 
+            const checkUserIsVerified = (name, mobile) => {
+                if (!name) return false;
+                const lowerName = name.toLowerCase();
+                if (lowerName.includes('reviews world') || lowerName.includes('admin wallet') || lowerName.includes('digital wallet')) {
+                    return true;
+                }
+                const cache = window.allUsersCache || [];
+                const profile = cache.find(u =>
+                    (mobile && u.mobile === mobile) ||
+                    (u.name && u.name.toLowerCase() === lowerName)
+                );
+                if (profile) {
+                    const role = String(profile.role || '').toLowerCase();
+                    return role === 'admin' || role === 'subadmin' || role === 'owner' || !!profile.isVerified || !!profile.verified;
+                }
+                return false;
+            };
+
             if (item.type === 'mobile_recharge') {
                 const isPending = item.status === 'pending';
                 const isRejected = item.status === 'rejected';
@@ -430,15 +448,17 @@ const renderTransactionItem = (item, isFullPage = false) => {
                 const colorClass = isCredit ? 'text-green-500' : 'text-red-500';
                 const actionText = isCredit ? 'From: ' : 'To: ';
                 const userName = isCredit ? (item.senderName || 'User') : (item.recipientName || 'User');
+                const userMobile = isCredit ? (item.senderMobile || '') : (item.recipientMobile || '');
+                const isVerified = checkUserIsVerified(userName, userMobile);
 
                 return `
                     <div class="flex justify-between items-center p-3 bg-gray-50 dark:bg-gray-700/50 rounded-lg text-sm ${clickableClass}" ${dataKey}>
-                        <div class="flex-1">
-                            <p class="font-semibold">${actionText}${escapeHtml(userName)}</p>
+                        <div class="flex-1 min-w-0">
+                            <p class="font-semibold truncate inline-flex items-center gap-1">${actionText}${escapeHtml(userName)}${isVerified ? getVerifiedBadge() : ''}</p>
                             <p class="text-xs text-gray-500 dark:text-gray-400">${formatDateDDMMYY(item.timestamp)}</p>
                             <p class="text-xs text-gray-500 dark:text-gray-400">Wallet Transfer</p>
                         </div>
-                        <p class="font-bold ${colorClass}">
+                        <p class="font-bold ${colorClass} shrink-0">
                             ${sign}${formatCurrency(Math.abs(item.amount))}
                         </p>
                     </div>`;
@@ -446,14 +466,15 @@ const renderTransactionItem = (item, isFullPage = false) => {
 
             // Handle debit transactions (when user sends money) - Show To information
             if (item.type === 'debit' && item.recipientName) {
+                const isVerified = checkUserIsVerified(item.recipientName, item.recipientMobile);
                 return `
                     <div class="flex justify-between items-center p-3 bg-gray-50 dark:bg-gray-700/50 rounded-lg text-sm ${clickableClass}" ${dataKey}>
-                        <div class="flex-1">
-                            <p class="font-semibold">To: ${escapeHtml(item.recipientName || 'User')}</p>
+                        <div class="flex-1 min-w-0">
+                            <p class="font-semibold truncate inline-flex items-center gap-1">To: ${escapeHtml(item.recipientName || 'User')}${isVerified ? getVerifiedBadge() : ''}</p>
                             <p class="text-xs text-gray-500 dark:text-gray-400">${formatDateDDMMYY(item.timestamp)}</p>
                             <p class="text-xs text-gray-500 dark:text-gray-400">Money Sent</p>
                         </div>
-                        <p class="font-bold text-red-500">
+                        <p class="font-bold text-red-500 shrink-0">
                             -${formatCurrencyAbs(item.amount)}
                         </p>
                     </div>`;
@@ -467,17 +488,24 @@ const renderTransactionItem = (item, isFullPage = false) => {
 
             // Check if this is a debit (wallet send) and use recipientName if available
             let displayText = (item.comment || item.type || 'Wallet Transaction').replace(/_/g, ' ');
+            let targetMobile = '';
             if (item.type === 'debit' && item.recipientName) {
                 displayText = item.recipientName;
+                targetMobile = item.recipientMobile || '';
+            } else if (item.senderName) {
+                displayText = item.senderName;
+                targetMobile = item.senderMobile || '';
             }
+
+            const isVerified = checkUserIsVerified(displayText, targetMobile);
 
             return `
                 <div class="flex justify-between items-center p-3 bg-gray-50 dark:bg-gray-700/50 rounded-lg text-sm ${clickableClass}" ${dataKey}>
-                    <div class="flex-1">
-                        <p class="font-semibold capitalize">${escapeHtml(displayText)}</p>
+                    <div class="flex-1 min-w-0">
+                        <p class="font-semibold capitalize truncate inline-flex items-center gap-1">${escapeHtml(displayText)}${isVerified ? getVerifiedBadge() : ''}</p>
                         <p class="text-xs text-gray-500 dark:text-gray-400">${formatDateDDMMYY(item.timestamp)}</p>
                     </div>
-                    <p class="font-bold ${colorClass}">
+                    <p class="font-bold ${colorClass} shrink-0">
                         ${sign}${formatCurrencyAbs(item.amount)}
                     </p>
                 </div>`;
@@ -6403,10 +6431,18 @@ const showTransactionDetails = (key, source = 'user') => {
                 return (parts[0][0] + parts[1][0]).toUpperCase();
             };
             const verifiedBadge = getVerifiedBadge();
-            const isVerifiedTransactionParty = (party = {}) =>
-                !!party.appLogo ||
-                isReviewsWorldName(party.name || '') ||
-                /admin wallet|rw wallet|digital wallet/i.test(`${party.detail || ''} ${party.name || ''}`);
+            const isVerifiedTransactionParty = (party = {}) => {
+                if (!!party.appLogo) return true;
+                const pName = String(party.name || '');
+                if (isReviewsWorldName(pName)) return true;
+                if (/admin wallet|rw wallet|digital wallet/i.test(`${party.detail || ''} ${pName}`)) return true;
+                const profile = findUserProfile({ name: pName, mobile: party.detail });
+                if (profile) {
+                    const role = String(profile.role || '').toLowerCase();
+                    return role === 'admin' || role === 'subadmin' || role === 'owner' || !!profile.isVerified || !!profile.verified;
+                }
+                return false;
+            };
             const renderTransactionAvatar = (name, forceAppLogo = false, logoUrl = '', userProfile = null) => logoUrl ? `
                 <div class="w-10 h-10 bg-white dark:bg-gray-700 rounded-full flex items-center justify-center shadow-inner shrink-0 border border-gray-100 dark:border-gray-600 p-1.5">
                     <img src="${logoUrl}" class="w-full h-full object-contain rounded-full" alt="${name}" loading="eager">
