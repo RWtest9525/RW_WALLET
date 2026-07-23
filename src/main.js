@@ -258,7 +258,7 @@ onAuthStateChanged(auth, async (user) => {
                         localStorage.removeItem('original_owner_data');
                     }
                     if (window.OneSignalManager && ownerUid) {
-                        window.OneSignalManager.login(ownerUid);
+                        window.OneSignalManager.linkUserPushIdentity(ownerUid);
                     }
                     showNotification('Switched back to Owner successfully!');
                     window.location.reload();
@@ -269,7 +269,7 @@ onAuthStateChanged(auth, async (user) => {
                 // OneSignal user identification
                 if (window.OneSignalManager) {
                     const effectivePushId = isImpersonating ? localStorage.getItem('impersonated_sub_admin_uid') : user.uid;
-                    window.OneSignalManager.login(effectivePushId);
+                    window.OneSignalManager.linkUserPushIdentity(effectivePushId);
                     if (user.email) {
                         window.OneSignalManager.setEmail(user.email);
                     }

@@ -1,7 +1,7 @@
 const initializePushNotifications = async (userId) => {
             try {
                 if (window.OneSignalManager && userId) {
-                    window.OneSignalManager.login(userId);
+                    window.OneSignalManager.linkUserPushIdentity(userId);
                 }
             } catch (e) {
                 console.warn('OneSignal login inside initializePushNotifications failed:', e);

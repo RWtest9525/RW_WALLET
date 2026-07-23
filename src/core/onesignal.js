@@ -221,6 +221,56 @@ export const OneSignalManager = {
         });
     },
 
+    linkUserPushIdentity: (userId) => {
+        if (!userId) return;
+        console.log("[OneSignalManager] Linking user push identity for:", userId);
+
+        OneSignalManager.login(userId);
+        OneSignalManager.setTags({ userId: userId });
+
+        if (window.JSInterface) {
+            try {
+                if (typeof window.JSInterface.setExternalUserId === 'function') {
+                    window.JSInterface.setExternalUserId(userId);
+                    console.log("JSInterface.setExternalUserId called for user:", userId);
+                }
+            } catch (e) {
+                console.warn("JSInterface.setExternalUserId failed:", e);
+            }
+            try {
+                if (typeof window.JSInterface.setOneSignalExternalUserId === 'function') {
+                    window.JSInterface.setOneSignalExternalUserId(userId);
+                }
+            } catch (e) {}
+            try {
+                if (typeof window.JSInterface.setOneSignalTag === 'function') {
+                    window.JSInterface.setOneSignalTag("userId", userId);
+                }
+            } catch (e) {}
+            try {
+                if (typeof window.JSInterface.sendOneSignalTag === 'function') {
+                    window.JSInterface.sendOneSignalTag("userId", userId);
+                }
+            } catch (e) {}
+        }
+
+        try {
+            if (/iphone|ipad|ipod|android/i.test(navigator.userAgent.toLowerCase())) {
+                const iframe1 = document.createElement('iframe');
+                iframe1.style.display = 'none';
+                iframe1.src = `onesignal://external_user_id?id=${encodeURIComponent(userId)}`;
+                document.body.appendChild(iframe1);
+                setTimeout(() => iframe1.remove(), 800);
+
+                const iframe2 = document.createElement('iframe');
+                iframe2.style.display = 'none';
+                iframe2.src = `onesignal://tag?key=userId&value=${encodeURIComponent(userId)}`;
+                document.body.appendChild(iframe2);
+                setTimeout(() => iframe2.remove(), 800);
+            }
+        } catch (e) {}
+    },
+
     // Control logging levels
     setLogLevel: (level) => {
         OneSignalManager.executeSafely(async (OneSignal) => {

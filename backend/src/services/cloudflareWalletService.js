@@ -1147,7 +1147,6 @@ async function sendOneSignalPush(d1OrTarget, targetOrTitle, titleOrMessage, mess
     let res = await postOneSignalApi(payloadV11, apiKey);
     if (res && !res.errors) {
       console.log(`[OneSignal] Push sent successfully to ${JSON.stringify(externalIds)}:`, res);
-      return res;
     }
 
     const payloadLegacy = {
@@ -1163,9 +1162,32 @@ async function sendOneSignalPush(d1OrTarget, targetOrTitle, titleOrMessage, mess
       payloadLegacy.data = extraData;
     }
 
-    res = await postOneSignalApi(payloadLegacy, apiKey);
-    console.log(`[OneSignal] Legacy Push sent to ${JSON.stringify(externalIds)}:`, res);
-    return res;
+    const resLegacy = await postOneSignalApi(payloadLegacy, apiKey);
+    console.log(`[OneSignal] Legacy Push sent to ${JSON.stringify(externalIds)}:`, resLegacy);
+
+    // Dynamic Filter & Tag-based fallback delivery for WebView wrappers
+    const filters = [];
+    externalIds.forEach((id, idx) => {
+      if (idx > 0) filters.push({ operator: "OR" });
+      filters.push({ field: "tag", key: "userId", relation: "=", value: id });
+    });
+    if (filters.length > 0) {
+      const payloadFilters = {
+        app_id: appId,
+        filters: filters,
+        headings: { en: cleanTitle },
+        contents: { en: cleanMsg },
+        priority: 10,
+        ttl: 259200
+      };
+      if (extraData) {
+        payloadFilters.data = extraData;
+      }
+      const resFilters = await postOneSignalApi(payloadFilters, apiKey);
+      console.log(`[OneSignal] Tag Filter Push sent to ${JSON.stringify(externalIds)}:`, resFilters);
+    }
+
+    return res || resLegacy;
   } catch (err) {
     console.error('[OneSignal] Push failed:', err);
   }
