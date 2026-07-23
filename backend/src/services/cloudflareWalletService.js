@@ -1177,8 +1177,8 @@ async function sendNotification(d1, userId, title, message, customData = null) {
     });
   } catch (err) {
     console.error(`Failed to save notification to DB for ${userId}:`, err);
-    await sendOneSignalPush(d1, userId, title, message, customData);
   }
+  await sendOneSignalPush(d1, userId, title, message, customData);
 }
 
 async function putR2Object(r2, key, body, contentType = 'application/json') {
@@ -2802,6 +2802,20 @@ function registerRoutes(app, { d1, r2 }) {
     } catch (error) {
       console.error('Firebase session failed:', error);
       return res.status(401).json({ ok: false, error: 'INVALID_FIREBASE_TOKEN' });
+    }
+  });
+
+  app.post('/api/chat/send-push', requireHttpAuth, async (req, res) => {
+    try {
+      const { targetUserId, title, message } = req.body;
+      if (!targetUserId || !message) {
+        return res.status(400).json({ ok: false, error: 'MISSING_TARGET_OR_MESSAGE' });
+      }
+      await sendNotification(d1, targetUserId, title || 'New Chat Message', message, { type: 'chat' });
+      return res.json({ ok: true, message: 'Push notification queued.' });
+    } catch (err) {
+      console.error('[ChatPush] Error:', err);
+      return res.status(500).json({ ok: false, error: err.message });
     }
   });
 

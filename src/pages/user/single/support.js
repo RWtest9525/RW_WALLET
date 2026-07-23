@@ -421,6 +421,33 @@ const renderSupportMessages = (messages, viewerRole) => {
                 activeSupportMessages = mergeSupportMessages(activeSupportMessages, [tempMsgObj]);
                 writeSupportChatCache(activeSupportRoomId, activeSupportMessages);
                 renderSupportMessages(activeSupportMessages, viewerRole);
+                
+                const msgListContainer = document.getElementById('support-chat-messages');
+                if (msgListContainer) {
+                    msgListContainer.scrollTop = msgListContainer.scrollHeight;
+                }
+
+                // Trigger Web Push Notification for the recipient
+                const targetPushUserId = viewerRole === 'admin' 
+                    ? chatUserId 
+                    : (chatMeta.adminId || currentUserData?.parentAdmin || currentUserData?.parent_admin || ADMIN_UID);
+
+                if (targetPushUserId) {
+                    getBackendAuthToken().then(token => {
+                        fetch(`${BACKEND_BASE_URL}/api/chat/send-push`, {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                                'Authorization': `Bearer ${token}`
+                            },
+                            body: JSON.stringify({
+                                targetUserId: targetPushUserId,
+                                title: viewerRole === 'admin' ? 'New Message from Admin' : `New Message from ${currentUserData?.name || 'User'}`,
+                                message: text
+                            })
+                        }).catch(err => console.warn('Push notification trigger error:', err));
+                    }).catch(() => {});
+                }
 
                 const isChatWithOwner = chatUserId === ADMIN_UID;
                 const userMeta = {
@@ -780,6 +807,17 @@ const openSupportChatPage = async (chatUserId, viewerRole = 'user', chatMeta = {
                 renderSupportMessages(activeSupportMessages, viewerRole);
                 if (!isAdminView) markSupportChatSeen(activeSupportRoomId, activeSupportMessages);
                 if (isAdminView) markAdminSupportChatSeen(activeSupportRoomId, activeSupportMessages);
+            };
+            const handleNewMessage = (message) => {
+                const normalized = normalizeBackendMessage(message);
+                if (normalized.roomId !== activeSupportRoomId) return;
+                activeSupportMessages = mergeSupportMessages(activeSupportMessages, [normalized]);
+                writeSupportChatCache(activeSupportRoomId, activeSupportMessages);
+                renderSupportMessages(activeSupportMessages, viewerRole);
+                if (!isAdminView) markSupportChatSeen(activeSupportRoomId, activeSupportMessages);
+                if (isAdminView) markAdminSupportChatSeen(activeSupportRoomId, activeSupportMessages);
+                const msgListEl = document.getElementById('support-chat-messages');
+                if (msgListEl) msgListEl.scrollTop = msgListEl.scrollHeight;
             };
             const handleReadReceipt = ({ roomId, readerRole, readAt }) => {
                 if (roomId !== activeSupportRoomId) return;
@@ -1358,6 +1396,7 @@ const showHelpSupportPage = () => {
                         </div>
                         <span class="text-blue-600 dark:text-blue-300 font-bold">Ask</span>
                     </button>
+                    ${!hasSubAdmin ? `
                     <button id="reviews-world-chat-card" class="w-full flex items-center gap-4 p-4 bg-white dark:bg-gray-800 border border-gray-100 dark:border-gray-700 rounded-2xl shadow-md text-left hover:bg-gray-50 dark:hover:bg-gray-700/50 transition">
                         ${getSupportLogoFrame('h-14 w-14 shrink-0')}
                         <div class="flex-1 min-w-0">
@@ -1367,6 +1406,7 @@ const showHelpSupportPage = () => {
                         <span id="support-chat-unread-badge" class="hidden min-w-6 h-6 rounded-full bg-red-600 px-2 text-center text-xs font-black leading-6 text-white shadow"></span>
                         <span class="text-blue-600 dark:text-blue-300 font-bold">Chat</span>
                     </button>
+                    ` : ''}
                     <div id="sub-admin-chat-card-wrapper" class="hidden"></div>
                 </div>
                 ${getPageFooter()}`;
@@ -1375,7 +1415,9 @@ const showHelpSupportPage = () => {
             setBottomNavActive('bottom-help-btn');
             updateSupportChatUnreadBadges();
             document.getElementById('revy-ai-chat-card').onclick = openRevyBotChatPage;
-            document.getElementById('reviews-world-chat-card').onclick = () => openSupportChatPage(currentUser.uid, 'user', { adminId: ADMIN_UID });
+            if (!hasSubAdmin) {
+                document.getElementById('reviews-world-chat-card').onclick = () => openSupportChatPage(currentUser.uid, 'user', { adminId: ADMIN_UID });
+            }
             
             if (hasSubAdmin) {
                 loadSubAdminChatCard(parentAdminId);

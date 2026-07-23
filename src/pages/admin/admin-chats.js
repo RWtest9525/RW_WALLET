@@ -52,6 +52,15 @@ const subscribeAdminChatRooms = async (chats = allSupportChatsCache) => {
                 const cachedMessages = mergeSupportMessages(readSupportChatCache(normalized.roomId), [normalized]);
                 writeSupportChatCache(normalized.roomId, cachedMessages);
 
+                if (isActiveRoomOpen) {
+                    activeSupportMessages = mergeSupportMessages(activeSupportMessages, [normalized]);
+                    renderSupportMessages(activeSupportMessages, 'admin');
+                    const msgListContainer = document.getElementById('support-chat-messages');
+                    if (msgListContainer) {
+                        msgListContainer.scrollTop = msgListContainer.scrollHeight;
+                    }
+                }
+
                 const existingIndex = allSupportChatsCache.findIndex(chat => (chat.roomId || getSupportRoomId(chat.userId || chat.id)) === normalized.roomId);
                 const existing = existingIndex >= 0 ? allSupportChatsCache[existingIndex] : {};
                 const userProfile = allUsersCache.find(user => (user.id || user.uid) === userId) || {};
@@ -78,15 +87,7 @@ const subscribeAdminChatRooms = async (chats = allSupportChatsCache) => {
                 renderAdminChatsList();
             };
 
-            const handleAdminBackgroundRead = ({ roomId, readerRole, readAt }) => {
-                applySupportReadReceipt(roomId, readerRole, readAt);
-                renderAdminChatsList();
-            };
-
-            adminChatBackgroundHandlers = {
-                message: updateRoomFromMessage,
-                read: handleAdminBackgroundRead
-            };
+            adminChatBackgroundHandlers = { message: updateRoomFromMessage, read: handleAdminBackgroundRead };
             socket.on('new_message', updateRoomFromMessage);
             socket.on('chat_read', handleAdminBackgroundRead);
 
@@ -116,7 +117,7 @@ const getOwnerProfile = () => {
     };
 };
 
-const loadAdminChatsFromBackend = async ({ silent = false, retry = true, subscribeRealtime = false } = {}) => {
+const loadAdminChatsFromBackend = async ({ silent = false, retry = true, subscribeRealtime = true } = {}) => {
             if (!hasAdminSessionReadyOrCached()) return;
             await ensureAdminChatUsersLoaded();
             try {
@@ -144,8 +145,12 @@ const loadAdminChatsFromBackend = async ({ silent = false, retry = true, subscri
                 if (!isOwner) {
                     chatList = chatList.filter(chat => {
                         const cUserId = chat.userId || chat.id;
+                        if (cUserId === subAdminUid || cUserId === ADMIN_UID) return false;
                         const u = allUsersCache.find(user => (user.id || user.uid) === cUserId);
-                        return u && (u.parentAdmin === subAdminUid || u.parent_admin === subAdminUid);
+                        if (u) {
+                            return u.parentAdmin === subAdminUid || u.parent_admin === subAdminUid;
+                        }
+                        return chat.roomId && chat.roomId.includes(subAdminUid);
                     });
                 } else {
                     chatList = chatList.filter(chat => {
