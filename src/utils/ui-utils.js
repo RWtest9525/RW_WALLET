@@ -2467,6 +2467,17 @@ const normalizeBackendMessage = (message) => {
             const senderId = message.senderId || message.sender_id || '';
             const isSenderCurrent = senderId && currentUser?.uid && (senderId === currentUser.uid);
             const isSenderAdmin = senderId === ADMIN_UID || message.senderRole === 'admin' || message.sender_role === 'admin' || (window.currentUserData && (window.currentUserData.role === 'admin' || window.currentUserData.role === 'owner') && isSenderCurrent);
+            
+            let rawReadAt = message.readAt
+                    || (isSenderAdmin
+                        ? (message.readByUserAt || message.read_by_user_at)
+                        : (message.readByAdminAt || message.read_by_admin_at))
+                    || null;
+            
+            if (rawReadAt === 0 || rawReadAt === '0' || rawReadAt === 0.0 || !rawReadAt) {
+                rawReadAt = null;
+            }
+
             return {
                 id: message.id || `${message.roomId || message.room_id || activeSupportRoomId}-${message.timestamp || message.createdAt || Date.now()}-${senderId}`,
                 roomId: message.roomId || message.room_id || activeSupportRoomId,
@@ -2474,11 +2485,7 @@ const normalizeBackendMessage = (message) => {
                 senderId: senderId,
                 senderRole: isSenderAdmin ? 'admin' : (message.senderRole || message.sender_role || 'user'),
                 createdAt: message.timestamp || message.createdAt || Date.now(),
-                readAt: message.readAt
-                    || (isSenderAdmin
-                        ? (message.readByUserAt || message.read_by_user_at)
-                        : (message.readByAdminAt || message.read_by_admin_at))
-                    || null,
+                readAt: rawReadAt,
                 clientMessageId: message.clientMessageId || message.client_message_id || null
             };
         };
