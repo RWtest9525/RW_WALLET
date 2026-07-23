@@ -412,18 +412,22 @@ const showAdminUserDashboardPage = async (userId) => {
                 }
             }
 
-            let rawUsedCode = String(user.usedReferralCode || user.referredByCode || user.referralCodeUsed || user.refCode || '').trim();
-            if (!rawUsedCode || rawUsedCode === 'undefined' || rawUsedCode === 'null') {
-                rawUsedCode = subAdminRefCode;
+            let referrerDisplay = 'Direct Signup';
+            let rawUsedCode = String(user.usedReferralCode || user.referredByCode || user.referralCodeUsed || user.used_referral_code || '').trim();
+
+            if (user.referredBy && user.referredBy !== 'undefined' && user.referredBy !== 'N/A') {
+                const refUser = allUsersCache.find(u => String(u.id || u.uid) === String(user.referredBy));
+                if (refUser) {
+                    const refCode = refUser.referralCode || refUser.referral_code || '';
+                    referrerDisplay = refCode ? `${refCode} (${refUser.name || refUser.email || 'User'})` : (refUser.name || refUser.email || 'Referred User');
+                }
             }
 
-            let referrerDisplay = 'Direct Signup';
-            if (rawUsedCode && rawUsedCode !== 'undefined' && rawUsedCode !== 'null') {
-                referrerDisplay = rawUsedCode;
-            } else if (user.referredBy && user.referredBy !== 'undefined' && user.referredBy !== 'N/A') {
-                const refUser = allUsersCache.find(u => u.id === user.referredBy || u.uid === user.referredBy);
-                if (refUser) {
-                    referrerDisplay = refUser.name || refUser.email || 'Referred User';
+            if (referrerDisplay === 'Direct Signup') {
+                if (rawUsedCode && rawUsedCode !== 'undefined' && rawUsedCode !== 'null') {
+                    referrerDisplay = rawUsedCode;
+                } else if (subAdminRefCode && subAdminRefCode !== 'undefined' && subAdminRefCode !== 'null') {
+                    referrerDisplay = subAdminRefCode;
                 }
             }
 

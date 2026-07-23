@@ -172,6 +172,18 @@ const handleAuth = async (e) => {
                         } else {
                             referredBy = referrerData.id || referrerData.uid;
                             parentAdmin = referrerData.parentAdmin || referrerData.parent_admin || ADMIN_UID;
+                            
+                            // If referrer user's parentAdmin is missing or ADMIN_UID, inspect referrer's parent chain recursively
+                            if ((!parentAdmin || parentAdmin === ADMIN_UID) && referrerData.referredBy) {
+                                try {
+                                    const refParentDoc = await getDoc(doc(db, `artifacts/${appId}/public/data/users`, referrerData.referredBy));
+                                    if (refParentDoc.exists()) {
+                                        const pData = refParentDoc.data();
+                                        const pAdmin = pData.parentAdmin || pData.parent_admin;
+                                        if (pAdmin) parentAdmin = pAdmin;
+                                    }
+                                } catch (e) {}
+                            }
                         }
                     }
 
@@ -217,7 +229,9 @@ const handleAuth = async (e) => {
                         parentAdmin,
                         parent_admin: parentAdmin,
                         referredBy,
-                        referralCode: userReferralCode
+                        referralCode: userReferralCode,
+                        usedReferralCode: referralCodeUpper,
+                        referredByCode: referralCodeUpper
                     };
                     await setDoc(doc(db, `artifacts/${appId}/public/data/users`, cred.user.uid), pendingUserData, { merge: true });
                     currentUser = cred.user;
