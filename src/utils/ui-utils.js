@@ -890,7 +890,10 @@ const getBanDetails = (data = {}) => {
         };
 
 const isUserApprovalPending = (data = {}) => {
-    if (data.approvalStatus === 'approved' || data.signupApprovalStatus === 'approved' || data.accountStatus === 'active' || data.isApproved === true) {
+    if (!data) return false;
+    if (data.isApproved === true || data.is_approved === true || data.is_approved === 1 ||
+        data.approvalStatus === 'approved' || data.signupApprovalStatus === 'approved' ||
+        data.accountStatus === 'active' || data.account_status === 'active') {
         return false;
     }
     return data.approvalStatus === 'pending' || data.signupApprovalStatus === 'pending' || data.accountStatus === 'pending_approval';

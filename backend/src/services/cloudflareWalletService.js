@@ -3050,7 +3050,7 @@ function registerRoutes(app, { d1, r2 }) {
       // Verify user permissions
       if (req.auth.sub !== ADMIN_UID && req.auth.role !== 'owner') {
         const userDoc = await db.doc(`artifacts/${appId}/public/data/users/${targetUid}`).get();
-        if (userDoc.exists()) {
+        if (userDoc.exists) {
           const uData = userDoc.data();
           const pAdmin = uData.parentAdmin || uData.parent_admin;
           if (pAdmin !== req.auth.sub) {

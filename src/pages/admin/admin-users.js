@@ -18,8 +18,7 @@ const applyAdminUsersCache = (users = []) => {
             let filteredUsers = users;
             if (!isOwner) {
                 filteredUsers = users.filter(u => 
-                    u.id === ADMIN_UID || u.uid === ADMIN_UID || u.role === 'admin' || u.role === 'subadmin' || u.role === 'owner' ||
-                    u.parentAdmin === subAdminUid || u.parent_admin === subAdminUid
+                    !isAdminUserRecord(u) && (u.parentAdmin === subAdminUid || u.parent_admin === subAdminUid)
                 );
             }
 
