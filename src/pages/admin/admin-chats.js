@@ -318,8 +318,17 @@ const renderAdminChatsList = () => {
                     const isOwnerChat = chat.userId === ADMIN_UID || chat.id === ADMIN_UID || chat.roomId?.includes(ADMIN_UID);
                     const ownerProfile = isOwnerChat ? getOwnerProfile() : null;
                     const displayName = isOwnerChat && !isOwner ? ownerProfile.userName : (chat.userName || 'User');
-                    const displayEmail = isOwnerChat && !isOwner ? ownerProfile.userEmail : (chat.userEmail || '');
                     const avatarUrl = isOwnerChat && !isOwner ? ownerProfile.userAvatar : (chat.userAvatar || 'https://cdn-icons-png.flaticon.com/512/3135/3135715.png');
+
+                    const roomId = chat.roomId || chat.room_id || getSupportRoomId(chat.userId || chat.id);
+                    const lastSenderId = chat.lastSenderId || chat.last_sender_id || '';
+                    const updatedAt = timestampToMillis(chat.updatedAt || chat.updated_at);
+                    const seenAt = Number(localStorage.getItem(getAdminSupportChatSeenKey(roomId)) || 0);
+                    const isUnread = lastSenderId && lastSenderId !== currentUser?.uid && updatedAt > seenAt;
+
+                    const prefix = (lastSenderId && lastSenderId === currentUser?.uid) ? 'You: ' : '';
+                    const lastMsgText = chat.lastMessage || 'No messages yet';
+                    const displayLastMessage = prefix ? `${prefix}${lastMsgText}` : lastMsgText;
 
                     return `
                     <button data-chat-userid="${chat.userId || chat.id}" data-chat-source="cache" class="admin-chat-row w-full flex items-center gap-3 p-3.5 bg-white dark:bg-gray-800 border border-gray-100 dark:border-gray-700 rounded-2xl shadow-sm text-left hover:bg-gray-50 dark:hover:bg-gray-700/50 transition">
@@ -327,9 +336,12 @@ const renderAdminChatsList = () => {
                         <div class="flex-1 min-w-0">
                             <div class="flex items-center justify-between gap-2">
                                 <h3 class="font-bold text-sm truncate">${escapeHtml(displayName)}</h3>
-                                <span class="text-[10px] text-gray-400 shrink-0">${formatChatTime(chat.updatedAt)}</span>
+                                <div class="flex flex-col items-end gap-1.5 shrink-0">
+                                    <span class="text-[10px] text-gray-400 shrink-0">${formatChatTime(chat.updatedAt)}</span>
+                                    ${isUnread ? `<span class="h-2.5 w-2.5 rounded-full bg-red-500 animate-pulse"></span>` : ''}
+                                </div>
                             </div>
-                            <p class="text-xs text-gray-600 dark:text-gray-300 truncate mt-1">${escapeHtml(chat.lastMessage || 'No messages yet')}</p>
+                            <p class="text-xs ${isUnread ? 'text-gray-900 dark:text-white font-bold' : 'text-gray-600 dark:text-gray-300'} truncate mt-1">${escapeHtml(displayLastMessage)}</p>
                         </div>
                     </button>`;
                 }).join('');
