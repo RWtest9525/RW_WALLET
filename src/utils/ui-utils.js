@@ -3258,6 +3258,9 @@ const handleDeleteUser = (userId, userName) => {
         };
 
 const showEditUserBalanceModal = (userId) => {
+            if (!checkIsOwner(currentUser, currentUserData)) {
+                return showNotification('Only Owner can edit user wallet balance.', true);
+            }
             const user = allUsersCache.find(u => u.id === userId);
             if (!user) return showNotification('Error: User not found.', true);
             const currentBalance = Number.isFinite(Number(user.balance)) ? Number(user.balance) : getUserAvailableBalance(user);

@@ -437,6 +437,29 @@ const showAdminUserDashboardPage = async (userId) => {
                             <span class="inline-flex rounded-full bg-slate-100 dark:bg-slate-750 text-gray-600 dark:text-gray-300 px-2.5 py-0.5 text-[10px] font-black uppercase">Role: ${escapeHtml(user.role || 'user')}</span>
                             ${user.referralCode ? `<span class="inline-flex rounded-full bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-300 px-2.5 py-0.5 text-[10px] font-black uppercase font-mono">CODE: ${escapeHtml(user.referralCode)}</span>` : ''}
                         </div>
+
+                        <!-- Verification / Dashboard Status Indicator -->
+                        <div class="mt-4 pt-3 border-t border-slate-100 dark:border-slate-700/80 flex flex-wrap items-center justify-between gap-3">
+                            <div>
+                                <span class="text-gray-400 dark:text-gray-500 block text-[10px] uppercase font-bold tracking-wider">Dashboard Status</span>
+                                <div class="mt-1 flex items-center gap-2">
+                                    ${isUserApprovalPending(user) ? `
+                                        <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-black bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-200 border border-amber-300 dark:border-amber-700">
+                                            ⚠️ Pending for Verification
+                                        </span>
+                                    ` : `
+                                        <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-black bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-200 border border-emerald-300 dark:border-emerald-700">
+                                            ✅ Dashboard Unlocked / Active
+                                        </span>
+                                    `}
+                                </div>
+                            </div>
+                            ${isUserApprovalPending(user) ? `
+                                <button data-action="approve-signup-request" data-userid="${user.id}" class="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs shadow-md active:scale-95 transition">
+                                    Approve & Unlock Dashboard
+                                </button>
+                            ` : ''}
+                        </div>
                     </div>
                     <div class="bg-yellow-50 dark:bg-yellow-900/20 p-4 rounded-2xl shadow-md border border-yellow-100 dark:border-yellow-800">
                         <div class="flex items-center justify-between gap-3 mb-3">
@@ -628,12 +651,6 @@ const renderAdminUserTransactions = () => {
                                 ${hasBalanceRisk ? `<p class="mt-1 inline-flex rounded-full bg-red-100 dark:bg-red-900/30 px-2 py-0.5 text-[10px] font-black uppercase text-red-700 dark:text-red-200">Risk: requested more than available balance</p>` : ''}
                             </div>
                             <div class="text-right shrink-0">
-                                <p class="font-black ${amountClass}">${sign}${formatCurrencyAbs(item.amount || 0)}</p>
-                                <p class="text-[10px] uppercase text-gray-400">${escapeHtml(item.status || 'completed')}</p>
-                            </div>
-                        </div>
-                    </div>`;
-            }).join('') : '<p class="text-center text-gray-500 py-6">No transactions found.</p>';
         };
 
 const showUserActionsModal = (userId) => {
@@ -656,9 +673,11 @@ const showUserActionsModal = (userId) => {
                         <button data-action="view-user-dashboard" data-userid="${u.id}" onclick="window.closeModal()" class="w-full text-center px-4 py-3 rounded-xl bg-emerald-50 dark:bg-emerald-950/20 text-emerald-700 dark:text-emerald-300 font-bold text-sm border border-emerald-100/50 hover:bg-emerald-100/50 transition">
                             🔍 View Dashboard
                         </button>
+                        ${isOwner ? `
                         <button data-action="edit-user-balance" data-userid="${u.id}" onclick="window.closeModal()" class="w-full text-center px-4 py-3 rounded-xl bg-blue-50 dark:bg-blue-955/20 text-blue-700 dark:text-blue-300 font-bold text-sm border border-blue-100/50 hover:bg-blue-100/50 transition">
                             💵 Edit Balance
                         </button>
+                        ` : ''}
                         <button data-action="flag-user" data-userid="${u.id}" data-flagged="${u.isFlagged || false}" onclick="window.closeModal()" class="w-full text-center px-4 py-3 rounded-xl bg-orange-50 dark:bg-orange-950/20 text-orange-700 dark:text-orange-300 font-bold text-sm border border-orange-100/50 hover:bg-orange-100/50 transition">
                             ⚠️ ${u.isFlagged ? 'Unflag User' : 'Flag User'}
                         </button>

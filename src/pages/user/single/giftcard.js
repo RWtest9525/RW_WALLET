@@ -79,16 +79,43 @@ const handleCreateGiftCode = async () => {
                 return showNotification('Invalid code, amount, or usage limit.', true);
             }
 
-            await addDoc(collection(db, `artifacts/${appId}/public/data/gift_codes`), {
-                code,
-                amount,
-                usageLimit: limit,
-                timesUsed: 0,
-                redeemedBy: [],
-                createdAt: serverTimestamp()
-            });
-            showNotification(`Code ${code} created.`);
-            window.closeModal();
+            const totalCost = amount * limit;
+            const isOwner = checkIsOwner(currentUser, currentUserData);
+
+            if (!isOwner) {
+                const availableBalance = getUserAvailableBalance(currentUserData || currentUser);
+                if (availableBalance < totalCost) {
+                    return showNotification(`Insufficient balance in your sub-admin wallet. Required: ₹${totalCost}, Available: ₹${availableBalance}`, true);
+                }
+            }
+
+            try {
+                if (!isOwner && currentUser?.uid) {
+                    const adminRef = doc(db, `artifacts/${appId}/public/data/users`, currentUser.uid);
+                    await updateDoc(adminRef, {
+                        balance: increment(-totalCost)
+                    });
+                    if (currentUserData) {
+                        currentUserData.balance = (currentUserData.balance || 0) - totalCost;
+                    }
+                }
+
+                await addDoc(collection(db, `artifacts/${appId}/public/data/gift_codes`), {
+                    code,
+                    amount,
+                    usageLimit: limit,
+                    timesUsed: 0,
+                    redeemedBy: [],
+                    createdBy: currentUser?.uid || '',
+                    createdAt: serverTimestamp()
+                });
+
+                showNotification(`Code ${code} created. ${!isOwner ? `₹${totalCost} deducted from your wallet.` : ''}`);
+                window.closeModal();
+            } catch (e) {
+                console.error("Create gift code failed:", e);
+                showNotification(`Failed to create gift code: ${e.message}`, true);
+            }
         };
 
 const generateUniqueGiftCodeValue = (existingCodes) => {
@@ -114,7 +141,27 @@ const handleGenerateGiftCodes = async () => {
                 return showNotification('Enter valid count (1-200) and amount.', true);
             }
 
+            const totalCost = count * amount;
+            const isOwner = checkIsOwner(currentUser, currentUserData);
+
+            if (!isOwner) {
+                const availableBalance = getUserAvailableBalance(currentUserData || currentUser);
+                if (availableBalance < totalCost) {
+                    return showNotification(`Insufficient balance in your sub-admin wallet. Required: ₹${totalCost}, Available: ₹${availableBalance}`, true);
+                }
+            }
+
             try {
+                if (!isOwner && currentUser?.uid) {
+                    const adminRef = doc(db, `artifacts/${appId}/public/data/users`, currentUser.uid);
+                    await updateDoc(adminRef, {
+                        balance: increment(-totalCost)
+                    });
+                    if (currentUserData) {
+                        currentUserData.balance = (currentUserData.balance || 0) - totalCost;
+                    }
+                }
+
                 const codesRef = collection(db, `artifacts/${appId}/public/data/gift_codes`);
                 const snap = await getDocs(codesRef);
                 const existingCodes = new Set(snap.docs.map(d => (d.data().code || '').toUpperCase()));
@@ -128,6 +175,7 @@ const handleGenerateGiftCodes = async () => {
                         usageLimit: 1,
                         timesUsed: 0,
                         redeemedBy: [],
+                        createdBy: currentUser?.uid || '',
                         createdAt: serverTimestamp()
                     });
                 }
@@ -138,7 +186,7 @@ const handleGenerateGiftCodes = async () => {
                 const freshSnap = await getDocs(codesRef);
                 allGiftCodesCache = freshSnap.docs;
                 renderAdminGiftCodesList(freshSnap.docs);
-                showNotification(`${count} unique gift code(s) generated.`);
+                showNotification(`${count} gift code(s) generated. ${!isOwner ? `₹${totalCost} deducted from your wallet.` : ''}`);
             } catch (e) {
                 console.error('Bulk gift code generation failed:', e);
                 showNotification(`Error: ${e.message}`, true);
