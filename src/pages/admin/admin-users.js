@@ -44,7 +44,16 @@ const applyAdminUsersCache = (users = []) => {
             if (!isOwner) {
                 otherUsers = otherUsers.filter(u => u.parentAdmin === currentUser?.uid || u.parent_admin === currentUser?.uid);
             } else {
-                otherUsers = otherUsers.filter(u => !u.parentAdmin || u.parentAdmin === ADMIN_UID || u.parent_admin === ADMIN_UID || u.parentAdmin === currentUser?.uid || u.parent_admin === currentUser?.uid);
+                // Owner sees ONLY: direct users (parentAdmin empty/null/ADMIN_UID) + sub-admins themselves
+                // NOT sub-admin's users (those have parentAdmin = some sub-admin UID)
+                otherUsers = otherUsers.filter(u => {
+                    const pAdmin = String(u.parentAdmin || u.parent_admin || '').trim();
+                    const role = String(u.role || '').toLowerCase();
+                    // Sub-admins always visible to owner
+                    if (role === 'subadmin') return true;
+                    // Direct owner users: no parentAdmin, or parentAdmin is owner
+                    return !pAdmin || pAdmin === 'null' || pAdmin === 'undefined' || pAdmin === ADMIN_UID || pAdmin === currentUser?.uid;
+                });
             }
             otherUsers.forEach(u => {
                     const balance = getUserAvailableBalance(u);
@@ -335,7 +344,13 @@ const updateAdminUserListView = () => {
             if (!isOwner) {
                 usersToRender = usersToRender.filter(u => u.parentAdmin === currentUser?.uid || u.parent_admin === currentUser?.uid);
             } else {
-                usersToRender = usersToRender.filter(u => !u.parentAdmin || u.parentAdmin === ADMIN_UID || u.parent_admin === ADMIN_UID || u.parentAdmin === currentUser?.uid || u.parent_admin === currentUser?.uid);
+                // Owner sees ONLY direct users + sub-admins, NOT sub-admin's users
+                usersToRender = usersToRender.filter(u => {
+                    const pAdmin = String(u.parentAdmin || u.parent_admin || '').trim();
+                    const role = String(u.role || '').toLowerCase();
+                    if (role === 'subadmin') return true;
+                    return !pAdmin || pAdmin === 'null' || pAdmin === 'undefined' || pAdmin === ADMIN_UID || pAdmin === currentUser?.uid;
+                });
             }
 
             // Apply filter
