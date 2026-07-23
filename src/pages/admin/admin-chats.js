@@ -144,36 +144,9 @@ const loadAdminChatsFromBackend = async ({ silent = false, retry = true, subscri
                 if (!isOwner) {
                     chatList = chatList.filter(chat => {
                         const cUserId = chat.userId || chat.id;
-                        if (cUserId === ADMIN_UID || chat.roomId?.includes(ADMIN_UID)) return true;
                         const u = allUsersCache.find(user => (user.id || user.uid) === cUserId);
                         return u && (u.parentAdmin === subAdminUid || u.parent_admin === subAdminUid);
                     });
-
-                    const ownerProfile = getOwnerProfile();
-                    const ownerRoomId = getSupportRoomId(ADMIN_UID, subAdminUid);
-                    const existingOwnerIndex = chatList.findIndex(c => c.userId === ADMIN_UID || c.id === ADMIN_UID || c.roomId === ownerRoomId);
-
-                    if (existingOwnerIndex >= 0) {
-                        chatList[existingOwnerIndex] = {
-                            ...chatList[existingOwnerIndex],
-                            userName: ownerProfile.userName,
-                            userEmail: ownerProfile.userEmail,
-                            userAvatar: ownerProfile.userAvatar
-                        };
-                    } else {
-                        chatList.unshift({
-                            id: ADMIN_UID,
-                            userId: ADMIN_UID,
-                            roomId: ownerRoomId,
-                            userName: ownerProfile.userName,
-                            userEmail: ownerProfile.userEmail,
-                            userMobile: ownerProfile.userMobile,
-                            userAvatar: ownerProfile.userAvatar,
-                            lastMessage: 'Tap to chat with REVIEWS WORLD support',
-                            lastSenderId: '',
-                            updatedAt: Date.now()
-                        });
-                    }
                 } else {
                     chatList = chatList.filter(chat => {
                         const cUserId = chat.userId || chat.id;
@@ -223,7 +196,7 @@ const ensureAdminChatUsersLoaded = async () => {
                 const isOwner = checkIsOwner(currentUser, currentUserData);
                 if (!isOwner) {
                     const subAdminUid = currentUser?.uid || (typeof getCurrentUserId === 'function' ? getCurrentUserId() : '');
-                    list = list.filter(u => (u.id === ADMIN_UID || u.uid === ADMIN_UID || u.email === 'reviewsworld51@gmail.com' || u.email === 'reviewsworld01@gmail.com' || u.role === 'owner') || u.parentAdmin === subAdminUid || u.parent_admin === subAdminUid);
+                    list = list.filter(u => u.parentAdmin === subAdminUid || u.parent_admin === subAdminUid);
                 }
                 allUsersCache = list;
             } catch (error) {
@@ -250,7 +223,7 @@ const renderAdminChatsList = () => {
             let baseUsersForSearch = [...allUsersCache];
             if (!isOwner) {
                 baseUsersForSearch = baseUsersForSearch.filter(u => 
-                    (u.id === ADMIN_UID || u.uid === ADMIN_UID || u.email === 'reviewsworld51@gmail.com' || u.email === 'reviewsworld01@gmail.com' || u.role === 'owner') || u.parentAdmin === subAdminUid || u.parent_admin === subAdminUid
+                    u.parentAdmin === subAdminUid || u.parent_admin === subAdminUid
                 );
             }
 
