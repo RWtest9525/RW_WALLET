@@ -96,18 +96,32 @@ export const OneSignalManager = {
         });
     },
 
-    // Safe execution helper to avoid errors if initialization failed
+    // Safe execution helper that handles native plugin bridges (Cordova/Capacitor) and deferred Web SDK execution
     executeSafely: (fn) => {
+        // 1. Try native Cordova/Capacitor plugin if available
+        if (window.plugins && window.plugins.OneSignal) {
+            try {
+                fn(window.plugins.OneSignal);
+            } catch (err) {
+                // Catch silently
+            }
+        }
+        // 2. Try direct injected window.OneSignal instance
+        if (window.OneSignal) {
+            try {
+                fn(window.OneSignal);
+            } catch (err) {
+                // Catch silently
+            }
+        }
+
+        // 3. Defer for Web SDK execution (for web browser environment)
         window.OneSignalDeferred = window.OneSignalDeferred || [];
         window.OneSignalDeferred.push(async function(OneSignal) {
-            if (!isOneSignalInitSuccessful) {
-                console.warn("OneSignal operation skipped: SDK not initialized successfully.");
-                return;
-            }
             try {
                 await fn(OneSignal);
             } catch (err) {
-                console.error("OneSignal operation error:", err);
+                // Catch silently
             }
         });
     },
@@ -117,7 +131,9 @@ export const OneSignalManager = {
         if (!userId) return;
         OneSignalManager.executeSafely(async (OneSignal) => {
             console.log("OneSignal logging in external user:", userId);
-            await OneSignal.login(userId);
+            if (typeof OneSignal.login === 'function') {
+                await OneSignal.login(userId);
+            }
             if (OneSignal.Notifications && typeof OneSignal.Notifications.requestPermission === 'function') {
                 await OneSignal.Notifications.requestPermission();
             }
@@ -136,7 +152,9 @@ export const OneSignalManager = {
     logout: () => {
         OneSignalManager.executeSafely(async (OneSignal) => {
             console.log("OneSignal logging out user");
-            await OneSignal.logout();
+            if (typeof OneSignal.logout === 'function') {
+                await OneSignal.logout();
+            }
         });
     },
 
@@ -144,14 +162,22 @@ export const OneSignalManager = {
     setTags: (tags) => {
         OneSignalManager.executeSafely(async (OneSignal) => {
             console.log("OneSignal setting tags:", tags);
-            await OneSignal.User.addTags(tags);
+            if (OneSignal.User && typeof OneSignal.User.addTags === 'function') {
+                await OneSignal.User.addTags(tags);
+            } else if (typeof OneSignal.sendTags === 'function') {
+                await OneSignal.sendTags(tags);
+            }
         });
     },
 
     removeTags: (tagKeys) => {
         OneSignalManager.executeSafely(async (OneSignal) => {
             console.log("OneSignal removing tags:", tagKeys);
-            await OneSignal.User.removeTags(tagKeys);
+            if (OneSignal.User && typeof OneSignal.User.removeTags === 'function') {
+                await OneSignal.User.removeTags(tagKeys);
+            } else if (typeof OneSignal.deleteTags === 'function') {
+                await OneSignal.deleteTags(tagKeys);
+            }
         });
     },
 
@@ -159,14 +185,20 @@ export const OneSignalManager = {
     setEmail: (email) => {
         OneSignalManager.executeSafely(async (OneSignal) => {
             console.log("OneSignal adding email:", email);
-            await OneSignal.User.addEmail(email);
+            if (OneSignal.User && typeof OneSignal.User.addEmail === 'function') {
+                await OneSignal.User.addEmail(email);
+            } else if (typeof OneSignal.setEmail === 'function') {
+                await OneSignal.setEmail(email);
+            }
         });
     },
 
     removeEmail: () => {
         OneSignalManager.executeSafely(async (OneSignal) => {
             console.log("OneSignal removing email");
-            await OneSignal.User.removeEmail();
+            if (OneSignal.User && typeof OneSignal.User.removeEmail === 'function') {
+                await OneSignal.User.removeEmail();
+            }
         });
     },
 
@@ -174,14 +206,18 @@ export const OneSignalManager = {
     setSms: (smsNumber) => {
         OneSignalManager.executeSafely(async (OneSignal) => {
             console.log("OneSignal adding SMS:", smsNumber);
-            await OneSignal.User.addSms(smsNumber);
+            if (OneSignal.User && typeof OneSignal.User.addSms === 'function') {
+                await OneSignal.User.addSms(smsNumber);
+            }
         });
     },
 
     removeSms: () => {
         OneSignalManager.executeSafely(async (OneSignal) => {
             console.log("OneSignal removing SMS");
-            await OneSignal.User.removeSms();
+            if (OneSignal.User && typeof OneSignal.User.removeSms === 'function') {
+                await OneSignal.User.removeSms();
+            }
         });
     },
 
@@ -189,7 +225,9 @@ export const OneSignalManager = {
     setLogLevel: (level) => {
         OneSignalManager.executeSafely(async (OneSignal) => {
             console.log("OneSignal setting debug log level to:", level);
-            OneSignal.Debug.setLogLevel(level);
+            if (OneSignal.Debug && typeof OneSignal.Debug.setLogLevel === 'function') {
+                OneSignal.Debug.setLogLevel(level);
+            }
         });
     }
 };
