@@ -1167,17 +1167,8 @@ async function sendOneSignalPush(d1OrTarget, targetOrTitle, titleOrMessage, mess
 }
 
 async function sendNotification(d1, userId, title, message, customData = null) {
-  try {
-    await createNotification(d1, {
-      title,
-      message,
-      audience: 'selected',
-      recipients: [userId],
-      data: customData
-    });
-  } catch (err) {
-    console.error(`Failed to save notification to DB for ${userId}:`, err);
-  }
+  // System automated notifications (withdrawals, fund updates, chat push) send OneSignal Push Notifications only.
+  // They do NOT get inserted into the in-app notification database table.
   await sendOneSignalPush(d1, userId, title, message, customData);
 }
 

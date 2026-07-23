@@ -178,7 +178,14 @@ const updateNotificationUnreadBadge = () => {
         };
 
 const isManualAdminNotification = (item = {}) => {
-    return !!(item.isManualMessage || item.is_manual_message || item.senderRole === 'admin' || item.sender_role === 'admin' || item.type === 'manual_admin_broadcast' || item.type === 'manual_admin_message');
+    const title = String(item.title || '').toLowerCase();
+    const msg = String(item.message || '').toLowerCase();
+    const isAutoSystem = title.includes('withdraw') || title.includes('recharge') || title.includes('fund') || 
+                         title.includes('refer') || title.includes('payout') || title.includes('task') || 
+                         title.includes('approval') || title.includes('chat') ||
+                         msg.includes('withdrawal of') || msg.includes('has been approved') || msg.includes('has been rejected');
+    if (isAutoSystem) return false;
+    return !!(item.audience === 'all' || item.audience === 'selected' || item.isManualMessage || item.is_manual_message || item.type === 'manual_admin_broadcast' || item.type === 'manual_admin_message');
 };
 
 const refreshNotificationUnreadCount = (notifications = notificationsCache) => {
