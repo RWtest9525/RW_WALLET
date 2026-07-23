@@ -111,34 +111,67 @@ const handleAuth = async (e) => {
                         throw new Error('Referral code is mandatory.');
                     }
 
-                    // Verify referral code validity
+                    // Verify referral code validity strictly
                     let parentAdmin = ADMIN_UID;
                     let referredBy = null;
 
-                    const referralCodeUpper = referralCode.toUpperCase();
+                    const referralCodeUpper = referralCode.toUpperCase().trim();
                     if (referralCodeUpper === 'RWADMIN182488' || referralCodeUpper === 'RWADMIN01' || referralCodeUpper === 'RWADMIN02') {
                         parentAdmin = ADMIN_UID;
                         referredBy = null;
                     } else {
-                        // Verify referral code using backend API
-                        console.log("Verifying referral code via backend API...");
-                        const response = await fetch(`${BACKEND_BASE_URL}/api/auth/verify-referral?code=${encodeURIComponent(referralCode)}`);
-                        if (!response.ok) {
-                            throw new Error('Failed to verify referral code. Please try again.');
+                        let referrerData = null;
+
+                        // 1. Query Firestore for user or sub-admin matching this referral code
+                        try {
+                            const possibleCodes = [referralCodeUpper, referralCode.trim()];
+                            const q1 = query(
+                                collection(db, `artifacts/${appId}/public/data/users`),
+                                where("referralCode", "in", possibleCodes)
+                            );
+                            const snap1 = await getDocs(q1);
+                            if (!snap1.empty) {
+                                referrerData = { id: snap1.docs[0].id, ...snap1.docs[0].data() };
+                            } else {
+                                const q2 = query(
+                                    collection(db, `artifacts/${appId}/public/data/users`),
+                                    where("referral_code", "in", possibleCodes)
+                                );
+                                const snap2 = await getDocs(q2);
+                                if (!snap2.empty) {
+                                    referrerData = { id: snap2.docs[0].id, ...snap2.docs[0].data() };
+                                }
+                            }
+                        } catch (err) {
+                            console.warn("Firestore referral code lookup failed:", err);
                         }
-                        const resData = await response.json();
-                        if (!resData.ok || !resData.exists) {
-                            throw new Error('Invalid referral code. Please check and try again.');
+
+                        // 2. Fallback to backend API
+                        if (!referrerData) {
+                            try {
+                                const response = await fetch(`${BACKEND_BASE_URL}/api/auth/verify-referral?code=${encodeURIComponent(referralCodeUpper)}`);
+                                if (response.ok) {
+                                    const resData = await response.json().catch(() => ({}));
+                                    if (resData.ok && resData.exists && resData.referrer) {
+                                        referrerData = resData.referrer;
+                                    }
+                                }
+                            } catch (e) {}
                         }
-                        const referrer = resData.referrer;
-                        
-                        // If referrer is an admin/subadmin, they are the direct parent admin!
-                        if (referrer.role === 'admin' || referrer.role === 'subadmin') {
-                            parentAdmin = referrer.id;
+
+                        // 3. STRICT CHECK: If referral code is not found, BLOCK SIGNUP IMMEDIATELY!
+                        if (!referrerData) {
+                            throw new Error('Invalid referral code! Please enter a valid Sub-Admin referral code to sign up.');
+                        }
+
+                        // If referrer is an admin/subadmin, set them as the direct parent admin
+                        const refRole = String(referrerData.role || '').toLowerCase();
+                        if (refRole === 'admin' || refRole === 'subadmin' || refRole === 'owner') {
+                            parentAdmin = referrerData.id || referrerData.uid;
                             referredBy = null;
                         } else {
-                            referredBy = referrer.id;
-                            parentAdmin = referrer.parentAdmin || ADMIN_UID;
+                            referredBy = referrerData.id || referrerData.uid;
+                            parentAdmin = referrerData.parentAdmin || referrerData.parent_admin || ADMIN_UID;
                         }
                     }
 

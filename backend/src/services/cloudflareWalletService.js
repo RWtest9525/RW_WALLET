@@ -2827,6 +2827,62 @@ function registerRoutes(app, { d1, r2 }) {
     }
   });
 
+  app.get('/api/auth/verify-referral', async (req, res) => {
+    try {
+      const code = String(req.query.code || '').trim().toUpperCase();
+      if (!code) return res.status(400).json({ ok: false, error: 'CODE_REQUIRED' });
+
+      if (code === 'RWADMIN182488' || code === 'RWADMIN01' || code === 'RWADMIN02') {
+        return res.json({
+          ok: true,
+          exists: true,
+          referrer: { id: ADMIN_UID, role: 'owner', name: 'Reviews World' }
+        });
+      }
+
+      let user = null;
+      if (d1 && typeof d1.all === 'function') {
+        try {
+          const rows = await d1.all(
+            `SELECT id, role, parent_admin, name, email FROM users WHERE UPPER(referral_code) = ? LIMIT 1`,
+            [code]
+          );
+          user = rows?.[0];
+        } catch (e) {}
+      }
+
+      if (!user && admin.apps && admin.apps.length > 0) {
+        try {
+          const snap = await admin.firestore().collection(`artifacts/${appId}/public/data/users`)
+            .where('referralCode', '==', code)
+            .limit(1)
+            .get();
+          if (!snap.empty) {
+            const doc = snap.docs[0];
+            user = { id: doc.id, ...doc.data() };
+          }
+        } catch (e) {}
+      }
+
+      if (!user) {
+        return res.json({ ok: true, exists: false });
+      }
+
+      return res.json({
+        ok: true,
+        exists: true,
+        referrer: {
+          id: user.id || user.uid,
+          role: user.role || 'user',
+          name: user.name || '',
+          parentAdmin: user.parentAdmin || user.parent_admin || ADMIN_UID
+        }
+      });
+    } catch (err) {
+      return res.status(500).json({ ok: false, error: err.message });
+    }
+  });
+
   app.post('/api/session/firebase', async (req, res) => {
     try {
       const idToken = String(req.body.idToken || '');

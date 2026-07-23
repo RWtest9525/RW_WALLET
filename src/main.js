@@ -541,6 +541,16 @@ onAuthStateChanged(auth, async (user) => {
                     window.OneSignalManager.logout();
                 }
 
+                // Reset login button state so it never gets stuck in loading/spinning mode on logout
+                const authBtn = document.getElementById('auth-button');
+                if (authBtn) {
+                    authBtn.disabled = false;
+                    const btnText = authBtn.querySelector('.button-text');
+                    const loader = authBtn.querySelector('.loader');
+                    if (btnText) btnText.classList.remove('hidden');
+                    if (loader) loader.classList.add('hidden');
+                }
+
                 // Show auth screen immediately
                 document.getElementById('auth-screen').classList.remove('hidden');
                 document.getElementById('main-content').classList.add('hidden');
