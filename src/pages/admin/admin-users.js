@@ -381,19 +381,38 @@ const showAdminUserDashboardPage = async (userId) => {
             const parentAdminId = user.parentAdmin || user.parent_admin || '';
             let subAdminName = 'Owner (Review World)';
             if (parentAdminId && parentAdminId !== ADMIN_UID) {
-                const subAdmin = allUsersCache.find(u => u.id === parentAdminId || u.uid === parentAdminId);
-                if (subAdmin) {
-                    subAdminName = subAdmin.name ? `${subAdmin.name} (${subAdmin.email || 'Sub-Admin'})` : (subAdmin.email || 'Sub-Admin');
+                if (currentUser?.uid === parentAdminId) {
+                    subAdminName = currentUserData?.name ? `${currentUserData.name} (${currentUserData.email || 'Sub-Admin'})` : (currentUserData?.email || currentUser?.email || 'Sub-Admin');
                 } else {
-                    subAdminName = 'Sub-Admin (' + parentAdminId.slice(0, 6) + ')';
+                    const subAdmin = allUsersCache.find(u => u.id === parentAdminId || u.uid === parentAdminId);
+                    if (subAdmin) {
+                        subAdminName = subAdmin.name ? `${subAdmin.name} (${subAdmin.email || 'Sub-Admin'})` : (subAdmin.email || 'Sub-Admin');
+                    } else {
+                        subAdminName = 'Sub-Admin (' + parentAdminId.slice(0, 6) + ')';
+                        try {
+                            getDoc(doc(db, `artifacts/${appId}/public/data/users`, parentAdminId)).then(snap => {
+                                if (snap.exists()) {
+                                    const d = snap.data();
+                                    const fetchedName = d.name ? `${d.name} (${d.email || 'Sub-Admin'})` : (d.email || 'Sub-Admin');
+                                    const el = document.getElementById('admin-user-managed-subadmin-name');
+                                    if (el) el.textContent = `👑 ${fetchedName}`;
+                                }
+                            }).catch(() => {});
+                        } catch (e) {}
+                    }
                 }
             }
 
+            const usedRefCode = user.usedReferralCode || user.referredByCode || user.referralCodeUsed || user.refCode || '';
             const referrerId = user.referredBy || '';
-            let referrerName = 'Direct Signup';
+            let referrerDisplay = usedRefCode ? `Code: ${usedRefCode}` : 'Direct Signup';
             if (referrerId) {
                 const referrer = allUsersCache.find(u => u.id === referrerId || u.uid === referrerId);
-                referrerName = referrer ? (referrer.name || referrer.email || 'User') : 'User (' + referrerId.slice(0, 6) + ')';
+                if (referrer) {
+                    referrerDisplay = `${referrer.name || referrer.email || 'User'}${usedRefCode ? ` (Code: ${usedRefCode})` : ''}`;
+                } else {
+                    referrerDisplay = usedRefCode ? `Code: ${usedRefCode}` : (referrerId && referrerId !== 'N/A' ? `User (${referrerId.slice(0, 6)})` : 'Direct Signup');
+                }
             }
 
             const content = `
@@ -416,11 +435,11 @@ const showAdminUserDashboardPage = async (userId) => {
                         <div class="mt-4 pt-3 border-t border-slate-100 dark:border-slate-700/80 grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
                             <div class="rounded-xl bg-blue-50/70 dark:bg-blue-950/30 border border-blue-100 dark:border-blue-900/50 p-3">
                                 <span class="text-[10px] font-black uppercase text-blue-600 dark:text-blue-400 tracking-wider block mb-1">Managed Under Admin</span>
-                                <p class="font-extrabold text-sm text-blue-950 dark:text-blue-100">👑 ${escapeHtml(subAdminName)}</p>
+                                <p id="admin-user-managed-subadmin-name" class="font-extrabold text-sm text-blue-900 dark:text-blue-100">👑 ${escapeHtml(subAdminName)}</p>
                             </div>
                             <div class="rounded-xl bg-gray-50/70 dark:bg-gray-800/50 border border-gray-100 dark:border-gray-700 p-3">
-                                <span class="text-[10px] font-black uppercase text-gray-400 dark:text-gray-500 tracking-wider block mb-1">Referred By User</span>
-                                <p class="font-bold text-xs text-gray-700 dark:text-gray-300">${escapeHtml(referrerName)}</p>
+                                <span class="text-[10px] font-black uppercase text-gray-400 dark:text-gray-500 tracking-wider block mb-1">Referred By</span>
+                                <p class="font-bold text-xs text-gray-700 dark:text-gray-300 font-mono">${escapeHtml(referrerDisplay)}</p>
                             </div>
                             <div class="p-2">
                                 <span class="text-gray-400 dark:text-gray-500 block font-semibold">Join Date</span>
