@@ -149,18 +149,18 @@ const loadAdminChatsFromBackend = async ({ silent = false, retry = true, subscri
                 if (!isOwner) {
                     chatList = chatList.filter(chat => {
                         const cUserId = chat.userId || chat.id;
-                        if (cUserId === subAdminUid || cUserId === ADMIN_UID) return false;
-                        const u = allUsersCache.find(user => (user.id || user.uid) === cUserId);
+                        if (!cUserId || cUserId === subAdminUid || cUserId === ADMIN_UID) return false;
+                        const u = allUsersCache.find(user => String(user.id || user.uid) === String(cUserId));
                         if (u) {
-                            return u.parentAdmin === subAdminUid || u.parent_admin === subAdminUid;
+                            return String(u.parentAdmin || u.parent_admin || '') === String(subAdminUid);
                         }
-                        return chat.roomId && chat.roomId.includes(subAdminUid);
+                        return chat.roomId === `support_${cUserId}_${subAdminUid}`;
                     });
                 } else {
                     chatList = chatList.filter(chat => {
                         const cUserId = chat.userId || chat.id;
-                        const u = allUsersCache.find(user => (user.id || user.uid) === cUserId);
-                        if (!u) return true; // Keep chat room if user record isn't in cache
+                        const u = allUsersCache.find(user => String(user.id || user.uid) === String(cUserId));
+                        if (!u) return true;
                         if (u.role === 'admin' || u.role === 'subadmin' || u.role === 'owner') return true;
                         return !u.parentAdmin || u.parentAdmin === ADMIN_UID || u.parent_admin === ADMIN_UID || u.parentAdmin === subAdminUid || u.parent_admin === subAdminUid;
                     });
@@ -199,23 +199,14 @@ const getAdminChatUserMeta = (user = {}) => {
 
 const ensureAdminChatUsersLoaded = async (forceRefresh = false) => {
             if (!hasAdminSessionReadyOrCached()) return;
-            const isOwner = checkIsOwner(currentUser, currentUserData);
-            const subAdminUid = currentUser?.uid || (typeof getCurrentUserId === 'function' ? getCurrentUserId() : '');
 
             if (!forceRefresh && allUsersCache.length > 0) {
-                if (!isOwner) {
-                    allUsersCache = allUsersCache.filter(u => String(u.parentAdmin || u.parent_admin || '') === String(subAdminUid));
-                }
                 return;
             }
 
             try {
                 const usersSnap = await getDocs(query(collection(db, `artifacts/${appId}/public/data/users`)));
-                let list = usersSnap.docs.map(d => ({ id: d.id, ...d.data() }));
-                if (!isOwner) {
-                    list = list.filter(u => String(u.parentAdmin || u.parent_admin || '') === String(subAdminUid));
-                }
-                allUsersCache = list;
+                allUsersCache = usersSnap.docs.map(d => ({ id: d.id, uid: d.id, ...d.data() }));
             } catch (error) {
                 console.warn('Admin chat user search load failed:', error);
             }
@@ -240,16 +231,20 @@ const renderAdminChatsList = () => {
             if (!isOwner) {
                 chatsToRender = chatsToRender.filter(chat => {
                     const cUserId = chat.userId || chat.id;
-                    if (cUserId === ADMIN_UID) return false;
-                    const u = allUsersCache.find(user => (user.id || user.uid) === cUserId);
-                    return u && String(u.parentAdmin || u.parent_admin || '') === String(subAdminUid);
+                    if (!cUserId || cUserId === subAdminUid || cUserId === ADMIN_UID) return false;
+                    const u = allUsersCache.find(user => String(user.id || user.uid) === String(cUserId));
+                    if (u) {
+                        return String(u.parentAdmin || u.parent_admin || '') === String(subAdminUid);
+                    }
+                    return chat.roomId === `support_${cUserId}_${subAdminUid}`;
                 });
             }
 
             let baseUsersForSearch = [...allUsersCache];
             if (!isOwner) {
                 baseUsersForSearch = baseUsersForSearch.filter(u => 
-                    String(u.parentAdmin || u.parent_admin || '') === String(subAdminUid)
+                    String(u.parentAdmin || u.parent_admin || '') === String(subAdminUid) &&
+                    u.id !== subAdminUid && u.uid !== subAdminUid && u.id !== ADMIN_UID && u.uid !== ADMIN_UID && u.role !== 'admin' && u.role !== 'subadmin' && u.role !== 'owner'
                 );
             }
 
