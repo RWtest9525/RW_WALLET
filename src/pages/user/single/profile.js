@@ -848,6 +848,22 @@ const showProfilePage = (focusMethod = '') => {
                     </button>
                 </div>
 
+                <!-- Wallet Number Card -->
+                <div class="flex items-center justify-between gap-3 rounded-2xl bg-white dark:bg-slate-800 p-4 border border-slate-150 dark:border-slate-700/80 shadow-sm">
+                    <div class="flex items-center gap-3.5 min-w-0">
+                        <div class="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-blue-50 dark:bg-blue-950/50 text-blue-600 dark:text-blue-300 border border-blue-200/50">
+                            <svg class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z" />
+                            </svg>
+                        </div>
+                        <div class="min-w-0 text-left">
+                            <p class="text-[11px] font-black uppercase text-slate-400 dark:text-slate-400 tracking-wide">Your Wallet Number</p>
+                            <p class="text-base font-black text-slate-900 dark:text-white truncate mt-0.5">${escapeHtml(userMobile)}</p>
+                        </div>
+                    </div>
+                    <span class="shrink-0 rounded-lg bg-blue-50 dark:bg-blue-900/30 px-2 py-1 text-[10px] font-black uppercase text-blue-700 dark:text-blue-300">Active</span>
+                </div>
+
                 <!-- Saved Payment Method Card -->
                 <div id="open-saved-payment-methods-btn" class="cursor-pointer flex items-center justify-between gap-3 rounded-2xl bg-white dark:bg-slate-800 p-4 border border-slate-150 dark:border-slate-700/80 shadow-sm hover:border-purple-300 transition active:scale-98">
                     <div class="flex items-center gap-3.5 min-w-0">
