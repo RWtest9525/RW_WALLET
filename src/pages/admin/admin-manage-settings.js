@@ -1,11 +1,36 @@
 // Admin Manage Settings: src/pages/admin/admin-manage-settings.js
 
+// Get the Firestore doc path for per-admin rate settings
+const getAdminRateSettingsDocPath = (adminUid) => {
+    return `artifacts/${appId}/settings/admin_config_${adminUid}`;
+};
+
 const showAdminManageSettingsPage = async () => {
     if (!currentUser) return;
     await loadWithdrawalSettingsOnce(true);
 
     const isOwner = checkIsOwner(currentUser, currentUserData);
-    const referralReward = getReferralRewardAmount ? getReferralRewardAmount() : (appConfigCache.referralRewardAmount || 0);
+
+    // Load per-admin rate settings (sub-admin gets own doc, owner uses global)
+    let adminRateConfig = {};
+    if (!isOwner) {
+        try {
+            const adminConfigDoc = await getDoc(doc(db, getAdminRateSettingsDocPath(currentUser.uid)));
+            if (adminConfigDoc.exists()) {
+                adminRateConfig = adminConfigDoc.data();
+            }
+        } catch (e) {
+            console.warn('Per-admin rate config load failed:', e);
+        }
+    }
+
+    // Use per-admin values if available, otherwise fall back to global appConfigCache
+    const referralReward = adminRateConfig.referralRewardAmount ?? (getReferralRewardAmount ? getReferralRewardAmount() : (appConfigCache.referralRewardAmount || 0));
+    const perAdminMinUpi = adminRateConfig.min_withdrawal_upi ?? minWithdrawalUpi;
+    const perAdminMinBank = adminRateConfig.min_withdrawal_bank ?? minWithdrawalBank;
+    const perAdminMinRedeem = adminRateConfig.min_withdrawal_redeem ?? minWithdrawalRedeem;
+    const perAdminMaxDay = adminRateConfig.max_withdrawal_per_day ?? maxWithdrawalPerDay;
+    const perAdminMaxPending = adminRateConfig.max_pending_withdrawals ?? maxPendingWithdrawalsPerUser;
 
     const mEnabled = appConfigCache.maintenanceEnabled || false;
     const mMessage = appConfigCache.maintenanceMessage || 'We are improving your wallet experience. Please wait...';
@@ -46,23 +71,23 @@ const showAdminManageSettingsPage = async () => {
                     </div>
                     <div>
                         <label class="block text-xs font-semibold text-gray-400 uppercase mb-1">Min. Withdrawal UPI (₹)</label>
-                        <input type="number" id="setting-min-upi" value="${minWithdrawalUpi}" class="w-full px-4 py-3 bg-gray-100 dark:bg-gray-700 rounded-lg">
+                        <input type="number" id="setting-min-upi" value="${perAdminMinUpi}" class="w-full px-4 py-3 bg-gray-100 dark:bg-gray-700 rounded-lg">
                     </div>
                     <div>
                         <label class="block text-xs font-semibold text-gray-400 uppercase mb-1">Min. Withdrawal Bank (₹)</label>
-                        <input type="number" id="setting-min-bank" value="${minWithdrawalBank}" class="w-full px-4 py-3 bg-gray-100 dark:bg-gray-700 rounded-lg">
+                        <input type="number" id="setting-min-bank" value="${perAdminMinBank}" class="w-full px-4 py-3 bg-gray-100 dark:bg-gray-700 rounded-lg">
                     </div>
                     <div>
                         <label class="block text-xs font-semibold text-gray-400 uppercase mb-1">Min. Withdrawal Gift Cards (₹)</label>
-                        <input type="number" id="setting-min-redeem" value="${minWithdrawalRedeem}" class="w-full px-4 py-3 bg-gray-100 dark:bg-gray-700 rounded-lg">
+                        <input type="number" id="setting-min-redeem" value="${perAdminMinRedeem}" class="w-full px-4 py-3 bg-gray-100 dark:bg-gray-700 rounded-lg">
                     </div>
                     <div>
                         <label class="block text-xs font-semibold text-gray-400 uppercase mb-1">Max. Withdrawal Per Day (Total ₹)</label>
-                        <input type="number" id="setting-max-day" value="${maxWithdrawalPerDay}" class="w-full px-4 py-3 bg-gray-100 dark:bg-gray-700 rounded-lg">
+                        <input type="number" id="setting-max-day" value="${perAdminMaxDay}" class="w-full px-4 py-3 bg-gray-100 dark:bg-gray-700 rounded-lg">
                     </div>
                     <div>
                         <label class="block text-xs font-semibold text-gray-400 uppercase mb-1">Max. Pending Requests Per User</label>
-                        <input type="number" id="setting-max-pending" value="${maxPendingWithdrawalsPerUser}" class="w-full px-4 py-3 bg-gray-100 dark:bg-gray-700 rounded-lg">
+                        <input type="number" id="setting-max-pending" value="${perAdminMaxPending}" class="w-full px-4 py-3 bg-gray-100 dark:bg-gray-700 rounded-lg">
                     </div>
                 </div>
                 <button onclick="handleSaveRatesSettingsTab()" class="px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-lg transition">Save Rates Settings</button>
@@ -171,7 +196,7 @@ const handleSaveRatesSettingsTab = async () => {
     }
 
     try {
-        const configRef = doc(db, `artifacts/${appId}/settings`, 'app_config');
+        const isOwner = checkIsOwner(currentUser, currentUserData);
         const updatedConfig = {
             referralRewardAmount: referralReward,
             referralRewardUpdatedAt: serverTimestamp(),
@@ -184,9 +209,18 @@ const handleSaveRatesSettingsTab = async () => {
             max_pending_withdrawals: maxPending,
             updatedAt: serverTimestamp()
         };
-        await setDoc(configRef, updatedConfig, { merge: true });
 
-        // Update local limits
+        if (isOwner) {
+            // Owner saves to global app_config (default for all)
+            const configRef = doc(db, `artifacts/${appId}/settings`, 'app_config');
+            await setDoc(configRef, updatedConfig, { merge: true });
+        } else {
+            // Sub-Admin saves to their OWN per-admin config doc
+            const adminConfigRef = doc(db, getAdminRateSettingsDocPath(currentUser.uid));
+            await setDoc(adminConfigRef, updatedConfig, { merge: true });
+        }
+
+        // Update local limits for current session
         minWithdrawalUpi = minUpi;
         minWithdrawalBank = minBank;
         minWithdrawalRedeem = minRedeem;

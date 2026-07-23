@@ -2026,7 +2026,7 @@ const handleSaveWithdrawSettings = async () => {
     }
 
     try {
-        const configRef = doc(db, `artifacts/${appId}/settings`, 'app_config');
+        const isOwner = checkIsOwner(currentUser, currentUserData);
         const updatedConfig = {
             referralRewardAmount: referralReward,
             referralRewardUpdatedAt: serverTimestamp(),
@@ -2039,7 +2039,14 @@ const handleSaveWithdrawSettings = async () => {
             max_pending_withdrawals: maxPending,
             updatedAt: serverTimestamp()
         };
-        await setDoc(configRef, updatedConfig, { merge: true });
+
+        if (isOwner) {
+            const configRef = doc(db, `artifacts/${appId}/settings`, 'app_config');
+            await setDoc(configRef, updatedConfig, { merge: true });
+        } else {
+            const adminConfigRef = doc(db, `artifacts/${appId}/settings`, `admin_config_${currentUser.uid}`);
+            await setDoc(adminConfigRef, updatedConfig, { merge: true });
+        }
 
         const localConfig = {
             referralRewardAmount: referralReward,
@@ -2087,19 +2094,36 @@ const loadWithdrawalSettingsOnce = async (force = false) => {
     if (!force && withdrawalSettingsLoadedAt && now - withdrawalSettingsLoadedAt < 30000) return;
     if (withdrawalSettingsLoadPromise && !force) return withdrawalSettingsLoadPromise;
 
-    withdrawalSettingsLoadPromise = getDoc(doc(db, `artifacts/${appId}/settings`, 'app_config'))
-        .then(snapshot => {
-            if (snapshot.exists()) applyAppConfig(snapshot.data());
-            withdrawalSettingsLoadedAt = Date.now();
-        })
-        .catch(error => {
-            console.error('Withdrawal settings load failed:', error);
-        })
-        .finally(() => {
-            withdrawalSettingsLoadPromise = null;
-        });
+    withdrawalSettingsLoadPromise = (async () => {
+        try {
+            // 1. Always load global app_config first (Owner defaults + maintenance + whats new)
+            const globalSnapshot = await getDoc(doc(db, `artifacts/${appId}/settings`, 'app_config'));
+            if (globalSnapshot.exists()) applyAppConfig(globalSnapshot.data());
 
-    return withdrawalSettingsLoadPromise;
+            // 2. If current user has a parentAdmin (sub-admin's user), load per-admin rate overrides
+            const parentAdmin = currentUserData?.parentAdmin || currentUserData?.parent_admin || '';
+            if (parentAdmin && parentAdmin !== ADMIN_UID) {
+                try {
+                    const adminConfigDoc = await getDoc(doc(db, `artifacts/${appId}/settings`, `admin_config_${parentAdmin}`));
+                    if (adminConfigDoc.exists()) {
+                        const adminConfig = adminConfigDoc.data();
+                        // Only override rate settings, NOT maintenance/whatsNew
+                        applyWithdrawalConfig(adminConfig);
+                    }
+                } catch (e) {
+                    console.warn('Per-admin rate config load skipped:', e);
+                }
+            }
+
+            withdrawalSettingsLoadedAt = Date.now();
+        } catch (error) {
+            console.error('Withdrawal settings load failed:', error);
+        }
+    })();
+
+    return withdrawalSettingsLoadPromise.finally(() => {
+        withdrawalSettingsLoadPromise = null;
+    });
 };
 
 const getMinWithdrawalForMethod = (method) => {
@@ -2142,18 +2166,30 @@ handleWithdrawRequest = async function (amount, method, methodName) {
 const startWithdrawalSettingsListener = () => {
     if (appConfigListenerActive) return;
     appConfigListenerActive = true;
-    const stopListening = onSnapshot(doc(db, `artifacts/${appId}/settings`, 'app_config'), (snapshot) => {
+
+    // Listen to global app_config (maintenance, whats new, owner defaults)
+    const stopGlobal = onSnapshot(doc(db, `artifacts/${appId}/settings`, 'app_config'), (snapshot) => {
         if (!snapshot.exists()) return;
         applyAppConfig(snapshot.data());
         withdrawalSettingsLoadedAt = Date.now();
     }, (error) => {
-        appConfigListenerActive = false;
         console.error('App settings listener failed:', error);
     });
-    unsubscribers.push(() => {
-        stopListening();
-        appConfigListenerActive = false;
-    });
+    unsubscribers.push(() => { stopGlobal(); });
+
+    // Listen to per-admin config if user belongs to a sub-admin
+    const parentAdmin = currentUserData?.parentAdmin || currentUserData?.parent_admin || '';
+    if (parentAdmin && parentAdmin !== ADMIN_UID) {
+        const stopAdmin = onSnapshot(doc(db, `artifacts/${appId}/settings`, `admin_config_${parentAdmin}`), (snapshot) => {
+            if (!snapshot.exists()) return;
+            // Only override rate settings, NOT maintenance/whatsNew
+            applyWithdrawalConfig(snapshot.data());
+            withdrawalSettingsLoadedAt = Date.now();
+        }, (error) => {
+            console.warn('Per-admin settings listener failed:', error);
+        });
+        unsubscribers.push(() => { stopAdmin(); });
+    }
 };
 
 // Expose functions to window for global access
