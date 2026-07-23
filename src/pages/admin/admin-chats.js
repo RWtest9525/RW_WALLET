@@ -157,14 +157,34 @@ const loadAdminChatsFromBackend = async ({ silent = false, retry = true, subscri
                         return chat.roomId === `support_${cUserId}_${subAdminUid}`;
                     });
                 } else {
+                    // Owner ONLY sees users directly under Owner or Sub-Admins themselves
                     chatList = chatList.filter(chat => {
                         const cUserId = chat.userId || chat.id;
+                        if (!cUserId || cUserId === ADMIN_UID) return false;
                         const u = allUsersCache.find(user => String(user.id || user.uid) === String(cUserId));
-                        if (!u) return true;
-                        if (u.role === 'admin' || u.role === 'subadmin' || u.role === 'owner') return true;
-                        return !u.parentAdmin || u.parentAdmin === ADMIN_UID || u.parent_admin === ADMIN_UID || u.parentAdmin === subAdminUid || u.parent_admin === subAdminUid;
+                        if (u) {
+                            if (u.role === 'admin' || u.role === 'subadmin' || u.role === 'owner') return true;
+                            const pAdmin = String(u.parentAdmin || u.parent_admin || '').trim();
+                            return !pAdmin || pAdmin === ADMIN_UID || pAdmin === 'null' || pAdmin === 'undefined';
+                        }
+                        return !chat.roomId || chat.roomId === `support_${cUserId}`;
                     });
                 }
+
+                // Strictly deduplicate by userId so exactly ONE card is shown per user
+                const uniqueChatsMap = new Map();
+                chatList.forEach(chat => {
+                    const key = String(chat.userId || chat.id || '').trim();
+                    if (!key) return;
+                    const existing = uniqueChatsMap.get(key);
+                    const chatTime = timestampToMillis(chat.updatedAt);
+                    const existingTime = existing ? timestampToMillis(existing.updatedAt) : 0;
+                    if (!existing || chatTime > existingTime) {
+                        uniqueChatsMap.set(key, chat);
+                    }
+                });
+                chatList = Array.from(uniqueChatsMap.values()).sort((a, b) => timestampToMillis(b.updatedAt) - timestampToMillis(a.updatedAt));
+
                 allSupportChatsCache = chatList;
                 refreshAdminChatUnreadCount();
                 renderAdminChatsList();
@@ -238,7 +258,33 @@ const renderAdminChatsList = () => {
                     }
                     return chat.roomId === `support_${cUserId}_${subAdminUid}`;
                 });
+            } else {
+                chatsToRender = chatsToRender.filter(chat => {
+                    const cUserId = chat.userId || chat.id;
+                    if (!cUserId || cUserId === ADMIN_UID) return false;
+                    const u = allUsersCache.find(user => String(user.id || user.uid) === String(cUserId));
+                    if (u) {
+                        if (u.role === 'admin' || u.role === 'subadmin' || u.role === 'owner') return true;
+                        const pAdmin = String(u.parentAdmin || u.parent_admin || '').trim();
+                        return !pAdmin || pAdmin === ADMIN_UID || pAdmin === 'null' || pAdmin === 'undefined';
+                    }
+                    return !chat.roomId || chat.roomId === `support_${cUserId}`;
+                });
             }
+
+            // Deduplicate chatsToRender by userId
+            const uniqueRenderMap = new Map();
+            chatsToRender.forEach(chat => {
+                const key = String(chat.userId || chat.id || '').trim();
+                if (!key) return;
+                const existing = uniqueRenderMap.get(key);
+                const chatTime = timestampToMillis(chat.updatedAt);
+                const existingTime = existing ? timestampToMillis(existing.updatedAt) : 0;
+                if (!existing || chatTime > existingTime) {
+                    uniqueRenderMap.set(key, chat);
+                }
+            });
+            chatsToRender = Array.from(uniqueRenderMap.values()).sort((a, b) => timestampToMillis(b.updatedAt) - timestampToMillis(a.updatedAt));
 
             let baseUsersForSearch = [...allUsersCache];
             if (!isOwner) {
@@ -246,6 +292,13 @@ const renderAdminChatsList = () => {
                     String(u.parentAdmin || u.parent_admin || '') === String(subAdminUid) &&
                     u.id !== subAdminUid && u.uid !== subAdminUid && u.id !== ADMIN_UID && u.uid !== ADMIN_UID && u.role !== 'admin' && u.role !== 'subadmin' && u.role !== 'owner'
                 );
+            } else {
+                baseUsersForSearch = baseUsersForSearch.filter(u => {
+                    if (u.id === ADMIN_UID || u.uid === ADMIN_UID) return false;
+                    if (u.role === 'admin' || u.role === 'subadmin' || u.role === 'owner') return true;
+                    const pAdmin = String(u.parentAdmin || u.parent_admin || '').trim();
+                    return !pAdmin || pAdmin === ADMIN_UID || pAdmin === 'null' || pAdmin === 'undefined';
+                });
             }
 
             const existingChatUserIds = new Set(allSupportChatsCache.map(chat => String(chat.userId || chat.id || '')));
