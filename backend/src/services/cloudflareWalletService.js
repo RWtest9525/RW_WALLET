@@ -3039,6 +3039,37 @@ function registerRoutes(app, { d1, r2 }) {
     }
   });
 
+  app.post('/api/admin/delete-user', requireHttpAuth, async (req, res) => {
+    const { targetUid } = req.body;
+    if (!targetUid) return res.status(400).json({ ok: false, error: 'TARGET_UID_REQUIRED' });
+
+    try {
+      const db = admin.firestore();
+      const appId = process.env.FIREBASE_APP_ID || 'digital-wallet-prod';
+
+      // Verify user permissions
+      if (req.auth.sub !== ADMIN_UID && req.auth.role !== 'owner') {
+        const userDoc = await db.doc(`artifacts/${appId}/public/data/users/${targetUid}`).get();
+        if (userDoc.exists()) {
+          const uData = userDoc.data();
+          const pAdmin = uData.parentAdmin || uData.parent_admin;
+          if (pAdmin !== req.auth.sub) {
+            return res.status(403).json({ ok: false, error: 'NOT_AUTHORIZED_TO_DELETE_THIS_USER' });
+          }
+        }
+      }
+
+      await admin.auth().deleteUser(targetUid).catch(err => console.warn('[DeleteUser] Auth delete skipped:', err.message));
+      await db.doc(`artifacts/${appId}/public/data/users/${targetUid}`).delete().catch(err => console.warn('[DeleteUser] Firestore delete skipped:', err.message));
+      await d1.query('DELETE FROM users WHERE id = ? OR firebase_uid = ?', [targetUid, targetUid]).catch(err => console.warn('[DeleteUser] D1 delete skipped:', err.message));
+
+      return res.json({ ok: true });
+    } catch (err) {
+      console.error('[DeleteUser] Failed:', err);
+      return res.status(500).json({ ok: false, error: err.message || 'FAILED_TO_DELETE_USER' });
+    }
+  });
+
   app.post('/api/login', rateLimit({ windowMs: 60000, maxRequests: 10 }), async (req, res) => {
     try {
       const email = normalizeEmail(req.body.email);

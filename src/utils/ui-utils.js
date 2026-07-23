@@ -3203,32 +3203,53 @@ const processReferralRewardOnWithdrawalSuccess = async (userId, withdrawalAmount
         };
 
 const handleDeleteUser = (userId, userName) => {
-            renderModal('Disable User',
-                `<div class="space-y-4">
-                    <p class="text-red-600 font-semibold">This will block the user from using the wallet.</p>
-                    <p>Are you sure you want to disable <strong>${escapeHtml(userName)}</strong>?</p>
-                    <p class="text-sm text-gray-500 dark:text-gray-400">Financial records, transaction history, invoices, and wallet audit data will be preserved.</p>
+            renderModal('Delete User',
+                `<div class="space-y-4 text-left">
+                    <p class="text-red-600 font-extrabold text-sm">⚠️ Warning: Permanent Action</p>
+                    <p class="text-xs text-gray-700 dark:text-gray-300">Are you sure you want to permanently delete <strong>${escapeHtml(userName)}</strong>? This will remove their account, profile data, and access permanently.</p>
                 </div>`,
-                `<button onclick="window.closeModal()" class="px-4 py-2 text-sm bg-gray-200 dark:bg-gray-600 rounded-lg">Cancel</button>
-                 <button id="confirm-action-btn" class="px-4 py-2 text-sm bg-red-600 text-white rounded-lg">Disable User</button>`,
+                `<button onclick="window.closeModal()" class="px-4 py-2 text-xs font-bold bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-xl">Cancel</button>
+                 <button id="confirm-delete-user-btn" class="px-4 py-2 text-xs font-black bg-red-600 hover:bg-red-700 text-white rounded-xl transition">Delete Permanently</button>`,
                 'max-w-md'
             );
-            document.getElementById('confirm-action-btn').onclick = async () => {
+            document.getElementById('confirm-delete-user-btn').onclick = async () => {
+                const btn = document.getElementById('confirm-delete-user-btn');
+                if (btn) { btn.disabled = true; btn.textContent = 'Deleting...'; }
                 try {
-                    const userRef = doc(db, `artifacts/${appId}/public/data/users`, userId);
-                    await updateDoc(userRef, {
-                        isFlagged: true,
-                        isDisabled: true,
-                        disabledAt: serverTimestamp(),
-                        disabledBy: currentUser.uid,
-                        banReason: 'Account disabled by admin. Financial records retained for audit.'
+                    const token = await getBackendAuthToken();
+                    const res = await fetch(`${BACKEND_BASE_URL}/api/admin/delete-user`, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Authorization': `Bearer ${token}`
+                        },
+                        body: JSON.stringify({ targetUid: userId })
                     });
-                    showNotification('User disabled. Transaction history was preserved.');
-                    refreshAdminDashboardCaches().catch(error => console.error('Admin cache refresh failed:', error));
+                    const data = await res.json();
+                    if (!res.ok || !data.ok) throw new Error(data.error || 'Failed to delete user');
+
+                    // Also attempt direct Firestore delete if client SDK has permissions
+                    try {
+                        const userRef = doc(db, `artifacts/${appId}/public/data/users`, userId);
+                        await deleteDoc(userRef);
+                    } catch (fsErr) {
+                        console.warn('Firestore direct delete skipped:', fsErr.message);
+                    }
+
+                    showNotification('User deleted permanently.');
+
+                    // Update local cache and refresh view
+                    allUsersCache = allUsersCache.filter(u => (u.id || u.uid) !== userId);
+                    applyAdminUsersCache(allUsersCache);
+                    if (typeof updateAdminUserListView === 'function') {
+                        updateAdminUserListView();
+                    }
+
                     window.closeModal();
                 } catch (e) {
-                    console.error("Disable user failed:", e);
-                    showNotification(`Error disabling user: ${e.message}`, true);
+                    console.error("Delete user failed:", e);
+                    showNotification(`Error deleting user: ${e.message}`, true);
+                    if (btn) { btn.disabled = false; btn.textContent = 'Delete Permanently'; }
                 }
             };
         };
