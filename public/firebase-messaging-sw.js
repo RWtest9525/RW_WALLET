@@ -31,10 +31,31 @@ messaging.onBackgroundMessage((payload) => {
     const notificationTitle = payload.notification?.title || 'Review World Update';
     const notificationOptions = {
         body: payload.notification?.body || 'You have a new update.',
-        icon: payload.notification?.icon || '/src/assets/logo.png',
-        badge: '/src/assets/logo.png',
+        icon: payload.notification?.icon || 'https://i.ibb.co/x8YBYwGG/6233389803554672153.jpg',
+        badge: 'https://i.ibb.co/x8YBYwGG/6233389803554672153.jpg',
         data: payload.data
     };
 
     self.registration.showNotification(notificationTitle, notificationOptions);
+});
+
+self.addEventListener('notificationclick', (event) => {
+    event.notification.close();
+    const customData = event.notification?.data;
+    let urlToOpen = '/';
+    if (customData?.type === 'chat') {
+        urlToOpen = '/#support';
+    }
+    event.waitUntil(
+        clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientList) => {
+            for (const client of clientList) {
+                if (client.url && 'focus' in client) {
+                    return client.focus();
+                }
+            }
+            if (clients.openWindow) {
+                return clients.openWindow(urlToOpen);
+            }
+        })
+    );
 });

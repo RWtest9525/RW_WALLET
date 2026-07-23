@@ -10,7 +10,8 @@ export const OneSignalManager = {
                 console.log("Initializing OneSignal SDK...");
                 await OneSignal.init({
                     appId: ONESIGNAL_APP_ID,
-                    serviceWorkerPath: "firebase-messaging-sw.js",
+                    serviceWorkerPath: "/firebase-messaging-sw.js",
+                    serviceWorkerParam: { scope: "/" },
                     allowLocalhostAsSecureOrigin: true,
                     promptOptions: {
                         slidedown: {

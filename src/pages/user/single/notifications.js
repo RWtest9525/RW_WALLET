@@ -1,6 +1,12 @@
-// File: src/pages/notifications.js
-
 const initializePushNotifications = async (userId) => {
+            try {
+                if (window.OneSignalManager && userId) {
+                    window.OneSignalManager.login(userId);
+                }
+            } catch (e) {
+                console.warn('OneSignal login inside initializePushNotifications failed:', e);
+            }
+
             if (!messaging) return;
             if (!('Notification' in window)) {
                 console.log('This browser does not support desktop notifications');
