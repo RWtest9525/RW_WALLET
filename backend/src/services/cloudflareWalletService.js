@@ -1058,25 +1058,28 @@ function getOneSignalAuthHeaders(apiKey) {
 
 async function postOneSignalApi(payload, apiKey) {
   const headersList = getOneSignalAuthHeaders(apiKey);
+  const endpoints = ['https://api.onesignal.com/notifications', 'https://onesignal.com/api/v1/notifications'];
   let lastResult = null;
-  for (const authHeader of headersList) {
-    try {
-      const response = await fetch('https://onesignal.com/api/v1/notifications', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json; charset=utf-8',
-          'Authorization': authHeader
-        },
-        body: JSON.stringify(payload)
-      });
-      const result = await response.json().catch(() => ({}));
-      if (response.ok && !result.errors) {
-        return result;
+
+  for (const endpoint of endpoints) {
+    for (const authHeader of headersList) {
+      try {
+        const response = await fetch(endpoint, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json; charset=utf-8',
+            'Authorization': authHeader
+          },
+          body: JSON.stringify(payload)
+        });
+        const result = await response.json().catch(() => ({}));
+        if (response.ok && !result.errors) {
+          return result;
+        }
+        lastResult = result;
+      } catch (err) {
+        console.error('[OneSignal] Fetch request error:', err);
       }
-      lastResult = result;
-      console.warn(`[OneSignal] Auth header '${authHeader.slice(0, 15)}...' result:`, result?.errors || response.statusText);
-    } catch (err) {
-      console.error('[OneSignal] Fetch request error:', err);
     }
   }
   return lastResult;
@@ -1102,7 +1105,7 @@ async function sendOneSignalPush(d1OrTarget, targetOrTitle, titleOrMessage, mess
   const appId = process.env.ONESIGNAL_APP_ID || '465e22bd-8540-437b-ba7b-efa14ef4069f';
   const apiKey = process.env.ONESIGNAL_REST_API_KEY;
   if (!apiKey || apiKey === 'your_onesignal_rest_api_key') {
-    console.warn('[OneSignal] ONESIGNAL_REST_API_KEY not configured, skipping push.');
+    console.warn('[OneSignal] ONESIGNAL_REST_API_KEY is placeholder or not configured on server.');
     return;
   }
 
@@ -1142,6 +1145,12 @@ async function sendOneSignalPush(d1OrTarget, targetOrTitle, titleOrMessage, mess
       payloadV11.data = extraData;
     }
 
+    let res = await postOneSignalApi(payloadV11, apiKey);
+    if (res && !res.errors) {
+      console.log(`[OneSignal] Push sent successfully to ${JSON.stringify(externalIds)}:`, res);
+      return res;
+    }
+
     const payloadLegacy = {
       app_id: appId,
       include_external_user_ids: externalIds,
@@ -1155,12 +1164,9 @@ async function sendOneSignalPush(d1OrTarget, targetOrTitle, titleOrMessage, mess
       payloadLegacy.data = extraData;
     }
 
-    const [resV11, resLegacy] = await Promise.all([
-      postOneSignalApi(payloadV11, apiKey),
-      postOneSignalApi(payloadLegacy, apiKey)
-    ]);
-    console.log(`[OneSignal] Push sent to ${JSON.stringify(externalIds)}. v11 res:`, resV11, 'legacy res:', resLegacy);
-    return resV11 || resLegacy;
+    res = await postOneSignalApi(payloadLegacy, apiKey);
+    console.log(`[OneSignal] Legacy Push sent to ${JSON.stringify(externalIds)}:`, res);
+    return res;
   } catch (err) {
     console.error('[OneSignal] Push failed:', err);
   }
