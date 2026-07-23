@@ -1166,10 +1166,55 @@ async function sendOneSignalPush(d1OrTarget, targetOrTitle, titleOrMessage, mess
   }
 }
 
+async function sendFcmPushToUser(userId, title, message, extraData = null) {
+  try {
+    let fcmToken = null;
+    const cleanUserId = String(userId || '').trim();
+    if (!cleanUserId) return;
+
+    // Check Firestore user doc for FCM token
+    try {
+      if (admin.apps && admin.apps.length > 0) {
+        const userDoc = await admin.firestore().doc(`artifacts/${appId}/public/data/users/${cleanUserId}`).get();
+        if (userDoc.exists) {
+          const uData = userDoc.data() || {};
+          fcmToken = uData.fcmToken || uData.fcm_token || null;
+        }
+      }
+    } catch (e) {}
+
+    // Check D1 DB if FCM token not in Firestore
+    if (!fcmToken && d1 && typeof d1.all === 'function') {
+      try {
+        const rows = await d1.all(`SELECT fcm_token FROM users WHERE id = ? OR firebase_uid = ? LIMIT 1`, [cleanUserId, cleanUserId]);
+        fcmToken = rows?.[0]?.fcm_token || null;
+      } catch (e) {}
+    }
+
+    if (fcmToken && admin.apps && admin.apps.length > 0) {
+      const payload = {
+        token: fcmToken,
+        notification: {
+          title: String(title || 'REVIEWS WORLD').trim(),
+          body: String(message || '').trim()
+        },
+        data: extraData ? Object.fromEntries(Object.entries(extraData).map(([k, v]) => [k, String(v)])) : {}
+      };
+      const res = await admin.messaging().send(payload);
+      console.log(`[FCM Push] Sent to ${cleanUserId}:`, res);
+      return res;
+    }
+  } catch (err) {
+    console.warn(`[FCM Push] Notification to ${userId} skipped:`, err?.message || err);
+  }
+}
+
 async function sendNotification(d1, userId, title, message, customData = null) {
-  // System automated notifications (withdrawals, fund updates, chat push) send OneSignal Push Notifications only.
-  // They do NOT get inserted into the in-app notification database table.
-  await sendOneSignalPush(d1, userId, title, message, customData);
+  // Send FCM Push via Firebase Admin SDK
+  sendFcmPushToUser(userId, title, message, customData).catch(() => {});
+
+  // Send OneSignal Push
+  sendOneSignalPush(d1, userId, title, message, customData).catch(() => {});
 }
 
 async function putR2Object(r2, key, body, contentType = 'application/json') {
