@@ -2,13 +2,15 @@
 
 const getAdminFilteredFundRequests = () => {
             if (!Array.isArray(allFundRequestsCache)) return [];
-            const isOwner = currentUser?.uid === ADMIN_UID || currentUser?.email === 'reviewsworld51@gmail.com' || currentUser?.email === 'reviewsworld01@gmail.com' || currentUserData?.role === 'owner';
+            const isOwner = checkIsOwner(currentUser, currentUserData);
+            const subAdminUid = currentUser?.uid || (typeof getCurrentUserId === 'function' ? getCurrentUserId() : '');
             return allFundRequestsCache.filter(r => {
                 const u = allUsersCache.find(user => (user.id || user.uid) === r.userId);
                 if (isOwner) {
                     return !u || !u.parentAdmin || u.parentAdmin === ADMIN_UID || u.parent_admin === ADMIN_UID;
                 } else {
-                    return u && (u.parentAdmin === currentUser?.uid || u.parent_admin === currentUser?.uid);
+                    const parent = r.parentAdmin || r.parent_admin || (u ? (u.parentAdmin || u.parent_admin) : '');
+                    return String(parent) === String(subAdminUid);
                 }
             });
         };
