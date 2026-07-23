@@ -298,22 +298,25 @@ const markChatMessagesRead = async (messageDocs, readerRole) => {
                 await batch.commit();
             }
         };
-
 const renderSupportMessages = (messages, viewerRole) => {
             const list = document.getElementById('support-chat-messages');
             if (!list) return;
             const wasNearBottom = list.scrollHeight - list.scrollTop - list.clientHeight < 90;
-            list.innerHTML = messages.length === 0
+
+            const myUid = (typeof getCurrentUserId === 'function' ? getCurrentUserId() : (currentUser?.uid || ''));
+            const deletedIds = JSON.parse(localStorage.getItem(`deleted_message_ids_${myUid}`) || '[]');
+            const visibleMessages = messages.filter(msg => !deletedIds.includes(msg.id));
+
+            list.innerHTML = visibleMessages.length === 0
                 ? '<p class="text-center text-sm text-gray-500 dark:text-gray-400 py-8">Start a chat with Reviews World support.</p>'
-                : messages.map((message, index) => {
-                    const myUid = (typeof getCurrentUserId === 'function' ? getCurrentUserId() : (currentUser?.uid || ''));
+                : visibleMessages.map((message, index) => {
                     const msgSenderId = typeof getResolvedSenderId === 'function' ? getResolvedSenderId(message) : (message.senderId || '');
                     const impersonatedUid = localStorage.getItem('impersonated_sub_admin_uid') || '';
                     const isMine = (msgSenderId && myUid)
                         ? (msgSenderId === myUid || msgSenderId === currentUser?.uid || (impersonatedUid && msgSenderId === impersonatedUid))
                         : (message.senderRole === viewerRole);
                     const messageDate = formatChatDate(message.createdAt);
-                    const previousDate = index > 0 ? formatChatDate(messages[index - 1].createdAt) : '';
+                    const previousDate = index > 0 ? formatChatDate(visibleMessages[index - 1].createdAt) : '';
                     const dateDivider = messageDate && messageDate !== previousDate
                         ? `<div class="flex justify-center py-1">
                                 <span class="rounded-full bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 px-3 py-1 text-[10px] font-bold text-gray-500 dark:text-gray-400 shadow-sm">${messageDate}</span>
@@ -335,7 +338,7 @@ const renderSupportMessages = (messages, viewerRole) => {
                     return `
                         ${dateDivider}
                         <div class="flex ${isMine ? 'justify-end' : 'justify-start'}" data-message-id="${message.id}">
-                            <div class="w-fit max-w-[82%] px-3 py-1.5 shadow-sm ${isMine ? 'chat-bubble-user bg-emerald-50 dark:bg-emerald-900/40 text-gray-900 dark:text-white border border-emerald-100 dark:border-emerald-800' : 'chat-bubble-admin bg-white dark:bg-gray-800 text-gray-900 dark:text-white border border-gray-100 dark:border-gray-700'}">
+                            <div class="support-chat-bubble w-fit max-w-[82%] px-3 py-1.5 shadow-sm cursor-pointer select-none rounded-2xl ${isMine ? 'chat-bubble-user bg-emerald-50 dark:bg-emerald-900/40 text-gray-900 dark:text-white border border-emerald-100 dark:border-emerald-800' : 'chat-bubble-admin bg-white dark:bg-gray-800 text-gray-900 dark:text-white border border-gray-100 dark:border-gray-700'}" data-msg-id="${message.id}" data-is-mine="${isMine}">
                                 <span class="text-sm leading-5 break-words align-baseline whitespace-pre-wrap block" id="msg-text-content-${message.id}">${escapeHtml(message.text || '')}</span>
                                 ${inspectBtnHtml}
                                 <span class="inline-flex items-center text-[10px] ml-2 text-gray-400 align-baseline mt-1.5 w-full justify-end select-none">
@@ -359,11 +362,20 @@ const renderSupportMessages = (messages, viewerRole) => {
                 });
             }
 
+            // Bind message bubble click handlers for deletion
+            list.querySelectorAll('.support-chat-bubble').forEach(bubble => {
+                bubble.onclick = (e) => {
+                    e.stopPropagation();
+                    const msgId = Number(bubble.dataset.msgId);
+                    const isMsgMine = bubble.dataset.isMine === 'true';
+                    window.showDeleteSupportMessageModal(msgId, isMsgMine, viewerRole);
+                };
+            });
+
             if (wasNearBottom) {
                 list.scrollTop = list.scrollHeight;
             }
         };
-
             const handleNewMessage = (message) => {
                 if (message.roomId !== activeSupportRoomId) return;
                 activeSupportMessages = mergeSupportMessages(activeSupportMessages, [message]);
@@ -840,6 +852,12 @@ const openSupportChatPage = async (chatUserId, viewerRole = 'user', chatMeta = {
                 applySupportReadReceipt(activeSupportRoomId, readerRole, readAt);
                 renderSupportMessages(activeSupportMessages, viewerRole);
             };
+            const handleMessageDeleted = ({ roomId, messageId }) => {
+                if (roomId !== activeSupportRoomId) return;
+                activeSupportMessages = activeSupportMessages.filter(msg => msg.id !== messageId);
+                writeSupportChatCache(activeSupportRoomId, activeSupportMessages);
+                renderSupportMessages(activeSupportMessages, viewerRole);
+            };
             let socket = null;
             let realtimeAttached = false;
             const roomIdAtOpen = activeSupportRoomId;
@@ -850,12 +868,14 @@ const openSupportChatPage = async (chatUserId, viewerRole = 'user', chatMeta = {
                     socket.off('chat_history', handleHistory);
                     socket.off('new_message', handleNewMessage);
                     socket.off('chat_read', handleReadReceipt);
+                    socket.off('message_deleted', handleMessageDeleted);
                 }
                 socket = nextSocket;
                 if (!realtimeAttached) {
                     socket.on('chat_history', handleHistory);
                     socket.on('new_message', handleNewMessage);
                     socket.on('chat_read', handleReadReceipt);
+                    socket.on('message_deleted', handleMessageDeleted);
                     realtimeAttached = true;
                 }
                 socket.emit('join_room', { roomId: roomIdAtOpen, limit: 200, markRead: true }, (response) => {
@@ -876,6 +896,7 @@ const openSupportChatPage = async (chatUserId, viewerRole = 'user', chatMeta = {
                     socket.off('chat_history', handleHistory);
                     socket.off('new_message', handleNewMessage);
                     socket.off('chat_read', handleReadReceipt);
+                    socket.off('message_deleted', handleMessageDeleted);
                     socket.emit('leave_room', { roomId: roomIdAtOpen });
                 }
                 realtimeAttached = false;
@@ -1727,3 +1748,83 @@ window.addRevyBotMessage = addRevyBotMessage;
 window.openRevyBotChatPage = openRevyBotChatPage;
 window.showHelpSupportPage = showHelpSupportPage;
 window.openAdminInspectDetailsModal = openAdminInspectDetailsModal;
+
+const showDeleteSupportMessageModal = (messageId, isMine, viewerRole) => {
+    const isSender = isMine || viewerRole === 'admin';
+
+    renderModal('Delete Message', `
+        <div class="space-y-4 text-center">
+            <p class="text-sm text-gray-600 dark:text-gray-300">Choose how you want to delete this message:</p>
+            <div class="space-y-2 pt-2">
+                <button id="delete-for-me-btn" class="w-full py-3 bg-gray-105 hover:bg-gray-200 dark:bg-gray-700 dark:hover:bg-gray-600 rounded-xl text-sm font-bold text-gray-800 dark:text-white transition">🗑️ Delete for me</button>
+                ${isSender ? `
+                <button id="delete-for-everyone-btn" class="w-full py-3 bg-rose-50 hover:bg-rose-100 dark:bg-rose-950/30 dark:hover:bg-rose-950/50 rounded-xl text-sm font-bold text-rose-600 dark:text-rose-400 transition">🌍 Delete for everyone</button>
+                ` : ''}
+            </div>
+        </div>
+    `, `
+        <button onclick="window.closeModal()" class="w-full rounded-xl bg-gray-100 dark:bg-gray-700 py-3 text-sm font-extrabold text-gray-700 dark:text-gray-200">Cancel</button>
+    `, 'max-w-xs');
+
+    document.getElementById('delete-for-me-btn').onclick = () => {
+        const myUid = (typeof getCurrentUserId === 'function' ? getCurrentUserId() : (currentUser?.uid || ''));
+        const deletedIds = JSON.parse(localStorage.getItem(`deleted_message_ids_${myUid}`) || '[]');
+        deletedIds.push(messageId);
+        localStorage.setItem(`deleted_message_ids_${myUid}`, JSON.stringify(deletedIds));
+        
+        window.closeModal();
+        showNotification('Message deleted for you.');
+        
+        if (typeof activeSupportMessages !== 'undefined') {
+            renderSupportMessages(activeSupportMessages, viewerRole);
+        }
+    };
+
+    if (isSender) {
+        document.getElementById('delete-for-everyone-btn').onclick = async () => {
+            const socket = window.activeSupportSocket;
+            if (!socket || !socket.connected) {
+                showNotification('Connecting delete request...', false);
+                try {
+                    const token = await getBackendAuthToken();
+                    const response = await fetchWithTimeout(`${BACKEND_BASE_URL}/api/chats/${encodeURIComponent(activeSupportRoomId)}/messages/${messageId}`, {
+                        method: 'DELETE',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Authorization': `Bearer ${token}`
+                        }
+                    }, 5000);
+                    const res = await response.json().catch(() => ({}));
+                    window.closeModal();
+                    if (response.ok && res.ok) {
+                        showNotification('Message deleted for everyone.');
+                        activeSupportMessages = activeSupportMessages.filter(msg => msg.id !== messageId);
+                        writeSupportChatCache(activeSupportRoomId, activeSupportMessages);
+                        renderSupportMessages(activeSupportMessages, viewerRole);
+                    } else {
+                        showNotification(res.error || 'Failed to delete message.', true);
+                    }
+                } catch (e) {
+                    window.closeModal();
+                    showNotification('Network error deleting message.', true);
+                }
+                return;
+            }
+            
+            showNotification('Deleting message...', false);
+            socket.emit('delete_message', { roomId: activeSupportRoomId, messageId }, (res) => {
+                window.closeModal();
+                if (res && res.ok) {
+                    showNotification('Message deleted for everyone.');
+                    activeSupportMessages = activeSupportMessages.filter(msg => msg.id !== messageId);
+                    writeSupportChatCache(activeSupportRoomId, activeSupportMessages);
+                    renderSupportMessages(activeSupportMessages, viewerRole);
+                } else {
+                    showNotification(res?.error || 'Failed to delete message.', true);
+                }
+            });
+        };
+    }
+};
+
+window.showDeleteSupportMessageModal = showDeleteSupportMessageModal;

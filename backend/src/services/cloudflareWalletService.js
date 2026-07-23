@@ -3742,6 +3742,47 @@ ${memoriesContext}`
     res.json({ ok: true, history });
   });
 
+  app.delete('/api/chats/:roomId/messages/:messageId', requireHttpAuth, async (req, res) => {
+    const roomId = String(req.params.roomId || '');
+    const messageId = Number(req.params.messageId);
+    const roomUserId = roomId.replace(/^support_/, '');
+    if (!roomId || !messageId || (!req.auth.isAdmin && req.auth.sub !== roomUserId)) {
+      return res.status(403).json({ ok: false, error: 'FORBIDDEN' });
+    }
+
+    try {
+      if (!req.auth.isAdmin) {
+        const msgRow = await d1.first(`SELECT sender_id FROM chats WHERE id = ? LIMIT 1`, [messageId]);
+        if (!msgRow) {
+          return res.status(404).json({ ok: false, error: 'MESSAGE_NOT_FOUND' });
+        }
+        if (msgRow.sender_id !== req.auth.sub) {
+          return res.status(403).json({ ok: false, error: 'UNAUTHORIZED' });
+        }
+      }
+
+      await d1.query(`DELETE FROM chats WHERE id = ?`, [messageId]);
+
+      const lastMsg = await d1.first(`SELECT message, sender_id, timestamp FROM chats WHERE room_id = ? ORDER BY timestamp DESC LIMIT 1`, [roomId]);
+      if (lastMsg) {
+        await upsertChatRoom(d1, {
+          roomId,
+          userId: roomId.replace(/^support_/, ''),
+          lastMessage: lastMsg.message,
+          lastSenderId: lastMsg.sender_id,
+          updatedAt: lastMsg.timestamp
+        }).catch(() => {});
+      } else {
+        await d1.query(`UPDATE chat_rooms SET last_message = '', last_sender_id = '', updated_at = ? WHERE id = ?`, [nowMs(), roomId]).catch(() => {});
+      }
+
+      res.json({ ok: true });
+    } catch (err) {
+      console.error('HTTP Delete chat message failed:', err);
+      res.status(500).json({ ok: false, error: 'DELETE_FAILED', message: err.message });
+    }
+  });
+
   app.post('/api/notifications/send', requireHttpAuth, async (req, res) => {
     const { userId, title, message, data } = req.body;
     if (!userId || !title || !message) {
@@ -6142,6 +6183,41 @@ function registerSocketHandlers(io, { d1 }) {
         }).catch((error) => console.error('Async chat room persist failed:', error));
 
         if (ack) ack({ ok: true, message: chatMessage });
+      } catch (error) {
+        if (ack) ack({ ok: false, error: error.message });
+      }
+    });
+
+    socket.on('delete_message', async ({ roomId, messageId }, ack) => {
+      try {
+        if (!roomId || !messageId) throw new Error('ROOM_AND_MESSAGE_REQUIRED');
+
+        if (!socket.user.isAdmin) {
+          const msgRow = await d1.first(`SELECT sender_id FROM chats WHERE id = ? LIMIT 1`, [messageId]);
+          if (!msgRow) throw new Error('MESSAGE_NOT_FOUND');
+          if (msgRow.sender_id !== socket.user.sub) {
+            throw new Error('UNAUTHORIZED');
+          }
+        }
+
+        await d1.query(`DELETE FROM chats WHERE id = ?`, [messageId]);
+
+        io.to(roomId).emit('message_deleted', { roomId, messageId });
+
+        const lastMsg = await d1.first(`SELECT message, sender_id, timestamp FROM chats WHERE room_id = ? ORDER BY timestamp DESC LIMIT 1`, [roomId]);
+        if (lastMsg) {
+          await upsertChatRoom(d1, {
+            roomId,
+            userId: roomId.replace(/^support_/, ''),
+            lastMessage: lastMsg.message,
+            lastSenderId: lastMsg.sender_id,
+            updatedAt: lastMsg.timestamp
+          }).catch(() => {});
+        } else {
+          await d1.query(`UPDATE chat_rooms SET last_message = '', last_sender_id = '', updated_at = ? WHERE id = ?`, [nowMs(), roomId]).catch(() => {});
+        }
+
+        if (ack) ack({ ok: true });
       } catch (error) {
         if (ack) ack({ ok: false, error: error.message });
       }
