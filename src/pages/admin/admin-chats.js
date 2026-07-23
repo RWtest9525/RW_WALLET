@@ -39,6 +39,14 @@ const preloadAdminChatRooms = (chats = allSupportChatsCache) => {
 const subscribeAdminChatRooms = async (chats = allSupportChatsCache) => {
             if (!hasAdminSessionReadyOrCached()) return;
             const socket = await getSupportSocket();
+
+            const handleAdminBackgroundRead = (data) => {
+                if (!data || !data.roomId) return;
+                localStorage.setItem(getAdminSupportChatSeenKey(data.roomId), String(Date.now()));
+                refreshAdminChatUnreadCount();
+                renderAdminChatsList();
+            };
+
             if (adminChatBackgroundHandlers) {
                 socket.off('new_message', adminChatBackgroundHandlers.message);
                 socket.off('chat_read', adminChatBackgroundHandlers.read);
