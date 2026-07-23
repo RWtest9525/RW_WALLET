@@ -2848,14 +2848,49 @@ function registerRoutes(app, { d1, r2 }) {
 
   app.post('/api/chat/send-push', requireHttpAuth, async (req, res) => {
     try {
-      const { targetUserId, title, message } = req.body;
+      const { targetUserId, title, message, customData } = req.body;
       if (!targetUserId || !message) {
         return res.status(400).json({ ok: false, error: 'MISSING_TARGET_OR_MESSAGE' });
       }
-      await sendNotification(d1, targetUserId, title || 'New Chat Message', message, { type: 'chat' });
+      const pushPayload = customData || { type: 'chat' };
+      await sendNotification(d1, targetUserId, title || 'New Chat Message', message, pushPayload);
       return res.json({ ok: true, message: 'Push notification queued.' });
     } catch (err) {
       console.error('[ChatPush] Error:', err);
+      return res.status(500).json({ ok: false, error: err.message });
+    }
+  });
+
+  app.post('/api/admin/notifications', requireHttpAuth, async (req, res) => {
+    try {
+      const { title, message, audience, recipients } = req.body;
+      if (!message) return res.status(400).json({ ok: false, error: 'MESSAGE_REQUIRED' });
+
+      const notificationTitle = title || 'REVIEWS WORLD';
+      const recipientList = Array.isArray(recipients) ? recipients : [];
+
+      if (audience === 'broadcast' || audience === 'all' || audience === 'all_new_version') {
+        await sendOneSignalPush(d1, 'broadcast', notificationTitle, message);
+      } else if (recipientList.length > 0) {
+        for (const targetId of recipientList) {
+          await sendNotification(d1, targetId, notificationTitle, message);
+        }
+      }
+
+      return res.json({ ok: true, message: 'Notification delivered via Push.' });
+    } catch (err) {
+      console.error('[AdminNotification] Error:', err);
+      return res.status(500).json({ ok: false, error: err.message });
+    }
+  });
+
+  app.post('/api/notifications/send', async (req, res) => {
+    try {
+      const { title, message, userId, target, customData } = req.body;
+      const targetId = userId || target || 'broadcast';
+      await sendNotification(d1, targetId, title || 'REVIEWS WORLD', message || '', customData);
+      return res.json({ ok: true, message: 'Notification queued.' });
+    } catch (err) {
       return res.status(500).json({ ok: false, error: err.message });
     }
   });
