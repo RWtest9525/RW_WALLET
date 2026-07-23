@@ -329,7 +329,6 @@ const renderAdminChatsList = () => {
                                 <h3 class="font-bold text-sm truncate">${escapeHtml(displayName)}</h3>
                                 <span class="text-[10px] text-gray-400 shrink-0">${formatChatTime(chat.updatedAt)}</span>
                             </div>
-                            <p class="text-xs text-gray-500 dark:text-gray-400 truncate mt-0.5">${escapeHtml(displayEmail || chat.userMobile || '')}</p>
                             <p class="text-xs text-gray-600 dark:text-gray-300 truncate mt-1">${escapeHtml(chat.lastMessage || 'No messages yet')}</p>
                         </div>
                     </button>`;
