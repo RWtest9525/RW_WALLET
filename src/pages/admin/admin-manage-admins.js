@@ -107,27 +107,6 @@ const showAdminManageAdminsPage = async () => {
                 <div class="text-center py-10 text-gray-400 text-xs font-semibold">Loading sub-admins...</div>
             </div>
 
-            <!-- Compact Pagination Bar -->
-            <div id="sub-admins-pagination" class="flex flex-col sm:flex-row items-center justify-between gap-2.5 pt-3 border-t border-gray-200 dark:border-gray-800 text-xs font-semibold text-gray-500 dark:text-gray-400">
-                <div id="pagination-info-text">Showing 0 of 0</div>
-                <div class="flex items-center gap-1.5">
-                    <button type="button" id="pag-prev-btn" class="h-8 w-8 flex items-center justify-center rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-slate-800 hover:bg-gray-50 text-gray-700 dark:text-gray-300 font-bold transition disabled:opacity-40">
-                        ‹
-                    </button>
-                    <div id="pag-pages-list" class="flex items-center gap-1">
-                        <button type="button" class="h-8 w-8 flex items-center justify-center rounded-lg bg-blue-600 text-white font-black text-xs">1</button>
-                    </div>
-                    <button type="button" id="pag-next-btn" class="h-8 w-8 flex items-center justify-center rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-slate-800 hover:bg-gray-50 text-gray-700 dark:text-gray-300 font-bold transition disabled:opacity-40">
-                        ›
-                    </button>
-                    <select id="pag-per-page-select" class="ml-1.5 h-8 px-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-slate-800 text-xs font-bold text-gray-700 dark:text-gray-300 focus:outline-none">
-                        <option value="10" selected>10 / page</option>
-                        <option value="20">20 / page</option>
-                        <option value="50">50 / page</option>
-                    </select>
-                </div>
-            </div>
-
         </div>
         ${getPageFooter()}
     `;
@@ -139,35 +118,11 @@ const showAdminManageAdminsPage = async () => {
 
     document.getElementById('subadmin-search-input')?.addEventListener('input', (e) => {
         subAdminSearchTerm = e.target.value.trim().toLowerCase();
-        subAdminCurrentPage = 1;
         renderSubAdminsUI();
     });
 
     document.getElementById('subadmin-status-filter-select')?.addEventListener('change', (e) => {
         subAdminStatusFilter = e.target.value;
-        subAdminCurrentPage = 1;
-        renderSubAdminsUI();
-    });
-
-    document.getElementById('pag-prev-btn')?.addEventListener('click', () => {
-        if (subAdminCurrentPage > 1) {
-            subAdminCurrentPage--;
-            renderSubAdminsUI();
-        }
-    });
-
-    document.getElementById('pag-next-btn')?.addEventListener('click', () => {
-        const filtered = getFilteredSubAdmins();
-        const totalPages = Math.ceil(filtered.length / subAdminPerPage) || 1;
-        if (subAdminCurrentPage < totalPages) {
-            subAdminCurrentPage++;
-            renderSubAdminsUI();
-        }
-    });
-
-    document.getElementById('pag-per-page-select')?.addEventListener('change', (e) => {
-        subAdminPerPage = Number(e.target.value) || 10;
-        subAdminCurrentPage = 1;
         renderSubAdminsUI();
     });
 
@@ -248,14 +203,20 @@ const renderSubAdminsUI = () => {
     if (statActive) statActive.textContent = activeCount;
     if (statInactive) statInactive.textContent = inactiveCount;
     
-    if (statUsers) {
-        let managedCount = 0;
-        if (typeof allUsersCache !== 'undefined' && Array.isArray(allUsersCache)) {
-            const subAdminUids = new Set(subAdminsListCache.map(i => String(i.id)));
-            managedCount = allUsersCache.filter(u => subAdminUids.has(String(u.parentAdmin || u.parent_admin || ''))).length;
-        }
-        statUsers.textContent = managedCount || (totalCount * 20);
+    let totalManagedBySubAdmins = 0;
+    const subAdminCountMap = {};
+
+    if (typeof allUsersCache !== 'undefined' && Array.isArray(allUsersCache)) {
+        const subAdminUids = new Set(subAdminsListCache.map(i => String(i.id)));
+        allUsersCache.forEach(u => {
+            const pAdmin = String(u.parentAdmin || u.parent_admin || '');
+            if (pAdmin && subAdminUids.has(pAdmin) && pAdmin !== ADMIN_UID) {
+                totalManagedBySubAdmins++;
+                subAdminCountMap[pAdmin] = (subAdminCountMap[pAdmin] || 0) + 1;
+            }
+        });
     }
+    if (statUsers) statUsers.textContent = totalManagedBySubAdmins;
 
     if (filtered.length === 0) {
         container.innerHTML = `
@@ -264,39 +225,11 @@ const renderSubAdminsUI = () => {
                 <p class="text-xs text-gray-400">Try adjusting your search query or status filter.</p>
             </div>
         `;
-        document.getElementById('pagination-info-text').textContent = 'Showing 0 of 0';
         return;
     }
 
-    // Paginate
-    const totalPages = Math.ceil(filtered.length / subAdminPerPage) || 1;
-    if (subAdminCurrentPage > totalPages) subAdminCurrentPage = totalPages;
-    const startIdx = (subAdminCurrentPage - 1) * subAdminPerPage;
-    const endIdx = Math.min(startIdx + subAdminPerPage, filtered.length);
-    const paginatedItems = filtered.slice(startIdx, endIdx);
-
-    document.getElementById('pagination-info-text').textContent = `Showing ${startIdx + 1} to ${endIdx} of ${filtered.length}`;
-
-    const prevBtn = document.getElementById('pag-prev-btn');
-    const nextBtn = document.getElementById('pag-next-btn');
-    if (prevBtn) prevBtn.disabled = subAdminCurrentPage <= 1;
-    if (nextBtn) nextBtn.disabled = subAdminCurrentPage >= totalPages;
-
-    const pagesContainer = document.getElementById('pag-pages-list');
-    if (pagesContainer) {
-        let pagesHtml = '';
-        for (let p = 1; p <= totalPages; p++) {
-            if (p === subAdminCurrentPage) {
-                pagesHtml += `<button type="button" class="h-8 w-8 flex items-center justify-center rounded-lg bg-blue-600 text-white font-black text-xs">${p}</button>`;
-            } else {
-                pagesHtml += `<button type="button" onclick="window.setSubAdminPage(${p})" class="h-8 w-8 flex items-center justify-center rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-slate-800 hover:bg-gray-50 text-gray-700 dark:text-gray-300 font-bold text-xs transition">${p}</button>`;
-            }
-        }
-        pagesContainer.innerHTML = pagesHtml;
-    }
-
     let html = '';
-    paginatedItems.forEach((item) => {
+    filtered.forEach((item) => {
         const docSnapId = item.id;
         const adminData = item.data;
         const isSuspended = adminData.status === 'suspended';
@@ -305,6 +238,7 @@ const renderSubAdminsUI = () => {
         const realPhoto = adminData.profilePhoto || adminData.profile_photo || adminData.photoURL;
         const adminName = adminData.name || 'Sub-Admin';
         const initial = adminName.charAt(0).toUpperCase();
+        const userCount = subAdminCountMap[docSnapId] || 0;
 
         const avatarMarkup = realPhoto
             ? `<img src="${escapeHtml(realPhoto)}" alt="${escapeHtml(adminName)}" class="h-10 w-10 rounded-full object-cover border border-gray-200 dark:border-gray-700 shadow-2xs">`
@@ -359,7 +293,7 @@ const renderSubAdminsUI = () => {
                 </div>
 
                 <!-- Compact Details Row (Inline Chips) -->
-                <div class="grid grid-cols-1 sm:grid-cols-3 gap-1.5 pt-1 text-xs font-semibold">
+                <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-1.5 pt-1 text-xs font-semibold">
                     <!-- Mobile Chip -->
                     <div class="bg-gray-50 dark:bg-slate-900/60 px-2.5 py-1.5 rounded-xl border border-gray-100/80 dark:border-slate-700/50 flex items-center gap-1.5 truncate">
                         <svg class="h-3.5 w-3.5 text-emerald-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z"></path></svg>
@@ -383,6 +317,12 @@ const renderSubAdminsUI = () => {
                                 <span id="admin-pw-label-${docSnapId}">Show</span>
                             </button>
                         ` : ''}
+                    </div>
+
+                    <!-- Managed Users Count Chip -->
+                    <div class="bg-purple-50 dark:bg-purple-950/60 px-2.5 py-1.5 rounded-xl border border-purple-100/80 dark:border-purple-800/50 flex items-center gap-1.5 truncate">
+                        <svg class="h-3.5 w-3.5 text-purple-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"></path></svg>
+                        <span class="text-slate-600 dark:text-slate-300 truncate">Users: <strong class="text-purple-600 dark:text-purple-400 font-black">${userCount}</strong></span>
                     </div>
                 </div>
 
@@ -410,6 +350,16 @@ const refreshSubAdminsList = async () => {
                 data: docSnap.data()
             });
         });
+
+        // Also populate allUsersCache for exact user count computation
+        try {
+            const snapUsers = await getDocs(collection(db, `artifacts/${appId}/public/data/users`));
+            const usersList = [];
+            snapUsers.forEach(d => usersList.push({ id: d.id, ...d.data() }));
+            allUsersCache = usersList;
+        } catch (uErr) {
+            console.warn('Managed user count fetch skipped:', uErr.message);
+        }
 
         renderSubAdminsUI();
     } catch (err) {
