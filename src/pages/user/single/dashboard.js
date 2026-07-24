@@ -5176,7 +5176,7 @@ const showUserTaskDetailsPage = async (taskId) => {
             if (isBulk) {
                 showLoading();
             }
-            const reward = task.rate || task.reward || 0;
+            const reward = getTaskRewardForUser(task, currentUserData);
             const taskTitle = task.title || 'Task Mission';
             const appName = task.appName || taskTitle;
 
@@ -5214,9 +5214,16 @@ const showUserTaskDetailsPage = async (taskId) => {
                 }
             }
 
-            const commentPool = isBulk ? availability.availableComments : getTaskCommentPool(task);
-            const totalCommentsCount = isBulk ? availability.totalCount : getTaskCommentPool(task).length;
-            const availableCommentsCount = isBulk ? availability.availableCount : commentPool.length;
+            const localCommentPool = getTaskCommentPool(task);
+            const commentPool = (isBulk && Array.isArray(availability.availableComments) && availability.availableComments.length > 0)
+                ? availability.availableComments
+                : localCommentPool;
+            const totalCommentsCount = (isBulk && availability.totalCount > 0)
+                ? availability.totalCount
+                : localCommentPool.length;
+            const availableCommentsCount = (isBulk && availability.availableCount > 0)
+                ? availability.availableCount
+                : commentPool.length;
             const taskLink = task.taskLink || task.link || task.url || '';
             const image = task.imageUrl || task.logoUrl || task.iconUrl || 'https://cdn-icons-png.flaticon.com/512/3176/3176366.png';
             
@@ -5286,7 +5293,7 @@ const showUserTaskDetailsPage = async (taskId) => {
                                 <span class="text-xs font-black text-indigo-600 dark:text-indigo-400 mt-1 block">${availableCommentsCount}/${totalCommentsCount} comments left</span>
                             </div>
                             <div class="flex items-center gap-2">
-                                <input type="number" id="task-bulk-comments-count" min="1" max="${availableCommentsCount}" value="" placeholder="Qty" class="w-16 rounded-xl border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-2 py-1.5 text-center text-xs font-bold focus:outline-none focus:ring-2 focus:ring-slate-900">
+                                <input type="number" id="task-bulk-comments-count" min="1" max="${Math.max(1, availableCommentsCount)}" value="" placeholder="Qty" class="w-20 rounded-xl border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-3 py-2 text-center text-xs font-bold focus:outline-none focus:ring-2 focus:ring-slate-900">
                                 <button type="button" id="task-bulk-generate-btn" class="rounded-xl bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-500 hover:to-blue-500 text-white px-4 py-2 text-xs font-black transition-all active:scale-[0.97] shadow-sm">Generate</button>
                             </div>
                         </div>
