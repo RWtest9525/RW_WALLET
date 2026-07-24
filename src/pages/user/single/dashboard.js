@@ -4887,11 +4887,21 @@ class TaskUploadQueueManager {
                     skipOcr = 'false';
                 }
             } else {
-                // SINGLE MODE: Use reserved comment
+                // SINGLE MODE: Strictly enforce reserved comment
                 activeReservation = window.activeTaskReservation;
+                if (!activeReservation || !activeReservation.comment) {
+                    try {
+                        activeReservation = await findReusableTaskReservation(item.task.id, currentUser.uid);
+                    } catch (e) {}
+                }
+                if (!activeReservation || !activeReservation.comment) {
+                    try {
+                        activeReservation = await reserveTaskReviewComment(item.task);
+                    } catch (e) {}
+                }
                 const expiresAt = timestampToMillis(activeReservation?.expiresAt);
                 if (!activeReservation?.comment || !expiresAt || expiresAt <= Date.now()) {
-                    throw new Error('Assigned comment reservation has expired. Please copy again.');
+                    throw new Error('Assigned comment reservation has expired. Please refresh the page to view your assigned comment.');
                 }
                 matchedComment = activeReservation.comment;
 
@@ -5270,6 +5280,7 @@ const showUserTaskDetailsPage = async (taskId) => {
                     console.warn('Single user reservation lock check:', resErr);
                 }
             }
+            window.activeTaskReservation = activeReservation;
 
             const selectDeterministicComment = (pool, userId, taskId) => {
                 let hash = 0;
