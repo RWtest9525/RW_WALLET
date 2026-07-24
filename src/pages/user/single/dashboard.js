@@ -6187,10 +6187,6 @@ window.submitSingleUserTask = async (task, file, reward, appName, taskLink, imag
         };
 
         if (clientOcrSuccess) {
-            if (!verifyCommentMatch(ocrText, matchedComment)) {
-                throw new Error('Comment mismatch. Ensure screenshot displays the correct assigned review.');
-            }
-
             try {
                 gmailName = await window.extractReviewerName(ocrText, matchedComment);
             } catch (chatErr) {
@@ -6235,10 +6231,13 @@ window.submitSingleUserTask = async (task, file, reward, appName, taskLink, imag
             throw new Error('Verification data missing from upload response');
         }
 
-        // Post-upload OCR validation (if client OCR was skipped or as a double check!)
+        // Post-upload OCR validation (if OCR extracted some text)
         const finalOcrText = verification.ocrText || ocrText || '';
-        if (!verifyCommentMatch(finalOcrText, matchedComment)) {
-            throw new Error('Comment mismatch. Ensure screenshot displays the correct assigned review.');
+        const cleanedOcr = finalOcrText.replace(/[^a-z0-9]/ig, '');
+        if (cleanedOcr.length > 0) {
+            if (!verifyCommentMatch(finalOcrText, matchedComment)) {
+                throw new Error('Comment mismatch. Ensure screenshot displays the correct assigned review.');
+            }
         }
 
         const finalComment = verification.matchedComment || matchedComment;
