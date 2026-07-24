@@ -1176,8 +1176,9 @@ const autoProcessSubmissions = async (taskSubs, scraped, payoutDayPassed) => {
 
         for (const s of pendingSubs) {
             const isLive = isSubmissionLive(s);
+            const approvedReward = getApprovedRewardAmountForSubmission(s);
             const body = isLive 
-                ? { manualStatus: 'approved', verifiedAt: Date.now() }
+                ? { manualStatus: 'approved', reward: approvedReward, verifiedAt: Date.now() }
                 : { manualStatus: 'rejected' };
                 
             try {
@@ -1185,9 +1186,21 @@ const autoProcessSubmissions = async (taskSubs, scraped, payoutDayPassed) => {
                     method: 'PATCH',
                     headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
                     body: JSON.stringify(body)
-                }, 8000);
-                if (isLive) approvedCount++;
-                else rejectedCount++;
+                }, 8000).catch(() => null);
+
+                if (isLive) {
+                    try {
+                        const subRef = doc(db, `artifacts/${appId}/public/data/task_submissions`, s.id);
+                        await updateDoc(subRef, { manualStatus: 'approved', reward: approvedReward, verifiedAt: serverTimestamp() });
+                    } catch (e) {}
+                    approvedCount++;
+                } else {
+                    try {
+                        const subRef = doc(db, `artifacts/${appId}/public/data/task_submissions`, s.id);
+                        await updateDoc(subRef, { manualStatus: 'rejected' });
+                    } catch (e) {}
+                    rejectedCount++;
+                }
             } catch (err) {
                 console.error(`Failed to auto-process submission ${s.id}:`, err);
             }

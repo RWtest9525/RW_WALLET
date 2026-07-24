@@ -5625,7 +5625,6 @@ const showUserTaskDetailsPage = async (taskId) => {
                 startLocalTimer();
             };
 
-            // Setup buttons & actions
             const downloadBtn = document.getElementById('task-download-btn');
             if (downloadBtn) {
                 downloadBtn.onclick = () => {
@@ -5634,6 +5633,10 @@ const showUserTaskDetailsPage = async (taskId) => {
                         return;
                     }
                     
+                    window._activeTaskExecutingId = task.id;
+                    window._activeTaskObj = task;
+                    try { sessionStorage.setItem('rw_active_task_id', task.id); } catch(e){}
+
                     const targetUrl = taskLink;
                     const a = document.createElement('a');
                     a.href = targetUrl;
@@ -5643,6 +5646,33 @@ const showUserTaskDetailsPage = async (taskId) => {
                     a.click();
                     document.body.removeChild(a);
                 };
+            }
+
+            // Global return-to-app listener for instant task page restoration
+            if (!window._taskPageReturnListenerBound) {
+                const handleAppReturnToTaskPage = () => {
+                    if (typeof window.closeModal === 'function') {
+                        window.closeModal();
+                    }
+                    const newsModal = document.getElementById('sandboxed-news-reader-modal');
+                    if (newsModal) newsModal.classList.add('hidden');
+
+                    const activeId = window._activeTaskExecutingId || (function(){ try { return sessionStorage.getItem('rw_active_task_id'); } catch(e){ return null; } })();
+                    if (activeId && window._activeTaskObj) {
+                        const proofInput = document.getElementById('task-proof-input');
+                        if (!proofInput && typeof window.renderTask === 'function') {
+                            window.renderTask(window._activeTaskObj);
+                        }
+                    }
+                };
+
+                window.addEventListener('focus', handleAppReturnToTaskPage);
+                document.addEventListener('visibilitychange', () => {
+                    if (document.visibilityState === 'visible') {
+                        handleAppReturnToTaskPage();
+                    }
+                });
+                window._taskPageReturnListenerBound = true;
             }
 
             // Copy & Review logic
