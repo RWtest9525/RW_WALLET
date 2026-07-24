@@ -4172,6 +4172,39 @@ const showUserTaskPage = () => {
                 } else {
                     bodyContent = taskCategories.map(renderCategory).join('');
                 }
+
+                const shellContainer = document.querySelector('.task-page-shell .max-w-xl');
+                if (shellContainer && currentMainSection === 'task') {
+                    shellContainer.innerHTML = bodyContent;
+                } else if (!isBackground) {
+                    const content = `
+                        <header class="mb-4 bg-white/95 px-4 py-3 shadow-sm backdrop-blur page-header-fixed dark:bg-gray-900/95">
+                            <div class="flex items-center justify-between gap-3">
+                                <div class="min-w-0">
+                                    <p class="text-lg font-black uppercase text-slate-950 dark:text-white">RW TASK</p>
+                                </div>
+                                <div class="task-header-actions">
+                                    <button type="button" data-action="open-task-ads-page" class="task-mini-action">
+                                        <img src="https://cdn-icons-png.flaticon.com/512/2659/2659360.png" alt="Ads" loading="eager" decoding="async">
+                                        <span>Ads</span>
+                                    </button>
+                                    <button type="button" data-action="open-task-bonus-page" class="task-mini-action">
+                                        <img src="https://cdn-icons-png.flaticon.com/512/2611/2611152.png" alt="Bonus" loading="eager" decoding="async">
+                                        <span>Bonus</span>
+                                    </button>
+                                </div>
+                            </div>
+                        </header>
+                        <div class="task-page-shell px-4 pt-1 pb-28">
+                            <div class="mx-auto max-w-xl space-y-4">
+                                ${bodyContent}
+                            </div>
+                        </div>
+                        ${getPageFooter()}`;
+                    
+                    showPage(content, { returnTo: currentUser?.uid === ADMIN_UID ? 'admin' : 'home', keepBottomNav: true });
+                    setBottomNavActive('bottom-task-btn');
+                }
             };
 
             // Render UI immediately
