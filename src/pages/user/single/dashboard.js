@@ -378,29 +378,29 @@ const renderTransactionItem = (item, isFullPage = false) => {
                 const chargeAmount = item.chargeAmount || item.amount || 0;
 
                 return `
-                    <div class="flex justify-between items-center p-3 ${bgColor} rounded-lg text-sm ${clickableClass}" ${dataKey}>
+                    <div class="flex justify-between items-center p-3.5 sm:p-4 ${bgColor} rounded-xl text-sm sm:text-base ${clickableClass}" ${dataKey}>
                         <div class="flex-1 min-w-0">
-                            <p class="font-semibold">Mobile Recharge</p>
-                            <p class="text-xs text-gray-500 dark:text-gray-400">${item.mobileNumber || ''} ${item.operator ? `| ${item.operator}` : ''}</p>
-                            <p class="text-xs text-gray-500 dark:text-gray-400">${formatDateDDMMYY(item.timestamp || item.requestedAt)}</p>
+                            <p class="text-base font-bold text-gray-900 dark:text-white">Mobile Recharge</p>
+                            <p class="text-xs sm:text-sm font-medium text-slate-600 dark:text-slate-300 mt-0.5">${item.mobileNumber || ''} ${item.operator ? `| ${item.operator}` : ''}</p>
+                            <p class="text-xs sm:text-sm font-medium text-slate-500 dark:text-slate-400">${formatDateDDMMYY(item.timestamp || item.requestedAt)}</p>
                         </div>
                         <div class="text-right">
-                            <p class="font-bold text-red-500">-${formatCurrencyAbs(chargeAmount)}</p>
-                            <p class="text-xs font-semibold ${statusColor}">${statusText}</p>
+                            <p class="text-base sm:text-lg font-black text-red-500">-${formatCurrencyAbs(chargeAmount)}</p>
+                            <p class="text-xs sm:text-sm font-bold ${statusColor}">${statusText}</p>
                         </div>
                     </div>`;
             }
 
             if (item.status === 'pending') {
                 return `
-                    <div class="flex justify-between items-center p-3 bg-yellow-50 dark:bg-yellow-900/20 rounded-lg text-sm ${clickableClass}" ${dataKey}>
+                    <div class="flex justify-between items-center p-3.5 sm:p-4 bg-yellow-50 dark:bg-yellow-900/20 rounded-xl text-sm sm:text-base ${clickableClass}" ${dataKey}>
                         <div class="flex-1">
-                            <p class="font-semibold capitalize">Withdrawal Request</p>
-                            <p class="text-xs text-gray-500 dark:text-gray-400">${formatDate(item.timestamp)}</p>
+                            <p class="text-base font-bold text-gray-900 dark:text-white capitalize">Withdrawal Request</p>
+                            <p class="text-xs sm:text-sm font-medium text-slate-600 dark:text-slate-300 mt-0.5">${formatDate(item.timestamp)}</p>
                         </div>
                         <div class="text-right">
-                            <p class="font-bold text-yellow-600">${formatCurrencyAbs(item.amount)}</p>
-                            <p class="text-xs font-semibold text-yellow-600">Pending</p>
+                            <p class="text-base sm:text-lg font-black text-yellow-600">${formatCurrencyAbs(item.amount)}</p>
+                            <p class="text-xs sm:text-sm font-bold text-yellow-600">Pending</p>
                         </div>
                     </div>`;
             }
@@ -415,7 +415,7 @@ const renderTransactionItem = (item, isFullPage = false) => {
                 const logoUrl = getWithdrawMethodLogo(methodId);
 
                 if (item.adminTransactionId) {
-                    txnIdBadge = `<span class="txn-id-badge text-xs ml-2">${item.adminTransactionId}</span>`;
+                    txnIdBadge = `<span class="txn-id-badge text-xs font-bold ml-2">${item.adminTransactionId}</span>`;
                 }
 
                 if (item.status === 'rejected') {
@@ -425,18 +425,18 @@ const renderTransactionItem = (item, isFullPage = false) => {
                 }
 
                 return `
-                    <div class="flex justify-between items-center p-3 ${bgColor} rounded-lg text-sm ${clickableClass}" ${dataKey}>
+                    <div class="flex justify-between items-center p-3.5 sm:p-4 ${bgColor} rounded-xl text-sm sm:text-base ${clickableClass}" ${dataKey}>
                         <div class="flex items-center gap-3 flex-1 min-w-0">
                             ${logoUrl ? `<img src="${logoUrl}" class="h-10 w-10 shrink-0 object-contain rounded-xl border border-slate-200 dark:border-slate-700 bg-white p-0.5 shadow-sm" alt="Logo">` : ''}
                             <div class="min-w-0 flex-1">
-                                <p class="font-semibold truncate">Withdrawal ${txnIdBadge}</p>
-                                <p class="text-xs text-gray-500 dark:text-gray-400">${formatDateDDMMYY(item.timestamp)}</p>
-                                ${item.rejectionReason ? `<p class="text-xs text-red-400 mt-1">Reason: ${escapeHtml(item.rejectionReason)}</p>` : ''}
+                                <p class="text-base font-bold text-gray-900 dark:text-white truncate">Withdrawal ${txnIdBadge}</p>
+                                <p class="text-xs sm:text-sm font-medium text-slate-600 dark:text-slate-300 mt-0.5">${formatDateDDMMYY(item.timestamp)}</p>
+                                ${item.rejectionReason ? `<p class="text-xs sm:text-sm font-semibold text-red-500 mt-1">Reason: ${escapeHtml(item.rejectionReason)}</p>` : ''}
                             </div>
                         </div>
                         <div class="text-right shrink-0">
-                            <p class="font-bold ${statusColor}">-${formatCurrencyAbs(item.amount)}</p>
-                            <p class="text-xs font-semibold ${statusColor}">${statusText}</p>
+                            <p class="text-base sm:text-lg font-black ${statusColor}">-${formatCurrencyAbs(item.amount)}</p>
+                            <p class="text-xs sm:text-sm font-bold ${statusColor}">${statusText}</p>
                         </div>
                     </div>`;
             }
@@ -445,20 +445,20 @@ const renderTransactionItem = (item, isFullPage = false) => {
             if (item.type === 'wallet_transfer') {
                 const isCredit = item.amount > 0;
                 const sign = isCredit ? '+' : '-';
-                const colorClass = isCredit ? 'text-green-500' : 'text-red-500';
+                const colorClass = isCredit ? 'text-green-600 dark:text-green-400' : 'text-red-500';
                 const actionText = isCredit ? 'From: ' : 'To: ';
                 const userName = isCredit ? (item.senderName || 'User') : (item.recipientName || 'User');
                 const userMobile = isCredit ? (item.senderMobile || '') : (item.recipientMobile || '');
                 const isVerified = checkUserIsVerified(userName, userMobile);
 
                 return `
-                    <div class="flex justify-between items-center p-3 bg-gray-50 dark:bg-gray-700/50 rounded-lg text-sm ${clickableClass}" ${dataKey}>
+                    <div class="flex justify-between items-center p-3.5 sm:p-4 bg-gray-50 dark:bg-gray-700/50 rounded-xl text-sm sm:text-base ${clickableClass}" ${dataKey}>
                         <div class="flex-1 min-w-0">
-                            <p class="font-semibold truncate inline-flex items-center gap-1">${actionText}${escapeHtml(userName)}${isVerified ? getVerifiedBadge() : ''}</p>
-                            <p class="text-xs text-gray-500 dark:text-gray-400">${formatDateDDMMYY(item.timestamp)}</p>
-                            <p class="text-xs text-gray-500 dark:text-gray-400">Wallet Transfer</p>
+                            <p class="text-base font-bold text-gray-900 dark:text-white truncate inline-flex items-center gap-1">${actionText}${escapeHtml(userName)}${isVerified ? getVerifiedBadge() : ''}</p>
+                            <p class="text-xs sm:text-sm font-medium text-slate-600 dark:text-slate-300 mt-0.5">${formatDateDDMMYY(item.timestamp)}</p>
+                            <p class="text-xs sm:text-sm font-semibold text-slate-500 dark:text-slate-400">Wallet Transfer</p>
                         </div>
-                        <p class="font-bold ${colorClass} shrink-0">
+                        <p class="text-base sm:text-lg font-black ${colorClass} shrink-0">
                             ${sign}${formatCurrency(Math.abs(item.amount))}
                         </p>
                     </div>`;
@@ -468,13 +468,13 @@ const renderTransactionItem = (item, isFullPage = false) => {
             if (item.type === 'debit' && item.recipientName) {
                 const isVerified = checkUserIsVerified(item.recipientName, item.recipientMobile);
                 return `
-                    <div class="flex justify-between items-center p-3 bg-gray-50 dark:bg-gray-700/50 rounded-lg text-sm ${clickableClass}" ${dataKey}>
+                    <div class="flex justify-between items-center p-3.5 sm:p-4 bg-gray-50 dark:bg-gray-700/50 rounded-xl text-sm sm:text-base ${clickableClass}" ${dataKey}>
                         <div class="flex-1 min-w-0">
-                            <p class="font-semibold truncate inline-flex items-center gap-1">To: ${escapeHtml(item.recipientName || 'User')}${isVerified ? getVerifiedBadge() : ''}</p>
-                            <p class="text-xs text-gray-500 dark:text-gray-400">${formatDateDDMMYY(item.timestamp)}</p>
-                            <p class="text-xs text-gray-500 dark:text-gray-400">Money Sent</p>
+                            <p class="text-base font-bold text-gray-900 dark:text-white truncate inline-flex items-center gap-1">To: ${escapeHtml(item.recipientName || 'User')}${isVerified ? getVerifiedBadge() : ''}</p>
+                            <p class="text-xs sm:text-sm font-medium text-slate-600 dark:text-slate-300 mt-0.5">${formatDateDDMMYY(item.timestamp)}</p>
+                            <p class="text-xs sm:text-sm font-semibold text-slate-500 dark:text-slate-400">Money Sent</p>
                         </div>
-                        <p class="font-bold text-red-500 shrink-0">
+                        <p class="text-base sm:text-lg font-black text-red-500 shrink-0">
                             -${formatCurrencyAbs(item.amount)}
                         </p>
                     </div>`;
@@ -484,7 +484,7 @@ const renderTransactionItem = (item, isFullPage = false) => {
             const normalizedType = normalizeTransactionType(item);
             const isCredit = ['credit', 'gift_card'].includes(normalizedType) || (Number(item.amount || 0) > 0 && !['debit', 'withdrawal', 'mobile_recharge'].includes(normalizedType));
             const sign = isCredit ? '+' : '-';
-            const colorClass = isCredit ? 'text-green-500' : 'text-red-500';
+            const colorClass = isCredit ? 'text-green-600 dark:text-green-400' : 'text-red-500';
 
             // Check if this is a debit (wallet send) and use recipientName if available
             let displayText = (item.comment || item.type || 'Wallet Transaction').replace(/_/g, ' ');
@@ -500,12 +500,12 @@ const renderTransactionItem = (item, isFullPage = false) => {
             const isVerified = checkUserIsVerified(displayText, targetMobile);
 
             return `
-                <div class="flex justify-between items-center p-3 bg-gray-50 dark:bg-gray-700/50 rounded-lg text-sm ${clickableClass}" ${dataKey}>
+                <div class="flex justify-between items-center p-3.5 sm:p-4 bg-gray-50 dark:bg-gray-700/50 rounded-xl text-sm sm:text-base ${clickableClass}" ${dataKey}>
                     <div class="flex-1 min-w-0">
-                        <p class="font-semibold capitalize truncate inline-flex items-center gap-1">${escapeHtml(displayText)}${isVerified ? getVerifiedBadge() : ''}</p>
-                        <p class="text-xs text-gray-500 dark:text-gray-400">${formatDateDDMMYY(item.timestamp)}</p>
+                        <p class="text-base font-bold text-gray-900 dark:text-white capitalize truncate inline-flex items-center gap-1">${escapeHtml(displayText)}${isVerified ? getVerifiedBadge() : ''}</p>
+                        <p class="text-xs sm:text-sm font-medium text-slate-600 dark:text-slate-300 mt-0.5">${formatDateDDMMYY(item.timestamp)}</p>
                     </div>
-                    <p class="font-bold ${colorClass} shrink-0">
+                    <p class="text-base sm:text-lg font-black ${colorClass} shrink-0">
                         ${sign}${formatCurrencyAbs(item.amount)}
                     </p>
                 </div>`;

@@ -230,7 +230,6 @@ root.outerHTML = String.raw`
                                         </div>
                                     </div>
                                     <p id="user-balance" class="text-4xl font-bold mt-4 tracking-tight">₹0.00</p>
-                                    <div id="user-referrer-info" class="hidden text-xs font-semibold text-white/90 mt-3 flex items-center gap-1.5 bg-white/15 px-3 py-1.5 rounded-xl backdrop-blur-sm border border-white/20 w-fit"></div>
                                 </div>
                             </div>
                             <div class="bg-white dark:bg-gray-800 p-5 rounded-2xl shadow-md border border-gray-100 dark:border-gray-700">
