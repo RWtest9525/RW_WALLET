@@ -3998,15 +3998,15 @@ const showUserTaskPage = () => {
                         .filter(task => {
                             const isBulker = isBulkTaskUser();
                             if (!isBulker) {
-                                // Single User: Hide task immediately if submitted today or ever submitted
-                                if (userTaskTodaySubmissionIds.has(task.id) || userTaskSubmissionIds.has(task.id)) {
+                                // Single User: Hide task if submitted TODAY
+                                if (typeof userTaskTodaySubmissionIds !== 'undefined' && userTaskTodaySubmissionIds && userTaskTodaySubmissionIds.has(task.id)) {
                                     return false;
                                 }
                                 return true;
                             } else {
                                 // Bulker User: Keep task visible until 12 AM (midnight)
                                 const subtype = task.subtype || task.taskSubtype || '';
-                                if (subtype === 'read_news') return !userTaskTodaySubmissionIds.has(task.id);
+                                if (subtype === 'read_news') return !(userTaskTodaySubmissionIds && userTaskTodaySubmissionIds.has(task.id));
                                 return true;
                             }
                         })
