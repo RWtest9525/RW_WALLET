@@ -5121,6 +5121,15 @@ class TaskUploadQueueManager {
             localStorage.removeItem('last_active_task_id');
             localStorage.removeItem('last_active_task_data');
 
+            // For Single Users (non-bulk): auto-redirect back to main Task Page & hide task!
+            if (!item.isBulk) {
+                setTimeout(() => {
+                    if (typeof showUserTaskPage === 'function') {
+                        showUserTaskPage();
+                    }
+                }, 600);
+            }
+
         } catch (err) {
             console.error(`Upload failed for ${item.fileName}:`, err);
             
