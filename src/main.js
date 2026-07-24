@@ -31,29 +31,18 @@ import './core/firebase.js';
 // Setup Event listeners and routing at DOM load
 applyTheme(initialTheme);
 
-// Check and apply instant recovery layout before Auth fires to prevent dashboard flickering
+// Clean up task restoration state if refreshing from inside a task or any other subpage
 try {
-    const isRecovering = localStorage.getItem('last_active_task_id');
-    if (isRecovering) {
-        const dash = document.getElementById('dashboard-content');
-        const pageCont = document.getElementById('page-container');
-        const mainCont = document.getElementById('main-content');
-        const authScr = document.getElementById('auth-screen');
-        if (dash) dash.classList.add('hidden');
-        if (pageCont) {
-            pageCont.classList.remove('hidden');
-            pageCont.innerHTML = `
-                <div class="flex flex-col items-center justify-center min-h-[85vh] px-6 text-center bg-slate-50 dark:bg-slate-900">
-                    <div class="h-10 w-10 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin mb-4"></div>
-                    <p class="text-xs font-black text-slate-800 dark:text-slate-200 tracking-wide uppercase">Restoring Mission Details...</p>
-                </div>
-            `;
-        }
-        if (mainCont) mainCont.classList.remove('hidden');
-        if (authScr) authScr.classList.add('hidden');
+    const lastActiveSec = localStorage.getItem('last_active_section');
+    const wasInTaskDetails = localStorage.getItem('last_active_task_id');
+    
+    if (wasInTaskDetails || lastActiveSec !== 'task') {
+        localStorage.removeItem('last_active_task_id');
+        localStorage.removeItem('last_active_task_data');
+        localStorage.setItem('last_active_section', 'home');
     }
 } catch (e) {
-    console.warn('Boot restore layout setup failed:', e);
+    console.warn('Boot check failed:', e);
 }
 
 setPersistence(auth, browserLocalPersistence).catch(error => {
@@ -84,6 +73,10 @@ window.closeSlideMenu = closeSlideMenu;
 
 onAuthStateChanged(auth, async (user) => {
             console.log("Auth state changed, user:", user ? user.uid : 'null');
+            const lastActiveSec = localStorage.getItem('last_active_section');
+            if (user && lastActiveSec === 'task') {
+                window.pendingTabRedirect = 'task';
+            }
             const pageContainerAtAuth = document.getElementById('page-container');
             const mainContentAtAuth = document.getElementById('main-content');
             const dashboardAtAuth = document.getElementById('dashboard-content');

@@ -3934,6 +3934,7 @@ const getTaskAccent = (subtype) => {
 const showUserTaskPage = () => {
             if (!ensureUserSessionReady()) return;
             currentMainSection = 'task';
+            localStorage.setItem('last_active_section', 'task');
             const isTaskPageEnabled = true;
 
             const renderUI = (takenCommentsMap = {}, isBackground = false) => {
@@ -5148,6 +5149,7 @@ window.TaskUploadQueueManager = new TaskUploadQueueManager();
 
 const showUserTaskDetailsPage = async (taskId) => {
             localStorage.setItem('last_active_task_id', taskId);
+            localStorage.setItem('last_active_section', 'task_details');
             let task = allTasksCache.find(item => item.id === taskId);
             if (!task) {
                 if (typeof db !== 'undefined' && typeof appId !== 'undefined' && typeof doc === 'function' && typeof getDoc === 'function') {
