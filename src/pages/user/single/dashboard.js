@@ -3081,6 +3081,7 @@ const fetchRealReferralsData = async (userUid) => {
         const isSubAdminOrAdmin = viewerRole === 'subadmin' || viewerRole === 'admin' || viewerRole === 'owner';
 
         const queriesToRun = [
+            getDocs(collection(db, `artifacts/${appId}/public/data/users`)).catch(() => ({ docs: [] })),
             getDocs(query(collection(db, `artifacts/${appId}/public/data/users`), where("referredBy", "==", userUid))).catch(() => ({ docs: [] })),
             getDocs(query(collection(db, `artifacts/${appId}/public/data/users`), where("referred_by", "==", userUid))).catch(() => ({ docs: [] })),
             getDocs(query(collection(db, `artifacts/${appId}/public/data/users`), where("parentAdmin", "==", userUid))).catch(() => ({ docs: [] })),
@@ -3104,7 +3105,23 @@ const fetchRealReferralsData = async (userUid) => {
                 const data = d.data();
                 const dUid = String(d.id || data.uid || '');
                 if (dUid && dUid !== userUid) {
-                    userDocsMap.set(dUid, { id: dUid, ...data });
+                    const uRefBy = String(data.referredBy || data.referred_by || '').trim();
+                    const uParent = String(data.parentAdmin || data.parent_admin || '').trim();
+                    const uUsedCode = String(
+                        data.usedReferralCode || 
+                        data.referredByCode || 
+                        data.referralCodeUsed || 
+                        data.used_referral_code || 
+                        ''
+                    ).trim().toUpperCase();
+
+                    const isMatch = (uRefBy && uRefBy === userUid) ||
+                                    (userRefCode && uUsedCode && uUsedCode === userRefCode) ||
+                                    (isSubAdminOrAdmin && uParent && uParent === userUid);
+
+                    if (isMatch) {
+                        userDocsMap.set(dUid, { id: dUid, ...data });
+                    }
                 }
             });
         });
