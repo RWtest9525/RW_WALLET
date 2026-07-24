@@ -571,8 +571,34 @@ const loadAdminSubmissions = async () => {
             await Promise.all([fetchTasksPromise, fetchSubmissionsPromise]);
 
             const isOwner = currentUser?.uid === ADMIN_UID || currentUser?.email === 'reviewsworld51@gmail.com' || currentUser?.email === 'reviewsworld01@gmail.com' || currentUserData?.role === 'owner';
-            if (!isOwner && currentUser?.uid) {
-                const subAdminUid = currentUser.uid;
+            const currentUid = currentUser?.uid || '';
+
+            if (isOwner) {
+                // OWNER VIEW: Only show submissions for Owner-created tasks!
+                const ownerTaskIds = new Set(
+                    (window.allTasksCache || [])
+                        .filter(t => {
+                            const creator = t.createdBy || '';
+                            return !creator || creator === ADMIN_UID || creator === 'owner' || creator === 'REVIEWS_WORLD_ADMIN';
+                        })
+                        .map(t => t.id)
+                );
+
+                adminSubmissionsCache = adminSubmissionsCache.filter(sub => {
+                    const taskId = sub.task_id || sub.taskId;
+                    const taskObj = (window.allTasksCache || []).find(t => t.id === taskId);
+                    
+                    if (taskObj) {
+                        const creator = taskObj.createdBy || '';
+                        return !creator || creator === ADMIN_UID || creator === 'owner' || creator === 'REVIEWS_WORLD_ADMIN';
+                    }
+
+                    const taskCreator = sub.taskCreatedBy || sub.task_created_by || '';
+                    return !taskCreator || taskCreator === ADMIN_UID || taskCreator === 'owner' || taskCreator === 'REVIEWS_WORLD_ADMIN';
+                });
+            } else if (currentUid) {
+                // SUB-ADMIN VIEW: Only show submissions for tasks created by/assigned to sub-admin or users under sub-admin
+                const subAdminUid = currentUid;
                 const allowedTaskIds = new Set(
                     (window.allTasksCache || [])
                         .filter(t => t.createdBy === subAdminUid || (Array.isArray(t.assignedToSubAdmins) && (t.assignedToSubAdmins.includes(subAdminUid) || t.assignedToSubAdmins.includes('all'))))
