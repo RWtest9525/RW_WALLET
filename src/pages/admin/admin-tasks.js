@@ -106,43 +106,14 @@ const getAdminTaskSubtype = (task = {}) => {
 
 const getAdminTaskEffectiveStatus = (task = {}) => {
     const status = String(task.status || 'draft').toLowerCase();
+    if (status !== 'active') {
+        return status;
+    }
     const expiresAt = timestampToMillis(task.expiresAt || task.autoCloseAt || task.closeAt);
-    
-    // Check if the scheduled date has passed (for both active and draft/off tasks)
-    const listDateStr = task.listDate || task.list_date;
-    if (listDateStr) {
-        const todayStr = new Date().toLocaleDateString('en-CA'); // 'YYYY-MM-DD'
-        if (listDateStr < todayStr) {
-            return 'over';
-        }
-    } else {
-        const createdAtMillis = timestampToMillis(task.createdAt);
-        if (createdAtMillis) {
-            const createdDate = new Date(createdAtMillis);
-            const today = new Date();
-            const createdDay = new Date(createdDate.getFullYear(), createdDate.getMonth(), createdDate.getDate()).getTime();
-            const todayDay = new Date(today.getFullYear(), today.getMonth(), today.getDate()).getTime();
-            if (createdDay < todayDay) {
-                return 'over';
-            }
-        }
+    if (expiresAt && expiresAt <= Date.now()) {
+        return 'closed';
     }
-
-    if (status === 'active' && expiresAt && expiresAt <= Date.now()) {
-        const createdAtMillis = timestampToMillis(task.createdAt);
-        if (createdAtMillis) {
-            const createdDate = new Date(createdAtMillis);
-            const today = new Date();
-            const isSameDay = createdDate.getFullYear() === today.getFullYear() &&
-                createdDate.getMonth() === today.getMonth() &&
-                createdDate.getDate() === today.getDate();
-            if (isSameDay) {
-                return 'closed';
-            }
-        }
-        return 'over';
-    }
-    return status;
+    return 'active';
 };
 
 const getDefaultAdminTaskInstructions = (family = 'review', subtype = 'app_review') => {

@@ -786,7 +786,13 @@ document.body.addEventListener('click', (e) => {
                     break;
 
                 case 'open-user-task': {
-                    showUserTaskDetailsPage(taskid);
+                    if (typeof window.showUserTaskDetailsPage === 'function') {
+                        window.showUserTaskDetailsPage(taskid).catch(err => {
+                            console.error('Failed to open task details:', err);
+                            if (typeof hideLoading === 'function') hideLoading();
+                            if (typeof showNotification === 'function') showNotification(err.message || 'Could not open task. Please try again.', true);
+                        });
+                    }
                     break;
                 }
             }
