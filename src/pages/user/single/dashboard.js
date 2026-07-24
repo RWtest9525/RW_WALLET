@@ -3996,15 +3996,19 @@ const showUserTaskPage = () => {
                             return true;
                         })
                         .filter(task => {
-                            // Show task if user hasn't submitted it today
-                            if (!userTaskTodaySubmissionIds.has(task.id)) return true;
-                            // If they have submitted it today: for bulkers, keep visible (to track upload status/queue)
-                            const subtype = task.subtype || task.taskSubtype || '';
-                            if (subtype === 'read_news') return false;
-                            if (isBulker) {
+                            const isBulker = isBulkTaskUser();
+                            if (!isBulker) {
+                                // Single User: Hide task immediately if submitted today or ever submitted
+                                if (userTaskTodaySubmissionIds.has(task.id) || userTaskSubmissionIds.has(task.id)) {
+                                    return false;
+                                }
+                                return true;
+                            } else {
+                                // Bulker User: Keep task visible until 12 AM (midnight)
+                                const subtype = task.subtype || task.taskSubtype || '';
+                                if (subtype === 'read_news') return !userTaskTodaySubmissionIds.has(task.id);
                                 return true;
                             }
-                            return false;
                         })
                         .filter(() => !hideNewTasksForDailyLimit)
                         .forEach(task => {
