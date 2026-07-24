@@ -235,6 +235,7 @@ root.outerHTML = String.raw`
                                         </div>
                                     </div>
                                     <p id="user-balance" class="text-4xl font-bold mt-4 tracking-tight">₹0.00</p>
+                                    <div id="user-referrer-info" class="hidden text-xs font-semibold text-white/90 mt-3 flex items-center gap-1.5 bg-white/15 px-3 py-1.5 rounded-xl backdrop-blur-sm border border-white/20 w-fit"></div>
                                 </div>
                             </div>
                             <div class="bg-white dark:bg-gray-800 p-5 rounded-2xl shadow-md border border-gray-100 dark:border-gray-700">
@@ -424,6 +425,13 @@ root.outerHTML = String.raw`
                                     <img src="https://cdn-icons-png.flaticon.com/512/584/584026.png" class="h-8 w-8 object-contain" alt="Settlement">
                                 </span>
                                 <span id="admin-settlement-btn-label" class="text-sm font-medium text-amber-700 dark:text-amber-300">Settlements</span>
+                            </button>
+                             <button id="admin-check-referral-btn"
+                                class="flex flex-col items-center justify-center p-3 min-h-28 bg-teal-50 dark:bg-teal-900/20 rounded-2xl hover:bg-teal-100 dark:hover:bg-teal-900/30 transition border border-teal-200 dark:border-teal-800 shadow-sm">
+                                <span class="flex h-12 w-12 items-center justify-center rounded-2xl bg-white dark:bg-gray-800 shadow-sm mb-2">
+                                    <img src="https://cdn-icons-png.flaticon.com/512/929/929610.png" class="h-8 w-8 object-contain" alt="Check Referral">
+                                </span>
+                                <span class="text-sm font-medium text-teal-700 dark:text-teal-300">Check Referral</span>
                             </button>
                             <button id="admin-train-ai-btn"
                                 class="flex flex-col items-center justify-center p-3 min-h-28 bg-orange-50 dark:bg-orange-900/20 rounded-2xl hover:bg-orange-100 dark:hover:bg-orange-900/30 transition border border-orange-200 dark:border-orange-800 shadow-sm hidden">

@@ -915,6 +915,7 @@ document.getElementById('admin-chats-btn').addEventListener('click', () => openA
 
 document.getElementById('admin-tasks-btn').addEventListener('click', () => openAdminQuickAction(showAdminTaskPage));
 document.getElementById('admin-settlement-btn')?.addEventListener('click', () => openAdminQuickAction(showAdminSettlementPage));
+document.getElementById('admin-check-referral-btn')?.addEventListener('click', () => openAdminQuickAction(showAdminReferralLookupPage));
 document.getElementById('admin-train-ai-btn')?.addEventListener('click', () => openAdminQuickAction(() => openRevyBotChatPage(true)));
 
 document.getElementById('withdraw-fund-btn').addEventListener('click', () => openUserQuickAction(showWithdrawPage));

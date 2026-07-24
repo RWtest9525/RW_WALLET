@@ -881,20 +881,22 @@ const renderAdminFundRequests = (requests) => {
                             <div class="min-w-0 flex-1 space-y-0.5">
                                 <div class="flex items-center gap-1.5 flex-wrap">
                                     <p class="text-sm font-bold text-gray-800 dark:text-gray-100 truncate capitalize leading-tight">${r.userName || 'No Name'}</p>
-                                    <span class="rounded-md bg-blue-100 dark:bg-blue-900/40 text-blue-800 dark:text-blue-200 border border-blue-200 dark:border-blue-800 px-2 py-0.5 text-[11px] font-black uppercase tracking-wider">${escapeHtml(methodName)}</span>
                                     ${needsBalanceCut ? '<span class="rounded bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-200 px-1 py-0.2 text-[8px] font-black uppercase tracking-wider">Uncut</span>' : ''}
                                 </div>
-                                <div class="flex flex-wrap items-center gap-1.5 pt-0.5">
-                                    <div class="flex items-center gap-1.5 min-w-0">
-                                        <div class="flex items-center gap-1 bg-indigo-50 dark:bg-indigo-900/30 border border-indigo-100/50 dark:border-indigo-900/30 px-1.5 py-0.5 rounded text-[10px] font-bold text-indigo-600 dark:text-indigo-300 min-w-0">
-                                            <span class="truncate max-w-[140px] xs:max-w-[180px] sm:max-w-[240px] leading-none" title="${escapedDetail}">${escapedDetail}</span>
+                                <div class="mt-0.5">
+                                    <span class="inline-block rounded-md bg-blue-100 dark:bg-blue-900/40 text-blue-800 dark:text-blue-200 border border-blue-200 dark:border-blue-800 px-2 py-0.5 text-[11px] font-black uppercase tracking-wider">${escapeHtml(methodName)}</span>
+                                </div>
+                                <div class="flex flex-wrap items-center gap-1.5 pt-1">
+                                    ${typeof renderPayoutDetailPills === 'function' ? renderPayoutDetailPills(r) : `
+                                        <div class="inline-flex items-center gap-1.5 bg-indigo-50 dark:bg-indigo-900/30 border border-indigo-200 dark:border-indigo-800/60 px-2.5 py-1 rounded-md text-xs font-bold text-indigo-700 dark:text-indigo-300">
+                                            <span>${escapedDetail}</span>
                                             ${detailText && detailText !== 'N/A' ? `
-                                                <button data-action="copy-text" data-text="${escapedDetail}" class="shrink-0 h-[18px] w-[18px] flex items-center justify-center rounded bg-indigo-200/50 dark:bg-indigo-800/60 text-indigo-700 dark:text-indigo-200 hover:bg-indigo-300/60 transition" title="Copy">
-                                                    <svg class="h-2.5 w-2.5 pointer-events-none" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+                                                <button data-action="copy-text" data-text="${escapedDetail}" class="h-5 w-5 flex items-center justify-center rounded hover:bg-indigo-200 dark:hover:bg-indigo-800 transition text-indigo-600 dark:text-indigo-300" title="Copy">
+                                                    <svg class="h-3 w-3 pointer-events-none" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
                                                 </button>
                                             ` : ''}
                                         </div>
-                                    </div>
+                                    `}
                                     ${giftTypeControl}
                                 </div>
                             </div>

@@ -497,10 +497,49 @@ const hydrateUserFromCache = (userId) => {
             currentUserData = cached;
             document.getElementById('user-balance').textContent = formatCompactBalance(cached.balance || 0);
             updateDollarBalanceDisplay(cached.balance || 0);
+            updateUserReferrerDisplay(cached);
             if (checkIsUserAdmin(currentUser, cached) || isImpersonating) {
                 document.getElementById('admin-wallet-balance').textContent = formatCompactBalance(cached.balance || 0);
             }
             return true;
+        };
+
+const updateUserReferrerDisplay = async (userData) => {
+            const el = document.getElementById('user-referrer-info');
+            if (!el) return;
+            if (!userData) {
+                el.classList.add('hidden');
+                return;
+            }
+
+            const refUid = userData.referredBy || userData.referred_by;
+            const refCode = userData.usedReferralCode || userData.referredByCode || userData.referralCodeUsed || '';
+
+            if (!refUid || refUid === 'ADMIN_UID' || refUid === 'undefined') {
+                el.innerHTML = `<span>Referred By: <strong class="underline decoration-white/30">Direct Signup (Owner)</strong></span>`;
+                el.classList.remove('hidden');
+                return;
+            }
+
+            let refUser = typeof allUsersCache !== 'undefined' && Array.isArray(allUsersCache)
+                ? allUsersCache.find(u => String(u.id || u.uid) === String(refUid))
+                : null;
+
+            if (!refUser && typeof db !== 'undefined' && typeof doc !== 'undefined' && typeof getDoc !== 'undefined' && typeof appId !== 'undefined') {
+                try {
+                    const refDoc = await getDoc(doc(db, `artifacts/${appId}/public/data/users`, refUid));
+                    if (refDoc.exists()) {
+                        refUser = { id: refDoc.id, ...refDoc.data() };
+                    }
+                } catch (e) {
+                    console.warn('Failed to fetch referrer details:', e);
+                }
+            }
+
+            const refName = refUser ? (refUser.name || refUser.email || 'Friend') : 'Referrer';
+            const codeDisplay = refCode ? ` (${escapeHtml(refCode)})` : '';
+            el.innerHTML = `<span>Referred By: <strong class="underline decoration-white/30">${escapeHtml(refName)}${codeDisplay}</strong></span>`;
+            el.classList.remove('hidden');
         };
 
 const loadSocketIoClient = (timeoutMs = 2500) => {
@@ -1029,6 +1068,7 @@ const initializeUserListeners = (userId) => {
                     markUpdatedWebAppSeen(userId, userDocRef, data).catch(e => console.warn('Web app usage marker skipped:', e));
                     document.getElementById('user-balance').textContent = formatCompactBalance(data.balance);
                     updateDollarBalanceDisplay(data.balance);
+                    updateUserReferrerDisplay(data);
                     currentUserData = { id: userId, uid: userId, ...data };
                     writeJsonCache(getUserCacheKey(userId), sanitizeUserForCache(data, userId));
                     getBackendAuthToken().catch(e => logBackgroundSkip('Backend session warmup skipped', e));

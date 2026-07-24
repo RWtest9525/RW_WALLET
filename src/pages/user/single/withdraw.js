@@ -950,6 +950,75 @@ const getWithdrawalDetailText = (item = {}) => {
     return detailText || item.upiId || item.accountNumber || item.email || item.paymentEmail || 'N/A';
 };
 
+const renderPayoutDetailPills = (item = {}) => {
+    const methodId = normalizeWithdrawalMethodId(item);
+    const details = item.paymentDetails && typeof item.paymentDetails === 'object' ? item.paymentDetails : {};
+    
+    if (methodId === 'bank') {
+        const accNum = item.accountNumber || details.accountNumber || '';
+        const ifsc = item.ifsc || details.ifsc || '';
+        const accName = item.accountName || details.accountName || '';
+        const bankName = item.bankName || details.bankName || '';
+
+        const pills = [];
+        if (accNum) {
+            const val = escapeHtml(accNum);
+            pills.push(`
+                <div class="inline-flex items-center gap-1.5 bg-indigo-50 dark:bg-indigo-900/30 border border-indigo-200 dark:border-indigo-800/60 px-2.5 py-1 rounded-md text-xs font-bold text-indigo-700 dark:text-indigo-300">
+                    <span>A/C: ${val}</span>
+                    <button data-action="copy-text" data-text="${val}" class="h-5 w-5 flex items-center justify-center rounded hover:bg-indigo-200 dark:hover:bg-indigo-800 transition text-indigo-600 dark:text-indigo-300" title="Copy Account Number">
+                        <svg class="h-3 w-3 pointer-events-none" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+                    </button>
+                </div>
+            `);
+        }
+        if (ifsc) {
+            const val = escapeHtml(ifsc);
+            pills.push(`
+                <div class="inline-flex items-center gap-1.5 bg-purple-50 dark:bg-purple-900/30 border border-purple-200 dark:border-purple-800/60 px-2.5 py-1 rounded-md text-xs font-bold text-purple-700 dark:text-purple-300">
+                    <span>IFSC: ${val}</span>
+                    <button data-action="copy-text" data-text="${val}" class="h-5 w-5 flex items-center justify-center rounded hover:bg-purple-200 dark:hover:bg-purple-800 transition text-purple-600 dark:text-purple-300" title="Copy IFSC">
+                        <svg class="h-3 w-3 pointer-events-none" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+                    </button>
+                </div>
+            `);
+        }
+        if (accName) {
+            const val = escapeHtml(accName);
+            pills.push(`
+                <div class="inline-flex items-center gap-1.5 bg-slate-100 dark:bg-slate-700/60 border border-slate-200 dark:border-slate-600 px-2.5 py-1 rounded-md text-xs font-bold text-slate-700 dark:text-slate-200">
+                    <span>Name: ${val}</span>
+                    <button data-action="copy-text" data-text="${val}" class="h-5 w-5 flex items-center justify-center rounded hover:bg-slate-200 dark:hover:bg-slate-600 transition text-slate-600 dark:text-slate-300" title="Copy Name">
+                        <svg class="h-3 w-3 pointer-events-none" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+                    </button>
+                </div>
+            `);
+        }
+        if (bankName) {
+            const val = escapeHtml(bankName);
+            pills.push(`
+                <div class="inline-flex items-center gap-1.5 bg-slate-100 dark:bg-slate-700/60 border border-slate-200 dark:border-slate-600 px-2.5 py-1 rounded-md text-xs font-bold text-slate-600 dark:text-slate-300">
+                    <span>Bank: ${val}</span>
+                </div>
+            `);
+        }
+        if (pills.length > 0) return pills.join('');
+    }
+
+    const detailText = getWithdrawalDetailText(item);
+    const escapedDetail = escapeHtml(detailText);
+    return `
+        <div class="inline-flex items-center gap-1.5 bg-indigo-50 dark:bg-indigo-900/30 border border-indigo-200 dark:border-indigo-800/60 px-2.5 py-1 rounded-md text-xs font-bold text-indigo-700 dark:text-indigo-300">
+            <span>${escapedDetail}</span>
+            ${detailText && detailText !== 'N/A' ? `
+                <button data-action="copy-text" data-text="${escapedDetail}" class="h-5 w-5 flex items-center justify-center rounded hover:bg-indigo-200 dark:hover:bg-indigo-800 transition text-indigo-600 dark:text-indigo-300" title="Copy">
+                    <svg class="h-3 w-3 pointer-events-none" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+                </button>
+            ` : ''}
+        </div>
+    `;
+};
+
 const getWithdrawalSnapshot = (data = {}) => ({
     method: getWithdrawalDisplayMethodName(data, getWithdrawalMethodName(data.methodId)),
     methodId: data.methodId || data.paymentMethod || '',
@@ -2211,6 +2280,7 @@ window.getWithdrawalMethodName = getWithdrawalMethodName;
 window.normalizeWithdrawalMethodId = normalizeWithdrawalMethodId;
 window.getWithdrawalDisplayMethodName = getWithdrawalDisplayMethodName;
 window.getWithdrawalDetailText = getWithdrawalDetailText;
+window.renderPayoutDetailPills = renderPayoutDetailPills;
 window.getWithdrawalSnapshot = getWithdrawalSnapshot;
 window.showWithdrawPage = showWithdrawPage;
 window.showWithdrawAmountPage = showWithdrawAmountPage;

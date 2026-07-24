@@ -208,6 +208,24 @@ const showAdminUsersPage = () => {
                     ${pendingUsers.length ? pendingUsers.map(user => {
                         const category = getSignupUserCategory(user);
                         const isOld = category === 'Old User';
+                        const rawUsedCode = String(user.usedReferralCode || user.referredByCode || user.referralCodeUsed || user.used_referral_code || '').trim();
+                        let referrerDisplay = 'Direct Signup (Owner)';
+                        if (user.referredBy && user.referredBy !== 'undefined' && user.referredBy !== 'ADMIN_UID') {
+                            const refUser = allUsersCache.find(u => String(u.id || u.uid) === String(user.referredBy));
+                            if (refUser) {
+                                referrerDisplay = `${refUser.name || refUser.email || 'User'}${rawUsedCode ? ` (${rawUsedCode})` : ''}`;
+                            } else if (rawUsedCode) {
+                                referrerDisplay = `Code: ${rawUsedCode}`;
+                            }
+                        } else if (rawUsedCode) {
+                            const refUser = allUsersCache.find(u => String(u.referralCode || u.myReferralCode || u.refCode).toUpperCase() === rawUsedCode.toUpperCase());
+                            if (refUser) {
+                                referrerDisplay = `${refUser.name || refUser.email || 'User'} (${rawUsedCode})`;
+                            } else {
+                                referrerDisplay = `Code: ${rawUsedCode}`;
+                            }
+                        }
+
                         return `
                         <div class="rounded-xl border border-amber-100 dark:border-amber-800 bg-amber-50/60 dark:bg-amber-900/20 p-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
                             <div class="min-w-0 flex items-start gap-3">
@@ -217,6 +235,7 @@ const showAdminUsersPage = () => {
                                     <p class="font-bold text-gray-900 dark:text-gray-100 truncate">${escapeHtml(user.name || 'No Name')}</p>
                                     <p class="text-xs text-gray-500 truncate">Email: ${escapeHtml(user.email || '')}</p>
                                     <p class="text-xs text-gray-500 truncate">Mobile: ${escapeHtml(user.mobile || 'No Mobile')}</p>
+                                    <p class="text-xs font-semibold text-indigo-600 dark:text-indigo-300 mt-0.5">Referred By: ${escapeHtml(referrerDisplay)}</p>
                                     <p class="text-[10px] font-bold text-amber-700 mt-1">Requested: ${formatDateDDMMYY(user.signupRequestedAt || user.createdAt || Date.now())}</p>
                                 </div>
                             </div>
@@ -759,6 +778,193 @@ const showUserActionsModal = (userId) => {
             renderModal('User Actions', content, `<button onclick="window.closeModal()" class="px-5 py-2.5 text-xs font-bold bg-gray-100 dark:bg-gray-700 rounded-xl hover:bg-gray-200 dark:hover:bg-gray-600">Close</button>`, 'max-w-sm');
         };
 
+const showAdminReferralLookupPage = async () => {
+    if (!allUsersCache || allUsersCache.length === 0) {
+        if (typeof loadAllUsersCacheSilently === 'function') {
+            await loadAllUsersCacheSilently();
+        }
+    }
+
+    const renderResults = (searchedCode = '') => {
+        const queryCode = String(searchedCode || '').trim().toUpperCase();
+        if (!queryCode) {
+            return `
+                <div class="text-center py-10 text-gray-500 dark:text-gray-400">
+                    <p class="text-sm font-semibold">Enter a referral code above to inspect details.</p>
+                </div>
+            `;
+        }
+
+        const ownerUser = (allUsersCache || []).find(u => {
+            const userCode = String(u.referralCode || u.myReferralCode || u.refCode || '').trim().toUpperCase();
+            return userCode && userCode === queryCode;
+        }) || (allUsersCache || []).find(u => {
+            const usedCode = String(u.usedReferralCode || u.referredByCode || '').trim().toUpperCase();
+            return usedCode && usedCode === queryCode;
+        });
+
+        let parentSubAdminDisplay = 'Direct under Owner Admin';
+        if (ownerUser) {
+            const parentUid = ownerUser.parentAdmin || ownerUser.parent_admin || ownerUser.referredBy;
+            if (parentUid && parentUid !== 'ADMIN_UID' && parentUid !== ownerUser.id) {
+                const parentUser = (allUsersCache || []).find(u => String(u.id || u.uid) === String(parentUid));
+                if (parentUser) {
+                    parentSubAdminDisplay = `${escapeHtml(parentUser.name || 'Sub Admin')} (${escapeHtml(parentUser.email || parentUser.mobile || 'No Contact')}) [Role: ${parentUser.role || 'subadmin'}]`;
+                } else {
+                    parentSubAdminDisplay = `UID: ${escapeHtml(parentUid)}`;
+                }
+            }
+        }
+
+        const referredUsers = (allUsersCache || []).filter(u => {
+            const uUsedCode = String(u.usedReferralCode || u.referredByCode || u.referralCodeUsed || '').trim().toUpperCase();
+            const uRefBy = String(u.referredBy || '').trim();
+            const ownerId = ownerUser ? String(ownerUser.id || ownerUser.uid) : '';
+            return uUsedCode === queryCode || (ownerId && uRefBy === ownerId);
+        });
+
+        if (!ownerUser && referredUsers.length === 0) {
+            return `
+                <div class="rounded-xl bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 p-4 text-center text-red-700 dark:text-red-300 text-sm font-semibold">
+                    No user or signups found for referral code "<span class="font-mono font-bold">${escapeHtml(queryCode)}</span>".
+                </div>
+            `;
+        }
+
+        return `
+            <div class="space-y-5">
+                <div class="rounded-2xl border border-teal-200 dark:border-teal-800/60 bg-teal-50/50 dark:bg-teal-950/20 p-4 shadow-sm">
+                    <div class="flex items-center justify-between mb-3 border-b border-teal-100 dark:border-teal-900/40 pb-2">
+                        <div class="flex items-center gap-2">
+                            <span class="h-3 w-3 rounded-full bg-teal-500"></span>
+                            <h4 class="font-bold text-sm text-teal-900 dark:text-teal-100">Referral Code Owner</h4>
+                        </div>
+                        <span class="px-2 py-0.5 rounded-full text-xs font-black uppercase bg-teal-100 dark:bg-teal-900/50 text-teal-800 dark:text-teal-200 font-mono">${escapeHtml(queryCode)}</span>
+                    </div>
+                    ${ownerUser ? `
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                            <div>
+                                <span class="text-gray-400 block text-[10px] uppercase font-bold">Name</span>
+                                <p class="font-bold text-gray-800 dark:text-gray-100 text-sm">${escapeHtml(ownerUser.name || 'N/A')}</p>
+                            </div>
+                            <div>
+                                <span class="text-gray-400 block text-[10px] uppercase font-bold">Email</span>
+                                <p class="font-semibold text-gray-700 dark:text-gray-200">${escapeHtml(ownerUser.email || 'N/A')}</p>
+                            </div>
+                            <div>
+                                <span class="text-gray-400 block text-[10px] uppercase font-bold">Mobile</span>
+                                <p class="font-semibold text-gray-700 dark:text-gray-200">${escapeHtml(ownerUser.mobile || 'N/A')}</p>
+                            </div>
+                            <div>
+                                <span class="text-gray-400 block text-[10px] uppercase font-bold">Role</span>
+                                <span class="inline-block rounded px-2 py-0.5 text-[10px] font-black uppercase ${ownerUser.role === 'admin' || ownerUser.role === 'owner' ? 'bg-purple-100 text-purple-700 dark:bg-purple-900/40' : ownerUser.role === 'subadmin' ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/40' : 'bg-gray-100 text-gray-700 dark:bg-gray-700'}">${escapeHtml(ownerUser.role || 'user')}</span>
+                            </div>
+                        </div>
+                    ` : `
+                        <p class="text-xs text-amber-700 dark:text-amber-300 italic">No primary owner account registered for code "${escapeHtml(queryCode)}", but signups exist below.</p>
+                    `}
+                </div>
+
+                <div class="rounded-2xl border border-indigo-200 dark:border-indigo-800/60 bg-indigo-50/40 dark:bg-indigo-950/20 p-4 shadow-sm">
+                    <div class="flex items-center gap-2 mb-2">
+                        <span class="h-2.5 w-2.5 rounded-full bg-indigo-500"></span>
+                        <h4 class="font-bold text-xs uppercase tracking-wider text-indigo-900 dark:text-indigo-200">Parent Sub-Admin Details</h4>
+                    </div>
+                    <p class="text-xs font-semibold text-gray-800 dark:text-gray-200">${parentSubAdminDisplay}</p>
+                </div>
+
+                <div>
+                    <div class="flex items-center justify-between mb-3">
+                        <h4 class="font-bold text-sm text-gray-800 dark:text-gray-100">Users Signed Up (${referredUsers.length})</h4>
+                        <span class="px-2 py-0.5 rounded bg-emerald-100 dark:bg-emerald-900/40 text-emerald-800 dark:text-emerald-200 text-xs font-bold">${referredUsers.length} total signups</span>
+                    </div>
+                    <div class="space-y-2 max-h-[50vh] overflow-y-auto pr-1">
+                        ${referredUsers.length ? referredUsers.map(u => {
+                            const isPending = isUserApprovalPending(u);
+                            const isRejected = isUserApprovalRejected(u);
+                            const statusBadge = isPending
+                                ? '<span class="rounded px-1.5 py-0.5 text-[9px] font-black uppercase bg-amber-100 text-amber-700 dark:bg-amber-900/40">Pending Approval</span>'
+                                : isRejected
+                                ? '<span class="rounded px-1.5 py-0.5 text-[9px] font-black uppercase bg-red-100 text-red-700 dark:bg-red-900/40">Rejected</span>'
+                                : '<span class="rounded px-1.5 py-0.5 text-[9px] font-black uppercase bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40">Approved Active</span>';
+                            
+                            return `
+                                <div class="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 text-xs">
+                                    <div>
+                                        <div class="flex items-center gap-2">
+                                            <p class="font-bold text-gray-900 dark:text-white">${escapeHtml(u.name || 'No Name')}</p>
+                                            ${statusBadge}
+                                        </div>
+                                        <p class="text-gray-500 dark:text-gray-400 mt-0.5">Email: ${escapeHtml(u.email || 'N/A')} | Mobile: ${escapeHtml(u.mobile || 'N/A')}</p>
+                                        <p class="text-[10px] text-gray-400 mt-0.5">Joined: ${formatDateDDMMYY(u.createdAt || u.signupRequestedAt || Date.now())}</p>
+                                    </div>
+                                    <button data-action="view-user-dashboard" data-userid="${u.id || u.uid}" class="shrink-0 px-2.5 py-1 rounded bg-blue-600 hover:bg-blue-700 text-white text-[11px] font-bold">View User</button>
+                                </div>
+                            `;
+                        }).join('') : '<p class="text-center py-6 text-xs text-gray-500">No users have signed up with this referral code yet.</p>'}
+                    </div>
+                </div>
+            </div>
+        `;
+    };
+
+    const content = `
+        <div class="max-w-3xl mx-auto space-y-5 p-4 sm:p-6">
+            <div class="flex items-center justify-between">
+                <div>
+                    <h2 class="text-xl font-black text-gray-900 dark:text-white flex items-center gap-2">
+                        <svg class="h-6 w-6 text-teal-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="8.5" cy="7" r="4"></circle><line x1="20" y1="8" x2="20" y2="14"></line><line x1="23" y1="11" x2="17" y2="11"></line></svg>
+                        Referral Code Lookup
+                    </h2>
+                    <p class="text-xs text-gray-500 dark:text-gray-400">Search any referral code to view code owner, parent sub-admin, and signed-up users.</p>
+                </div>
+                <button id="close-referral-lookup-btn" class="px-3 py-1.5 rounded-xl bg-gray-100 dark:bg-gray-700 text-xs font-bold hover:bg-gray-200 dark:hover:bg-gray-600 transition">Back to Admin</button>
+            </div>
+
+            <div class="rounded-2xl bg-white dark:bg-gray-800 p-4 border border-gray-200 dark:border-gray-700 shadow-sm space-y-4">
+                <form id="referral-lookup-form" class="flex gap-2">
+                    <input type="text" id="referral-lookup-input" placeholder="Enter Referral Code (e.g. RW123456)" class="flex-1 rounded-xl border border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-900 px-4 py-2.5 text-sm font-mono font-bold text-gray-900 dark:text-white uppercase outline-none focus:border-teal-500">
+                    <button type="submit" class="px-5 py-2.5 rounded-xl bg-teal-600 hover:bg-teal-700 text-white font-bold text-xs shadow transition flex items-center gap-1.5">
+                        <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+                        Search
+                    </button>
+                </form>
+
+                <div id="referral-lookup-results-container">
+                    ${renderResults('')}
+                </div>
+            </div>
+        </div>
+        ${getPageFooter()}
+    `;
+
+    showPage(content, { returnTo: 'admin' });
+    setBottomNavActive('bottom-admin-btn');
+
+    document.getElementById('close-referral-lookup-btn')?.addEventListener('click', () => {
+        showAdminMainPage();
+    });
+
+    const form = document.getElementById('referral-lookup-form');
+    const input = document.getElementById('referral-lookup-input');
+    const resultsContainer = document.getElementById('referral-lookup-results-container');
+
+    form?.addEventListener('submit', (e) => {
+        e.preventDefault();
+        const code = input?.value || '';
+        if (resultsContainer) {
+            resultsContainer.innerHTML = renderResults(code);
+        }
+    });
+
+    input?.addEventListener('input', () => {
+        const code = input.value || '';
+        if (code.trim().length >= 2 && resultsContainer) {
+            resultsContainer.innerHTML = renderResults(code);
+        }
+    });
+};
+
 // Expose functions to window for global access
 window.isAdminUserRecord = isAdminUserRecord;
 window.applyAdminUsersCache = applyAdminUsersCache;
@@ -772,3 +978,4 @@ window.showAdminUserDashboardPage = showAdminUserDashboardPage;
 window.loadAdminUserPendingWithdrawals = loadAdminUserPendingWithdrawals;
 window.renderAdminUserTransactions = renderAdminUserTransactions;
 window.showUserActionsModal = showUserActionsModal;
+window.showAdminReferralLookupPage = showAdminReferralLookupPage;
