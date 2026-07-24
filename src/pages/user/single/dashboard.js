@@ -3070,16 +3070,30 @@ const fetchRealReferralsData = async (userUid) => {
     try {
         if (!userUid) return [];
 
-        const userRefCode = String(currentUserData?.referralCode || '').trim().toUpperCase();
+        // Ensure allUsersCache is loaded
+        if (typeof loadAllUsersCacheSilently === 'function' && (!allUsersCache || allUsersCache.length === 0)) {
+            await loadAllUsersCacheSilently().catch(() => {});
+        }
+
+        const userRefCode = String(currentUserData?.referralCode || currentUserData?.myReferralCode || currentUserData?.refCode || '').trim().toUpperCase();
+        const userRefCodeLower = userRefCode.toLowerCase();
+        const viewerRole = String(currentUserData?.role || '').toLowerCase();
+        const isSubAdminOrAdmin = viewerRole === 'subadmin' || viewerRole === 'admin' || viewerRole === 'owner';
 
         const queriesToRun = [
             getDocs(query(collection(db, `artifacts/${appId}/public/data/users`), where("referredBy", "==", userUid))).catch(() => ({ docs: [] })),
-            getDocs(query(collection(db, `artifacts/${appId}/public/data/users`), where("referred_by", "==", userUid))).catch(() => ({ docs: [] }))
+            getDocs(query(collection(db, `artifacts/${appId}/public/data/users`), where("referred_by", "==", userUid))).catch(() => ({ docs: [] })),
+            getDocs(query(collection(db, `artifacts/${appId}/public/data/users`), where("parentAdmin", "==", userUid))).catch(() => ({ docs: [] })),
+            getDocs(query(collection(db, `artifacts/${appId}/public/data/users`), where("parent_admin", "==", userUid))).catch(() => ({ docs: [] }))
         ];
 
         if (userRefCode) {
             queriesToRun.push(getDocs(query(collection(db, `artifacts/${appId}/public/data/users`), where("usedReferralCode", "==", userRefCode))).catch(() => ({ docs: [] })));
+            queriesToRun.push(getDocs(query(collection(db, `artifacts/${appId}/public/data/users`), where("usedReferralCode", "==", userRefCodeLower))).catch(() => ({ docs: [] })));
             queriesToRun.push(getDocs(query(collection(db, `artifacts/${appId}/public/data/users`), where("referredByCode", "==", userRefCode))).catch(() => ({ docs: [] })));
+            queriesToRun.push(getDocs(query(collection(db, `artifacts/${appId}/public/data/users`), where("referredByCode", "==", userRefCodeLower))).catch(() => ({ docs: [] })));
+            queriesToRun.push(getDocs(query(collection(db, `artifacts/${appId}/public/data/users`), where("referralCodeUsed", "==", userRefCode))).catch(() => ({ docs: [] })));
+            queriesToRun.push(getDocs(query(collection(db, `artifacts/${appId}/public/data/users`), where("used_referral_code", "==", userRefCode))).catch(() => ({ docs: [] })));
         }
 
         const queryResults = await Promise.all(queriesToRun);
@@ -3087,18 +3101,34 @@ const fetchRealReferralsData = async (userUid) => {
 
         queryResults.forEach(snap => {
             (snap.docs || []).forEach(d => {
-                userDocsMap.set(d.id, { id: d.id, ...d.data() });
+                const data = d.data();
+                const dUid = String(d.id || data.uid || '');
+                if (dUid && dUid !== userUid) {
+                    userDocsMap.set(dUid, { id: dUid, ...data });
+                }
             });
         });
 
-        // Also merge from allUsersCache if available
+        // Also merge from allUsersCache
         if (typeof allUsersCache !== 'undefined' && Array.isArray(allUsersCache)) {
             allUsersCache.forEach(u => {
                 const uUid = String(u.id || u.uid || '');
-                const uRefBy = String(u.referredBy || u.referred_by || '');
-                const uUsedCode = String(u.usedReferralCode || u.referredByCode || u.referralCodeUsed || '').trim().toUpperCase();
-                if (uRefBy === userUid || (userRefCode && uUsedCode === userRefCode)) {
-                    if (uUid && !userDocsMap.has(uUid)) {
+                if (uUid && uUid !== userUid) {
+                    const uRefBy = String(u.referredBy || u.referred_by || '').trim();
+                    const uParent = String(u.parentAdmin || u.parent_admin || '').trim();
+                    const uUsedCode = String(
+                        u.usedReferralCode || 
+                        u.referredByCode || 
+                        u.referralCodeUsed || 
+                        u.used_referral_code || 
+                        ''
+                    ).trim().toUpperCase();
+
+                    const isMatch = (uRefBy && uRefBy === userUid) ||
+                                    (userRefCode && uUsedCode && uUsedCode === userRefCode) ||
+                                    (isSubAdminOrAdmin && uParent && uParent === userUid);
+
+                    if (isMatch) {
                         userDocsMap.set(uUid, { id: uUid, ...u });
                     }
                 }
@@ -3110,9 +3140,6 @@ const fetchRealReferralsData = async (userUid) => {
             realReferralsCache = [];
             return [];
         }
-
-        const viewerRole = String(currentUserData?.role || '').toLowerCase();
-        const isSubAdminOrAdmin = viewerRole === 'subadmin' || viewerRole === 'admin' || viewerRole === 'owner';
 
         const realReferrals = await Promise.all(referredUsers.map(async (u) => {
             const userId = u.id || u.uid;
