@@ -789,8 +789,12 @@ const showAdminReferralLookupPage = async () => {
         const queryCode = String(searchedCode || '').trim().toUpperCase();
         if (!queryCode) {
             return `
-                <div class="text-center py-10 text-gray-500 dark:text-gray-400">
-                    <p class="text-sm font-semibold">Enter a referral code above to inspect details.</p>
+                <div class="text-center py-12 px-4 bg-gray-50 dark:bg-gray-800/40 rounded-2xl border border-dashed border-gray-200 dark:border-gray-700">
+                    <div class="w-12 h-12 rounded-full bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 mx-auto flex items-center justify-center mb-3">
+                        <svg class="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+                    </div>
+                    <h3 class="text-base font-bold text-gray-800 dark:text-gray-200">Enter Referral Code</h3>
+                    <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">Type any user or sub-admin referral code above to inspect details.</p>
                 </div>
             `;
         }
@@ -803,13 +807,13 @@ const showAdminReferralLookupPage = async () => {
             return usedCode && usedCode === queryCode;
         });
 
-        let parentSubAdminDisplay = 'Direct under Owner Admin';
+        let parentSubAdminDisplay = 'Direct under Main Owner';
         if (ownerUser) {
             const parentUid = ownerUser.parentAdmin || ownerUser.parent_admin || ownerUser.referredBy;
             if (parentUid && parentUid !== 'ADMIN_UID' && parentUid !== ownerUser.id) {
                 const parentUser = (allUsersCache || []).find(u => String(u.id || u.uid) === String(parentUid));
                 if (parentUser) {
-                    parentSubAdminDisplay = `${escapeHtml(parentUser.name || 'Sub Admin')} (${escapeHtml(parentUser.email || parentUser.mobile || 'No Contact')}) [Role: ${parentUser.role || 'subadmin'}]`;
+                    parentSubAdminDisplay = `${escapeHtml(parentUser.name || 'Sub Admin')} • ${escapeHtml(parentUser.mobile || parentUser.email || '')}`;
                 } else {
                     parentSubAdminDisplay = `UID: ${escapeHtml(parentUid)}`;
                 }
@@ -825,83 +829,78 @@ const showAdminReferralLookupPage = async () => {
 
         if (!ownerUser && referredUsers.length === 0) {
             return `
-                <div class="rounded-xl bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 p-4 text-center text-red-700 dark:text-red-300 text-sm font-semibold">
-                    No user or signups found for referral code "<span class="font-mono font-bold">${escapeHtml(queryCode)}</span>".
+                <div class="rounded-2xl bg-rose-50 dark:bg-rose-950/20 border border-rose-200 dark:border-rose-900/50 p-5 text-center">
+                    <p class="text-sm font-bold text-rose-700 dark:text-rose-300">No records found for referral code "<span class="font-mono">${escapeHtml(queryCode)}</span>"</p>
                 </div>
             `;
         }
 
         return `
-            <div class="space-y-5">
-                <div class="rounded-2xl border border-teal-200 dark:border-teal-800/60 bg-teal-50/50 dark:bg-teal-950/20 p-4 shadow-sm">
-                    <div class="flex items-center justify-between mb-3 border-b border-teal-100 dark:border-teal-900/40 pb-2">
-                        <div class="flex items-center gap-2">
-                            <span class="h-3 w-3 rounded-full bg-teal-500"></span>
-                            <h4 class="font-bold text-sm text-teal-900 dark:text-teal-100">Referral Code Owner</h4>
-                        </div>
-                        <span class="px-2 py-0.5 rounded-full text-xs font-black uppercase bg-teal-100 dark:bg-teal-900/50 text-teal-800 dark:text-teal-200 font-mono">${escapeHtml(queryCode)}</span>
+            <div class="space-y-4">
+                <!-- Referral Code Owner Card -->
+                <div class="rounded-2xl border border-blue-100 dark:border-blue-900/50 bg-blue-50/40 dark:bg-blue-950/20 p-4 sm:p-5 shadow-xs space-y-3">
+                    <div class="flex items-center justify-between pb-2 border-b border-blue-100 dark:border-blue-900/40">
+                        <span class="text-xs font-bold text-blue-900 dark:text-blue-200 uppercase tracking-wider">Referral Code Owner</span>
+                        <span class="px-2.5 py-1 rounded-lg text-xs font-black bg-blue-600 text-white font-mono shadow-xs">${escapeHtml(queryCode)}</span>
                     </div>
                     ${ownerUser ? `
-                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
-                            <div>
-                                <span class="text-gray-400 block text-[10px] uppercase font-bold">Name</span>
-                                <p class="font-bold text-gray-800 dark:text-gray-100 text-sm">${escapeHtml(ownerUser.name || 'N/A')}</p>
+                        <div class="flex items-start gap-3">
+                            <div class="w-11 h-11 rounded-full bg-blue-600 text-white flex items-center justify-center font-bold text-lg shrink-0 shadow-sm">
+                                ${(ownerUser.name || 'U').charAt(0).toUpperCase()}
                             </div>
-                            <div>
-                                <span class="text-gray-400 block text-[10px] uppercase font-bold">Email</span>
-                                <p class="font-semibold text-gray-700 dark:text-gray-200">${escapeHtml(ownerUser.email || 'N/A')}</p>
-                            </div>
-                            <div>
-                                <span class="text-gray-400 block text-[10px] uppercase font-bold">Mobile</span>
-                                <p class="font-semibold text-gray-700 dark:text-gray-200">${escapeHtml(ownerUser.mobile || 'N/A')}</p>
-                            </div>
-                            <div>
-                                <span class="text-gray-400 block text-[10px] uppercase font-bold">Role</span>
-                                <span class="inline-block rounded px-2 py-0.5 text-[10px] font-black uppercase ${ownerUser.role === 'admin' || ownerUser.role === 'owner' ? 'bg-purple-100 text-purple-700 dark:bg-purple-900/40' : ownerUser.role === 'subadmin' ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/40' : 'bg-gray-100 text-gray-700 dark:bg-gray-700'}">${escapeHtml(ownerUser.role || 'user')}</span>
+                            <div class="min-w-0 flex-1 space-y-1">
+                                <div class="flex items-center gap-2 flex-wrap">
+                                    <h3 class="text-base font-bold text-gray-900 dark:text-white">${escapeHtml(ownerUser.name || 'N/A')}</h3>
+                                    <span class="px-2 py-0.5 rounded text-[10px] font-black uppercase ${ownerUser.role === 'admin' || ownerUser.role === 'owner' ? 'bg-purple-100 text-purple-700 dark:bg-purple-900/50 dark:text-purple-300' : ownerUser.role === 'subadmin' ? 'bg-indigo-100 text-indigo-700 dark:bg-indigo-900/50 dark:text-indigo-300' : 'bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-300'}">${escapeHtml(ownerUser.role || 'user')}</span>
+                                </div>
+                                <div class="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-0.5 text-xs text-gray-600 dark:text-gray-300 font-medium">
+                                    <p>Mobile: <span class="font-bold text-gray-900 dark:text-white">${escapeHtml(ownerUser.mobile || 'N/A')}</span></p>
+                                    <p>Email: <span class="font-bold text-gray-900 dark:text-white">${escapeHtml(ownerUser.email || 'N/A')}</span></p>
+                                </div>
                             </div>
                         </div>
                     ` : `
-                        <p class="text-xs text-amber-700 dark:text-amber-300 italic">No primary owner account registered for code "${escapeHtml(queryCode)}", but signups exist below.</p>
+                        <p class="text-xs font-semibold text-amber-700 dark:text-amber-300">No primary owner account registered for code "${escapeHtml(queryCode)}", but signups exist below.</p>
                     `}
                 </div>
 
-                <div class="rounded-2xl border border-indigo-200 dark:border-indigo-800/60 bg-indigo-50/40 dark:bg-indigo-950/20 p-4 shadow-sm">
-                    <div class="flex items-center gap-2 mb-2">
-                        <span class="h-2.5 w-2.5 rounded-full bg-indigo-500"></span>
-                        <h4 class="font-bold text-xs uppercase tracking-wider text-indigo-900 dark:text-indigo-200">Parent Sub-Admin Details</h4>
-                    </div>
-                    <p class="text-xs font-semibold text-gray-800 dark:text-gray-200">${parentSubAdminDisplay}</p>
+                <!-- Sub-Admin Parent Info Pill -->
+                <div class="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-3.5 flex items-center justify-between shadow-xs">
+                    <span class="text-xs font-semibold text-gray-500 dark:text-gray-400">Parent Sub-Admin</span>
+                    <span class="text-xs font-bold text-gray-900 dark:text-white">${parentSubAdminDisplay}</span>
                 </div>
 
-                <div>
-                    <div class="flex items-center justify-between mb-3">
-                        <h4 class="font-bold text-sm text-gray-800 dark:text-gray-100">Users Signed Up (${referredUsers.length})</h4>
-                        <span class="px-2 py-0.5 rounded bg-emerald-100 dark:bg-emerald-900/40 text-emerald-800 dark:text-emerald-200 text-xs font-bold">${referredUsers.length} total signups</span>
+                <!-- Signed Up Users Section -->
+                <div class="space-y-3 pt-1">
+                    <div class="flex items-center justify-between px-1">
+                        <h4 class="text-sm font-bold text-gray-900 dark:text-white">Signed Up Users</h4>
+                        <span class="px-2.5 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-900/40 text-emerald-800 dark:text-emerald-300 text-xs font-black">${referredUsers.length} Users</span>
                     </div>
-                    <div class="space-y-2 max-h-[50vh] overflow-y-auto pr-1">
+
+                    <div class="space-y-2.5 max-h-[50vh] overflow-y-auto pr-1">
                         ${referredUsers.length ? referredUsers.map(u => {
                             const isPending = isUserApprovalPending(u);
                             const isRejected = isUserApprovalRejected(u);
                             const statusBadge = isPending
-                                ? '<span class="rounded px-1.5 py-0.5 text-[9px] font-black uppercase bg-amber-100 text-amber-700 dark:bg-amber-900/40">Pending Approval</span>'
+                                ? '<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300">Pending</span>'
                                 : isRejected
-                                ? '<span class="rounded px-1.5 py-0.5 text-[9px] font-black uppercase bg-red-100 text-red-700 dark:bg-red-900/40">Rejected</span>'
-                                : '<span class="rounded px-1.5 py-0.5 text-[9px] font-black uppercase bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40">Approved Active</span>';
+                                ? '<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-300">Rejected</span>'
+                                : '<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300">Active</span>';
                             
                             return `
-                                <div class="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 text-xs">
-                                    <div>
-                                        <div class="flex items-center gap-2">
-                                            <p class="font-bold text-gray-900 dark:text-white">${escapeHtml(u.name || 'No Name')}</p>
+                                <div class="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-3.5 flex items-center justify-between gap-3 shadow-xs hover:border-blue-300 dark:hover:border-blue-700 transition">
+                                    <div class="min-w-0 flex-1">
+                                        <div class="flex items-center gap-2 mb-0.5">
+                                            <p class="text-sm font-bold text-gray-900 dark:text-white truncate">${escapeHtml(u.name || 'User')}</p>
                                             ${statusBadge}
                                         </div>
-                                        <p class="text-gray-500 dark:text-gray-400 mt-0.5">Email: ${escapeHtml(u.email || 'N/A')} | Mobile: ${escapeHtml(u.mobile || 'N/A')}</p>
-                                        <p class="text-[10px] text-gray-400 mt-0.5">Joined: ${formatDateDDMMYY(u.createdAt || u.signupRequestedAt || Date.now())}</p>
+                                        <p class="text-xs text-gray-500 dark:text-gray-400 font-medium truncate">${escapeHtml(u.mobile || u.email || 'N/A')}</p>
+                                        <p class="text-[11px] text-gray-400 mt-0.5">Joined: ${formatDateDDMMYY(u.createdAt || u.signupRequestedAt || Date.now())}</p>
                                     </div>
-                                    <button data-action="view-user-dashboard" data-userid="${u.id || u.uid}" class="shrink-0 px-2.5 py-1 rounded bg-blue-600 hover:bg-blue-700 text-white text-[11px] font-bold">View User</button>
+                                    <button data-action="view-user-dashboard" data-userid="${u.id || u.uid}" class="shrink-0 px-3.5 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold shadow-xs transition">View Details</button>
                                 </div>
                             `;
-                        }).join('') : '<p class="text-center py-6 text-xs text-gray-500">No users have signed up with this referral code yet.</p>'}
+                        }).join('') : '<div class="text-center py-6 text-xs text-gray-500 dark:text-gray-400">No users have signed up with this referral code yet.</div>'}
                     </div>
                 </div>
             </div>
@@ -909,30 +908,29 @@ const showAdminReferralLookupPage = async () => {
     };
 
     const content = `
-        <div class="max-w-3xl mx-auto space-y-5 p-4 sm:p-6">
-            <div class="flex items-center justify-between">
+        ${getPageHeader('Referral Code Lookup')}
+        <div class="max-w-2xl mx-auto space-y-5 p-4 sm:p-6 bg-white dark:bg-gray-800 rounded-2xl shadow-md border border-gray-100 dark:border-gray-700">
+            <div class="flex items-center justify-between pb-3 border-b border-gray-100 dark:border-gray-700">
                 <div>
-                    <h2 class="text-xl font-black text-gray-900 dark:text-white flex items-center gap-2">
-                        <svg class="h-6 w-6 text-teal-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="8.5" cy="7" r="4"></circle><line x1="20" y1="8" x2="20" y2="14"></line><line x1="23" y1="11" x2="17" y2="11"></line></svg>
-                        Referral Code Lookup
+                    <h2 class="text-lg font-bold text-gray-900 dark:text-white flex items-center gap-2">
+                        <svg class="h-5 w-5 text-blue-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+                        Referral Lookup Tool
                     </h2>
-                    <p class="text-xs text-gray-500 dark:text-gray-400">Search any referral code to view code owner, parent sub-admin, and signed-up users.</p>
+                    <p class="text-xs text-gray-500 dark:text-gray-400 mt-0.5">Search referral code to view owner, parent sub-admin & signups.</p>
                 </div>
-                <button id="close-referral-lookup-btn" class="px-3 py-1.5 rounded-xl bg-gray-100 dark:bg-gray-700 text-xs font-bold hover:bg-gray-200 dark:hover:bg-gray-600 transition">Back to Admin</button>
+                <button id="close-referral-lookup-btn" class="px-3.5 py-2 rounded-xl bg-gray-100 dark:bg-gray-700 text-xs font-bold text-gray-700 dark:text-gray-200 hover:bg-gray-200 dark:hover:bg-gray-600 transition">Back to Admin</button>
             </div>
 
-            <div class="rounded-2xl bg-white dark:bg-gray-800 p-4 border border-gray-200 dark:border-gray-700 shadow-sm space-y-4">
-                <form id="referral-lookup-form" class="flex gap-2">
-                    <input type="text" id="referral-lookup-input" placeholder="Enter Referral Code (e.g. RW123456)" class="flex-1 rounded-xl border border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-900 px-4 py-2.5 text-sm font-mono font-bold text-gray-900 dark:text-white uppercase outline-none focus:border-teal-500">
-                    <button type="submit" class="px-5 py-2.5 rounded-xl bg-teal-600 hover:bg-teal-700 text-white font-bold text-xs shadow transition flex items-center gap-1.5">
-                        <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
-                        Search
-                    </button>
-                </form>
+            <form id="referral-lookup-form" class="flex gap-2">
+                <input type="text" id="referral-lookup-input" placeholder="Enter Referral Code (e.g. RW1234)" class="flex-1 rounded-xl border border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-900 px-4 py-3 text-sm font-mono font-bold text-gray-900 dark:text-white uppercase outline-none focus:ring-2 focus:ring-blue-500">
+                <button type="submit" class="px-5 py-3 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs shadow-sm transition flex items-center gap-1.5 shrink-0">
+                    <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+                    Search
+                </button>
+            </form>
 
-                <div id="referral-lookup-results-container">
-                    ${renderResults('')}
-                </div>
+            <div id="referral-lookup-results-container">
+                ${renderResults('')}
             </div>
         </div>
         ${getPageFooter()}
@@ -961,6 +959,16 @@ const showAdminReferralLookupPage = async () => {
         const code = input.value || '';
         if (code.trim().length >= 2 && resultsContainer) {
             resultsContainer.innerHTML = renderResults(code);
+        }
+    });
+
+    resultsContainer?.addEventListener('click', (e) => {
+        const btn = e.target.closest('[data-action="view-user-dashboard"]');
+        if (btn) {
+            const uid = btn.dataset.userid;
+            if (uid && typeof showUserDashboardPage === 'function') {
+                showUserDashboardPage(uid);
+            }
         }
     });
 };
