@@ -1302,7 +1302,6 @@ const handleWithdrawConfirmation = (amount, method, methodName, payoutDetails = 
                         </span>
                         <p class="withdraw-confirm-kicker">Admin approval required</p>
                         <h4>Confirm withdrawal</h4>
-                        <span>Txn ID will be generated after admin approval.</span>
                     </div>
                     <div class="withdraw-confirm-amount">
                         <div class="withdraw-confirm-amount-label-wrapper">
@@ -1341,45 +1340,6 @@ const handleWithdrawConfirmation = (amount, method, methodName, payoutDetails = 
                                 <span>Payout details</span>
                             </div>
                             <strong>${escapeHtml(methodDetails)}</strong>
-                        </div>
-                        <!-- Row 3: Wallet balance -->
-                        <div class="withdraw-confirm-details-row">
-                            <div class="withdraw-confirm-row-left">
-                                <div class="withdraw-confirm-row-icon bg-green-50 dark:bg-green-950/40 text-green-600 dark:text-green-400">
-                                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="h-5 w-5">
-                                        <path d="M21 12V7a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2H3"></path>
-                                    </svg>
-                                </div>
-                                <span>Wallet balance</span>
-                            </div>
-                            <strong>${formatCurrency(walletBalance)}</strong>
-                        </div>
-                        <!-- Row 4: Available balance -->
-                        <div class="withdraw-confirm-details-row">
-                            <div class="withdraw-confirm-row-left">
-                                <div class="withdraw-confirm-row-icon bg-amber-50 dark:bg-amber-950/40 text-amber-600 dark:text-amber-550">
-                                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="h-5 w-5">
-                                        <path d="M21 12V7a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2H3"></path>
-                                    </svg>
-                                </div>
-                                <span>Available balance</span>
-                            </div>
-                            <strong>${formatCurrency(spendableBalance)}</strong>
-                        </div>
-                        <!-- Row 5: Balance after -->
-                        <div class="withdraw-confirm-details-row">
-                            <div class="withdraw-confirm-row-left">
-                                <div class="withdraw-confirm-row-icon bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-450">
-                                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="h-5 w-5">
-                                        <path d="M6 12a4 4 0 0 1 4-4h4a4 4 0 0 1 4 4v5a4 4 0 0 1-4 4h-4a4 4 0 0 1-4-4v-5z"></path>
-                                        <path d="M12 8V4m0 0a2 2 0 1 0-2-2h4a2 2 0 1 0-2 2z"></path>
-                                        <path d="M9 11h6"></path>
-                                        <path d="M9 14h4.5a1.5 1.5 0 0 1 0 3H9"></path>
-                                    </svg>
-                                </div>
-                                <span>Balance after</span>
-                            </div>
-                            <strong class="purple-val">${formatCurrency(balanceAfter)}</strong>
                         </div>
                     </div>
                 </div>`,
