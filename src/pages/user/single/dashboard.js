@@ -4986,10 +4986,20 @@ class TaskUploadQueueManager {
                 this.inFlightComments[taskId].add(String(finalComment).trim());
             }
 
-            const screenshotUrl = uploadData.screenshot.url || '';
-            const screenshotKey = uploadData.screenshot.key || '';
-            const screenshotViewUrl = uploadData.screenshot.viewUrl || '';
-            const screenshotDrivePath = uploadData.screenshot.drivePath || '';
+            const screenshotUrl = uploadData?.screenshot?.url 
+                || uploadData?.screenshot?.viewUrl 
+                || uploadData?.screenshot?.view_url 
+                || uploadData?.screenshotUrl 
+                || uploadData?.url 
+                || uploadData?.screenshot?.drivePath 
+                || '';
+            const screenshotKey = uploadData?.screenshot?.key || uploadData?.key || '';
+            const screenshotViewUrl = uploadData?.screenshot?.viewUrl || uploadData?.viewUrl || screenshotUrl;
+            const screenshotDrivePath = uploadData?.screenshot?.drivePath || uploadData?.drivePath || '';
+
+            if (!screenshotUrl) {
+                throw new Error('Screenshot upload failed to generate image URL. Please re-upload your screenshot.');
+            }
 
             if (!navigator.onLine) throw new Error('Offline');
 

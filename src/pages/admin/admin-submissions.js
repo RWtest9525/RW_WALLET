@@ -547,7 +547,7 @@ const loadAdminSubmissions = async () => {
                                 user_email: data.userEmail || '',
                                 app_name: data.appName || data.taskTitle || '',
                                 assigned_comment: data.assignedComment || '',
-                                screenshot_url: data.screenshotUrl || '',
+                                screenshot_url: data.screenshotUrl || data.screenshot_url || data.screenshotViewUrl || data.screenshot_view_url || '',
                                 manual_status: data.manualStatus || 'pending',
                                 ocr_status: data.ocrStatus || 'pending',
                                 ocr_extracted_name: data.ocrExtractedName || '',
