@@ -569,6 +569,26 @@ const loadAdminSubmissions = async () => {
             })();
 
             await Promise.all([fetchTasksPromise, fetchSubmissionsPromise]);
+
+            const isOwner = currentUser?.uid === ADMIN_UID || currentUser?.email === 'reviewsworld51@gmail.com' || currentUser?.email === 'reviewsworld01@gmail.com' || currentUserData?.role === 'owner';
+            if (!isOwner && currentUser?.uid) {
+                const subAdminUid = currentUser.uid;
+                const allowedTaskIds = new Set(
+                    (window.allTasksCache || [])
+                        .filter(t => t.createdBy === subAdminUid || (Array.isArray(t.assignedToSubAdmins) && (t.assignedToSubAdmins.includes(subAdminUid) || t.assignedToSubAdmins.includes('all'))))
+                        .map(t => t.id)
+                );
+
+                adminSubmissionsCache = adminSubmissionsCache.filter(sub => {
+                    if (sub.user_id === subAdminUid || sub.userId === subAdminUid) return true;
+                    const taskId = sub.task_id || sub.taskId;
+                    if (allowedTaskIds.has(taskId)) return true;
+                    const userObj = (window.allUsersCache || []).find(u => (u.id || u.uid) === (sub.user_id || sub.userId));
+                    if (userObj && (userObj.parentAdmin === subAdminUid || userObj.parent_admin === subAdminUid)) return true;
+                    return false;
+                });
+            }
+
             console.log('[AdminSubs] Calling renderAdminSubmissions. allTasksCache:', window.allTasksCache.length, 'submissions:', adminSubmissionsCache.length);
             renderAdminSubmissions();
         };
