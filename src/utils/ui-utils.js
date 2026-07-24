@@ -1337,7 +1337,7 @@ const renderHomeTaskCategories = () => {
                                 </span>
                                 <span class="text-right">
                                     <span class="block text-[8px] font-black uppercase text-slate-400">Reward</span>
-                                    <span class="block text-lg font-black text-slate-950 dark:text-white">${formatCurrency(task.rate || task.reward || 0).replace('.00', '')}</span>
+                                    <span class="block text-lg font-black text-slate-950 dark:text-white">${formatCurrency(getTaskRewardForUser(task, currentUserData)).replace('.00', '')}</span>
                                 </span>
                             </div>
                         </button>`;
@@ -1961,6 +1961,18 @@ const getTaskTier = (u) => {
 const isBulkTaskUser = () => {
             const tier = getTaskTier(currentUserData);
             return tier === 'bulker' || tier === 'super_bulker';
+        };
+
+const getTaskRewardForUser = (task = {}, user = currentUserData) => {
+            if (!task) return 0;
+            const tier = getTaskTier(user || currentUserData);
+            const isBulker = tier === 'bulker' || tier === 'super_bulker' || (typeof isBulkTaskUser === 'function' && isBulkTaskUser());
+            if (isBulker) {
+                const bulkerVal = Number(task.bulkerUserReward ?? task.reward_bulker ?? task.bulkerReward);
+                if (Number.isFinite(bulkerVal) && bulkerVal >= 0) return bulkerVal;
+            }
+            const singleVal = Number(task.singleUserReward ?? task.reward_single ?? task.singleReward ?? task.rate ?? task.reward ?? 0);
+            return Number.isFinite(singleVal) ? singleVal : 0;
         };
 
 const getTaskReservationDocId = (taskId, userId) => getSafeTransactionDocId(`task-reservation-${taskId}-${userId}`);
@@ -4151,4 +4163,5 @@ window.checkIsUserAdmin = checkIsUserAdmin;
 window.getCurrentUserId = getCurrentUserId;
 window.getResolvedSenderId = getResolvedSenderId;
 window.showNativePushNotification = showNativePushNotification;
+window.getTaskRewardForUser = getTaskRewardForUser;
 

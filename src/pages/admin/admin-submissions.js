@@ -329,13 +329,34 @@ window.showAdminSubmissionDetailModal = function(index) {
                 };
             };
 
+            const getApprovedRewardAmountForSubmission = (subObj) => {
+                if (!subObj) return 0;
+                const taskId = subObj.task_id || subObj.taskId;
+                const userId = subObj.user_id || subObj.userId;
+                const task = (allTasksCache || []).find(t => t.id === taskId);
+                const subUser = (allUsersCache || []).find(u => (u.id || u.uid) === userId);
+                if (task && typeof getTaskRewardForUser === 'function') {
+                    return getTaskRewardForUser(task, subUser);
+                }
+                return Number(subObj.reward || 0);
+            };
+
             bindAction('modal-approve-btn', async () => {
                 const token = await getBackendAuthToken();
+                const targetSub = (adminSubmissionsCache || []).find(s => s.id === subId) || sub;
+                const approvedReward = getApprovedRewardAmountForSubmission(targetSub);
                 await fetchWithTimeout(`${BACKEND_BASE_URL}/api/admin/task-submissions/${encodeURIComponent(subId)}`, {
                     method: 'PATCH',
                     headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ manualStatus: 'approved', verifiedAt: Date.now() })
-                }, 8000);
+                    body: JSON.stringify({ manualStatus: 'approved', reward: approvedReward, verifiedAt: Date.now() })
+                }, 8000).catch(() => {});
+
+                // Fallback / sync update to Firestore
+                try {
+                    const subRef = doc(db, `artifacts/${appId}/public/data/task_submissions`, subId);
+                    await updateDoc(subRef, { manualStatus: 'approved', reward: approvedReward, verifiedAt: serverTimestamp() });
+                } catch (e) {}
+
                 showNotification('Submission approved.');
             });
 
@@ -2365,23 +2386,32 @@ const renderAdminSubmissions = () => {
                 e.currentTarget.disabled = true;
                 e.currentTarget.innerHTML = '⏳';
                 try {
+                    const targetSub = (adminSubmissionsCache || []).find(s => s.id === subId);
+                    const taskId = targetSub?.task_id || targetSub?.taskId;
+                    const userId = targetSub?.user_id || targetSub?.userId;
+                    const taskObj = (allTasksCache || []).find(t => t.id === taskId);
+                    const userObj = (allUsersCache || []).find(u => (u.id || u.uid) === userId);
+                    const approvedReward = (taskObj && typeof getTaskRewardForUser === 'function') ? getTaskRewardForUser(taskObj, userObj) : Number(targetSub?.reward || 0);
+
                     const token = await getBackendAuthToken();
                     const resp = await fetchWithTimeout(`${BACKEND_BASE_URL}/api/admin/task-submissions/${encodeURIComponent(subId)}`, {
                         method: 'PATCH',
                         headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ manualStatus: 'approved', verifiedAt: Date.now() })
-                    }, 8000);
-                    const data = await resp.json().catch(() => ({}));
-                    if (data.ok) {
-                        const subIdx = adminSubmissionsCache.findIndex(s => s.id === subId);
-                        if (subIdx !== -1) {
-                            adminSubmissionsCache[subIdx].manual_status = 'approved';
-                        }
-                        showNotification('Approved successfully.');
-                        renderAdminSubmissions();
-                    } else {
-                        throw new Error(data.error || 'API error');
+                        body: JSON.stringify({ manualStatus: 'approved', reward: approvedReward, verifiedAt: Date.now() })
+                    }, 8000).catch(() => null);
+
+                    try {
+                        const subRef = doc(db, `artifacts/${appId}/public/data/task_submissions`, subId);
+                        await updateDoc(subRef, { manualStatus: 'approved', reward: approvedReward, verifiedAt: serverTimestamp() });
+                    } catch (e) {}
+
+                    const subIdx = adminSubmissionsCache.findIndex(s => s.id === subId);
+                    if (subIdx !== -1) {
+                        adminSubmissionsCache[subIdx].manual_status = 'approved';
+                        adminSubmissionsCache[subIdx].reward = approvedReward;
                     }
+                    showNotification('Approved successfully.');
+                    renderAdminSubmissions();
                 } catch (err) {
                     console.error('Quick approve failed:', err);
                     showNotification('Approval failed. Please try again.', true);

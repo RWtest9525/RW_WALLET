@@ -590,9 +590,14 @@ const showAdminTaskPage = () => {
                                 </div>
                             </div>
                             <div>
-                                <label class="text-xs font-black uppercase text-gray-400">Rate / Reward</label>
-                                <input id="admin-task-rate" type="number" min="0" step="1" placeholder="Amount in rupees" class="mt-1 w-full px-4 py-3 bg-gray-100 dark:bg-gray-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-cyan-500">
+                                <label class="text-xs font-black uppercase text-gray-400">Single User Reward (₹)</label>
+                                <input id="admin-task-single-reward" type="number" min="0" step="1" placeholder="Reward for single users" class="mt-1 w-full px-4 py-3 bg-gray-100 dark:bg-gray-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-cyan-500">
                             </div>
+                            <div>
+                                <label class="text-xs font-black uppercase text-gray-400">Bulker User Reward (₹)</label>
+                                <input id="admin-task-bulker-reward" type="number" min="0" step="1" placeholder="Reward for bulker users" class="mt-1 w-full px-4 py-3 bg-gray-100 dark:bg-gray-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-cyan-500">
+                            </div>
+                            <input id="admin-task-rate" type="hidden" value="0">
                             <div id="admin-task-limit-wrapper" class="hidden">
                                 <label class="text-xs font-black uppercase text-gray-400">Task Limit</label>
                                 <input id="admin-task-limit" type="number" min="1" step="1" placeholder="Total slots" class="mt-1 w-full px-4 py-3 bg-gray-100 dark:bg-gray-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-cyan-500">
@@ -983,7 +988,13 @@ const getAdminTaskFormData = (existingTask = null) => {
     const family = document.getElementById('admin-task-family')?.value || 'review';
     const subtype = document.getElementById('admin-task-subtype')?.value || getAdminTaskTypes(family)[0].value;
     const subtypeMeta = getAdminTaskSubtypeMeta(family, subtype);
-    const rate = Number(document.getElementById('admin-task-rate')?.value || 0);
+    
+    const singleRewardVal = Number(document.getElementById('admin-task-single-reward')?.value || 0);
+    const bulkerRewardVal = Number(document.getElementById('admin-task-bulker-reward')?.value || 0);
+    const legacyRate = Number(document.getElementById('admin-task-rate')?.value || 0);
+    const singleUserReward = singleRewardVal > 0 ? singleRewardVal : (legacyRate > 0 ? legacyRate : 0);
+    const bulkerUserReward = bulkerRewardVal > 0 ? bulkerRewardVal : singleUserReward;
+
     const limitValue = Number(document.getElementById('admin-task-limit')?.value || 0);
     let taskLink = document.getElementById('admin-task-link')?.value.trim() || '';
 
@@ -1035,8 +1046,12 @@ const getAdminTaskFormData = (existingTask = null) => {
         taskSubtypeLabel: subtypeMeta.label,
         category: subtypeMeta.label,
         taskGroup: getAdminTaskFamilyLabel(family),
-        rate,
-        reward: rate,
+        singleUserReward,
+        bulkerUserReward,
+        reward_single: singleUserReward,
+        reward_bulker: bulkerUserReward,
+        rate: singleUserReward,
+        reward: singleUserReward,
         limit: Number.isFinite(limitValue) && limitValue > 0 ? limitValue : null,
         status,
         isVisible: status === 'active',
@@ -1086,6 +1101,10 @@ const resetAdminTaskForm = () => {
     document.getElementById('admin-task-form')?.reset();
     const editId = document.getElementById('admin-task-edit-id');
     if (editId) editId.value = '';
+    const sInput = document.getElementById('admin-task-single-reward');
+    if (sInput) sInput.value = '';
+    const bInput = document.getElementById('admin-task-bulker-reward');
+    if (bInput) bInput.value = '';
     const linkInput = document.getElementById('admin-task-link');
     if (linkInput) delete linkInput.dataset.scrapedLogoUrl;
     const listTimeInput = document.getElementById('admin-task-list-time');
@@ -1127,7 +1146,8 @@ const handleSaveAdminTask = async (event) => {
     }
     const payload = getAdminTaskFormData(existingTask);
     if (!payload.title) return showNotification('Please enter task title.', true);
-    if (!Number.isFinite(payload.rate) || payload.rate <= 0) return showNotification('Please enter a valid task rate.', true);
+    if (!Number.isFinite(payload.singleUserReward) || payload.singleUserReward <= 0) return showNotification('Please enter a valid Single User Reward.', true);
+    if (!Number.isFinite(payload.bulkerUserReward) || payload.bulkerUserReward <= 0) return showNotification('Please enter a valid Bulker User Reward.', true);
 
     if (payload.taskSubtype === 'read_news') {
         if (!payload.newsLinks || payload.newsLinks.length === 0) {
@@ -1211,7 +1231,14 @@ const editAdminTask = (taskId) => {
     } else {
         renderAdminTaskNewsLinkInputs([]);
     }
-    document.getElementById('admin-task-rate').value = task.rate || task.reward || '';
+    const sReward = task.singleUserReward ?? task.reward_single ?? task.singleReward ?? task.rate ?? task.reward ?? '';
+    const bReward = task.bulkerUserReward ?? task.reward_bulker ?? task.bulkerReward ?? task.rate ?? task.reward ?? '';
+    const sInput = document.getElementById('admin-task-single-reward');
+    const bInput = document.getElementById('admin-task-bulker-reward');
+    const rInput = document.getElementById('admin-task-rate');
+    if (sInput) sInput.value = sReward;
+    if (bInput) bInput.value = bReward;
+    if (rInput) rInput.value = sReward;
     document.getElementById('admin-task-limit').value = task.limit || '';
     const linkInput = document.getElementById('admin-task-link');
     if (linkInput) {

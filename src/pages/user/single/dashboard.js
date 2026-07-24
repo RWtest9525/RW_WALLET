@@ -4654,6 +4654,8 @@ class TaskUploadQueueManager {
 
         const startIndex = this.queues[taskId].length;
         
+        const effectiveReward = typeof getTaskRewardForUser === 'function' ? getTaskRewardForUser(task, currentUserData) : (reward || 0);
+
         // Add placeholders with Waiting status
         for (let i = 0; i < files.length; i++) {
             const file = files[i];
@@ -4670,7 +4672,7 @@ class TaskUploadQueueManager {
                 compressedFile: null,
                 isBulk,
                 task,
-                reward,
+                reward: effectiveReward,
                 appName,
                 taskLink,
                 image,
