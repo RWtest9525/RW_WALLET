@@ -3946,26 +3946,30 @@ const showUserTaskPage = () => {
                     const socialTaskItems = [];
 
                     const isTaskVisibleToUser = (task) => {
-                        const parentAdminId = currentUserData?.parentAdmin || currentUserData?.parent_admin || '';
-                        const userIsOwnerDirect = !parentAdminId || parentAdminId === ADMIN_UID;
+                        const userRole = String(currentUserData?.role || '').toLowerCase();
+                        const isUserSubAdmin = userRole === 'admin' || userRole === 'subadmin';
+                        const userUid = currentUser?.uid || currentUserData?.uid || '';
+                        const parentAdminId = currentUserData?.parentAdmin || currentUserData?.parent_admin || currentUserData?.assignedSubAdmin || currentUserData?.subAdminId || '';
+
+                        // Effective sub-admin ID associated with this user
+                        const effectiveSubAdminId = isUserSubAdmin ? userUid : parentAdminId;
+
                         const taskCreator = task.createdBy || '';
-                        const isOwnerTask = !taskCreator || taskCreator === ADMIN_UID || taskCreator === 'owner';
+                        const assigned = Array.isArray(task.assignedToSubAdmins) ? task.assignedToSubAdmins : [];
+
+                        const isOwnerTask = !taskCreator || taskCreator === ADMIN_UID || taskCreator === 'owner' || taskCreator === 'REVIEWS_WORLD_ADMIN';
 
                         if (isOwnerTask) {
-                            // Owner-created task
-                            const assigned = task.assignedToSubAdmins || [];
-                            const hasAssignments = assigned.length > 0;
-                            if (userIsOwnerDirect) {
-                                // Owner's direct user sees owner tasks that are NOT assigned to any sub-admin
-                                return !hasAssignments;
+                            if (!effectiveSubAdminId || effectiveSubAdminId === ADMIN_UID) {
+                                return assigned.length === 0 || assigned.includes('all');
                             } else {
-                                // Sub-admin's user sees owner tasks only if assigned to their sub-admin
-                                return assigned.includes(parentAdminId) || assigned.includes('all');
+                                return assigned.includes(effectiveSubAdminId) || assigned.includes('all');
                             }
                         } else {
-                            // Sub-admin created task — ONLY show to that sub-admin's users
-                            if (userIsOwnerDirect) return false; // Owner's direct users NEVER see sub-admin tasks
-                            return taskCreator === parentAdminId;
+                            if (!effectiveSubAdminId || effectiveSubAdminId === ADMIN_UID) {
+                                return false;
+                            }
+                            return taskCreator === effectiveSubAdminId || assigned.includes(effectiveSubAdminId) || assigned.includes('all');
                         }
                     };
 
