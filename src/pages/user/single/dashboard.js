@@ -5892,6 +5892,10 @@ const showUserTaskDetailsPage = async (taskId) => {
             } else {
                 startLocalTimer();
                 const initBackgroundReservation = async () => {
+                    if (activeReservation) {
+                        updateReservationUi(activeReservation);
+                        return;
+                    }
                     try {
                         const reservation = await reserveTaskReviewComment(task);
                         updateReservationUi(reservation);
@@ -5926,13 +5930,6 @@ const showUserTaskDetailsPage = async (taskId) => {
                         }
                     } catch (err) {
                         showNotification('Copy failed. Copy manually.', true);
-                    }
-
-                    try {
-                        const reservation = await reserveTaskReviewComment(task);
-                        updateReservationUi(reservation);
-                    } catch (error) {
-                        console.error('Review reserve failed:', error);
                     }
                 };
                 if (copyBtn) copyBtn.onclick = triggerCopy;
