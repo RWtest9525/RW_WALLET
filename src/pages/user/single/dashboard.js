@@ -4103,7 +4103,8 @@ const showUserTaskPage = () => {
                 const isReal = isTaskPageEnabled;
                 const status = isReal ? getAdminTaskEffectiveStatus(task) : 'draft';
                 const isLive = isReal && status === 'active';
-                const reward = isReal ? `₹${task.rate || task.reward || 0}` : task.reward;
+                const rewardVal = isReal ? getTaskRewardForUser(task, currentUserData) : (task.reward || 0);
+                const reward = `₹${rewardVal}`;
                 const imageUrl = isReal ? (task.imageUrl || category.logo) : category.logo;
                 const taskTitle = isReal ? (task.title || 'Task Mission') : task.title;
 
