@@ -3946,18 +3946,26 @@ const showUserTaskPage = () => {
                     const socialTaskItems = [];
 
                     const isTaskVisibleToUser = (task) => {
-                        const parentAdminId = currentUserData?.parentAdmin || currentUserData?.parent_admin || ADMIN_UID;
-                        const isOwnerTask = !task.createdBy || task.createdBy === ADMIN_UID || task.createdBy === 'owner';
+                        const parentAdminId = currentUserData?.parentAdmin || currentUserData?.parent_admin || '';
+                        const userIsOwnerDirect = !parentAdminId || parentAdminId === ADMIN_UID;
+                        const taskCreator = task.createdBy || '';
+                        const isOwnerTask = !taskCreator || taskCreator === ADMIN_UID || taskCreator === 'owner';
+
                         if (isOwnerTask) {
+                            // Owner-created task
                             const assigned = task.assignedToSubAdmins || [];
                             const hasAssignments = assigned.length > 0;
-                            if (parentAdminId === ADMIN_UID) {
+                            if (userIsOwnerDirect) {
+                                // Owner's direct user sees owner tasks that are NOT assigned to any sub-admin
                                 return !hasAssignments;
                             } else {
+                                // Sub-admin's user sees owner tasks only if assigned to their sub-admin
                                 return assigned.includes(parentAdminId) || assigned.includes('all');
                             }
                         } else {
-                            return task.createdBy === parentAdminId;
+                            // Sub-admin created task — ONLY show to that sub-admin's users
+                            if (userIsOwnerDirect) return false; // Owner's direct users NEVER see sub-admin tasks
+                            return taskCreator === parentAdminId;
                         }
                     };
 
