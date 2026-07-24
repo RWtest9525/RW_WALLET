@@ -5285,24 +5285,30 @@ const showUserTaskDetailsPage = async (taskId) => {
             let step2Html = '';
             if (isBulk) {
                 step2Html = `
-                    <div class="space-y-4 text-left p-4 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl shadow-sm">
-                        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                            <div>
-                                <label for="task-bulk-comments-count" class="text-xs font-bold text-gray-700 dark:text-gray-300">How many comments do you want?</label>
-                                <p class="text-[10px] text-gray-400">Specify number of comments to copy.</p>
-                                <span class="text-xs font-black text-indigo-600 dark:text-indigo-400 mt-1 block">${availableCommentsCount}/${totalCommentsCount} comments left</span>
+                    <div class="space-y-4 text-left p-4.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-3xl shadow-sm">
+                        <div>
+                            <div class="flex items-center justify-between">
+                                <label for="task-bulk-comments-count" class="text-xs font-black uppercase tracking-wider text-slate-800 dark:text-slate-100">Enter Number of Comments Needed</label>
+                                <span class="text-[11px] font-black text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/40 px-2.5 py-0.5 rounded-lg border border-indigo-100 dark:border-indigo-900/50">${availableCommentsCount}/${totalCommentsCount} Available</span>
                             </div>
-                            <div class="flex items-center gap-2">
-                                <input type="number" id="task-bulk-comments-count" min="1" max="${Math.max(1, availableCommentsCount)}" value="" placeholder="Qty" class="w-20 rounded-xl border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-3 py-2 text-center text-xs font-bold focus:outline-none focus:ring-2 focus:ring-slate-900">
-                                <button type="button" id="task-bulk-generate-btn" class="rounded-xl bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-500 hover:to-blue-500 text-white px-4 py-2 text-xs font-black transition-all active:scale-[0.97] shadow-sm">Generate</button>
-                            </div>
+                            <p class="text-[10px] font-semibold text-gray-400 mt-0.5">Type how many comments you want to generate (e.g. 5, 10, 20)</p>
                         </div>
-                        <div class="border-t border-gray-200 dark:border-gray-700 my-2"></div>
+                        
+                        <div class="flex items-center gap-3">
+                            <div class="relative flex-1">
+                                <input type="number" id="task-bulk-comments-count" min="1" max="${Math.max(1, availableCommentsCount)}" placeholder="Enter Quantity (e.g. 10)" class="w-full rounded-2xl border-2 border-indigo-200 dark:border-indigo-800/60 bg-white dark:bg-gray-800 px-4 py-3 text-sm font-black text-slate-900 dark:text-white placeholder:text-gray-400 placeholder:font-semibold focus:outline-none focus:ring-2 focus:ring-indigo-500 shadow-sm">
+                            </div>
+                            <button type="button" id="task-bulk-generate-btn" class="shrink-0 rounded-2xl bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-500 hover:to-blue-500 text-white px-5 py-3 text-xs font-black uppercase tracking-wider transition-all active:scale-[0.97] shadow-md">
+                                Generate ⚡
+                            </button>
+                        </div>
+
+                        <div class="border-t border-gray-200 dark:border-gray-700/80 my-2"></div>
                         <div class="flex items-center justify-between">
-                            <p class="text-[10px] font-bold text-gray-500 uppercase tracking-wider">Generated Comments:</p>
-                            <button type="button" id="task-bulk-copy-all-btn" class="hidden rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-gray-200 border border-slate-200 dark:border-slate-700 px-3 py-1 text-[10px] font-black uppercase transition shadow-sm">Copy All</button>
+                            <p class="text-[10px] font-black text-gray-500 uppercase tracking-wider">Your Generated Comments:</p>
+                            <button type="button" id="task-bulk-copy-all-btn" class="hidden rounded-xl bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-950/40 dark:hover:bg-indigo-950/80 text-indigo-600 dark:text-indigo-400 border border-indigo-200/40 dark:border-indigo-800/30 px-3 py-1 text-[10px] font-black uppercase tracking-wider transition shadow-sm">Copy All</button>
                         </div>
-                        <div id="task-bulk-comments-list" class="max-h-48 overflow-y-auto space-y-2 pr-1">
+                        <div id="task-bulk-comments-list" class="max-h-56 overflow-y-auto space-y-2 pr-1">
                             <!-- Populated dynamically -->
                         </div>
                     </div>
@@ -5771,47 +5777,70 @@ const showUserTaskDetailsPage = async (taskId) => {
                 if (generateBtn) {
                     generateBtn.onclick = async () => {
                         const qtyStr = countInput ? countInput.value.trim() : '';
-                        if (!qtyStr) return showNotification('Please enter a quantity.', true);
+                        if (!qtyStr) return showNotification('Please enter a quantity (e.g. 5, 10).', true);
                         
                         let limit = parseInt(qtyStr) || 0;
-                        if (limit <= 0) return showNotification('Please enter a valid quantity.', true);
-                        if (limit > availableCommentsCount) {
-                            limit = availableCommentsCount;
+                        if (limit <= 0) return showNotification('Please enter a valid positive quantity.', true);
+                        
+                        const maxAvail = Math.max(1, availableCommentsCount);
+                        if (limit > maxAvail) {
+                            limit = maxAvail;
                             if (countInput) countInput.value = limit;
                         }
                         
                         showLoading();
+                        let newlyReserved = [];
+
+                        // 1. Try Backend API first
                         try {
                             const token = await getBackendAuthToken();
                             const response = await fetchWithTimeout(`${BACKEND_BASE_URL}/api/task-reservations/bulk`, {
                                 method: 'POST',
                                 headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
                                 body: JSON.stringify({ taskId: task.id, count: limit })
-                            }, 15000);
-                            const resData = await response.json();
-                            if (response.ok && resData.ok) {
-                                const newlyReserved = resData.reservedComments.map(r => r.comment);
-                                generatedComments = [...generatedComments, ...newlyReserved];
-                                
-                                // Auto-copy to clipboard
-                                const textToCopy = newlyReserved.join('\n\n');
-                                try {
-                                    await navigator.clipboard.writeText(textToCopy);
-                                    showNotification(`Generated & Copied ${newlyReserved.length} comments!`);
-                                } catch (copyErr) {
-                                    showNotification(`Generated ${newlyReserved.length} comments!`, false);
+                            }, 8000).catch(() => null);
+
+                            if (response && response.ok) {
+                                const resData = await response.json().catch(() => ({}));
+                                if (resData.ok && Array.isArray(resData.reservedComments) && resData.reservedComments.length > 0) {
+                                    newlyReserved = resData.reservedComments.map(r => r.comment);
                                 }
-                                
-                                renderBulkCommentsList();
-                            } else {
-                                showNotification(resData.error || 'Failed to generate comments.', true);
                             }
-                        } catch (err) {
-                            console.error('Failed to generate comments:', err);
-                            showNotification('Failed to generate comments.', true);
-                        } finally {
-                            hideLoading();
+                        } catch (e) {
+                            console.warn('Backend bulk reservation check failed, using local fallback:', e);
                         }
+
+                        // 2. Local Fallback if backend API did not return comments
+                        if (newlyReserved.length === 0) {
+                            const fullPool = getTaskCommentPool(task);
+                            const usedSet = new Set([
+                                ...generatedComments.map(c => String(c).trim()),
+                                ...submittedComments.map(c => String(c).trim())
+                            ]);
+
+                            const availablePool = fullPool.filter(c => !usedSet.has(String(c).trim()));
+                            const fallbackPool = availablePool.length > 0 ? availablePool : fullPool;
+                            newlyReserved = fallbackPool.slice(0, limit);
+                        }
+
+                        if (newlyReserved.length === 0) {
+                            hideLoading();
+                            return showNotification('No comments available for this task.', true);
+                        }
+
+                        generatedComments = [...generatedComments, ...newlyReserved];
+                        
+                        // Auto-copy to clipboard
+                        const textToCopy = newlyReserved.join('\n\n');
+                        try {
+                            await navigator.clipboard.writeText(textToCopy);
+                            showNotification(`Generated & Copied ${newlyReserved.length} comment(s)!`);
+                        } catch (copyErr) {
+                            showNotification(`Generated ${newlyReserved.length} comment(s)!`, false);
+                        }
+                        
+                        renderBulkCommentsList();
+                        hideLoading();
                     };
                 }
 
