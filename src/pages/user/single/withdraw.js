@@ -2187,6 +2187,52 @@ const applyWithdrawalConfig = (config = {}) => {
     }
 };
 
+const resolveEffectiveSubAdminId = async () => {
+    if (!currentUserData) return '';
+    let pAdmin = currentUserData.parentAdmin || currentUserData.parent_admin || '';
+    if (pAdmin && pAdmin !== ADMIN_UID) return pAdmin;
+
+    // Check referredBy
+    const refUid = currentUserData.referredBy || currentUserData.referred_by || '';
+    if (refUid && refUid !== ADMIN_UID) {
+        let refUser = (typeof allUsersCache !== 'undefined' && Array.isArray(allUsersCache))
+            ? allUsersCache.find(u => String(u.id || u.uid) === String(refUid))
+            : null;
+        
+        if (!refUser) {
+            try {
+                const snap = await getDoc(doc(db, `artifacts/${appId}/public/data/users`, refUid));
+                if (snap.exists()) refUser = snap.data();
+            } catch (e) {}
+        }
+
+        if (refUser) {
+            const role = String(refUser.role || '').toLowerCase();
+            if (role === 'subadmin' || role === 'admin') {
+                return refUser.id || refUser.uid || refUid;
+            }
+            const parentOfRef = refUser.parentAdmin || refUser.parent_admin;
+            if (parentOfRef && parentOfRef !== ADMIN_UID) return parentOfRef;
+        }
+    }
+
+    // Check usedReferralCode
+    const usedCode = String(currentUserData.usedReferralCode || currentUserData.referredByCode || currentUserData.referralCodeUsed || '').trim().toUpperCase();
+    if (usedCode && typeof allUsersCache !== 'undefined' && Array.isArray(allUsersCache)) {
+        const codeOwner = allUsersCache.find(u => String(u.referralCode || u.myReferralCode || u.refCode || '').trim().toUpperCase() === usedCode);
+        if (codeOwner) {
+            const role = String(codeOwner.role || '').toLowerCase();
+            if (role === 'subadmin' || role === 'admin') {
+                return codeOwner.id || codeOwner.uid;
+            }
+            const parentOfOwner = codeOwner.parentAdmin || codeOwner.parent_admin;
+            if (parentOfOwner && parentOfOwner !== ADMIN_UID) return parentOfOwner;
+        }
+    }
+
+    return '';
+};
+
 const loadWithdrawalSettingsOnce = async (force = false) => {
     const now = Date.now();
     if (!force && withdrawalSettingsLoadedAt && now - withdrawalSettingsLoadedAt < 30000) return;
@@ -2198,11 +2244,11 @@ const loadWithdrawalSettingsOnce = async (force = false) => {
             const globalSnapshot = await getDoc(doc(db, `artifacts/${appId}/settings`, 'app_config'));
             if (globalSnapshot.exists()) applyAppConfig(globalSnapshot.data());
 
-            // 2. If current user has a parentAdmin (sub-admin's user), load per-admin rate overrides
-            const parentAdmin = currentUserData?.parentAdmin || currentUserData?.parent_admin || currentUserData?.referredBy || '';
-            if (parentAdmin && parentAdmin !== ADMIN_UID) {
+            // 2. If current user has a parent sub-admin, load per-admin rate overrides
+            const subAdminId = await resolveEffectiveSubAdminId();
+            if (subAdminId && subAdminId !== ADMIN_UID) {
                 try {
-                    const adminConfigDoc = await getDoc(doc(db, `artifacts/${appId}/settings`, `admin_config_${parentAdmin}`));
+                    const adminConfigDoc = await getDoc(doc(db, `artifacts/${appId}/settings`, `admin_config_${subAdminId}`));
                     if (adminConfigDoc.exists()) {
                         const adminConfig = adminConfigDoc.data();
                         // Only override rate settings, NOT maintenance/whatsNew
@@ -2261,14 +2307,26 @@ handleWithdrawRequest = async function (amount, method, methodName) {
     }
 };
 
-const startWithdrawalSettingsListener = () => {
+const startWithdrawalSettingsListener = async () => {
     if (appConfigListenerActive) return;
     appConfigListenerActive = true;
+
+    const subAdminId = await resolveEffectiveSubAdminId();
 
     // Listen to global app_config (maintenance, whats new, owner defaults)
     const stopGlobal = onSnapshot(doc(db, `artifacts/${appId}/settings`, 'app_config'), (snapshot) => {
         if (!snapshot.exists()) return;
         applyAppConfig(snapshot.data());
+
+        // Re-apply sub-admin rates so owner defaults never overwrite sub-admin settings
+        if (subAdminId && subAdminId !== ADMIN_UID) {
+            getDoc(doc(db, `artifacts/${appId}/settings`, `admin_config_${subAdminId}`)).then(subSnap => {
+                if (subSnap.exists()) {
+                    applyWithdrawalConfig(subSnap.data());
+                }
+            }).catch(() => {});
+        }
+
         withdrawalSettingsLoadedAt = Date.now();
     }, (error) => {
         console.error('App settings listener failed:', error);
@@ -2276,9 +2334,8 @@ const startWithdrawalSettingsListener = () => {
     unsubscribers.push(() => { stopGlobal(); });
 
     // Listen to per-admin config if user belongs to a sub-admin
-    const parentAdmin = currentUserData?.parentAdmin || currentUserData?.parent_admin || '';
-    if (parentAdmin && parentAdmin !== ADMIN_UID) {
-        const stopAdmin = onSnapshot(doc(db, `artifacts/${appId}/settings`, `admin_config_${parentAdmin}`), (snapshot) => {
+    if (subAdminId && subAdminId !== ADMIN_UID) {
+        const stopAdmin = onSnapshot(doc(db, `artifacts/${appId}/settings`, `admin_config_${subAdminId}`), (snapshot) => {
             if (!snapshot.exists()) return;
             // Only override rate settings, NOT maintenance/whatsNew
             applyWithdrawalConfig(snapshot.data());
