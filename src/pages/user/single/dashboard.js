@@ -5721,14 +5721,14 @@ const showUserTaskDetailsPage = async (taskId) => {
                         const isSubmitted = submittedComments.includes(String(comment).trim());
                         
                         listHtml.push(`
-                            <div class="flex items-center justify-between gap-3 p-2 bg-white dark:bg-slate-800 rounded-xl border border-gray-150 dark:border-gray-700/80 shadow-sm">
-                                <div class="min-w-0 flex-1 flex items-center gap-2">
-                                    <span class="text-[9px] font-black text-gray-400 bg-slate-50 dark:bg-slate-900 rounded px-1.5 shadow-sm border border-gray-100 dark:border-gray-800">${i + 1}</span>
-                                    <p class="text-xs font-semibold text-gray-900 dark:text-white truncate italic text-left">${escapeHtml(comment)}</p>
+                            <div class="flex items-start justify-between gap-3 p-3 bg-white dark:bg-slate-800 rounded-2xl border border-gray-200 dark:border-gray-700/80 shadow-sm min-w-0">
+                                <div class="min-w-0 flex-1 flex items-start gap-2.5">
+                                    <span class="text-[10px] font-black text-gray-500 bg-slate-100 dark:bg-slate-900 rounded-lg px-2 py-1 shadow-sm border border-gray-200 dark:border-gray-800 shrink-0 mt-0.5">${i + 1}</span>
+                                    <p class="text-xs font-semibold text-gray-900 dark:text-gray-100 italic text-left break-words whitespace-pre-wrap leading-relaxed flex-1 min-w-0 pr-1">${escapeHtml(comment)}</p>
                                 </div>
                                 ${isSubmitted 
-                                    ? `<span class="text-[10px] font-black text-green-600 shrink-0 bg-green-500/10 border border-green-500/20 px-2.5 py-0.5 rounded-lg shadow-sm">Done ✅</span>`
-                                    : `<button type="button" data-action="copy-comment" data-comment="${escapeHtml(comment)}" class="rounded-xl bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-950/40 dark:hover:bg-indigo-950/80 text-indigo-600 dark:text-indigo-400 border border-indigo-200/40 dark:border-indigo-800/30 px-3 py-1.5 text-[9px] font-black tracking-wide uppercase transition shrink-0 shadow-sm">Copy</button>`
+                                    ? `<span class="text-[10px] font-black text-green-600 shrink-0 bg-green-500/10 border border-green-500/20 px-2.5 py-1 rounded-xl shadow-sm mt-0.5">Done ✅</span>`
+                                    : `<button type="button" data-action="copy-comment" data-comment="${escapeHtml(comment)}" class="rounded-xl bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-950/40 dark:hover:bg-indigo-950/80 text-indigo-600 dark:text-indigo-400 border border-indigo-200/40 dark:border-indigo-800/30 px-3 py-1.5 text-[10px] font-black tracking-wider uppercase transition shrink-0 shadow-sm mt-0.5">Copy</button>`
                                 }
                             </div>
                         `);
