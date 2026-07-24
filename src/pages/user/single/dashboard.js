@@ -5285,31 +5285,39 @@ const showUserTaskDetailsPage = async (taskId) => {
             let step2Html = '';
             if (isBulk) {
                 step2Html = `
-                    <div class="space-y-4 text-left p-4.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-3xl shadow-sm">
-                        <div>
-                            <div class="flex items-center justify-between">
-                                <label for="task-bulk-comments-count" class="text-xs font-black uppercase tracking-wider text-slate-800 dark:text-slate-100">Enter Number of Comments Needed</label>
-                                <span class="text-[11px] font-black text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/40 px-2.5 py-0.5 rounded-lg border border-indigo-100 dark:border-indigo-900/50">${availableCommentsCount}/${totalCommentsCount} Available</span>
+                    <div class="space-y-4 text-left p-5 bg-slate-50 dark:bg-slate-900/90 border border-slate-200/90 dark:border-slate-700/80 rounded-3xl shadow-sm">
+                        <!-- Header Block -->
+                        <div class="mb-3.5">
+                            <div class="flex items-center justify-between gap-2 flex-wrap mb-1">
+                                <label for="task-bulk-comments-count" class="text-xs font-black uppercase tracking-wider text-slate-900 dark:text-slate-100">Enter Number of Comments Needed</label>
+                                <span class="text-[11px] font-black text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/50 px-2.5 py-1 rounded-xl border border-indigo-100 dark:border-indigo-900/60 shadow-xs">${availableCommentsCount}/${totalCommentsCount} Available</span>
                             </div>
-                            <p class="text-[10px] font-semibold text-gray-400 mt-0.5">Type how many comments you want to generate (e.g. 5, 10, 20)</p>
+                            <p class="text-[10px] font-semibold text-slate-400 dark:text-slate-400">Type how many comments you want to generate (e.g. 5, 10, 20)</p>
                         </div>
                         
-                        <div class="flex items-center gap-3">
-                            <div class="relative flex-1">
-                                <input type="number" id="task-bulk-comments-count" min="1" max="${Math.max(1, availableCommentsCount)}" placeholder="Enter Quantity (e.g. 10)" class="w-full rounded-2xl border-2 border-indigo-200 dark:border-indigo-800/60 bg-white dark:bg-gray-800 px-4 py-3 text-sm font-black text-slate-900 dark:text-white placeholder:text-gray-400 placeholder:font-semibold focus:outline-none focus:ring-2 focus:ring-indigo-500 shadow-sm">
+                        <!-- Input & Generate Button Box -->
+                        <div class="flex items-center gap-3 my-2">
+                            <div class="relative flex-1 min-w-0">
+                                <input type="number" id="task-bulk-comments-count" min="1" max="${Math.max(1, availableCommentsCount)}" placeholder="Enter Quantity (e.g. 10)" class="w-full rounded-2xl border-2 border-indigo-200/90 dark:border-indigo-800/80 bg-white dark:bg-slate-800 px-4 py-3.5 text-sm font-black text-slate-900 dark:text-white placeholder:text-slate-400 placeholder:font-semibold focus:outline-none focus:ring-2 focus:ring-indigo-500 shadow-sm">
                             </div>
-                            <button type="button" id="task-bulk-generate-btn" class="shrink-0 rounded-2xl bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-500 hover:to-blue-500 text-white px-5 py-3 text-xs font-black uppercase tracking-wider transition-all active:scale-[0.97] shadow-md">
-                                Generate ⚡
+                            <button type="button" id="task-bulk-generate-btn" class="shrink-0 rounded-2xl bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-500 hover:to-blue-500 text-white px-5 py-3.5 text-xs font-black uppercase tracking-wider transition-all active:scale-[0.97] shadow-md flex items-center gap-1.5">
+                                <span>Generate</span>
+                                <span>⚡</span>
                             </button>
                         </div>
 
-                        <div class="border-t border-gray-200 dark:border-gray-700/80 my-2"></div>
-                        <div class="flex items-center justify-between">
-                            <p class="text-[10px] font-black text-gray-500 uppercase tracking-wider">Your Generated Comments:</p>
-                            <button type="button" id="task-bulk-copy-all-btn" class="hidden rounded-xl bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-950/40 dark:hover:bg-indigo-950/80 text-indigo-600 dark:text-indigo-400 border border-indigo-200/40 dark:border-indigo-800/30 px-3 py-1 text-[10px] font-black uppercase tracking-wider transition shadow-sm">Copy All</button>
-                        </div>
-                        <div id="task-bulk-comments-list" class="max-h-56 overflow-y-auto space-y-2 pr-1">
-                            <!-- Populated dynamically -->
+                        <!-- Divider Line -->
+                        <div class="border-t border-slate-200 dark:border-slate-800 my-4"></div>
+
+                        <!-- Generated Comments Header & List -->
+                        <div>
+                            <div class="flex items-center justify-between mb-3">
+                                <p class="text-[10px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-wider">Your Generated Comments:</p>
+                                <button type="button" id="task-bulk-copy-all-btn" class="hidden rounded-xl bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-950/40 dark:hover:bg-indigo-950/80 text-indigo-600 dark:text-indigo-400 border border-indigo-200/40 dark:border-indigo-800/30 px-3 py-1.5 text-[10px] font-black uppercase tracking-wider transition shadow-sm">Copy All</button>
+                            </div>
+                            <div id="task-bulk-comments-list" class="max-h-56 overflow-y-auto space-y-2.5 pr-1">
+                                <!-- Populated dynamically -->
+                            </div>
                         </div>
                     </div>
                 `;
