@@ -4099,11 +4099,11 @@ const showUserTaskPage = () => {
                         <h3 class="text-sm font-black uppercase tracking-wider text-slate-900 dark:text-white">${escapeHtml(category.label)}</h3>
                     </div>
                     <div class="flex flex-col gap-4">
-                        ${category.items.map((task, index) => renderTaskCard(category, task, index)).join('')}
+                        ${category.items.map((task, index) => renderTaskCard(category, task, index, takenCommentsMap)).join('')}
                     </div>
                 </section>`;
 
-            const renderTaskCard = (category, task, index) => {
+            const renderTaskCard = (category, task, index, takenCommentsMap = {}) => {
                 const isReal = isTaskPageEnabled;
                 const status = isReal ? getAdminTaskEffectiveStatus(task) : 'draft';
                 const isLive = isReal && status === 'active';
@@ -4122,8 +4122,11 @@ const showUserTaskPage = () => {
                 const payoutVal = getPayoutCleanVal(task);
                 const approvalVal = payoutVal === 'Instant' ? 'Instant' : `${payoutVal} Later`;
                 const isReview = subtype === 'app_review' || subtype === 'map_review' || subtype === 'trustpilot_review' || subtype === 'website_review';
-                const totalSlots = isReview ? ((task.reviewComments || []).length || 1) : (task.limit || 300);
-                const submissionsCount = task.timesUsed ?? task.submissionsCount ?? 0;
+                const totalSlots = isReview ? (getTaskCommentPool(task).length || 1) : (task.limit || 300);
+                
+                const takenList = Array.isArray(takenCommentsMap[task.id]) ? takenCommentsMap[task.id] : [];
+                const takenCount = takenList.length;
+                const submissionsCount = Math.max(task.timesUsed ?? task.submissionsCount ?? 0, takenCount);
 
                 if (isLive) {
                     return `

@@ -2110,7 +2110,22 @@ const reserveTaskReviewComment = async (task = {}) => {
                     usedByOthers.add(String(data.comment || '').trim());
                 }
             });
-            const comment = comments.find(item => !usedByOthers.has(item));
+
+            // Also check task_submissions to ensure submitted comments are never repeated!
+            try {
+                const submissionsSnap = await getDocs(query(
+                    collection(db, `artifacts/${appId}/public/data/task_submissions`),
+                    where('taskId', '==', task.id)
+                ));
+                submissionsSnap.docs.forEach(docSnap => {
+                    const data = docSnap.data();
+                    if (data.assignedComment) {
+                        usedByOthers.add(String(data.assignedComment).trim());
+                    }
+                });
+            } catch (e) {}
+
+            const comment = comments.find(item => !usedByOthers.has(String(item).trim()));
             if (!comment) {
                 throw new Error('No comments available. Please try later.');
             }
