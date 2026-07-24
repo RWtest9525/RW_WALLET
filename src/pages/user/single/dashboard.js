@@ -3951,25 +3951,25 @@ const showUserTaskPage = () => {
                         const userUid = currentUser?.uid || currentUserData?.uid || '';
                         const parentAdminId = currentUserData?.parentAdmin || currentUserData?.parent_admin || currentUserData?.assignedSubAdmin || currentUserData?.subAdminId || '';
 
-                        // Effective sub-admin ID associated with this user
                         const effectiveSubAdminId = isUserSubAdmin ? userUid : parentAdminId;
-
                         const taskCreator = task.createdBy || '';
                         const assigned = Array.isArray(task.assignedToSubAdmins) ? task.assignedToSubAdmins : [];
 
                         const isOwnerTask = !taskCreator || taskCreator === ADMIN_UID || taskCreator === 'owner' || taskCreator === 'REVIEWS_WORLD_ADMIN';
 
+                        if (assigned.includes('all')) return true;
+
                         if (isOwnerTask) {
                             if (!effectiveSubAdminId || effectiveSubAdminId === ADMIN_UID) {
-                                return assigned.length === 0 || assigned.includes('all');
+                                return assigned.length === 0;
                             } else {
-                                return assigned.includes(effectiveSubAdminId) || assigned.includes('all');
+                                return assigned.length === 0 || assigned.includes(effectiveSubAdminId);
                             }
                         } else {
                             if (!effectiveSubAdminId || effectiveSubAdminId === ADMIN_UID) {
                                 return false;
                             }
-                            return taskCreator === effectiveSubAdminId || assigned.includes(effectiveSubAdminId) || assigned.includes('all');
+                            return taskCreator === effectiveSubAdminId || assigned.includes(effectiveSubAdminId);
                         }
                     };
 
