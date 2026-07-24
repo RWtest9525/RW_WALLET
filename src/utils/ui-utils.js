@@ -3126,8 +3126,18 @@ const processReferralRewardOnWithdrawalSuccess = async (userId, withdrawalAmount
         if (!userSnap.exists()) return;
         const userData = userSnap.data();
         const referrerId = userData.referredBy || userData.referred_by;
-
         if (!referrerId || referrerId === ADMIN_UID) return;
+
+        // Check referrer user role: Sub-Admin/Admin/Owner referrals NEVER receive referral rewards
+        const referrerRef = doc(db, `artifacts/${appId}/public/data/users`, referrerId);
+        const referrerSnap = await getDoc(referrerRef);
+        if (!referrerSnap.exists()) return;
+        const referrerData = referrerSnap.data();
+        const referrerRole = String(referrerData.role || '').toLowerCase();
+
+        if (referrerRole === 'subadmin' || referrerRole === 'admin' || referrerRole === 'owner') {
+            return;
+        }
 
         // Count completed withdrawals for this user
         const pastWithdrawalsQ = query(
@@ -3140,7 +3150,6 @@ const processReferralRewardOnWithdrawalSuccess = async (userId, withdrawalAmount
 
         const isFirstWithdrawal = completedCount <= 1;
 
-        const referrerRef = doc(db, `artifacts/${appId}/public/data/users`, referrerId);
         const baseBonus = isFirstWithdrawal ? 5.00 : 0;
         const lifetimeBonus = Number((withdrawalAmount * 0.01).toFixed(2));
         const totalReward = baseBonus + lifetimeBonus;

@@ -3070,30 +3070,49 @@ const fetchRealReferralsData = async (userUid) => {
     try {
         if (!userUid) return [];
 
-        const refQ1 = query(
-            collection(db, `artifacts/${appId}/public/data/users`),
-            where("referredBy", "==", userUid)
-        );
-        const refQ2 = query(
-            collection(db, `artifacts/${appId}/public/data/users`),
-            where("referred_by", "==", userUid)
-        );
+        const userRefCode = String(currentUserData?.referralCode || '').trim().toUpperCase();
 
-        const [snap1, snap2] = await Promise.all([
-            getDocs(refQ1).catch(() => ({ docs: [] })),
-            getDocs(refQ2).catch(() => ({ docs: [] }))
-        ]);
+        const queriesToRun = [
+            getDocs(query(collection(db, `artifacts/${appId}/public/data/users`), where("referredBy", "==", userUid))).catch(() => ({ docs: [] })),
+            getDocs(query(collection(db, `artifacts/${appId}/public/data/users`), where("referred_by", "==", userUid))).catch(() => ({ docs: [] }))
+        ];
 
+        if (userRefCode) {
+            queriesToRun.push(getDocs(query(collection(db, `artifacts/${appId}/public/data/users`), where("usedReferralCode", "==", userRefCode))).catch(() => ({ docs: [] })));
+            queriesToRun.push(getDocs(query(collection(db, `artifacts/${appId}/public/data/users`), where("referredByCode", "==", userRefCode))).catch(() => ({ docs: [] })));
+        }
+
+        const queryResults = await Promise.all(queriesToRun);
         const userDocsMap = new Map();
-        [...(snap1.docs || []), ...(snap2.docs || [])].forEach(d => {
-            userDocsMap.set(d.id, { id: d.id, ...d.data() });
+
+        queryResults.forEach(snap => {
+            (snap.docs || []).forEach(d => {
+                userDocsMap.set(d.id, { id: d.id, ...d.data() });
+            });
         });
+
+        // Also merge from allUsersCache if available
+        if (typeof allUsersCache !== 'undefined' && Array.isArray(allUsersCache)) {
+            allUsersCache.forEach(u => {
+                const uUid = String(u.id || u.uid || '');
+                const uRefBy = String(u.referredBy || u.referred_by || '');
+                const uUsedCode = String(u.usedReferralCode || u.referredByCode || u.referralCodeUsed || '').trim().toUpperCase();
+                if (uRefBy === userUid || (userRefCode && uUsedCode === userRefCode)) {
+                    if (uUid && !userDocsMap.has(uUid)) {
+                        userDocsMap.set(uUid, { id: uUid, ...u });
+                    }
+                }
+            });
+        }
 
         const referredUsers = Array.from(userDocsMap.values());
         if (referredUsers.length === 0) {
             realReferralsCache = [];
             return [];
         }
+
+        const viewerRole = String(currentUserData?.role || '').toLowerCase();
+        const isSubAdminOrAdmin = viewerRole === 'subadmin' || viewerRole === 'admin' || viewerRole === 'owner';
 
         const realReferrals = await Promise.all(referredUsers.map(async (u) => {
             const userId = u.id || u.uid;
@@ -3111,13 +3130,15 @@ const fetchRealReferralsData = async (userUid) => {
             });
 
             const isSuccessful = completedWithdrawals.length > 0;
-            const referralBonus = isSuccessful ? 5.00 : 0;
+            const referralBonus = (isSuccessful && !isSubAdminOrAdmin) ? 5.00 : 0;
             
             let lifetimeEarnings = 0;
-            completedWithdrawals.forEach(w => {
-                const amt = Number(w.amount || 0);
-                lifetimeEarnings += amt * 0.01;
-            });
+            if (!isSubAdminOrAdmin) {
+                completedWithdrawals.forEach(w => {
+                    const amt = Number(w.amount || 0);
+                    lifetimeEarnings += amt * 0.01;
+                });
+            }
             lifetimeEarnings = Number(lifetimeEarnings.toFixed(2));
             const totalEarned = Number((referralBonus + lifetimeEarnings).toFixed(2));
 
@@ -3147,8 +3168,8 @@ const fetchRealReferralsData = async (userUid) => {
                 joinedTime,
                 status: isSuccessful ? 'successful' : 'pending',
                 statusLabel: isSuccessful ? 'Successful' : 'Pending',
-                bonusText: `₹${referralBonus.toFixed(2)}`,
-                lifetimeText: isSuccessful ? `+ 1% Lifetime (₹${lifetimeEarnings.toFixed(2)})` : 'Waiting for first withdrawal',
+                bonusText: isSubAdminOrAdmin ? '₹0.00' : `₹${referralBonus.toFixed(2)}`,
+                lifetimeText: isSubAdminOrAdmin ? 'Sub-Admin referral' : (isSuccessful ? `+ 1% Lifetime (₹${lifetimeEarnings.toFixed(2)})` : 'Waiting for first withdrawal'),
                 referralBonus,
                 lifetimeEarnings,
                 totalEarned,

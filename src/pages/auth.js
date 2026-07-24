@@ -164,13 +164,13 @@ const handleAuth = async (e) => {
                             throw new Error('Invalid referral code! Please enter a valid Sub-Admin referral code to sign up.');
                         }
 
-                        // If referrer is an admin/subadmin, set them as the direct parent admin
+                        // Always store the referrer's UID in referredBy for tracking
+                        referredBy = referrerData.id || referrerData.uid;
                         const refRole = String(referrerData.role || '').toLowerCase();
+
                         if (refRole === 'admin' || refRole === 'subadmin' || refRole === 'owner') {
                             parentAdmin = referrerData.id || referrerData.uid;
-                            referredBy = null;
                         } else {
-                            referredBy = referrerData.id || referrerData.uid;
                             parentAdmin = referrerData.parentAdmin || referrerData.parent_admin || ADMIN_UID;
                             
                             // If referrer user's parentAdmin is missing or ADMIN_UID, inspect referrer's parent chain recursively
