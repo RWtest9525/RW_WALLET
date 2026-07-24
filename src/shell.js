@@ -451,17 +451,17 @@ root.outerHTML = String.raw`
                         </span>
                         <span id="bottom-home-label">Wallet</span>
                     </button>
-                    <button id="bottom-admin-btn" hidden class="bottom-nav-btn hidden flex flex-col items-center gap-1 py-1">
-                        <span class="bottom-nav-icon flex h-9 w-9 items-center justify-center rounded-xl bg-gray-100 dark:bg-gray-700 transition">
-                            <img src="https://cdn-icons-png.flaticon.com/512/3135/3135715.png" alt="Admin" class="bottom-nav-img" loading="eager" fetchpriority="high" decoding="async">
-                        </span>
-                        <span>Admin</span>
-                    </button>
                     <button id="bottom-task-btn" class="bottom-nav-btn flex flex-col items-center gap-1 py-1">
                         <span class="bottom-nav-icon flex h-9 w-9 items-center justify-center rounded-xl bg-gray-100 dark:bg-gray-700 transition">
                             <img src="https://cdn-icons-png.flaticon.com/512/3176/3176366.png" alt="Task" class="bottom-nav-img" loading="eager" fetchpriority="high" decoding="async">
                         </span>
                         <span>Task</span>
+                    </button>
+                    <button id="bottom-admin-btn" hidden class="bottom-nav-btn hidden flex flex-col items-center gap-1 py-1">
+                        <span class="bottom-nav-icon flex h-9 w-9 items-center justify-center rounded-xl bg-gray-100 dark:bg-gray-700 transition">
+                            <img src="https://cdn-icons-png.flaticon.com/512/3135/3135715.png" alt="Admin" class="bottom-nav-img" loading="eager" fetchpriority="high" decoding="async">
+                        </span>
+                        <span>Admin</span>
                     </button>
                     <button id="bottom-help-btn" class="bottom-nav-btn flex flex-col items-center gap-1 py-1">
                         <span class="bottom-nav-icon relative flex h-9 w-9 items-center justify-center rounded-xl bg-gray-100 dark:bg-gray-700 transition">

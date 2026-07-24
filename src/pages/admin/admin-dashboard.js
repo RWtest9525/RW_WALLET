@@ -873,15 +873,6 @@ const renderAdminFundRequests = (requests) => {
                     </select>
                 ` : '';
 
-                const logoUrl = typeof WITHDRAW_METHOD_LOGOS !== 'undefined' ? WITHDRAW_METHOD_LOGOS[methodId] : null;
-                const methodSymbolHtml = logoUrl ? `
-                    <span class="inline-flex items-center justify-center rounded-full bg-white dark:bg-slate-700 w-6 h-6 border border-slate-200 dark:border-slate-600 p-0.5 shadow-2xs shrink-0" title="${escapeHtml(methodName)}">
-                        <img src="${logoUrl}" class="w-full h-full object-contain rounded-full" alt="${escapeHtml(methodName)}">
-                    </span>
-                ` : `
-                    <span class="inline-flex items-center gap-0.5 rounded-full bg-gray-100 dark:bg-gray-700 px-2 py-0.5 text-[10px] font-bold text-gray-600 dark:text-gray-300 leading-none">${escapeHtml(methodName)}</span>
-                `;
-
                 return `
                 <div class="relative mb-2 rounded-xl border ${needsBalanceCut ? 'border-rose-300 dark:border-rose-900/50 bg-rose-50/10 dark:bg-rose-950/5' : 'border-slate-200 dark:border-slate-700/80 bg-white dark:bg-gray-800'} overflow-hidden shadow-sm hover:shadow transition-all duration-200">
                     ${needsBalanceCut ? '<span class="absolute left-0 top-0 bottom-0 w-1 bg-red-500 rounded-l-xl"></span>' : ''}
@@ -890,11 +881,11 @@ const renderAdminFundRequests = (requests) => {
                             <div class="min-w-0 flex-1 space-y-0.5">
                                 <div class="flex items-center gap-1.5 flex-wrap">
                                     <p class="text-sm font-bold text-gray-800 dark:text-gray-100 truncate capitalize leading-tight">${r.userName || 'No Name'}</p>
+                                    <span class="rounded-md bg-blue-100 dark:bg-blue-900/40 text-blue-800 dark:text-blue-200 border border-blue-200 dark:border-blue-800 px-2 py-0.5 text-[11px] font-black uppercase tracking-wider">${escapeHtml(methodName)}</span>
                                     ${needsBalanceCut ? '<span class="rounded bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-200 px-1 py-0.2 text-[8px] font-black uppercase tracking-wider">Uncut</span>' : ''}
                                 </div>
-                                <div class="flex flex-wrap items-center gap-1.5">
+                                <div class="flex flex-wrap items-center gap-1.5 pt-0.5">
                                     <div class="flex items-center gap-1.5 min-w-0">
-                                        ${methodSymbolHtml}
                                         <div class="flex items-center gap-1 bg-indigo-50 dark:bg-indigo-900/30 border border-indigo-100/50 dark:border-indigo-900/30 px-1.5 py-0.5 rounded text-[10px] font-bold text-indigo-600 dark:text-indigo-300 min-w-0">
                                             <span class="truncate max-w-[140px] xs:max-w-[180px] sm:max-w-[240px] leading-none" title="${escapedDetail}">${escapedDetail}</span>
                                             ${detailText && detailText !== 'N/A' ? `

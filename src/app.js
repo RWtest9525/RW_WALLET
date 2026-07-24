@@ -48,17 +48,70 @@ const hydrateInstantShell = () => {
     if (lastUser) {
         document.getElementById('main-content').classList.remove('hidden');
         document.getElementById('auth-screen').classList.add('hidden');
-        document.getElementById('bottom-task-btn')?.classList.remove('hidden');
-        if (lastUser === ADMIN_UID || isImpersonating) {
+
+        // Check if the user is an admin/sub-admin/owner based on UID or cached user details
+        let isUserAdmin = false;
+        try {
+            const cachedUser = JSON.parse(localStorage.getItem(`rw_wallet_user_cache_${effectiveUser}`) || 'null');
+            if (effectiveUser === ADMIN_UID || isImpersonating || (cachedUser && (cachedUser.role === 'admin' || cachedUser.role === 'subadmin' || cachedUser.role === 'owner' || cachedUser.isAdmin))) {
+                isUserAdmin = true;
+            }
+        } catch (e) {
+            console.warn('Failed to parse cached user for admin check:', e);
+        }
+
+        if (isUserAdmin) {
             document.getElementById('admin-tab-button')?.classList.remove('hidden');
-            document.getElementById('bottom-admin-btn')?.classList.remove('hidden');
+            const bottomAdminButton = document.getElementById('bottom-admin-btn');
+            if (bottomAdminButton) {
+                bottomAdminButton.hidden = false;
+                bottomAdminButton.classList.remove('hidden');
+            }
+            const bottomHelpButton = document.getElementById('bottom-help-btn');
+            if (bottomHelpButton) {
+                bottomHelpButton.hidden = true;
+                bottomHelpButton.classList.add('hidden');
+            }
             document.getElementById('bottom-task-btn')?.classList.remove('hidden');
             const bottomHomeLabel = document.getElementById('bottom-home-label');
             if (bottomHomeLabel) bottomHomeLabel.textContent = 'Wallet';
             const bottomGrid = document.getElementById('bottom-nav-grid');
             if (bottomGrid) {
-                bottomGrid.className = 'mx-auto grid max-w-xl grid-cols-6 items-center px-2 pt-2 text-[10px] sm:text-xs font-semibold text-gray-500 dark:text-gray-400';
+                bottomGrid.style.setProperty('--bottom-nav-count', '5');
+                bottomGrid.className = 'mx-auto grid w-full max-w-xl grid-cols-5 items-center px-2 pt-2 text-[10px] sm:text-xs font-semibold text-gray-500 dark:text-gray-400';
             }
+            document.querySelectorAll('.bottom-nav-btn').forEach(btn => {
+                btn.classList.toggle('active', btn.id === 'bottom-admin-btn');
+            });
+            document.getElementById('user-panel')?.classList.add('hidden');
+            document.getElementById('admin-panel')?.classList.remove('hidden');
+            document.querySelectorAll('.tab-button').forEach(btn => btn.setAttribute('aria-selected', btn.dataset.tab === 'admin-panel'));
+        } else {
+            document.getElementById('admin-tab-button')?.classList.add('hidden');
+            const bottomAdminButton = document.getElementById('bottom-admin-btn');
+            if (bottomAdminButton) {
+                bottomAdminButton.hidden = true;
+                bottomAdminButton.classList.add('hidden');
+            }
+            const bottomHelpButton = document.getElementById('bottom-help-btn');
+            if (bottomHelpButton) {
+                bottomHelpButton.hidden = false;
+                bottomHelpButton.classList.remove('hidden');
+            }
+            document.getElementById('bottom-task-btn')?.classList.remove('hidden');
+            const bottomHomeLabel = document.getElementById('bottom-home-label');
+            if (bottomHomeLabel) bottomHomeLabel.textContent = 'Wallet';
+            const bottomGrid = document.getElementById('bottom-nav-grid');
+            if (bottomGrid) {
+                bottomGrid.style.setProperty('--bottom-nav-count', '5');
+                bottomGrid.className = 'mx-auto grid w-full max-w-xl grid-cols-5 items-center px-2 pt-2 text-[10px] sm:text-xs font-semibold text-gray-500 dark:text-gray-400';
+            }
+            document.querySelectorAll('.bottom-nav-btn').forEach(btn => {
+                btn.classList.toggle('active', btn.id === 'bottom-home-btn');
+            });
+            document.getElementById('admin-panel')?.classList.add('hidden');
+            document.getElementById('user-panel')?.classList.remove('hidden');
+            document.querySelectorAll('.tab-button').forEach(btn => btn.setAttribute('aria-selected', btn.dataset.tab === 'user-panel'));
         }
         try {
             const cachedUser = JSON.parse(localStorage.getItem(`rw_wallet_user_cache_${effectiveUser}`) || 'null');

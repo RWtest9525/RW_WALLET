@@ -270,14 +270,7 @@ const renderLocalWithdrawalHistoryList = () => {
 
         const escapedDetail = escapeHtml(payoutDetails);
         const methodId = normalizeWithdrawalMethodId(w);
-        const logoUrl = typeof WITHDRAW_METHOD_LOGOS !== 'undefined' ? WITHDRAW_METHOD_LOGOS[methodId] : null;
-        const methodSymbolHtml = logoUrl ? `
-            <span class="inline-flex items-center justify-center rounded-full bg-white dark:bg-slate-700 w-6 h-6 border border-slate-200 dark:border-slate-600 p-0.5 shadow-2xs shrink-0" title="${escapeHtml(w.method || 'N/A')}">
-                <img src="${logoUrl}" class="w-full h-full object-contain rounded-full" alt="${escapeHtml(w.method || 'N/A')}">
-            </span>
-        ` : `
-            <span class="inline-flex items-center gap-0.5 rounded-full bg-gray-100 dark:bg-gray-700 px-2 py-0.5 text-[10px] font-bold text-gray-600 dark:text-gray-300 leading-none">${escapeHtml(w.method || 'N/A')}</span>
-        `;
+        const methodName = getWithdrawalDisplayMethodName(w, escapeHtml(w.method || 'N/A'));
 
         return `
             <div class="relative mb-2.5 rounded-xl border border-slate-200 dark:border-slate-700/80 bg-white dark:bg-gray-800 overflow-hidden shadow-sm hover:shadow transition-all duration-200 animate-fade-in">
@@ -286,11 +279,11 @@ const renderLocalWithdrawalHistoryList = () => {
                         <div class="min-w-0 flex-1 space-y-0.5">
                             <div class="flex items-center gap-1.5 flex-wrap">
                                 <p class="text-sm font-bold text-gray-800 dark:text-gray-100 truncate capitalize leading-tight">${escapeHtml(w.userName || 'N/A')}</p>
+                                <span class="rounded-md bg-blue-100 dark:bg-blue-900/40 text-blue-800 dark:text-blue-200 border border-blue-200 dark:border-blue-800 px-2 py-0.5 text-[11px] font-black uppercase tracking-wider">${escapeHtml(methodName)}</span>
                                 <span class="rounded px-1.5 py-0.5 text-[9px] font-bold ${statusBg} ${statusColor} leading-none">${statusText}</span>
                             </div>
-                            <div class="flex flex-wrap items-center gap-1.5">
+                            <div class="flex flex-wrap items-center gap-1.5 pt-0.5">
                                 <div class="flex items-center gap-1.5 min-w-0">
-                                    ${methodSymbolHtml}
                                     <div class="flex items-center gap-1 bg-indigo-50 dark:bg-indigo-900/30 border border-indigo-100/50 dark:border-indigo-900/30 px-1.5 py-0.5 rounded text-[10px] font-bold text-indigo-600 dark:text-indigo-300 min-w-0">
                                         <span class="truncate max-w-[140px] xs:max-w-[180px] sm:max-w-[240px] leading-none" title="${escapedDetail}">${escapedDetail}</span>
                                         ${payoutDetails && payoutDetails !== 'N/A' ? `
