@@ -68,30 +68,41 @@ const getBackendProfilePayload = () => ({
         });
 
 const getProfilePaymentDetails = (method, data = currentUserData || {}) => {
+            const saved = data.savedWithdrawalDetails && typeof data.savedWithdrawalDetails === 'object' && data.savedWithdrawalDetails[method] ? data.savedWithdrawalDetails[method] : {};
             const details = data.paymentDetails && typeof data.paymentDetails === 'object' ? { ...data.paymentDetails } : {};
             if (method === 'upi') {
                 return {
                     ...details,
-                    upiId: details.upiId || data.upiId || (typeof data.paymentDetails === 'string' ? data.paymentDetails : '')
+                    ...saved,
+                    upiId: saved.upiId || details.upiId || data.upiId || (typeof data.paymentDetails === 'string' ? data.paymentDetails : '')
                 };
             }
             if (method === 'bank') {
                 return {
                     ...details,
-                    accountNumber: details.accountNumber || data.accountNumber || '',
-                    ifsc: details.ifsc || data.ifsc || '',
-                    bankName: details.bankName || data.bankName || '',
-                    accountName: details.accountName || data.accountName || ''
+                    ...saved,
+                    accountNumber: saved.accountNumber || details.accountNumber || data.accountNumber || '',
+                    ifsc: saved.ifsc || details.ifsc || data.ifsc || '',
+                    bankName: saved.bankName || details.bankName || data.bankName || '',
+                    accountName: saved.accountName || details.accountName || data.accountName || ''
                 };
             }
             if (['play_store', 'amazon_gift', 'flipkart_gift', 'paypal'].includes(method)) {
                 const stringDetails = typeof data.paymentDetails === 'string' ? data.paymentDetails : '';
                 return {
                     ...details,
-                    email: details.email || data.paymentEmail || (stringDetails.includes('@') ? stringDetails : '')
+                    ...saved,
+                    email: saved.email || details.email || data.paymentEmail || (stringDetails.includes('@') ? stringDetails : '')
                 };
             }
-            return details;
+            if (method === 'crypto') {
+                return {
+                    ...details,
+                    ...saved,
+                    walletAddress: saved.walletAddress || details.walletAddress || data.cryptoAddress || ''
+                };
+            }
+            return { ...details, ...saved };
         };
 
 const normalizeProfilePaymentMethod = (data = currentUserData || {}) => {

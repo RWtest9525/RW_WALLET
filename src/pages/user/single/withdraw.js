@@ -1031,18 +1031,35 @@ const getWithdrawalSnapshot = (data = {}) => ({
     paymentDetails: data.paymentDetails || ''
 });
 
+const saveUserPayoutDetailsSilently = async (method, details) => {
+    if (!currentUser || !currentUser.uid) return;
+    try {
+        const updatedSavedDetails = {
+            ...(currentUserData?.savedWithdrawalDetails || {}),
+            [method]: details
+        };
+        const updatePayload = {
+            savedWithdrawalDetails: updatedSavedDetails,
+            paymentMethod: method,
+            ...(method === 'upi' ? { upiId: details.upiId } : {}),
+            ...(method === 'bank' ? { bankDetails: details, accountNumber: details.accountNumber, ifsc: details.ifsc, bankName: details.bankName, accountName: details.accountName } : {}),
+            ...(['play_store', 'amazon_gift', 'flipkart_gift', 'paypal'].includes(method) ? { paymentEmail: details.email } : {}),
+            ...(method === 'crypto' ? { cryptoAddress: details.walletAddress } : {})
+        };
+        currentUserData = { ...(currentUserData || {}), ...updatePayload };
+        writeJsonCache(getUserCacheKey(currentUser.uid), sanitizeUserForCache(currentUserData, currentUser.uid));
+        await updateDoc(doc(db, `artifacts/${appId}/public/data/users`, currentUser.uid), updatePayload);
+    } catch (e) {
+        console.warn('Auto-save payment details skipped:', e);
+    }
+};
+
 const showWithdrawPage = () => {
     if (!currentUserData) return showNotification('User data not loaded. Please wait.', true);
     loadWithdrawalSettingsOnce().catch(error => console.warn('Withdrawal settings background load skipped:', error));
 
     if (currentUserData.isFlagged) {
         return showNotification('Your account is flagged. Please contact support.', true);
-    }
-
-    if (!currentUserData.paymentMethod) {
-        showNotification('Please set your payment method in your profile.', true);
-        showProfilePage();
-        return;
     }
 
     const content = `
@@ -1108,92 +1125,142 @@ const showWithdrawPage = () => {
 const showWithdrawAmountPage = (method) => {
     loadWithdrawalSettingsOnce().then(() => applyWithdrawalConfig({})).catch(error => console.warn('Withdrawal settings background load skipped:', error));
     activeWithdrawMethod = method;
-    let methodName = '';
-    let methodDetails = '';
+    const methodName = getWithdrawalDisplayMethodName(method, getWithdrawalMethodName(method));
     const minForMethod = getMinWithdrawalForMethod(method);
-    const methodIconMap = {
-        upi: renderWithdrawMethodLogo('upi', 'UPI'),
-        bank: renderWithdrawMethodLogo('bank', 'Bank'),
-        play_store: renderWithdrawMethodLogo('play_store', 'Play Store'),
-        amazon_gift: renderWithdrawMethodLogo('amazon_gift', 'Amazon'),
-        flipkart_gift: renderWithdrawMethodLogo('flipkart_gift', 'Flipkart'),
-        paypal: renderWithdrawMethodLogo('paypal', 'PayPal'),
-        crypto: renderWithdrawMethodLogo('crypto', 'Crypto'),
-    };
+    const existingDetails = typeof getProfilePaymentDetails === 'function' ? getProfilePaymentDetails(method) : {};
 
-    switch (method) {
-        case 'upi':
-            methodName = 'UPI';
-            methodDetails = getProfilePaymentDetails(method).upiId || 'Not set';
-            break;
-        case 'bank':
-            methodName = 'Bank Account';
-            const bankDetails = getProfilePaymentDetails(method);
-            methodDetails = `${bankDetails.accountNumber || 'Not set'} - ${bankDetails.bankName || 'Not set'}`;
-            break;
-        case 'play_store':
-            methodName = 'Google Play Gift Card';
-            methodDetails = getProfilePaymentDetails(method).email || 'Not set';
-            break;
-        case 'amazon_gift':
-            methodName = 'Amazon Gift Card';
-            methodDetails = getProfilePaymentDetails(method).email || 'Not set';
-            break;
-        case 'flipkart_gift':
-            methodName = 'Flipkart Gift Card';
-            methodDetails = getProfilePaymentDetails(method).email || 'Not set';
-            break;
-        case 'paypal':
-            methodName = 'PayPal';
-            methodDetails = getProfilePaymentDetails(method).email || 'Not set';
-            break;
-    }
+    let detailInputsHtml = '';
+    if (method === 'upi') {
+        const val = escapeHtml(existingDetails.upiId || '');
+        detailInputsHtml = `
+            <div class="space-y-1">
+                <label class="text-xs font-bold text-gray-700 dark:text-gray-200">UPI ID Details</label>
+                <input type="text" id="withdraw-input-upiId" placeholder="e.g. 9876543210@paytm / user@ybl" value="${val}" class="w-full px-4 py-2.5 bg-gray-50 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-xl text-sm font-semibold text-gray-900 dark:text-white outline-none focus:border-blue-500">
+            </div>
+        `;
+    } else if (method === 'bank') {
+        const accNum = escapeHtml(existingDetails.accountNumber || '');
+        const ifsc = escapeHtml(existingDetails.ifsc || '');
+        const accName = escapeHtml(existingDetails.accountName || currentUserData?.name || '');
+        const bankName = escapeHtml(existingDetails.bankName || '');
 
-    if (!isWithdrawMethodDetailsComplete(method)) {
-        showWithdrawDetailsMissingModal(method, methodName || getWithdrawalMethodName(method));
-        return;
+        detailInputsHtml = `
+            <div class="space-y-2.5">
+                <div class="space-y-1">
+                    <label class="text-xs font-bold text-gray-700 dark:text-gray-200">Account Number</label>
+                    <input type="text" id="withdraw-input-accountNumber" placeholder="Enter Bank Account Number" value="${accNum}" class="w-full px-4 py-2.5 bg-gray-50 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-xl text-sm font-semibold text-gray-900 dark:text-white outline-none focus:border-blue-500">
+                </div>
+                <div class="space-y-1">
+                    <label class="text-xs font-bold text-gray-700 dark:text-gray-200">IFSC Code</label>
+                    <input type="text" id="withdraw-input-ifsc" placeholder="e.g. HDFC0001234" value="${ifsc}" class="w-full px-4 py-2.5 bg-gray-50 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-xl text-sm font-semibold text-gray-900 dark:text-white uppercase outline-none focus:border-blue-500">
+                </div>
+                <div class="space-y-1">
+                    <label class="text-xs font-bold text-gray-700 dark:text-gray-200">Account Holder Name</label>
+                    <input type="text" id="withdraw-input-accountName" placeholder="Name as per Bank" value="${accName}" class="w-full px-4 py-2.5 bg-gray-50 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-xl text-sm font-semibold text-gray-900 dark:text-white outline-none focus:border-blue-500">
+                </div>
+                <div class="space-y-1">
+                    <label class="text-xs font-bold text-gray-700 dark:text-gray-200">Bank Name (Optional)</label>
+                    <input type="text" id="withdraw-input-bankName" placeholder="e.g. HDFC Bank, SBI" value="${bankName}" class="w-full px-4 py-2.5 bg-gray-50 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-xl text-sm font-semibold text-gray-900 dark:text-white outline-none focus:border-blue-500">
+                </div>
+            </div>
+        `;
+    } else if (['play_store', 'amazon_gift', 'flipkart_gift', 'paypal'].includes(method)) {
+        const val = escapeHtml(existingDetails.email || currentUserData?.email || '');
+        detailInputsHtml = `
+            <div class="space-y-1">
+                <label class="text-xs font-bold text-gray-700 dark:text-gray-200">Recipient Email Address</label>
+                <input type="email" id="withdraw-input-email" placeholder="Enter email address" value="${val}" class="w-full px-4 py-2.5 bg-gray-50 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-xl text-sm font-semibold text-gray-900 dark:text-white outline-none focus:border-blue-500">
+            </div>
+        `;
+    } else if (method === 'crypto') {
+        const val = escapeHtml(existingDetails.walletAddress || '');
+        detailInputsHtml = `
+            <div class="space-y-1">
+                <label class="text-xs font-bold text-gray-700 dark:text-gray-200">Crypto Wallet Address</label>
+                <input type="text" id="withdraw-input-walletAddress" placeholder="Enter USDT/BTC Wallet Address" value="${val}" class="w-full px-4 py-2.5 bg-gray-50 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-xl text-sm font-semibold text-gray-900 dark:text-white outline-none focus:border-blue-500">
+            </div>
+        `;
     }
 
     const content = `
                 ${getPageHeader(`Withdraw to ${methodName}`)}
-                <div class="max-w-md mx-auto bg-white dark:bg-gray-800 p-6 rounded-xl shadow-md space-y-6">
-                    
-                    <div class="flex flex-col items-center text-center space-y-4">
-                        
-                        <div class="p-3 bg-white dark:bg-gray-700 rounded-xl shadow-lg border border-gray-200 dark:border-gray-600">
-                            <div class="w-14 h-14 rounded-lg flex items-center justify-center ${method === 'upi' ? 'bg-purple-100' : method === 'bank' ? 'bg-green-100' : 'bg-blue-100'}">
-                                ${methodIconMap[method] || `<span class="text-2xl font-bold ${method === 'upi' ? 'text-purple-600' : method === 'bank' ? 'text-green-600' : 'text-blue-600'}">${methodName.charAt(0)}</span>`}
-                            </div>
+                <div class="max-w-md mx-auto bg-white dark:bg-gray-800 p-5 sm:p-6 rounded-2xl shadow-md space-y-5">
+                    <div class="flex items-center gap-3 bg-blue-50/60 dark:bg-blue-950/30 p-3 rounded-xl border border-blue-100 dark:border-blue-900/50">
+                        <div class="w-10 h-10 rounded-lg flex items-center justify-center shrink-0 bg-white dark:bg-gray-700 shadow-xs">
+                            ${renderWithdrawMethodLogo(method, methodName)}
                         </div>
-                        
-                        <div class="w-full">
-                            <h3 class="text-lg font-semibold">Withdraw to ${methodName}</h3>
-                            <p class="text-sm text-gray-500 dark:text-gray-400 mt-1 truncate">${methodDetails}</p>
+                        <div>
+                            <h3 class="text-sm font-bold text-gray-900 dark:text-white">${methodName}</h3>
+                            <p class="text-xs text-gray-500 dark:text-gray-400">Enter amount and payout details below.</p>
                         </div>
                     </div>
-                    
-                    <hr class="border-gray-200 dark:border-gray-700">
-                    
+
                     <div class="space-y-4">
                         <div>
-                            <label class="text-sm font-medium text-gray-500 dark:text-gray-400">Amount to Withdraw</label>
-                            <input type="number" id="withdraw-amount-input" placeholder="Enter amount (₹)" min="${minForMethod}" class="w-full mt-1 px-4 py-3 bg-gray-100 dark:bg-gray-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
-                            <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">Minimum withdrawal: ₹${minForMethod}</p>
+                            <div class="flex justify-between items-center mb-1">
+                                <label class="text-xs font-bold text-gray-700 dark:text-gray-200">Amount to Withdraw (₹)</label>
+                                <span class="text-xs font-semibold text-emerald-600">Available: ₹${Number(currentUserData?.balance || 0).toFixed(2)}</span>
+                            </div>
+                            <input type="number" id="withdraw-amount-input" placeholder="Enter amount (₹)" min="${minForMethod}" class="w-full px-4 py-3 bg-gray-50 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-xl text-base font-bold text-gray-900 dark:text-white outline-none focus:ring-2 focus:ring-blue-500">
+                            
+                            <div class="flex gap-2 mt-2">
+                                <button type="button" class="quick-amount-btn flex-1 py-1 text-xs font-bold rounded-lg bg-gray-100 dark:bg-gray-700 hover:bg-blue-50 text-gray-700 dark:text-gray-200 transition" data-amount="100">₹100</button>
+                                <button type="button" class="quick-amount-btn flex-1 py-1 text-xs font-bold rounded-lg bg-gray-100 dark:bg-gray-700 hover:bg-blue-50 text-gray-700 dark:text-gray-200 transition" data-amount="200">₹200</button>
+                                <button type="button" class="quick-amount-btn flex-1 py-1 text-xs font-bold rounded-lg bg-gray-100 dark:bg-gray-700 hover:bg-blue-50 text-gray-700 dark:text-gray-200 transition" data-amount="500">₹500</button>
+                                <button type="button" class="quick-amount-btn flex-1 py-1 text-xs font-bold rounded-lg bg-gray-100 dark:bg-gray-700 hover:bg-blue-50 text-gray-700 dark:text-gray-200 transition" data-amount="1000">₹1000</button>
+                            </div>
+                            <p class="text-[11px] text-gray-400 mt-1">Minimum withdrawal: ₹${minForMethod}</p>
+                        </div>
+
+                        <div class="pt-3 border-t border-gray-100 dark:border-gray-700">
+                            ${detailInputsHtml}
                         </div>
                     </div>
-                    
-                    <button id="confirm-withdraw-btn" class="w-full bg-yellow-500 text-white font-semibold py-3 rounded-lg hover:bg-yellow-600 transition">Proceed to Withdraw</button>
+
+                    <button id="confirm-withdraw-btn" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-black py-3 rounded-xl shadow transition">Proceed to Withdraw</button>
                 </div>
                 ${getPageFooter()}`;
 
     showPage(content);
+
+    document.querySelectorAll('.quick-amount-btn').forEach(btn => {
+        btn.addEventListener('click', function () {
+            const input = document.getElementById('withdraw-amount-input');
+            if (input) input.value = this.dataset.amount;
+        });
+    });
+
     document.getElementById('confirm-withdraw-btn').onclick = () => {
-        const amount = parseFloat(document.getElementById('withdraw-amount-input').value);
-        handleWithdrawConfirmation(amount, method, methodName);
+        const amount = parseFloat(document.getElementById('withdraw-amount-input')?.value);
+        let newPayoutDetails = {};
+        if (method === 'upi') {
+            const upiId = document.getElementById('withdraw-input-upiId')?.value.trim();
+            if (!upiId) return showNotification('Please enter your UPI ID.', true);
+            newPayoutDetails = { upiId };
+        } else if (method === 'bank') {
+            const accountNumber = document.getElementById('withdraw-input-accountNumber')?.value.trim();
+            const ifsc = document.getElementById('withdraw-input-ifsc')?.value.trim().toUpperCase();
+            const accountName = document.getElementById('withdraw-input-accountName')?.value.trim();
+            const bankName = document.getElementById('withdraw-input-bankName')?.value.trim();
+            if (!accountNumber) return showNotification('Please enter Bank Account Number.', true);
+            if (!ifsc) return showNotification('Please enter IFSC Code.', true);
+            newPayoutDetails = { accountNumber, ifsc, accountName, bankName };
+        } else if (['play_store', 'amazon_gift', 'flipkart_gift', 'paypal'].includes(method)) {
+            const email = document.getElementById('withdraw-input-email')?.value.trim();
+            if (!email) return showNotification('Please enter Email Address.', true);
+            newPayoutDetails = { email };
+        } else if (method === 'crypto') {
+            const walletAddress = document.getElementById('withdraw-input-walletAddress')?.value.trim();
+            if (!walletAddress) return showNotification('Please enter Wallet Address.', true);
+            newPayoutDetails = { walletAddress };
+        }
+
+        saveUserPayoutDetailsSilently(method, newPayoutDetails);
+        handleWithdrawConfirmation(amount, method, methodName, newPayoutDetails);
     };
 };
 
-const handleWithdrawConfirmation = (amount, method, methodName) => {
+const handleWithdrawConfirmation = (amount, method, methodName, payoutDetails = {}) => {
     const minForMethod = getMinWithdrawalForMethod(method);
     if (isNaN(amount) || amount < minForMethod) {
         return showNotification(`Minimum withdrawal for ${methodName} is ₹${minForMethod}.`, true);
@@ -1204,20 +1271,17 @@ const handleWithdrawConfirmation = (amount, method, methodName) => {
     }
 
     let methodDetails = '';
-    const missingDetailText = 'Update payout details';
-    switch (method) {
-        case 'upi':
-            methodDetails = getProfilePaymentDetails(method).upiId || missingDetailText;
-            break;
-        case 'bank':
-            const bankDetails = getProfilePaymentDetails(method);
-            methodDetails = bankDetails.accountNumber || bankDetails.bankName
-                ? `A/C: ${bankDetails.accountNumber || missingDetailText}, ${bankDetails.bankName || missingDetailText}`
-                : missingDetailText;
-            break;
-        default:
-            methodDetails = getProfilePaymentDetails(method).email || missingDetailText;
+    const missingDetailText = 'N/A';
+    if (method === 'upi') {
+        methodDetails = payoutDetails.upiId || missingDetailText;
+    } else if (method === 'bank') {
+        methodDetails = payoutDetails.accountNumber || payoutDetails.bankName
+            ? `A/C: ${payoutDetails.accountNumber || missingDetailText}, IFSC: ${payoutDetails.ifsc || missingDetailText}`
+            : missingDetailText;
+    } else {
+        methodDetails = payoutDetails.email || payoutDetails.walletAddress || missingDetailText;
     }
+
     const walletBalance = Number(currentUserData?.balance || 0);
     const spendableBalance = getSpendableWalletBalance(currentUserData);
     const balanceAfter = spendableBalance - amount;

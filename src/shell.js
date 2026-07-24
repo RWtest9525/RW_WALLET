@@ -120,14 +120,9 @@ root.outerHTML = String.raw`
                 class="flex justify-between items-center mb-6 bg-white dark:bg-gray-800 p-4 rounded-xl shadow-md header-border">
                 <div class="flex items-center">
                     <!-- Logo with fallback -->
-                    <div class="logo-placeholder small mr-4" id="header-logo-fallback">
-                        RW
-                    </div>
-                    <img src="https://i.ibb.co/x8YBYwGG/6233389803554672153.jpg" alt="Reviews World Logo"
-                        class="w-10 h-10 rounded-full mr-4 hidden" loading="eager" fetchpriority="high" decoding="async"
-                        width="40" height="40" id="header-logo"
-                        onload="this.classList.remove('hidden'); this.classList.add('loaded'); document.getElementById('header-logo-fallback')?.classList.add('hidden');"
-                        onerror="this.classList.add('hidden'); document.getElementById('header-logo-fallback')?.classList.remove('hidden');">
+                    <img src="/logo_192.png" alt="Reviews World Logo"
+                        class="w-10 h-10 rounded-full mr-4 object-cover shadow-sm" loading="eager" fetchpriority="high" decoding="async"
+                        width="40" height="40" id="header-logo">
                     <div>
                         <h1 id="header-title" class="text-xl font-bold">Reviews World</h1>
                         <p class="text-xs text-gray-500 dark:text-gray-400 mt-0.5">Do task , Earn rewards !</p>
