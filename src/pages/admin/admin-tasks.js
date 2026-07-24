@@ -1505,11 +1505,10 @@ const showAdminTaskCommentsPage = async (taskId) => {
                 <div class="max-w-2xl mx-auto space-y-6 pb-24 px-4">
                     <!-- Add Comment Form -->
                     <section class="bg-white dark:bg-gray-800 p-6 rounded-2xl shadow-md border border-gray-100 dark:border-gray-700 space-y-4">
-                        <h3 class="text-base font-extrabold text-gray-900 dark:text-white">Add Review Comment</h3>
-                        <div class="flex gap-2">
-                            <input type="text" id="admin-comment-input" placeholder="Enter review comment..." class="flex-grow px-4 py-2.5 bg-gray-50 dark:bg-gray-700 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none text-sm border border-gray-100 dark:border-gray-600">
-                            <button id="admin-comment-add-btn" class="px-5 py-2.5 bg-blue-600 text-white font-bold rounded-xl hover:bg-blue-700 transition shrink-0">Add</button>
-                        </div>
+                        <h3 class="text-base font-extrabold text-gray-900 dark:text-white">Add Review Comments</h3>
+                        <p class="text-xs font-semibold text-gray-400 dark:text-gray-500">Paste multiple comments — each line becomes a separate comment.</p>
+                        <textarea id="admin-comment-input" rows="4" placeholder="Enter review comments (one per line)..." class="w-full px-4 py-3 bg-gray-50 dark:bg-gray-700 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none text-sm border border-gray-100 dark:border-gray-600 resize-y"></textarea>
+                        <button id="admin-comment-add-btn" class="w-full py-2.5 bg-blue-600 text-white font-black text-xs uppercase tracking-wider rounded-xl hover:bg-blue-700 transition">Add Comments</button>
                     </section>
 
                     <!-- Comments Listing & Tracking -->
@@ -1564,19 +1563,22 @@ const showAdminTaskCommentsPage = async (taskId) => {
             }
 
             return `
-                        <div class="py-4 flex flex-col gap-1.5">
-                            <div class="flex justify-between items-start gap-4">
-                                <p class="text-sm font-semibold text-gray-800 dark:text-gray-200 flex-1">${index + 1}. "${escapeHtml(comment)}"</p>
-                                <div class="flex gap-1 shrink-0">
-                                    <button data-action="edit-comment-item" data-index="${index}" class="p-1.5 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-lg transition">
-                                        <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"></path></svg>
-                                    </button>
-                                    <button data-action="delete-comment-item" data-index="${index}" class="p-1.5 text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition">
-                                        <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
-                                    </button>
+                        <div class="py-3 flex items-start gap-3">
+                            <span class="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 text-[11px] font-black border border-indigo-100 dark:border-indigo-800/40 mt-0.5">${index + 1}</span>
+                            <div class="flex-1 min-w-0">
+                                <div class="flex justify-between items-start gap-3">
+                                    <p class="text-sm font-semibold text-gray-800 dark:text-gray-200 flex-1 break-words">${escapeHtml(comment)}</p>
+                                    <div class="flex gap-1 shrink-0">
+                                        <button data-action="edit-comment-item" data-index="${index}" class="p-1.5 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-lg transition" title="Edit">
+                                            <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"></path></svg>
+                                        </button>
+                                        <button data-action="delete-comment-item" data-index="${index}" class="p-1.5 text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition" title="Delete">
+                                            <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+                                        </button>
+                                    </div>
                                 </div>
+                                ${resInfo}
                             </div>
-                            ${resInfo}
                         </div>`;
         }).join('');
 
@@ -1658,14 +1660,20 @@ const showAdminTaskCommentsPage = async (taskId) => {
 
     document.getElementById('admin-comment-add-btn').onclick = async () => {
         const input = document.getElementById('admin-comment-input');
-        const text = input.value.trim();
-        if (!text) return showNotification('Please enter comment text.', true);
+        const rawText = input.value.trim();
+        if (!rawText) return showNotification('Please enter comment text.', true);
+
+        const newComments = rawText.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+        if (!newComments.length) return showNotification('Please enter at least one comment.', true);
 
         const currentComments = getTaskCommentPool(task);
-        currentComments.push(text);
+        newComments.forEach(c => {
+            if (!currentComments.includes(c)) currentComments.push(c);
+        });
         input.value = '';
         await saveTaskComments(taskId, currentComments);
         renderComments();
+        showNotification(`${newComments.length} comment(s) added.`);
     };
 };
 
