@@ -5259,6 +5259,18 @@ const showUserTaskDetailsPage = async (taskId) => {
                 hideLoading();
             }
 
+            let activeReservation = null;
+            if (!isBulk) {
+                try {
+                    activeReservation = await findReusableTaskReservation(task.id, currentUser.uid);
+                    if (!activeReservation) {
+                        activeReservation = await reserveTaskReviewComment(task);
+                    }
+                } catch (resErr) {
+                    console.warn('Single user reservation lock check:', resErr);
+                }
+            }
+
             const selectDeterministicComment = (pool, userId, taskId) => {
                 let hash = 0;
                 const str = userId + taskId;
@@ -5269,7 +5281,10 @@ const showUserTaskDetailsPage = async (taskId) => {
                 return { comment: pool[index] || '', index };
             };
             const preSelected = selectDeterministicComment(commentPool, currentUser.uid, task.id);
-            const initialComment = preSelected.comment;
+            const initialComment = activeReservation?.comment || preSelected.comment;
+            const poolAll = getTaskCommentPool(task);
+            const initialCommentIdx = activeReservation?.comment ? poolAll.indexOf(activeReservation.comment) : preSelected.index;
+            const commentIdxVal = initialCommentIdx >= 0 ? initialCommentIdx : preSelected.index;
 
             const getPayoutDelayText = (t) => {
                 const days = t.paymentDelayDays ?? t.paymentDays ?? t.payoutDelayDays ?? 7;
@@ -5330,8 +5345,7 @@ const showUserTaskDetailsPage = async (taskId) => {
                     </div>
                 `;
             } else {
-                const commentIdxInit = preSelected.index;
-                const commentIdStr = `Comment #${String(commentIdxInit + 1).padStart(2, '0')}`;
+                const commentIdStr = `Comment #${String(commentIdxVal + 1).padStart(2, '0')}`;
                 step2Html = `
                     <div class="space-y-3.5">
                         <div class="relative rounded-2xl bg-indigo-50/30 dark:bg-indigo-950/20 border border-indigo-100 dark:border-indigo-900/50 p-4 pr-10 text-left mt-3">

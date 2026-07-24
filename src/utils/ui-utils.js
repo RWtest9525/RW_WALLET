@@ -2012,12 +2012,27 @@ const preloadUserTaskParticipation = async (userId = currentUser?.uid, { force =
         };
 
 const findReusableTaskReservation = async (taskId, userId) => {
+            const cacheKey = `task_res_${taskId}_${userId}`;
+            try {
+                const localCached = localStorage.getItem(cacheKey);
+                if (localCached) {
+                    const parsed = JSON.parse(localCached);
+                    const expiresAt = timestampToMillis(parsed?.expiresAt);
+                    if (parsed && parsed.status === 'reserved' && expiresAt > Date.now()) {
+                        return parsed;
+                    }
+                }
+            } catch (e) {}
+
             const reservationRef = doc(db, `artifacts/${appId}/public/data/task_comment_reservations`, getTaskReservationDocId(taskId, userId));
             const snap = await getDoc(reservationRef);
             if (!snap.exists()) return null;
             const data = { id: snap.id, ...snap.data() };
             const expiresAt = timestampToMillis(data.expiresAt);
-            if (data.status === 'reserved' && expiresAt > Date.now()) return data;
+            if (data.status === 'reserved' && expiresAt > Date.now()) {
+                try { localStorage.setItem(cacheKey, JSON.stringify(data)); } catch (e) {}
+                return data;
+            }
             return null;
         };
 
@@ -2079,6 +2094,7 @@ const reserveTaskReviewComment = async (task = {}) => {
                         expiresAt: Timestamp.fromMillis(reservation.expiresAt),
                         updatedAt: serverTimestamp()
                     }, { merge: true }).catch(e => console.warn('Firebase reservation sync skipped:', e));
+                    try { localStorage.setItem(`task_res_${task.id}_${currentUser.uid}`, JSON.stringify(reservation)); } catch (e) {}
                     return reservation;
                 }
                 if (data.error === 'TASK_ALREADY_SUBMITTED') throw new Error('You have already submitted this task.');
