@@ -6164,26 +6164,26 @@ window.submitSingleUserTask = async (task, file, reward, appName, taskLink, imag
             if (!expectedComment) return true;
             const clean = (str) => String(str || '').toLowerCase().replace(/[^a-z0-9]/g, '');
             const ocrNormalized = String(text || '').toLowerCase().replace(/[^a-z0-9\s]/g, '').replace(/\s+/g, ' ');
-            const expectedWords = String(expectedComment || '').trim().split(/\s+/).map(clean).filter(Boolean);
-            if (expectedWords.length === 0) return true;
+            
+            const expectedWords = String(expectedComment || '')
+                .trim()
+                .split(/\s+/)
+                .map(clean)
+                .filter(w => w.length >= 3);
+                
+            if (expectedWords.length === 0) {
+                const shortWords = String(expectedComment || '').trim().split(/\s+/).map(clean).filter(Boolean);
+                if (shortWords.length === 0) return true;
+                return shortWords.every(word => ocrNormalized.includes(word));
+            }
 
             let matchedCount = 0;
             for (const word of expectedWords) {
                 if (ocrNormalized.includes(word)) matchedCount++;
             }
 
-            const matchRatio = matchedCount / expectedWords.length;
-            if (matchRatio >= 0.60) return true;
-
-            if (expectedWords.length >= 3) {
-                for (let i = 0; i <= expectedWords.length - 3; i++) {
-                    const phrase = expectedWords.slice(i, i + 3).join(' ');
-                    const ocrNoSpace = ocrNormalized.replace(/\s+/g, '');
-                    const phraseNoSpace = phrase.replace(/\s+/g, '');
-                    if (ocrNoSpace.includes(phraseNoSpace)) return true;
-                }
-            }
-            return false;
+            const requiredMatches = Math.min(2, expectedWords.length);
+            return matchedCount >= requiredMatches;
         };
 
         if (clientOcrSuccess) {
