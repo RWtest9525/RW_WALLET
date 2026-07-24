@@ -331,6 +331,10 @@ window.showAdminSubmissionDetailModal = function(index) {
 
             const getApprovedRewardAmountForSubmission = (subObj) => {
                 if (!subObj) return 0;
+                const subReward = Number(subObj.reward || subObj.rate || 0);
+                if (Number.isFinite(subReward) && subReward > 0) {
+                    return subReward;
+                }
                 const taskId = subObj.task_id || subObj.taskId;
                 const userId = subObj.user_id || subObj.userId;
                 const task = (allTasksCache || []).find(t => t.id === taskId);
@@ -338,7 +342,7 @@ window.showAdminSubmissionDetailModal = function(index) {
                 if (task && typeof getTaskRewardForUser === 'function') {
                     return getTaskRewardForUser(task, subUser);
                 }
-                return Number(subObj.reward || 0);
+                return 0;
             };
 
             bindAction('modal-approve-btn', async () => {
@@ -2399,12 +2403,7 @@ const renderAdminSubmissions = () => {
                 e.currentTarget.disabled = true;
                 e.currentTarget.innerHTML = '⏳';
                 try {
-                    const targetSub = (adminSubmissionsCache || []).find(s => s.id === subId);
-                    const taskId = targetSub?.task_id || targetSub?.taskId;
-                    const userId = targetSub?.user_id || targetSub?.userId;
-                    const taskObj = (allTasksCache || []).find(t => t.id === taskId);
-                    const userObj = (allUsersCache || []).find(u => (u.id || u.uid) === userId);
-                    const approvedReward = (taskObj && typeof getTaskRewardForUser === 'function') ? getTaskRewardForUser(taskObj, userObj) : Number(targetSub?.reward || 0);
+                    const approvedReward = getApprovedRewardAmountForSubmission(targetSub);
 
                     const token = await getBackendAuthToken();
                     const resp = await fetchWithTimeout(`${BACKEND_BASE_URL}/api/admin/task-submissions/${encodeURIComponent(subId)}`, {
