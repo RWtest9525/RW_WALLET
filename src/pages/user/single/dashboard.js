@@ -3947,6 +3947,7 @@ const showUserTaskPage = () => {
 
                     const isTaskVisibleToUser = (task) => {
                         const userRole = String(currentUserData?.role || '').toLowerCase();
+                        const isOwner = currentUser?.uid === ADMIN_UID || currentUser?.email === 'reviewsworld51@gmail.com' || currentUser?.email === 'reviewsworld01@gmail.com' || userRole === 'owner';
                         const isUserSubAdmin = userRole === 'admin' || userRole === 'subadmin';
                         const userUid = currentUser?.uid || currentUserData?.uid || '';
                         const parentAdminId = currentUserData?.parentAdmin || currentUserData?.parent_admin || currentUserData?.assignedSubAdmin || currentUserData?.subAdminId || '';
@@ -3957,6 +3958,7 @@ const showUserTaskPage = () => {
 
                         const isOwnerTask = !taskCreator || taskCreator === ADMIN_UID || taskCreator === 'owner' || taskCreator === 'REVIEWS_WORLD_ADMIN';
 
+                        if (isOwner) return isOwnerTask;
                         if (assigned.includes('all')) return true;
 
                         if (isOwnerTask) {
