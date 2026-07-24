@@ -2167,15 +2167,14 @@ const handleSaveWithdrawSettings = async () => {
 };
 
 const applyWithdrawalConfig = (config = {}) => {
-    minWithdrawalUpi = setNumberSetting(config.min_withdrawal_upi, minWithdrawalUpi);
-    minWithdrawalBank = setNumberSetting(config.min_withdrawal_bank, minWithdrawalBank);
-    minWithdrawalRedeem = setNumberSetting(config.min_withdrawal_redeem, minWithdrawalRedeem);
-    maxWithdrawalPerDay = setNumberSetting(config.max_withdrawal_per_day, maxWithdrawalPerDay);
-    maxPendingWithdrawalsPerUser = Math.max(1, setNumberSetting(config.max_pending_withdrawals, maxPendingWithdrawalsPerUser));
-    minWithdrawalAmount = setNumberSetting(
-        config.min_withdrawal_amount,
-        Math.min(minWithdrawalUpi, minWithdrawalBank, minWithdrawalRedeem)
-    );
+    if (config.min_withdrawal_upi !== undefined) minWithdrawalUpi = Number(config.min_withdrawal_upi);
+    if (config.min_withdrawal_bank !== undefined) minWithdrawalBank = Number(config.min_withdrawal_bank);
+    if (config.min_withdrawal_redeem !== undefined) minWithdrawalRedeem = Number(config.min_withdrawal_redeem);
+    if (config.max_withdrawal_per_day !== undefined) maxWithdrawalPerDay = Number(config.max_withdrawal_per_day);
+    if (config.max_pending_withdrawals !== undefined) maxPendingWithdrawalsPerUser = Math.max(1, Number(config.max_pending_withdrawals));
+    
+    minWithdrawalAmount = Math.min(minWithdrawalUpi, minWithdrawalBank, minWithdrawalRedeem);
+
     updateMinWithdrawalInfo();
     const amountInput = document.getElementById('withdraw-amount-input');
     if (amountInput && activeWithdrawMethod) {
@@ -2192,7 +2191,7 @@ const resolveEffectiveSubAdminId = async () => {
     let pAdmin = currentUserData.parentAdmin || currentUserData.parent_admin || '';
     if (pAdmin && pAdmin !== ADMIN_UID) return pAdmin;
 
-    // Check referredBy
+    // Check referredBy with direct Firestore lookup if cache is unpopulated
     const refUid = currentUserData.referredBy || currentUserData.referred_by || '';
     if (refUid && refUid !== ADMIN_UID) {
         let refUser = (typeof allUsersCache !== 'undefined' && Array.isArray(allUsersCache))
@@ -2202,7 +2201,7 @@ const resolveEffectiveSubAdminId = async () => {
         if (!refUser) {
             try {
                 const snap = await getDoc(doc(db, `artifacts/${appId}/public/data/users`, refUid));
-                if (snap.exists()) refUser = snap.data();
+                if (snap.exists()) refUser = { id: snap.id, ...snap.data() };
             } catch (e) {}
         }
 
@@ -2225,10 +2224,16 @@ const resolveEffectiveSubAdminId = async () => {
         
         if (!codeOwner) {
             try {
-                const codeQ = query(collection(db, `artifacts/${appId}/public/data/users`), where("referralCode", "==", usedCode));
-                const snap = await getDocs(codeQ);
-                if (!snap.empty) {
-                    codeOwner = { id: snap.docs[0].id, ...snap.docs[0].data() };
+                const codeQ1 = query(collection(db, `artifacts/${appId}/public/data/users`), where("referralCode", "==", usedCode));
+                const snap1 = await getDocs(codeQ1);
+                if (!snap1.empty) {
+                    codeOwner = { id: snap1.docs[0].id, ...snap1.docs[0].data() };
+                } else {
+                    const codeQ2 = query(collection(db, `artifacts/${appId}/public/data/users`), where("myReferralCode", "==", usedCode));
+                    const snap2 = await getDocs(codeQ2);
+                    if (!snap2.empty) {
+                        codeOwner = { id: snap2.docs[0].id, ...snap2.docs[0].data() };
+                    }
                 }
             } catch (e) {}
         }
