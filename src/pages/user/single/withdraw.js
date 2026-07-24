@@ -1122,9 +1122,13 @@ const showWithdrawPage = () => {
         .catch(error => console.warn('Pending withdrawal background check skipped:', error));
 };
 
-const showWithdrawAmountPage = (method) => {
-    loadWithdrawalSettingsOnce().then(() => applyWithdrawalConfig({})).catch(error => console.warn('Withdrawal settings background load skipped:', error));
+const showWithdrawAmountPage = async (method) => {
     activeWithdrawMethod = method;
+    try {
+        await loadWithdrawalSettingsOnce(true);
+    } catch (e) {
+        console.warn('Withdrawal settings load skipped:', e);
+    }
     const methodName = getWithdrawalDisplayMethodName(method, getWithdrawalMethodName(method));
     const minForMethod = getMinWithdrawalForMethod(method);
     const existingDetails = typeof getProfilePaymentDetails === 'function' ? getProfilePaymentDetails(method) : {};
@@ -1201,7 +1205,7 @@ const showWithdrawAmountPage = (method) => {
                                 <label class="text-xs font-bold text-gray-700 dark:text-gray-200">Amount to Withdraw (₹)</label>
                                 <span class="text-xs font-semibold text-emerald-600">Available: ₹${Number(currentUserData?.balance || 0).toFixed(2)}</span>
                             </div>
-                            <input type="number" id="withdraw-amount-input" placeholder="Enter amount (₹)" min="${minForMethod}" class="w-full px-4 py-3 bg-gray-50 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-xl text-base font-bold text-gray-900 dark:text-white outline-none focus:ring-2 focus:ring-blue-500">
+                            <input type="number" id="withdraw-amount-input" placeholder="Enter amount (min ₹${minForMethod})" min="${minForMethod}" class="w-full px-4 py-3 bg-gray-50 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-xl text-base font-bold text-gray-900 dark:text-white outline-none focus:ring-2 focus:ring-blue-500">
                             
                             <div class="flex gap-2 mt-2">
                                 <button type="button" class="quick-amount-btn flex-1 py-1 text-xs font-bold rounded-lg bg-gray-100 dark:bg-gray-700 hover:bg-blue-50 text-gray-700 dark:text-gray-200 transition" data-amount="100">₹100</button>
@@ -1209,7 +1213,7 @@ const showWithdrawAmountPage = (method) => {
                                 <button type="button" class="quick-amount-btn flex-1 py-1 text-xs font-bold rounded-lg bg-gray-100 dark:bg-gray-700 hover:bg-blue-50 text-gray-700 dark:text-gray-200 transition" data-amount="500">₹500</button>
                                 <button type="button" class="quick-amount-btn flex-1 py-1 text-xs font-bold rounded-lg bg-gray-100 dark:bg-gray-700 hover:bg-blue-50 text-gray-700 dark:text-gray-200 transition" data-amount="1000">₹1000</button>
                             </div>
-                            <p class="text-[11px] text-gray-400 mt-1">Minimum withdrawal: ₹${minForMethod}</p>
+                            <p id="withdraw-min-helper" class="text-[11px] text-gray-400 mt-1">Minimum withdrawal: ₹${minForMethod}</p>
                         </div>
 
                         <div class="pt-3 border-t border-gray-100 dark:border-gray-700">
@@ -2217,7 +2221,8 @@ const applyWithdrawalConfig = (config = {}) => {
     if (amountInput && activeWithdrawMethod) {
         const minForMethod = getMinWithdrawalForMethod(activeWithdrawMethod);
         amountInput.min = String(minForMethod);
-        const helper = amountInput.parentElement?.querySelector('p');
+        amountInput.placeholder = `Enter amount (min ₹${minForMethod})`;
+        const helper = document.getElementById('withdraw-min-helper') || amountInput.parentElement?.querySelector('p');
         if (helper) helper.textContent = `Minimum withdrawal: ₹${minForMethod}`;
     }
 };
@@ -2234,7 +2239,7 @@ const loadWithdrawalSettingsOnce = async (force = false) => {
             if (globalSnapshot.exists()) applyAppConfig(globalSnapshot.data());
 
             // 2. If current user has a parentAdmin (sub-admin's user), load per-admin rate overrides
-            const parentAdmin = currentUserData?.parentAdmin || currentUserData?.parent_admin || '';
+            const parentAdmin = currentUserData?.parentAdmin || currentUserData?.parent_admin || currentUserData?.referredBy || '';
             if (parentAdmin && parentAdmin !== ADMIN_UID) {
                 try {
                     const adminConfigDoc = await getDoc(doc(db, `artifacts/${appId}/settings`, `admin_config_${parentAdmin}`));
