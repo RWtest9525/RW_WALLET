@@ -2216,10 +2216,23 @@ const resolveEffectiveSubAdminId = async () => {
         }
     }
 
-    // Check usedReferralCode
+    // Check usedReferralCode with Firestore fallback
     const usedCode = String(currentUserData.usedReferralCode || currentUserData.referredByCode || currentUserData.referralCodeUsed || '').trim().toUpperCase();
-    if (usedCode && typeof allUsersCache !== 'undefined' && Array.isArray(allUsersCache)) {
-        const codeOwner = allUsersCache.find(u => String(u.referralCode || u.myReferralCode || u.refCode || '').trim().toUpperCase() === usedCode);
+    if (usedCode) {
+        let codeOwner = (typeof allUsersCache !== 'undefined' && Array.isArray(allUsersCache))
+            ? allUsersCache.find(u => String(u.referralCode || u.myReferralCode || u.refCode || '').trim().toUpperCase() === usedCode)
+            : null;
+        
+        if (!codeOwner) {
+            try {
+                const codeQ = query(collection(db, `artifacts/${appId}/public/data/users`), where("referralCode", "==", usedCode));
+                const snap = await getDocs(codeQ);
+                if (!snap.empty) {
+                    codeOwner = { id: snap.docs[0].id, ...snap.docs[0].data() };
+                }
+            } catch (e) {}
+        }
+
         if (codeOwner) {
             const role = String(codeOwner.role || '').toLowerCase();
             if (role === 'subadmin' || role === 'admin') {
@@ -2292,7 +2305,7 @@ handleWithdrawRequest = async function (amount, method, methodName) {
     }
 
     try {
-        await loadWithdrawalSettingsOnce();
+        await loadWithdrawalSettingsOnce(true);
         // Check minimum withdrawal
         const minForMethod = getMinWithdrawalForMethod(method);
         if (amount < minForMethod) {

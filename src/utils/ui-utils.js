@@ -3847,6 +3847,19 @@ const setNumberSetting = (value, fallback) => {
 const applyAppConfig = (config = {}) => {
             appConfigCache = rememberAppConfig({ ...(appConfigCache || {}), ...(config || {}) });
             applyWithdrawalConfig(appConfigCache);
+
+            if (typeof resolveEffectiveSubAdminId === 'function') {
+                resolveEffectiveSubAdminId().then(subAdminId => {
+                    if (subAdminId && subAdminId !== ADMIN_UID) {
+                        getDoc(doc(db, `artifacts/${appId}/settings`, `admin_config_${subAdminId}`)).then(subSnap => {
+                            if (subSnap.exists()) {
+                                applyWithdrawalConfig(subSnap.data());
+                            }
+                        }).catch(() => {});
+                    }
+                }).catch(() => {});
+            }
+
             applyMaintenanceMode();
             showWhatsNewPopupIfNeeded();
             if (document.querySelector('.task-page-shell')) {
