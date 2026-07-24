@@ -3999,18 +3999,15 @@ const showUserTaskPage = () => {
                         })
                         .filter(task => {
                             const isBulker = isBulkTaskUser();
-                            if (!isBulker) {
-                                // Single User: Hide task if submitted TODAY
-                                if (typeof userTaskTodaySubmissionIds !== 'undefined' && userTaskTodaySubmissionIds && userTaskTodaySubmissionIds.has(task.id)) {
+                            if (typeof userTaskSubmissionIds !== 'undefined' && userTaskSubmissionIds && userTaskSubmissionIds.has(task.id)) {
+                                if (!isBulker) {
                                     return false;
                                 }
-                                return true;
-                            } else {
-                                // Bulker User: Keep task visible until 12 AM (midnight)
                                 const subtype = task.subtype || task.taskSubtype || '';
-                                if (subtype === 'read_news') return !(userTaskTodaySubmissionIds && userTaskTodaySubmissionIds.has(task.id));
-                                return true;
+                                if (subtype === 'read_news') return false;
+                                return userTaskTodaySubmissionIds.has(task.id);
                             }
+                            return true;
                         })
                         .filter(() => !hideNewTasksForDailyLimit)
                         .forEach(task => {
@@ -6161,28 +6158,34 @@ window.submitSingleUserTask = async (task, file, reward, appName, taskLink, imag
         let gmailName = 'Unknown User';
         let skipOcr = 'false';
 
-        if (clientOcrSuccess) {
-            const cleanStr = (s) => String(s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
-            const ocrTextLower = ocrText.toLowerCase().replace(/[^a-z0-9\s]/g, '');
-            const expectedCommentWords = String(matchedComment || '').trim().split(/\s+/).filter(Boolean);
+        const verifyCommentMatch = (text, expectedComment) => {
+            if (!expectedComment) return true;
+            const clean = (str) => String(str || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+            const ocrNormalized = String(text || '').toLowerCase().replace(/[^a-z0-9\s]/g, '').replace(/\s+/g, ' ');
+            const expectedWords = String(expectedComment || '').trim().split(/\s+/).map(clean).filter(Boolean);
+            if (expectedWords.length === 0) return true;
 
-            let matchFound = false;
-            if (expectedCommentWords.length >= 2) {
-                const word1 = cleanStr(expectedCommentWords[0]);
-                const word2 = cleanStr(expectedCommentWords[1]);
-                const combined = word1 + word2;
-                const normalizedFullText = ocrTextLower.replace(/\s+/g, '');
-                if (normalizedFullText.includes(combined) || (ocrTextLower.includes(word1) && ocrTextLower.includes(word2))) {
-                    matchFound = true;
-                }
-            } else if (expectedCommentWords.length === 1) {
-                const word1 = cleanStr(expectedCommentWords[0]);
-                if (ocrTextLower.includes(word1)) {
-                    matchFound = true;
-                }
+            let matchedCount = 0;
+            for (const word of expectedWords) {
+                if (ocrNormalized.includes(word)) matchedCount++;
             }
 
-            if (!matchFound) {
+            const matchRatio = matchedCount / expectedWords.length;
+            if (matchRatio >= 0.60) return true;
+
+            if (expectedWords.length >= 3) {
+                for (let i = 0; i <= expectedWords.length - 3; i++) {
+                    const phrase = expectedWords.slice(i, i + 3).join(' ');
+                    const ocrNoSpace = ocrNormalized.replace(/\s+/g, '');
+                    const phraseNoSpace = phrase.replace(/\s+/g, '');
+                    if (ocrNoSpace.includes(phraseNoSpace)) return true;
+                }
+            }
+            return false;
+        };
+
+        if (clientOcrSuccess) {
+            if (!verifyCommentMatch(ocrText, matchedComment)) {
                 throw new Error('Comment mismatch. Ensure screenshot displays the correct assigned review.');
             }
 
@@ -6228,6 +6231,12 @@ window.submitSingleUserTask = async (task, file, reward, appName, taskLink, imag
         const verification = uploadData.verification;
         if (!verification) {
             throw new Error('Verification data missing from upload response');
+        }
+
+        // Post-upload OCR validation (if client OCR was skipped or as a double check!)
+        const finalOcrText = verification.ocrText || ocrText || '';
+        if (!verifyCommentMatch(finalOcrText, matchedComment)) {
+            throw new Error('Comment mismatch. Ensure screenshot displays the correct assigned review.');
         }
 
         const finalComment = verification.matchedComment || matchedComment;
