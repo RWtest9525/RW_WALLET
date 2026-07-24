@@ -215,9 +215,13 @@ const handleSaveRatesSettingsTab = async () => {
             const configRef = doc(db, `artifacts/${appId}/settings`, 'app_config');
             await setDoc(configRef, updatedConfig, { merge: true });
         } else {
-            // Sub-Admin saves to their OWN per-admin config doc
+            // Sub-Admin saves to their OWN per-admin config doc AND user document
             const adminConfigRef = doc(db, getAdminRateSettingsDocPath(currentUser.uid));
-            await setDoc(adminConfigRef, updatedConfig, { merge: true });
+            const subAdminUserRef = doc(db, `artifacts/${appId}/public/data/users`, currentUser.uid);
+            await Promise.all([
+                setDoc(adminConfigRef, updatedConfig, { merge: true }),
+                setDoc(subAdminUserRef, { rateSettings: updatedConfig, withdrawalSettings: updatedConfig }, { merge: true })
+            ]);
         }
 
         // Update local limits for current session

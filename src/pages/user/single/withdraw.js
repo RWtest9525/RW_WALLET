@@ -2188,10 +2188,19 @@ const applyWithdrawalConfig = (config = {}) => {
 
 const resolveEffectiveSubAdminId = async () => {
     if (!currentUserData) return '';
-    let pAdmin = currentUserData.parentAdmin || currentUserData.parent_admin || '';
+    
+    // 0. If current logged-in user is a sub-admin/admin, their rates apply to themselves
+    const myRole = String(currentUserData.role || '').toLowerCase();
+    if (myRole === 'subadmin' || myRole === 'admin') {
+        const myUid = currentUser?.uid || currentUserData.uid || currentUserData.id || '';
+        if (myUid && myUid !== ADMIN_UID) return myUid;
+    }
+
+    // 1. Check parentAdmin / assigned fields
+    let pAdmin = currentUserData.parentAdmin || currentUserData.parent_admin || currentUserData.assignedSubAdmin || currentUserData.adminId || currentUserData.subAdminId || '';
     if (pAdmin && pAdmin !== ADMIN_UID) return pAdmin;
 
-    // Check referredBy with direct Firestore lookup if cache is unpopulated
+    // 2. Check referredBy with direct Firestore lookup
     const refUid = currentUserData.referredBy || currentUserData.referred_by || '';
     if (refUid && refUid !== ADMIN_UID) {
         let refUser = (typeof allUsersCache !== 'undefined' && Array.isArray(allUsersCache))
@@ -2215,8 +2224,8 @@ const resolveEffectiveSubAdminId = async () => {
         }
     }
 
-    // Check usedReferralCode with Firestore fallback
-    const usedCode = String(currentUserData.usedReferralCode || currentUserData.referredByCode || currentUserData.referralCodeUsed || '').trim().toUpperCase();
+    // 3. Check usedReferralCode with Firestore fallback
+    const usedCode = String(currentUserData.usedReferralCode || currentUserData.referredByCode || currentUserData.referralCodeUsed || currentUserData.used_referral_code || '').trim().toUpperCase();
     if (usedCode) {
         let codeOwner = (typeof allUsersCache !== 'undefined' && Array.isArray(allUsersCache))
             ? allUsersCache.find(u => String(u.referralCode || u.myReferralCode || u.refCode || '').trim().toUpperCase() === usedCode)
@@ -2262,14 +2271,26 @@ const loadWithdrawalSettingsOnce = async (force = false) => {
             const globalSnapshot = await getDoc(doc(db, `artifacts/${appId}/settings`, 'app_config'));
             if (globalSnapshot.exists()) applyAppConfig(globalSnapshot.data());
 
-            // 2. If current user has a parent sub-admin, load per-admin rate overrides
+            // 2. If current user has a parent sub-admin, load per-admin rate overrides from dual locations
             const subAdminId = await resolveEffectiveSubAdminId();
             if (subAdminId && subAdminId !== ADMIN_UID) {
                 try {
-                    const adminConfigDoc = await getDoc(doc(db, `artifacts/${appId}/settings`, `admin_config_${subAdminId}`));
-                    if (adminConfigDoc.exists()) {
-                        const adminConfig = adminConfigDoc.data();
-                        // Only override rate settings, NOT maintenance/whatsNew
+                    const [adminConfigDoc, subUserDoc] = await Promise.all([
+                        getDoc(doc(db, `artifacts/${appId}/settings`, `admin_config_${subAdminId}`)).catch(() => null),
+                        getDoc(doc(db, `artifacts/${appId}/public/data/users`, subAdminId)).catch(() => null)
+                    ]);
+
+                    let adminConfig = {};
+                    if (adminConfigDoc && adminConfigDoc.exists()) {
+                        adminConfig = { ...adminConfig, ...adminConfigDoc.data() };
+                    }
+                    if (subUserDoc && subUserDoc.exists()) {
+                        const uData = subUserDoc.data();
+                        const rateData = uData.rateSettings || uData.withdrawalSettings || {};
+                        adminConfig = { ...rateData, ...adminConfig };
+                    }
+
+                    if (Object.keys(adminConfig).length > 0) {
                         applyWithdrawalConfig(adminConfig);
                     }
                 } catch (e) {
