@@ -2186,16 +2186,21 @@ const getTaskCommentPool = (task = {}) => {
 };
 
 const getTaskTier = (u) => {
-            if (!u) return 'single';
-            if (u.taskTier) return u.taskTier;
-            if (u.bulkTaskMode || u.isBulkTaskUser) return 'bulker';
-            return 'single';
-        };
+    if (!u || typeof u !== 'object') return 'single';
+    const rawTier = String(u.taskTier || u.tier || u.userTier || u.role || u.userType || u.user_type || u.mode || '').toLowerCase().trim();
+    if (rawTier === 'bulker' || rawTier === 'super_bulker' || rawTier === 'superbulker' || rawTier === 'bulk') {
+        return (rawTier === 'super_bulker' || rawTier === 'superbulker') ? 'super_bulker' : 'bulker';
+    }
+    if (u.bulkTaskMode || u.isBulkTaskUser || u.isBulker || u.is_bulker || u.bulkMode || u.isBulk) {
+        return 'bulker';
+    }
+    return 'single';
+};
 
 const isBulkTaskUser = () => {
-            const tier = getTaskTier(currentUserData);
-            return tier === 'bulker' || tier === 'super_bulker';
-        };
+    const tier = getTaskTier(currentUserData);
+    return tier === 'bulker' || tier === 'super_bulker';
+};
 
 const getTaskRewardForUser = (task = {}, user = currentUserData) => {
             if (!task) return 0;
