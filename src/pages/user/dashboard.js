@@ -3983,7 +3983,6 @@ const showUserTaskPage = () => {
                             return false;
                         }
 
-                        return true;
                     };
 
                     const isBulker = isBulkTaskUser();
@@ -3999,11 +3998,14 @@ const showUserTaskPage = () => {
                                 const comments = getTaskCommentPool(task);
                                 if (comments.length === 0) return false;
 
-                                const taken = takenCommentsMap[task.id] || [];
-                                const takenSet = new Set(taken.map(c => String(c).trim()));
-                                const available = comments.filter(c => !takenSet.has(String(c).trim()));
-                                if (available.length === 0) {
-                                    return false; // Hide task if no comments are left!
+                                const hasReservation = typeof hasActiveUserReservation === 'function' && hasActiveUserReservation(task.id);
+                                if (!hasReservation) {
+                                    const taken = takenCommentsMap[task.id] || [];
+                                    const takenSet = new Set(taken.map(c => String(c).trim()));
+                                    const available = comments.filter(c => !takenSet.has(String(c).trim()));
+                                    if (available.length === 0) {
+                                        return false; // Hide task for users without an active reservation
+                                    }
                                 }
                             }
                             return true;

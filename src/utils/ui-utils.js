@@ -1436,6 +1436,7 @@ const refreshTaskAvailabilityRealtime = async () => {
         }, 5000);
         const d = await resp.json();
         if (d.ok && d.takenComments) {
+            window.userReservedTaskIds = Array.isArray(d.userReservedTaskIds) ? d.userReservedTaskIds : [];
             const newMap = d.takenComments;
             const strOld = JSON.stringify(window.lastTakenCommentsMap || {});
             const strNew = JSON.stringify(newMap);
@@ -2243,6 +2244,28 @@ const preloadUserTaskParticipation = async (userId = currentUser?.uid, { force =
                 console.warn('Task participation preload skipped:', error);
             }
         };
+
+const hasActiveUserReservation = (taskId) => {
+    if (!taskId || !currentUser?.uid) return false;
+    
+    if (window.userReservedTaskIds && Array.isArray(window.userReservedTaskIds)) {
+        if (window.userReservedTaskIds.includes(taskId)) return true;
+    }
+
+    try {
+        const cacheKey = `task_res_${taskId}_${currentUser.uid}`;
+        const localCached = localStorage.getItem(cacheKey);
+        if (localCached) {
+            const parsed = JSON.parse(localCached);
+            const expiresAt = timestampToMillis(parsed?.expiresAt);
+            if (parsed && parsed.status === 'reserved' && expiresAt > Date.now()) {
+                return true;
+            }
+        }
+    } catch (e) {}
+
+    return false;
+};
 
 const findReusableTaskReservation = async (taskId, userId) => {
             const cacheKey = `task_res_${taskId}_${userId}`;
@@ -4209,6 +4232,7 @@ window.getTaskReservationDocId = getTaskReservationDocId;
 window.getStartOfTodayMillis = getStartOfTodayMillis;
 window.preloadUserTaskParticipation = preloadUserTaskParticipation;
 window.findReusableTaskReservation = findReusableTaskReservation;
+window.hasActiveUserReservation = hasActiveUserReservation;
 window.reserveTaskReviewComment = reserveTaskReviewComment;
 window.getTaskLogoFromLink = getTaskLogoFromLink;
 window.getTaskPaymentLabel = getTaskPaymentLabel;

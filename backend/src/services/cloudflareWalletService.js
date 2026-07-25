@@ -4014,6 +4014,12 @@ ${memoriesContext}`
         [nowMs()]
       );
 
+      const userReservations = await d1.all(
+        `SELECT DISTINCT task_id FROM task_comment_reservations 
+         WHERE user_id = ? AND status = 'reserved' AND expires_at > ?`,
+        [userId, nowMs()]
+      );
+
       const takenMap = {};
       for (const row of takenComments) {
         if (!row.task_id) continue;
@@ -4026,7 +4032,9 @@ ${memoriesContext}`
         }
       }
 
-      res.json({ ok: true, takenComments: takenMap });
+      const userReservedTaskIds = (userReservations || []).map(r => r.task_id).filter(Boolean);
+
+      res.json({ ok: true, takenComments: takenMap, userReservedTaskIds });
     } catch (err) {
       console.error('Failed to get task comment availability:', err);
       res.status(500).json({ ok: false, error: 'GET_AVAILABILITY_FAILED' });
