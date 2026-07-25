@@ -32,8 +32,38 @@ async function createApp(io, { startedAt = new Date().toISOString() } = {}) {
   app.use(applyNoCacheHeaders);
 
   const projectRoot = path.join(__dirname, '..', '..');
+  const publicDir = path.join(projectRoot, 'public');
   app.use(express.static(projectRoot));
-  app.use('/.well-known', express.static(path.join(projectRoot, 'public', '.well-known')));
+  app.use(express.static(publicDir));
+  app.use('/assets', express.static(path.join(publicDir, 'assets')));
+  app.use('/pages', express.static(path.join(publicDir, 'pages')));
+  app.use('/js', express.static(path.join(publicDir, 'js')));
+  app.use('/css', express.static(path.join(publicDir, 'css')));
+  app.use('/.well-known', express.static(path.join(publicDir, '.well-known')));
+
+  // Legacy route fallbacks for auxiliary HTML pages and assets
+  const pageFallbackMap = {
+    '/privacy.html': 'privacy.html',
+    '/privacy': 'privacy.html',
+    '/terms.html': 'terms.html',
+    '/terms': 'terms.html',
+    '/contact.html': 'contact.html',
+    '/contact': 'contact.html',
+    '/delete-account.html': 'delete-account.html',
+    '/delete-account': 'delete-account.html',
+    '/dl.html': 'dl.html',
+    '/dl': 'dl.html'
+  };
+
+  Object.entries(pageFallbackMap).forEach(([routePath, fileName]) => {
+    app.get(routePath, (req, res) => {
+      res.sendFile(path.join(publicDir, 'pages', fileName));
+    });
+  });
+
+  app.get('/avatars_sheet.png', (req, res) => {
+    res.sendFile(path.join(publicDir, 'assets', 'images', 'avatars_sheet.png'));
+  });
 
   app.get('/', (req, res) => {
     res.sendFile(path.join(projectRoot, 'index.html'));

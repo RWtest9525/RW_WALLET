@@ -10,7 +10,7 @@
     gap: 18px;
     padding: 18px;
     border-radius: 24px;
-    background-image: linear-gradient(rgba(0, 0, 0, 0.15), rgba(0, 0, 0, 0.15)), url('/profile_card_bg.png');
+    background-image: linear-gradient(rgba(0, 0, 0, 0.15), rgba(0, 0, 0, 0.15)), url('/assets/images/profile_card_bg.png');
     background-size: cover;
     background-position: center;
     background-repeat: no-repeat;

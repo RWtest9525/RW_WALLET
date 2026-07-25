@@ -155,10 +155,15 @@ function createLinkController(cfStore) {
     async handleApkDownload(req, res) {
       try {
         const candidateDirs = [
+          path.join(__dirname, '..', '..', '..', 'public', 'assets', 'downloads'),
           path.join(__dirname, '..', '..', '..', 'public', 'files'),
+          path.join(__dirname, '..', '..', 'public', 'assets', 'downloads'),
           path.join(__dirname, '..', '..', 'public', 'files'),
+          path.join(__dirname, '..', 'public', 'assets', 'downloads'),
           path.join(__dirname, '..', 'public', 'files'),
+          path.join(process.cwd(), 'public', 'assets', 'downloads'),
           path.join(process.cwd(), 'public', 'files'),
+          path.join(process.cwd(), '..', 'public', 'assets', 'downloads'),
           path.join(process.cwd(), '..', 'public', 'files'),
           path.join(process.cwd(), 'files'),
           path.join(process.cwd(), 'dist', 'files')
