@@ -80,24 +80,28 @@ export async function runClientOcrSpace(imageBlob, apiKey = 'helloworld') {
 }
 
 /**
- * Client-side normalized & fuzzy comment verification helper
+ * Client-side normalized & fuzzy comment verification helper (targeting FIRST 4 WORDS)
  */
 export function verifyClientCommentMatch(ocrText = '', targetComment = '') {
   if (!ocrText || !targetComment) return false;
 
+  const rawWords = String(targetComment).trim().split(/\s+/).filter(Boolean);
+  const first4Words = rawWords.slice(0, 4).join(' ');
+
   const clean = (s) => String(s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
   const ocrClean = clean(ocrText);
-  const targetClean = clean(targetComment);
+  const targetCleanFull = clean(targetComment);
+  const targetClean4 = clean(first4Words);
 
-  // Level 1: Full Containment Check
-  if (ocrClean.includes(targetClean)) return true;
+  // Level 1: First 4 Words / Full Containment Check
+  if (ocrClean.includes(targetClean4) || ocrClean.includes(targetCleanFull)) return true;
 
-  // Level 2: Substituted OCR Character Confusion Matching (l/1/i, o/0, s/5)
+  // Level 2: Substituted OCR Character Confusion Matching (l/1/i, o/0, s/5, b/8)
   const sub = (s) => s.replace(/[1l!|]/g, 'i').replace(/0/g, 'o').replace(/5/g, 's').replace(/8/g, 'b');
-  if (sub(ocrClean).includes(sub(targetClean))) return true;
+  if (sub(ocrClean).includes(sub(targetClean4)) || sub(ocrClean).includes(sub(targetCleanFull))) return true;
 
-  // Level 3: Word-Level Overlap Check (minimum 50% matching words)
-  const targetWords = String(targetComment)
+  // Level 3: Word-Level Overlap Check on First 4 Words
+  const targetWords = first4Words
     .toLowerCase()
     .replace(/[^a-z0-9\s]/g, ' ')
     .trim()
@@ -111,7 +115,8 @@ export function verifyClientCommentMatch(ocrText = '', targetComment = '') {
         matchedCount++;
       }
     }
-    if (matchedCount / targetWords.length >= 0.50) {
+    const requiredMin = Math.min(2, targetWords.length);
+    if (matchedCount >= requiredMin) {
       return true;
     }
   }

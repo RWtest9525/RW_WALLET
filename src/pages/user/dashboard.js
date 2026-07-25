@@ -6136,6 +6136,18 @@ const showUserTaskDetailsPage = async (taskId) => {
         };
 
 window.submitSingleUserTask = async (task, file, reward, appName, taskLink, image, taskTitle) => {
+    window.singleSubmitTaskLocks = window.singleSubmitTaskLocks || {};
+    if (task?.id && window.singleSubmitTaskLocks[task.id]) {
+        console.warn('[SingleSubmit] Task upload already in progress for task:', task.id);
+        return;
+    }
+    if (task?.id) window.singleSubmitTaskLocks[task.id] = true;
+    const releaseLock = () => {
+        if (task?.id && window.singleSubmitTaskLocks) {
+            delete window.singleSubmitTaskLocks[task.id];
+        }
+    };
+
     // Show premium processing modal
     renderModal('Submitting Proof', 
         `<div class="text-center p-5 space-y-4 select-none">
@@ -6396,11 +6408,13 @@ window.submitSingleUserTask = async (task, file, reward, appName, taskLink, imag
             closeBtn.className = "w-full py-3 text-xs font-black bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl transition uppercase tracking-wider shadow-sm";
             closeBtn.textContent = "Okay";
             closeBtn.onclick = () => {
+                releaseLock();
                 window.closeModal();
                 showUserTaskPage();
             };
         }
     } catch (err) {
+        releaseLock();
         console.error('Single user auto-submission failed:', err);
         // Error state
         if (statusIconEl) {

@@ -1688,7 +1688,31 @@ async function markReservationSubmitted(d1, reservationId) {
 // ── Task Submission helpers ────────────────────────────────────────────────
 async function saveTaskSubmission(d1, { id, taskId, userId, reservationId, assignedComment, screenshotUrl, screenshotKey, screenshotViewUrl, screenshotDrivePath, reward, taskLink, appName, userName, userEmail, payoutDelayDays = 7, details = {} }) {
   const submittedAt = nowMs();
-  const submissionId = id || `sub_${taskId.slice(0,12)}_${userId.slice(0,12)}_${submittedAt}`;
+  const cleanComment = String(assignedComment || '').trim();
+
+  // 1. Check if user already submitted this task / comment / screenshot to prevent duplicate scam entries!
+  const existing = await d1.first(
+    `SELECT id FROM task_submissions 
+     WHERE user_id = ? AND task_id = ? 
+     AND (assigned_comment = ? OR (reservation_id IS NOT NULL AND reservation_id = ?) OR screenshot_url = ?)
+     AND manual_status != 'rejected'
+     LIMIT 1`,
+    [userId, taskId, cleanComment, reservationId || 'NO_RES', screenshotUrl || 'NO_URL']
+  ).catch(() => null);
+
+  const submissionId = existing?.id || id || `sub_${taskId.slice(0,12)}_${userId.slice(0,12)}_${submittedAt}`;
+
+  if (existing && existing.id) {
+    console.log(`[D1-Submit] Existing submission ${existing.id} found for user ${userId} task ${taskId}. Updating existing record to prevent duplicates.`);
+    await d1.query(
+      `UPDATE task_submissions 
+       SET screenshot_url = ?, screenshot_key = ?, screenshot_view_url = ?, screenshot_drive_path = ?, details_json = ?
+       WHERE id = ?`,
+      [screenshotUrl || '', screenshotKey || '', screenshotViewUrl || '', screenshotDrivePath || '', JSON.stringify(details || {}), existing.id]
+    ).catch(e => console.warn('[D1-Submit] Update existing submission failed:', e));
+    return existing.id;
+  }
+
   await d1.query(
     `INSERT INTO task_submissions (id, task_id, user_id, reservation_id, assigned_comment, screenshot_url, screenshot_key, screenshot_view_url, screenshot_drive_path, reward, task_link, app_name, user_name, user_email, payout_delay_days, submitted_at, details_json)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -1696,7 +1720,7 @@ async function saveTaskSubmission(d1, { id, taskId, userId, reservationId, assig
        screenshot_url = excluded.screenshot_url, screenshot_key = excluded.screenshot_key,
        screenshot_view_url = excluded.screenshot_view_url, screenshot_drive_path = excluded.screenshot_drive_path,
        details_json = excluded.details_json`,
-    [submissionId, taskId, userId, reservationId || null, assignedComment || '', screenshotUrl || '', screenshotKey || '', screenshotViewUrl || '', screenshotDrivePath || '', Number(reward || 0), taskLink || '', appName || '', userName || '', userEmail || '', payoutDelayDays, submittedAt, JSON.stringify(details || {})]
+    [submissionId, taskId, userId, reservationId || null, cleanComment, screenshotUrl || '', screenshotKey || '', screenshotViewUrl || '', screenshotDrivePath || '', Number(reward || 0), taskLink || '', appName || '', userName || '', userEmail || '', payoutDelayDays, submittedAt, JSON.stringify(details || {})]
   );
   return submissionId;
 }
@@ -1719,17 +1743,29 @@ async function listTaskSubmissions(d1, { taskId = null, userId = null, manualSta
      ORDER BY ts.submitted_at DESC LIMIT ?`,
     params
   );
-  return (rows || []).map(r => {
+
+  // Strict deduplication filter: Never return duplicate submissions for the same user + task + assigned_comment
+  const seenKeys = new Set();
+  const deduplicated = [];
+
+  for (const r of rows || []) {
     let details = {};
     try {
       details = r.details_json ? JSON.parse(r.details_json) : {};
     } catch {}
-    return {
-      ...r,
-      ...details,
-      details_json: undefined
-    };
-  });
+
+    const dupKey = `${r.user_id}_${r.task_id}_${String(r.assigned_comment || '').trim()}`;
+    if (!seenKeys.has(dupKey)) {
+      seenKeys.add(dupKey);
+      deduplicated.push({
+        ...r,
+        ...details,
+        details_json: undefined
+      });
+    }
+  }
+
+  return deduplicated;
 }
 
 async function updateTaskSubmission(d1, submissionId, updates = {}) {

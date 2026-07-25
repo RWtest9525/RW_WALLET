@@ -1,7 +1,7 @@
 /**
  * OCR Service (backend/src/services/ocrService.js)
  * Dedicated module for handling screenshot OCR processing, reviewer name extraction,
- * fuzzy & relaxed review comment matching, and avatar cropping.
+ * fuzzy & relaxed review comment matching (targeting FIRST 4 WORDS), and avatar cropping.
  */
 
 const Tesseract = require('tesseract.js');
@@ -112,7 +112,7 @@ function substituteOcrConfusions(text) {
 }
 
 /**
- * Performs Multi-level Fuzzy & Relaxed match verification for assigned comment inside OCR text.
+ * Performs Multi-level Fuzzy & Relaxed match verification targeting the FIRST 4 WORDS of expected comment inside OCR text.
  * Threshold defaults to 0.60 (60% similarity).
  */
 function verifyFuzzyCommentMatch(ocrText, expectedComment, threshold = 0.60) {
@@ -123,61 +123,63 @@ function verifyFuzzyCommentMatch(ocrText, expectedComment, threshold = 0.60) {
     return { isMatched: false, similarityScore: 0.0, matchedComment: expectedComment };
   }
 
-  const cleanOcr = cleanStr(ocrText);
-  const cleanTarget = cleanStr(expectedComment);
-  const normOcr = normalizeText(ocrText);
-  const normTarget = normalizeText(expectedComment);
+  // Extract first 4 words of expected comment
+  const rawWords = String(expectedComment).trim().split(/\s+/).filter(Boolean);
+  const first4Words = rawWords.slice(0, 4).join(' ');
 
-  // Level 1: Full Containment Check (100% Match)
-  if (cleanOcr.includes(cleanTarget) || normOcr.includes(normTarget)) {
+  const cleanOcr = cleanStr(ocrText);
+  const cleanTargetFull = cleanStr(expectedComment);
+  const cleanTarget4 = cleanStr(first4Words);
+  const normOcr = normalizeText(ocrText);
+  const normTargetFull = normalizeText(expectedComment);
+  const normTarget4 = normalizeText(first4Words);
+
+  // Level 1: First 4 Words / Full Comment Containment Check (100% Match)
+  if (cleanOcr.includes(cleanTarget4) || normOcr.includes(normTarget4) ||
+      cleanOcr.includes(cleanTargetFull) || normOcr.includes(normTargetFull)) {
     return { isMatched: true, similarityScore: 1.0, matchedComment: expectedComment };
   }
 
-  // Level 2: OCR Character Confusion Substitution Match (e.g. l vs 1, O vs 0)
+  // Level 2: OCR Character Confusion Substitution Match on First 4 Words (e.g. l vs 1, O vs 0)
   const subOcr = substituteOcrConfusions(ocrText);
-  const subTarget = substituteOcrConfusions(expectedComment);
-  if (subOcr.includes(subTarget)) {
+  const subTarget4 = substituteOcrConfusions(first4Words);
+  const subTargetFull = substituteOcrConfusions(expectedComment);
+  if (subOcr.includes(subTarget4) || subOcr.includes(subTargetFull)) {
     return { isMatched: true, similarityScore: 0.95, matchedComment: expectedComment };
   }
 
-  // Level 3: Word-Level Overlap & Fuzzy Word Presence
-  const targetWords = normTarget.split(/\s+/).filter(w => w.length >= 2);
-  if (targetWords.length > 0) {
+  // Level 3: Word-Level Overlap on First 4 Words
+  const targetWords4 = normTarget4.split(/\s+/).filter(w => w.length >= 2);
+  if (targetWords4.length > 0) {
     let matchedWordCount = 0;
-    for (const word of targetWords) {
+    for (const word of targetWords4) {
       const cleanW = cleanStr(word);
-      if (cleanOcr.includes(cleanW)) {
+      const subW = substituteOcrConfusions(word);
+      if (cleanOcr.includes(cleanW) || subOcr.includes(subW)) {
         matchedWordCount++;
-      } else {
-        // Fuzzy check for single word misreading (e.g., misreading 1 char in word)
-        const subW = substituteOcrConfusions(word);
-        if (subOcr.includes(subW)) {
-          matchedWordCount++;
-        }
       }
     }
-    const wordScore = matchedWordCount / targetWords.length;
-    if (wordScore >= 0.50) {
-      const computedScore = Math.max(0.60, Number(wordScore.toFixed(2)));
-      if (computedScore >= threshold) {
-        return { isMatched: true, similarityScore: computedScore, matchedComment: expectedComment };
-      }
+    // Require at least 2 words (or 1 word if comment has only 1 word)
+    const requiredMin = Math.min(2, targetWords4.length);
+    if (matchedWordCount >= requiredMin) {
+      const computedScore = Math.max(0.60, Number((matchedWordCount / targetWords4.length).toFixed(2)));
+      return { isMatched: true, similarityScore: computedScore, matchedComment: expectedComment };
     }
   }
 
-  // Level 4: Sliding Window Levenshtein Fuzzy Similarity Search
-  if (cleanTarget.length > 3 && cleanOcr.length >= cleanTarget.length) {
-    const winLen = cleanTarget.length;
+  // Level 4: Sliding Window Levenshtein Fuzzy Similarity Search on First 4 Words
+  if (cleanTarget4.length > 3 && cleanOcr.length >= cleanTarget4.length) {
+    const winLen = cleanTarget4.length;
     let maxWinScore = 0;
     const step = Math.max(1, Math.floor(winLen / 4));
 
     for (let i = 0; i <= cleanOcr.length - winLen; i += step) {
       const windowSub = cleanOcr.slice(i, i + winLen);
-      const score = calculateSimilarityScore(windowSub, cleanTarget);
+      const score = calculateSimilarityScore(windowSub, cleanTarget4);
       if (score > maxWinScore) {
         maxWinScore = score;
       }
-      if (maxWinScore >= 0.90) break;
+      if (maxWinScore >= 0.85) break;
     }
 
     if (maxWinScore >= threshold) {
@@ -185,7 +187,7 @@ function verifyFuzzyCommentMatch(ocrText, expectedComment, threshold = 0.60) {
     }
   }
 
-  // Level 5: Overall Full String Similarity Score
+  // Level 5: Overall Full String Similarity Score Fallback
   const overallScore = calculateSimilarityScore(ocrText, expectedComment);
   const isMatched = overallScore >= threshold;
   return {
