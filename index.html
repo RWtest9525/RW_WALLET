@@ -3,34 +3,21 @@
 
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport"
-        content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, interactive-widget=resizes-content">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, interactive-widget=resizes-content">
     <title>Reviews World</title>
     <meta name="description" content="Reviews World is the official companion app for managing tasks, reward points, community updates, and support.">
     <meta name="application-name" content="Reviews World">
     <meta name="robots" content="index, follow">
     <meta name="theme-color" content="#2563eb">
-    <link rel="canonical" href="https://rw-wallet.vercel.app/">
-    <link rel="preconnect" href="https://i.ibb.co">
-    <link rel="preconnect" href="https://cdn-icons-png.flaticon.com">
-    <link rel="preconnect" href="https://cdn.iconscout.com">
-    <link rel="preconnect" href="https://upload.wikimedia.org">
-    <link rel="icon" href="/logo_192.png">
-    <link rel="apple-touch-icon" href="/logo_192.png">
-    <link rel="preload" as="image" href="/logo_192.png" fetchpriority="high">
-    <link rel="preload" as="image" href="https://cdn-icons-png.flaticon.com/512/2040/2040946.png" fetchpriority="high">
-    <link rel="preload" as="image" href="/profile_card_bg.png" fetchpriority="high">
-    <link rel="preload" as="image" href="/referral_banner.png" fetchpriority="high">
-    <link rel="preload" as="image" href="/referral_howitworks_cards.png" fetchpriority="high">
-    <link rel="preload" as="image" href="/withdraw_confirm_bg.png" fetchpriority="low">
+    <link rel="icon" href="/assets/images/logo_192.png">
+    <link rel="apple-touch-icon" href="/assets/images/logo_192.png">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" media="print" onload="this.media='all'">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
     <link rel="stylesheet" href="/src/styles/tailwind.generated.css">
     <link rel="stylesheet" href="/src/styles/app.css">
     <link rel="manifest" href="/manifest.json">
-    <script src="https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.page.js" defer></script>
     <style>
         html, body {
             background-color: #f3f4f6;
@@ -38,26 +25,18 @@
             margin: 0;
             padding: 0;
         }
-        @media (prefers-color-scheme: dark) {
-            html, body {
-                background-color: #0f172a;
-            }
-        }
         html.dark, html.dark body {
             background-color: #0f172a !important;
         }
     </style>
 </head>
 
-<body class="bg-gray-100 dark:bg-gray-900 text-gray-800 dark:text-gray-200 font-sans" style="background-color: #f3f4f6;">
+<body class="bg-gray-100 dark:bg-gray-900 text-gray-800 dark:text-gray-200 font-sans">
     <div id="rw-wallet-root"></div>
 
-    <script type="module" src="/src/core/onesignal.js"></script>
     <script type="module" src="/src/shell.js"></script>
     <script type="module" src="/src/app.js"></script>
-    <script type="module">
-        import('/src/main.js');
-    </script>
+    <script type="module" src="/src/main.js"></script>
 </body>
 
 </html>
