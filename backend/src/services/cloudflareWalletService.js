@@ -1521,7 +1521,7 @@ function readRequestBody(req, maxBytes) {
 }
 
 // ── Task Reservation helpers ───────────────────────────────────────────────
-const TASK_RESERVATION_MS = 5 * 60 * 1000;
+const TASK_RESERVATION_MS = 10 * 60 * 1000; // 10 minutes default
 const TASK_SCREENSHOT_MAX_BYTES = 5 * 1024 * 1024;
 
 async function checkIsBulker(d1, userId) {
@@ -1538,8 +1538,6 @@ async function checkIsBulker(d1, userId) {
   }
   return false;
 }
-
-const TASK_RESERVATION_MS = 10 * 60 * 1000; // 10 minutes default
 
 async function cleanupExpiredReservations(d1) {
   await d1.query(
