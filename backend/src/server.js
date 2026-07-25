@@ -1,7 +1,7 @@
-require('dotenv').config();
-
+// File: backend/src/server.js
 const http = require('http');
 const { Server } = require('socket.io');
+const env = require('./config/env');
 const { createApp } = require('./app');
 
 async function startServer() {
@@ -14,14 +14,14 @@ async function startServer() {
   });
   const io = new Server(server, {
     cors: {
-      origin: process.env.CORS_ORIGIN || '*',
+      origin: env.corsOrigin,
       methods: ['GET', 'POST']
     }
   });
 
   appInstance = await createApp(io, { startedAt });
 
-  const port = Number(process.env.PORT || 8080);
+  const port = Number(env.port || 8080);
   server.listen(port, () => {
     console.log(`RW wallet backend listening on port ${port}`);
   });

@@ -1,17 +1,11 @@
+// File: backend/src/app.js
 const cors = require('cors');
 const express = require('express');
 const path = require('path');
+const env = require('./config/env');
+const { applyNoCacheHeaders } = require('./middlewares/cacheMiddleware');
 const { createCloudflareWalletService } = require('./services/cloudflareWalletService');
-
-function applyNoCacheHeaders(req, res, next) {
-  if (req.method === 'GET' && (req.path === '/' || req.path.endsWith('.html'))) {
-    res.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
-    res.set('Pragma', 'no-cache');
-    res.set('Expires', '0');
-    res.set('Surrogate-Control', 'no-store');
-  }
-  next();
-}
+const linkRoutes = require('./routes/linkRoutes');
 
 function createHealthHandler(app, startedAt) {
   return (req, res) => {
@@ -33,7 +27,7 @@ async function createApp(io, { startedAt = new Date().toISOString() } = {}) {
   const app = express();
   app.disable('etag');
 
-  app.use(cors({ origin: process.env.CORS_ORIGIN || '*' }));
+  app.use(cors({ origin: env.corsOrigin }));
   app.use(express.json({ limit: '1mb' }));
   app.use(applyNoCacheHeaders);
 
@@ -49,7 +43,7 @@ async function createApp(io, { startedAt = new Date().toISOString() } = {}) {
     res.set('Cache-Control', 'no-store');
     res.json({
       ok: true,
-      version: process.env.RENDER_GIT_COMMIT || process.env.COMMIT_SHA || 'local',
+      version: env.commitSha,
       startedAt,
       backendReady: !app.locals.walletServiceError,
       backendError: app.locals.walletServiceError || ''
@@ -68,8 +62,7 @@ async function createApp(io, { startedAt = new Date().toISOString() } = {}) {
 
   app.get('/health', createHealthHandler(app, startedAt));
 
-  const { registerDeepLinkRoutes } = require('./services/customDeepLinkService');
-  registerDeepLinkRoutes(app);
+  app.use('/', linkRoutes);
 
   try {
     const walletService = await createCloudflareWalletService();
