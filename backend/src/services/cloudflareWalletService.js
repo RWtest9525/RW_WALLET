@@ -1539,6 +1539,8 @@ async function checkIsBulker(d1, userId) {
   return false;
 }
 
+const TASK_RESERVATION_MS = 10 * 60 * 1000; // 10 minutes default
+
 async function cleanupExpiredReservations(d1) {
   await d1.query(
     `UPDATE task_comment_reservations SET status = 'expired' WHERE status = 'reserved' AND expires_at <= ?`,
@@ -1551,7 +1553,7 @@ async function reserveTaskComment(d1, { taskId, userId, userName, userEmail, com
 
   const isBulker = await checkIsBulker(d1, userId);
 
-  // Check existing active reservation for this user+task
+  // 1. Check existing active (unexpired) reservation for this user+task
   const existing = await d1.first(
     `SELECT * FROM task_comment_reservations WHERE task_id = ? AND user_id = ? AND status = 'reserved' AND expires_at > ? LIMIT 1`,
     [taskId, userId, nowMs()]
@@ -1571,12 +1573,47 @@ async function reserveTaskComment(d1, { taskId, userId, userName, userEmail, com
     if (submitted) throw new Error('TASK_ALREADY_SUBMITTED');
   }
 
-  // Pick first available comment with retry loop
   const commentsList = (Array.isArray(comments) ? comments : []).map(c => String(c || '').trim()).filter(Boolean);
   if (commentsList.length === 0) {
     throw new Error('NO_COMMENTS_AVAILABLE');
   }
 
+  // 2. EXPIRED RESERVATION RE-ASSIGNMENT: Check if user's last expired comment is STILL AVAILABLE
+  if (!isBulker) {
+    const lastExpired = await d1.first(
+      `SELECT * FROM task_comment_reservations WHERE task_id = ? AND user_id = ? ORDER BY reserved_at DESC LIMIT 1`,
+      [taskId, userId]
+    );
+    if (lastExpired && lastExpired.comment) {
+      const prevComment = String(lastExpired.comment).trim();
+      // Check if prevComment is currently reserved or submitted by anyone else
+      const conflict = await d1.first(
+        `SELECT id FROM task_comment_reservations WHERE task_id = ? AND comment = ? AND status IN ('reserved', 'submitted') AND (expires_at > ? OR status = 'submitted') LIMIT 1`,
+        [taskId, prevComment, nowMs()]
+      );
+      // If NOT taken by anyone else and exists in current task commentsList, RE-ASSIGN IT for fresh 10 mins!
+      if (!conflict && commentsList.includes(prevComment)) {
+        const now = nowMs();
+        const expiresAt = now + (10 * 60 * 1000); // Fresh 10 minutes
+        const commentIndex = commentsList.indexOf(prevComment);
+        const id = `res_${taskId.slice(0,12)}_${userId.slice(0,12)}_${now}`;
+        const detailsObj = { userName: userName || '', userEmail: userEmail || '' };
+
+        try {
+          await d1.query(
+            `INSERT INTO task_comment_reservations (id, task_id, user_id, comment, comment_index, status, reserved_at, expires_at, details_json)
+             VALUES (?, ?, ?, ?, ?, 'reserved', ?, ?, ?)`,
+            [id, taskId, userId, prevComment, commentIndex, now, expiresAt, JSON.stringify(detailsObj)]
+          );
+          return { id, task_id: taskId, user_id: userId, comment: prevComment, comment_index: commentIndex, status: 'reserved', reserved_at: now, expires_at: expiresAt, ...detailsObj };
+        } catch (reassignErr) {
+          console.warn('Re-assignment failed, falling back to new comment selection:', reassignErr);
+        }
+      }
+    }
+  }
+
+  // 3. Fallback: Pick first available comment with retry loop
   let attempt = 0;
   while (attempt < 5) {
     attempt++;
@@ -1592,7 +1629,7 @@ async function reserveTaskComment(d1, { taskId, userId, userName, userEmail, com
         [taskId, nowMs(), userId]
       );
     }
-    const usedComments = new Set(activeReservations.map(r => r.comment));
+    const usedComments = new Set(activeReservations.map(r => String(r.comment).trim()));
     const comment = commentsList.find(c => !usedComments.has(c));
     if (!comment) {
       throw new Error('NO_COMMENTS_AVAILABLE');
@@ -1600,7 +1637,7 @@ async function reserveTaskComment(d1, { taskId, userId, userName, userEmail, com
     const commentIndex = commentsList.indexOf(comment);
 
     const now = nowMs();
-    let expiresAt = now + reservationMs;
+    let expiresAt = now + (10 * 60 * 1000); // 10 minutes for single user
     if (isBulker) {
       const d = new Date();
       const istOffset = 5.5 * 60 * 60 * 1000;
@@ -4114,6 +4151,7 @@ ${memoriesContext}`
       
       let reservedCount = 0;
       let attempt = 0;
+      const reservedInBatch = new Set();
       
       while (reservedCount < requestedCount && attempt < 100) {
         attempt++;
@@ -4124,13 +4162,14 @@ ${memoriesContext}`
         ).catch(() => []);
         
         const usedSet = new Set(activeReservations.map(r => String(r.comment).trim()));
-        const availableList = commentPool.filter(c => !usedSet.has(c));
+        const availableList = commentPool.filter(c => !usedSet.has(c) && !reservedInBatch.has(c));
         
         if (availableList.length === 0) {
           break; 
         }
         
         const commentToReserve = availableList[0];
+        reservedInBatch.add(commentToReserve);
         const commentIndex = commentPool.indexOf(commentToReserve);
         const id = `res_bulk_${taskId.slice(0,12)}_${userId.slice(0,12)}_${nowMs()}_${reservedCount}`;
         const detailsObj = { userName, userEmail };
@@ -4148,6 +4187,7 @@ ${memoriesContext}`
           });
           reservedCount++;
         } catch (err) {
+          reservedInBatch.delete(commentToReserve);
           if (String(err.message || '').includes('UNIQUE constraint failed')) {
             console.warn(`Unique constraint hit in bulk reserve for comment "${commentToReserve}", retrying...`);
             continue; 

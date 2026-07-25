@@ -5633,7 +5633,7 @@ const showUserTaskDetailsPage = async (taskId) => {
             if (!isBulk) {
                 activeTaskReservation = {
                     comment: initialComment,
-                    expiresAt: Date.now() + 5 * 60 * 1000
+                    expiresAt: Date.now() + (window.TASK_COMMENT_RESERVATION_MS || 10 * 60 * 1000)
                 };
             }
 
