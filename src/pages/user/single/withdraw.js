@@ -1081,7 +1081,7 @@ const showWithdrawPage = () => {
                 ${getPageHeader('Withdraw Funds')}
                 <div class="max-w-xl mx-auto relative select-none w-full payment-option-container rounded-3xl overflow-hidden shadow-md" style="aspect-ratio: 1024 / 748;">
                     <div class="absolute inset-0 scale-[1.03] origin-center transform-gpu">
-                        <img src="/withdraw_methods_layout.jpg" class="w-full h-full object-cover [image-rendering:-webkit-optimize-contrast]" alt="Withdraw Methods" loading="eager" fetchpriority="high">
+                        <img src="/assets/images/withdraw_methods_layout.jpg" class="w-full h-full object-cover [image-rendering:-webkit-optimize-contrast]" alt="Withdraw Methods" loading="eager" fetchpriority="high">
                         
                         <!-- Clickable hotspot overlays -->
                         <div class="absolute inset-0">

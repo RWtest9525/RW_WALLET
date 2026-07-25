@@ -35,10 +35,13 @@ async function createApp(io, { startedAt = new Date().toISOString() } = {}) {
   const publicDir = path.join(projectRoot, 'public');
   app.use(express.static(projectRoot));
   app.use(express.static(publicDir));
+  // Cache images for 1 year immutable for instant fetching
+  app.use('/assets/images', express.static(path.join(publicDir, 'assets', 'images'), {
+    maxAge: '1y',
+    immutable: true
+  }));
   app.use('/assets', express.static(path.join(publicDir, 'assets')));
   app.use('/pages', express.static(path.join(publicDir, 'pages')));
-  app.use('/js', express.static(path.join(publicDir, 'js')));
-  app.use('/css', express.static(path.join(publicDir, 'css')));
   app.use('/.well-known', express.static(path.join(publicDir, '.well-known')));
 
   // Legacy route fallbacks for auxiliary HTML pages and assets
@@ -61,8 +64,33 @@ async function createApp(io, { startedAt = new Date().toISOString() } = {}) {
     });
   });
 
-  app.get('/avatars_sheet.png', (req, res) => {
-    res.sendFile(path.join(publicDir, 'assets', 'images', 'avatars_sheet.png'));
+  // Legacy image route fallbacks with max-age cache
+  const legacyImages = [
+    'avatars_sheet.png',
+    'logo_192.png',
+    'logo_512.png',
+    'notification_bell.png',
+    'profile_card_bg.png',
+    'referral_banner.png',
+    'referral_howitworks_cards.png',
+    'whats_new_megaphone.png',
+    'withdraw_amazon.png',
+    'withdraw_bank.png',
+    'withdraw_confirm_bg.png',
+    'withdraw_crypto.png',
+    'withdraw_flipkart.png',
+    'withdraw_methods_layout.jpg',
+    'withdraw_methods_layout.png',
+    'withdraw_paypal.png',
+    'withdraw_playstore.png',
+    'withdraw_upi.png'
+  ];
+
+  legacyImages.forEach(imgName => {
+    app.get(`/${imgName}`, (req, res) => {
+      res.set('Cache-Control', 'public, max-age=31536000, immutable');
+      res.sendFile(path.join(publicDir, 'assets', 'images', imgName));
+    });
   });
 
   app.get('/', (req, res) => {

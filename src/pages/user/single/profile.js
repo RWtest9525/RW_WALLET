@@ -397,7 +397,7 @@ const showSavedPaymentMethodsPage = (focusMethod = '') => {
         {
             id: 'upi',
             name: 'UPI',
-            iconUrl: '/withdraw_upi.png',
+            iconUrl: '/assets/images/withdraw_upi.png',
             getSummary: () => {
                 const details = getProfilePaymentDetails('upi');
                 return details.upiId ? details.upiId : 'Not Added Yet';
@@ -406,7 +406,7 @@ const showSavedPaymentMethodsPage = (focusMethod = '') => {
         {
             id: 'bank',
             name: 'Bank Account',
-            iconUrl: '/withdraw_bank.png',
+            iconUrl: '/assets/images/withdraw_bank.png',
             getSummary: () => {
                 const details = getProfilePaymentDetails('bank');
                 if (!details.accountNumber) return 'Not Added Yet';
@@ -418,7 +418,7 @@ const showSavedPaymentMethodsPage = (focusMethod = '') => {
         {
             id: 'play_store',
             name: 'Google Play',
-            iconUrl: '/withdraw_playstore.png',
+            iconUrl: '/assets/images/withdraw_playstore.png',
             getSummary: () => {
                 const details = getProfilePaymentDetails('play_store');
                 return details.email ? details.email : 'Not Added Yet';
@@ -427,7 +427,7 @@ const showSavedPaymentMethodsPage = (focusMethod = '') => {
         {
             id: 'amazon_gift',
             name: 'Amazon Pay',
-            iconUrl: '/withdraw_amazon.png',
+            iconUrl: '/assets/images/withdraw_amazon.png',
             getSummary: () => {
                 const details = getProfilePaymentDetails('amazon_gift');
                 return details.email ? details.email : 'Not Added Yet';
@@ -436,7 +436,7 @@ const showSavedPaymentMethodsPage = (focusMethod = '') => {
         {
             id: 'flipkart_gift',
             name: 'Flipkart Voucher',
-            iconUrl: '/withdraw_flipkart.png',
+            iconUrl: '/assets/images/withdraw_flipkart.png',
             getSummary: () => {
                 const details = getProfilePaymentDetails('flipkart_gift');
                 return details.email ? details.email : 'Not Added Yet';
@@ -445,7 +445,7 @@ const showSavedPaymentMethodsPage = (focusMethod = '') => {
         {
             id: 'paypal',
             name: 'PayPal',
-            iconUrl: '/withdraw_paypal.png',
+            iconUrl: '/assets/images/withdraw_paypal.png',
             getSummary: () => {
                 const details = getProfilePaymentDetails('paypal');
                 return details.email ? details.email : 'Not Added Yet';
@@ -454,7 +454,7 @@ const showSavedPaymentMethodsPage = (focusMethod = '') => {
         {
             id: 'crypto',
             name: 'Crypto Wallet',
-            iconUrl: '/withdraw_crypto.png',
+            iconUrl: '/assets/images/withdraw_crypto.png',
             getSummary: () => {
                 const details = getProfilePaymentDetails('crypto');
                 return (details.address || details.email) ? (details.address || details.email) : 'Not Added Yet';

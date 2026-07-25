@@ -775,15 +775,15 @@ const showNativePushNotification = (title, body, data = {}) => {
                 navigator.serviceWorker.ready.then(reg => {
                     reg.showNotification(title, {
                         body: body,
-                        icon: '/notification_bell.png',
-                        badge: '/notification_bell.png',
+                        icon: '/assets/images/notification_bell.png',
+                        badge: '/assets/images/notification_bell.png',
                         data: data
                     });
                 });
             } else {
                 new Notification(title, {
                     body: body,
-                    icon: '/notification_bell.png',
+                    icon: '/assets/images/notification_bell.png',
                     data: data
                 });
             }
@@ -1799,7 +1799,7 @@ const showWhatsNewPopupIfNeeded = () => {
                     <div class="relative bg-gradient-to-r from-blue-700 via-indigo-600 to-emerald-500 px-6 pt-7 pb-6 text-white text-left overflow-hidden">
                         <!-- Megaphone Illustration Background -->
                         <div class="absolute -right-5 sm:right-0 bottom-0 top-0 w-36 sm:w-48 opacity-80 sm:opacity-95 overflow-hidden pointer-events-none flex items-center justify-end">
-                            <img src="/whats_new_megaphone.png" class="h-36 sm:h-48 w-36 sm:w-48 object-contain transform rotate-[-8deg] translate-x-4 sm:translate-x-0 -translate-y-1" alt="Megaphone">
+                            <img src="/assets/images/whats_new_megaphone.png" class="h-36 sm:h-48 w-36 sm:w-48 object-contain transform rotate-[-8deg] translate-x-4 sm:translate-x-0 -translate-y-1" alt="Megaphone">
                         </div>
                         <button type="button" onclick="window.closeWhatsNewPopup()" class="absolute right-4 sm:right-5 top-4 sm:top-5 flex h-9 w-9 items-center justify-center rounded-full bg-white/20 text-white hover:bg-white/30 transition duration-150 active:scale-90 z-10" aria-label="Close" style="outline: none;">
                             <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
@@ -3811,14 +3811,20 @@ const preloadLogoImages = () => {
             const criticalLogoUrls = [...new Set([
                 RW_LOGO_URL,
                 CHATBOT_ICON_URL,
-                '/withdraw_upi.png',
-                '/withdraw_bank.png',
-                '/withdraw_playstore.png',
-                '/withdraw_amazon.png',
-                '/withdraw_flipkart.png',
-                '/withdraw_paypal.png',
-                '/withdraw_crypto.png',
-                '/withdraw_methods_layout.jpg'
+                '/assets/images/withdraw_upi.png',
+                '/assets/images/withdraw_bank.png',
+                '/assets/images/withdraw_playstore.png',
+                '/assets/images/withdraw_amazon.png',
+                '/assets/images/withdraw_flipkart.png',
+                '/assets/images/withdraw_paypal.png',
+                '/assets/images/withdraw_crypto.png',
+                '/assets/images/withdraw_methods_layout.jpg',
+                '/assets/images/referral_banner.png',
+                '/assets/images/referral_howitworks_cards.png',
+                '/assets/images/notification_bell.png',
+                '/assets/images/profile_card_bg.png',
+                '/assets/images/withdraw_confirm_bg.png',
+                '/assets/images/whats_new_megaphone.png'
             ])];
             const idleLogoUrls = [...new Set([
                 REFER_ICON_URL,

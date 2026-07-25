@@ -90,7 +90,7 @@ window.ADMIN_ICON_URL = 'https://cdn-icons-png.flaticon.com/512/3135/3135715.png
 window.TASK_ICON_URL = 'https://cdn-icons-png.flaticon.com/512/3176/3176366.png';
 window.CHAT_ICON_URL = 'https://cdn-icons-png.flaticon.com/512/5962/5962463.png';
 window.SETTINGS_ICON_URL = 'https://cdn-icons-png.flaticon.com/512/3524/3524659.png';
-window.NOTIFICATION_ICON_URL = '/notification_bell.png';
+window.NOTIFICATION_ICON_URL = '/assets/images/notification_bell.png';
 window.app = initializeApp(firebaseConfig);
 window.auth = getAuth(app);
 window.db = initializeFirestore(app, {
@@ -227,13 +227,13 @@ window.monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 'Ju
 window.shortMonthNames = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'];
 window.CHATBOT_ICON_URL = 'https://cdn-icons-png.flaticon.com/512/2040/2040946.png';
 window.WITHDRAW_METHOD_LOGOS = {
-            upi: '/withdraw_upi.png',
-            bank: '/withdraw_bank.png',
-            play_store: '/withdraw_playstore.png',
-            amazon_gift: '/withdraw_amazon.png',
-            flipkart_gift: '/withdraw_flipkart.png',
-            paypal: '/withdraw_paypal.png',
-            crypto: '/withdraw_crypto.png'
+            upi: '/assets/images/withdraw_upi.png',
+            bank: '/assets/images/withdraw_bank.png',
+            play_store: '/assets/images/withdraw_playstore.png',
+            amazon_gift: '/assets/images/withdraw_amazon.png',
+            flipkart_gift: '/assets/images/withdraw_flipkart.png',
+            paypal: '/assets/images/withdraw_paypal.png',
+            crypto: '/assets/images/withdraw_crypto.png'
         };
 window.loanPageOpening = false;
 window.CURRENT_VERSION_CODE = 2;
