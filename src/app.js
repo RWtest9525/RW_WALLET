@@ -53,7 +53,9 @@ const hydrateInstantShell = () => {
         let isUserAdmin = false;
         try {
             const cachedUser = JSON.parse(localStorage.getItem(`rw_wallet_user_cache_${effectiveUser}`) || 'null');
-            if (effectiveUser === ADMIN_UID || isImpersonating || (cachedUser && (cachedUser.role === 'admin' || cachedUser.role === 'subadmin' || cachedUser.role === 'owner' || cachedUser.isAdmin))) {
+            const cachedRole = (localStorage.getItem('user_role') || '').toLowerCase();
+            const isRoleAdmin = cachedRole === 'admin' || cachedRole === 'subadmin' || cachedRole === 'owner' || (window.checkIsUserAdmin ? window.checkIsUserAdmin(currentUser, currentUserData) : false);
+            if (effectiveUser === ADMIN_UID || isImpersonating || isRoleAdmin || (cachedUser && (cachedUser.role === 'admin' || cachedUser.role === 'subadmin' || cachedUser.role === 'owner' || cachedUser.isAdmin))) {
                 isUserAdmin = true;
             }
         } catch (e) {

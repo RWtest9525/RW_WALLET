@@ -130,17 +130,18 @@ const ensureAdminSessionReady = () => {
     return false;
 };
 
-const applyAdminBottomChrome = (isAdmin) => {
-            document.getElementById('admin-tab-button')?.classList.toggle('hidden', !isAdmin);
+const applyAdminBottomChrome = (isAdminView) => {
+            const isUserAdmin = checkIsUserAdmin(currentUser, currentUserData);
+            document.getElementById('admin-tab-button')?.classList.toggle('hidden', !isUserAdmin);
             const bottomAdminButton = document.getElementById('bottom-admin-btn');
             if (bottomAdminButton) {
-                bottomAdminButton.hidden = !isAdmin;
-                bottomAdminButton.classList.toggle('hidden', !isAdmin);
+                bottomAdminButton.hidden = !isUserAdmin;
+                bottomAdminButton.classList.toggle('hidden', !isUserAdmin);
             }
             const bottomHelpButton = document.getElementById('bottom-help-btn');
             if (bottomHelpButton) {
-                bottomHelpButton.hidden = isAdmin;
-                bottomHelpButton.classList.toggle('hidden', isAdmin);
+                bottomHelpButton.hidden = isUserAdmin;
+                bottomHelpButton.classList.toggle('hidden', isUserAdmin);
             }
             document.getElementById('bottom-task-btn')?.classList.remove('hidden');
             const bottomHomeLabel = document.getElementById('bottom-home-label');

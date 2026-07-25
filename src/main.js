@@ -43,13 +43,14 @@ try {
 
 const syncBottomNavFromCache = () => {
     try {
-        const cachedRole = localStorage.getItem('user_role');
+        const cachedRole = (localStorage.getItem('user_role') || '').toLowerCase();
+        const isAdminUser = cachedRole === 'admin' || cachedRole === 'subadmin' || cachedRole === 'owner' || (window.checkIsUserAdmin ? window.checkIsUserAdmin() : false);
         const adminBtn = document.getElementById('bottom-admin-btn');
         const helpBtn = document.getElementById('bottom-help-btn');
-        if (cachedRole === 'admin' || cachedRole === 'subadmin' || cachedRole === 'owner') {
+        if (isAdminUser) {
             if (adminBtn) { adminBtn.hidden = false; adminBtn.classList.remove('hidden'); }
             if (helpBtn) { helpBtn.hidden = true; helpBtn.classList.add('hidden'); }
-        } else if (cachedRole === 'user') {
+        } else {
             if (adminBtn) { adminBtn.hidden = true; adminBtn.classList.add('hidden'); }
             if (helpBtn) { helpBtn.hidden = false; helpBtn.classList.remove('hidden'); }
         }
