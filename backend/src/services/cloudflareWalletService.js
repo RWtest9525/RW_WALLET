@@ -4131,16 +4131,11 @@ ${memoriesContext}`
       
       const commentPool = getTaskCommentPool(taskData);
       
-      // Get all active reservations or submissions for this task
-      const activeReservations = isBulker
-        ? await d1.all(
-            `SELECT comment FROM task_comment_reservations WHERE task_id = ? AND status IN ('reserved', 'submitted') AND (expires_at > ? OR status = 'submitted')`,
-            [req.params.taskId, nowMs()]
-          ).catch(() => [])
-        : await d1.all(
-            `SELECT comment FROM task_comment_reservations WHERE task_id = ? AND status IN ('reserved', 'submitted') AND (expires_at > ? OR status = 'submitted') AND NOT (user_id = ? AND status = 'reserved')`,
-            [req.params.taskId, nowMs(), userId]
-          ).catch(() => []);
+      // Get active reservations or submissions by other users for this task
+      const activeReservations = await d1.all(
+        `SELECT comment FROM task_comment_reservations WHERE task_id = ? AND status IN ('reserved', 'submitted') AND (expires_at > ? OR status = 'submitted') AND NOT (user_id = ? AND status = 'reserved')`,
+        [req.params.taskId, nowMs(), userId]
+      ).catch(() => []);
       
       const usedSet = new Set(activeReservations.map(r => String(r.comment).trim()));
       const availableComments = commentPool.filter(c => !usedSet.has(c));

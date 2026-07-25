@@ -5288,9 +5288,9 @@ const showUserTaskDetailsPage = async (taskId) => {
             const totalCommentsCount = (isBulk && Number.isFinite(availability.totalCount) && availability.totalCount > 0)
                 ? availability.totalCount
                 : localCommentPool.length;
-            const availableCommentsCount = (isBulk && Number.isFinite(availability.availableCount) && availability.availableCount > 0)
-                ? availability.availableCount
-                : commentPool.length;
+            const availableCommentsCount = isBulk
+                ? (localCommentPool.length > 0 ? localCommentPool.length : (availability.totalCount || 100))
+                : ((Number.isFinite(availability.availableCount) && availability.availableCount > 0) ? availability.availableCount : commentPool.length);
             const taskLink = task.taskLink || task.link || task.url || '';
             const image = task.imageUrl || task.logoUrl || task.iconUrl || 'https://cdn-icons-png.flaticon.com/512/3176/3176366.png';
             
