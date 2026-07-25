@@ -49,6 +49,8 @@ async function verifyReviewScreenshot(req, res) {
       return res.status(400).json({
         success: false,
         isMatched: false,
+        similarityScore: 0.0,
+        extractedText: '',
         error: 'SCREENSHOT_IMAGE_REQUIRED',
         detail: 'Please provide a valid review screenshot (base64 or screenshotUrl)'
       });
@@ -57,39 +59,27 @@ async function verifyReviewScreenshot(req, res) {
     // 2. Perform OCR Recognition
     const { ocrText, ocrConfidence } = await ocrService.runOcrOnBuffer(imgBuffer);
 
-    // 3. Extract Reviewer Name & Match Comment
+    // 3. Extract Reviewer Name & Perform Multi-Level Fuzzy Match Verification
     const extractedUserName = ocrService.extractReviewerName(ocrText);
-    const targetComments = expectedComment ? [expectedComment] : [];
-    const matchedComment = ocrService.matchAssignedComment(ocrText, targetComments);
+    const fuzzyComment = ocrService.verifyFuzzyCommentMatch(ocrText, expectedComment, 0.60);
+    const fuzzyName = ocrService.verifyFuzzyReviewerMatch(ocrText, extractedUserName, reviewerName, 0.60);
 
-    // 4. Fuzzy / Normalized String Matching Checks
-    const cleanOcrText = ocrService.cleanStr(ocrText);
-    const cleanExpectedComment = ocrService.cleanStr(expectedComment);
-    const cleanReviewerName = ocrService.cleanStr(reviewerName);
-    const cleanExtractedName = ocrService.cleanStr(extractedUserName);
+    const isMatched = fuzzyComment.isMatched && fuzzyName.isMatched;
 
-    // Comment is matched if direct algorithm matched OR clean OCR text contains expected comment
-    const isCommentMatched = expectedComment
-      ? (!!matchedComment || (cleanExpectedComment.length > 0 && cleanOcrText.includes(cleanExpectedComment)))
-      : true;
+    let similarityScore = Math.min(fuzzyComment.similarityScore, fuzzyName.similarityScore);
+    if (isMatched && similarityScore < 0.60) {
+      similarityScore = 0.60;
+    }
+    similarityScore = Number(similarityScore.toFixed(2));
 
-    // User name is matched if cleanExtractedName or cleanOcrText contains reviewerName
-    const isNameMatched = reviewerName
-      ? (cleanExtractedName.includes(cleanReviewerName) ||
-         cleanReviewerName.includes(cleanExtractedName) ||
-         cleanOcrText.includes(cleanReviewerName))
-      : true;
-
-    const isMatched = isCommentMatched && isNameMatched;
-
+    // Return JSON structure: { success: true, isMatched: boolean, similarityScore: number, extractedText: string }
     return res.json({
       success: true,
       isMatched,
-      extractedText: {
-        userName: extractedUserName,
-        comment: matchedComment || expectedComment || ocrText
-      },
-      confidenceScore: ocrConfidence || 0.95
+      similarityScore,
+      extractedText: ocrText || '',
+      extractedUserName,
+      matchedComment: fuzzyComment.matchedComment || expectedComment || ''
     });
 
   } catch (error) {
@@ -97,6 +87,8 @@ async function verifyReviewScreenshot(req, res) {
     return res.status(500).json({
       success: false,
       isMatched: false,
+      similarityScore: 0.0,
+      extractedText: '',
       error: 'OCR_VERIFICATION_FAILED',
       detail: error.message || 'Error occurred while verifying review screenshot'
     });

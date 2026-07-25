@@ -80,24 +80,40 @@ export async function runClientOcrSpace(imageBlob, apiKey = 'helloworld') {
 }
 
 /**
- * Client-side normalized comment verification helper
+ * Client-side normalized & fuzzy comment verification helper
  */
 export function verifyClientCommentMatch(ocrText = '', targetComment = '') {
   if (!ocrText || !targetComment) return false;
 
   const clean = (s) => String(s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
-  const ocrLower = ocrText.toLowerCase().replace(/[^a-z0-9\s]/g, '');
-  const normalizedFullText = ocrLower.replace(/\s+/g, '');
+  const ocrClean = clean(ocrText);
+  const targetClean = clean(targetComment);
 
-  const words = String(targetComment).trim().split(/\s+/).filter(Boolean);
-  if (words.length >= 2) {
-    const w1 = clean(words[0]);
-    const w2 = clean(words[1]);
-    const combined = w1 + w2;
-    return normalizedFullText.includes(combined) || (ocrLower.includes(w1) && ocrLower.includes(w2));
-  } else if (words.length === 1) {
-    const w1 = clean(words[0]);
-    return ocrLower.includes(w1);
+  // Level 1: Full Containment Check
+  if (ocrClean.includes(targetClean)) return true;
+
+  // Level 2: Substituted OCR Character Confusion Matching (l/1/i, o/0, s/5)
+  const sub = (s) => s.replace(/[1l!|]/g, 'i').replace(/0/g, 'o').replace(/5/g, 's').replace(/8/g, 'b');
+  if (sub(ocrClean).includes(sub(targetClean))) return true;
+
+  // Level 3: Word-Level Overlap Check (minimum 50% matching words)
+  const targetWords = String(targetComment)
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, ' ')
+    .trim()
+    .split(/\s+/)
+    .filter(w => w.length >= 2);
+
+  if (targetWords.length > 0) {
+    let matchedCount = 0;
+    for (const w of targetWords) {
+      if (ocrClean.includes(clean(w)) || sub(ocrClean).includes(sub(clean(w)))) {
+        matchedCount++;
+      }
+    }
+    if (matchedCount / targetWords.length >= 0.50) {
+      return true;
+    }
   }
 
   return false;

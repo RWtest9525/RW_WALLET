@@ -1,7 +1,7 @@
 /**
  * OCR Service (backend/src/services/ocrService.js)
  * Dedicated module for handling screenshot OCR processing, reviewer name extraction,
- * review comment matching, and avatar cropping.
+ * fuzzy & relaxed review comment matching, and avatar cropping.
  */
 
 const Tesseract = require('tesseract.js');
@@ -38,10 +38,187 @@ const OCR_SKIP_PATTERNS = [
 ];
 
 /**
- * Normalizes string for character-by-character matching
+ * Strips punctuation, quotes, emojis, special symbols, line breaks, and extra whitespace.
+ */
+function normalizeText(text) {
+  if (!text) return '';
+  return String(text)
+    .replace(/[\u{1F600}-\u{1F64F}\u{1F300}-\u{1F5FF}\u{1F680}-\u{1F6FF}\u{1F700}-\u{1F77F}\u{1F780}-\u{1F7FF}\u{1F800}-\u{1F8FF}\u{1F900}-\u{1F9FF}\u{1FA00}-\u{1FA6F}\u{1FA70}-\u{1FAFF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}]/gu, '')
+    .replace(/["'“”‘’`.,\/#!$%\^&\*;:{}=\-_`~()?<>{}\[\]|\+\\]/g, ' ')
+    .toLowerCase()
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+/**
+ * Normalizes string for strict alphanumeric character-by-character matching
  */
 function cleanStr(str) {
   return String(str || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+}
+
+/**
+ * Calculates Levenshtein Distance between two strings.
+ */
+function levenshteinDistance(s1, s2) {
+  const m = s1.length;
+  const n = s2.length;
+  if (m === 0) return n;
+  if (n === 0) return m;
+
+  const dp = Array.from({ length: m + 1 }, () => new Array(n + 1).fill(0));
+
+  for (let i = 0; i <= m; i++) dp[i][0] = i;
+  for (let j = 0; j <= n; j++) dp[0][j] = j;
+
+  for (let i = 1; i <= m; i++) {
+    for (let j = 1; j <= n; j++) {
+      const cost = s1[i - 1] === s2[j - 1] ? 0 : 1;
+      dp[i][j] = Math.min(
+        dp[i - 1][j] + 1,
+        dp[i][j - 1] + 1,
+        dp[i - 1][j - 1] + cost
+      );
+    }
+  }
+  return dp[m][n];
+}
+
+/**
+ * Calculates similarity score (0.0 to 1.0) based on normalized Levenshtein distance.
+ */
+function calculateSimilarityScore(str1, str2) {
+  const norm1 = cleanStr(str1);
+  const norm2 = cleanStr(str2);
+  if (!norm1 && !norm2) return 1.0;
+  if (!norm1 || !norm2) return 0.0;
+  if (norm1 === norm2) return 1.0;
+  if (norm1.includes(norm2) || norm2.includes(norm1)) return 1.0;
+
+  const dist = levenshteinDistance(norm1, norm2);
+  const maxLen = Math.max(norm1.length, norm2.length);
+  return maxLen === 0 ? 1.0 : Math.max(0, (maxLen - dist) / maxLen);
+}
+
+/**
+ * Replaces common OCR character confusions (e.g. l/1/i, O/0, S/5, B/8).
+ */
+function substituteOcrConfusions(text) {
+  return cleanStr(text)
+    .replace(/[1l!|]/g, 'i')
+    .replace(/0/g, 'o')
+    .replace(/5/g, 's')
+    .replace(/8/g, 'b');
+}
+
+/**
+ * Performs Multi-level Fuzzy & Relaxed match verification for assigned comment inside OCR text.
+ * Threshold defaults to 0.60 (60% similarity).
+ */
+function verifyFuzzyCommentMatch(ocrText, expectedComment, threshold = 0.60) {
+  if (!expectedComment || !String(expectedComment).trim()) {
+    return { isMatched: true, similarityScore: 1.0, matchedComment: '' };
+  }
+  if (!ocrText || !String(ocrText).trim()) {
+    return { isMatched: false, similarityScore: 0.0, matchedComment: expectedComment };
+  }
+
+  const cleanOcr = cleanStr(ocrText);
+  const cleanTarget = cleanStr(expectedComment);
+  const normOcr = normalizeText(ocrText);
+  const normTarget = normalizeText(expectedComment);
+
+  // Level 1: Full Containment Check (100% Match)
+  if (cleanOcr.includes(cleanTarget) || normOcr.includes(normTarget)) {
+    return { isMatched: true, similarityScore: 1.0, matchedComment: expectedComment };
+  }
+
+  // Level 2: OCR Character Confusion Substitution Match (e.g. l vs 1, O vs 0)
+  const subOcr = substituteOcrConfusions(ocrText);
+  const subTarget = substituteOcrConfusions(expectedComment);
+  if (subOcr.includes(subTarget)) {
+    return { isMatched: true, similarityScore: 0.95, matchedComment: expectedComment };
+  }
+
+  // Level 3: Word-Level Overlap & Fuzzy Word Presence
+  const targetWords = normTarget.split(/\s+/).filter(w => w.length >= 2);
+  if (targetWords.length > 0) {
+    let matchedWordCount = 0;
+    for (const word of targetWords) {
+      const cleanW = cleanStr(word);
+      if (cleanOcr.includes(cleanW)) {
+        matchedWordCount++;
+      } else {
+        // Fuzzy check for single word misreading (e.g., misreading 1 char in word)
+        const subW = substituteOcrConfusions(word);
+        if (subOcr.includes(subW)) {
+          matchedWordCount++;
+        }
+      }
+    }
+    const wordScore = matchedWordCount / targetWords.length;
+    if (wordScore >= 0.50) {
+      const computedScore = Math.max(0.60, Number(wordScore.toFixed(2)));
+      if (computedScore >= threshold) {
+        return { isMatched: true, similarityScore: computedScore, matchedComment: expectedComment };
+      }
+    }
+  }
+
+  // Level 4: Sliding Window Levenshtein Fuzzy Similarity Search
+  if (cleanTarget.length > 3 && cleanOcr.length >= cleanTarget.length) {
+    const winLen = cleanTarget.length;
+    let maxWinScore = 0;
+    const step = Math.max(1, Math.floor(winLen / 4));
+
+    for (let i = 0; i <= cleanOcr.length - winLen; i += step) {
+      const windowSub = cleanOcr.slice(i, i + winLen);
+      const score = calculateSimilarityScore(windowSub, cleanTarget);
+      if (score > maxWinScore) {
+        maxWinScore = score;
+      }
+      if (maxWinScore >= 0.90) break;
+    }
+
+    if (maxWinScore >= threshold) {
+      return { isMatched: true, similarityScore: Number(maxWinScore.toFixed(2)), matchedComment: expectedComment };
+    }
+  }
+
+  // Level 5: Overall Full String Similarity Score
+  const overallScore = calculateSimilarityScore(ocrText, expectedComment);
+  const isMatched = overallScore >= threshold;
+  return {
+    isMatched,
+    similarityScore: Number(overallScore.toFixed(2)),
+    matchedComment: isMatched ? expectedComment : ''
+  };
+}
+
+/**
+ * Multi-level fuzzy matching for reviewer name verification
+ */
+function verifyFuzzyReviewerMatch(ocrText, extractedUserName, reviewerName, threshold = 0.60) {
+  if (!reviewerName || !String(reviewerName).trim()) {
+    return { isMatched: true, similarityScore: 1.0 };
+  }
+
+  const cleanReviewer = cleanStr(reviewerName);
+  const cleanExtracted = cleanStr(extractedUserName);
+  const cleanOcr = cleanStr(ocrText);
+
+  if (cleanExtracted.includes(cleanReviewer) || cleanReviewer.includes(cleanExtracted) || cleanOcr.includes(cleanReviewer)) {
+    return { isMatched: true, similarityScore: 1.0 };
+  }
+
+  const nameScore = calculateSimilarityScore(extractedUserName, reviewerName);
+  const ocrSubScore = calculateSimilarityScore(cleanOcr, cleanReviewer);
+  const maxScore = Math.max(nameScore, ocrSubScore);
+
+  return {
+    isMatched: maxScore >= threshold,
+    similarityScore: Number(maxScore.toFixed(2))
+  };
 }
 
 /**
@@ -100,38 +277,17 @@ async function runOcrOnBuffer(imageBuffer, originalName = 'screenshot.jpg', cont
 }
 
 /**
- * Matches target comment in OCR text using normalized word check algorithm
+ * Matches target comment in OCR text using fuzzy & relaxed matching algorithm
  */
-function matchAssignedComment(ocrText, targetComments = []) {
+function matchAssignedComment(ocrText, targetComments = [], threshold = 0.60) {
   if (!ocrText || !targetComments || !targetComments.length) return null;
 
-  const ocrTextLower = ocrText.toLowerCase().replace(/[^a-z0-9\s]/g, '');
-  const normalizedFullText = ocrTextLower.replace(/\s+/g, '');
-
   for (const comment of targetComments) {
-    const expectedWords = String(comment || '').trim().split(/\s+/).filter(Boolean);
-    let matchFound = false;
-
-    if (expectedWords.length >= 2) {
-      const word1 = cleanStr(expectedWords[0]);
-      const word2 = cleanStr(expectedWords[1]);
-      const combined = word1 + word2;
-
-      if (normalizedFullText.includes(combined) || (ocrTextLower.includes(word1) && ocrTextLower.includes(word2))) {
-        matchFound = true;
-      }
-    } else if (expectedWords.length === 1) {
-      const word1 = cleanStr(expectedWords[0]);
-      if (ocrTextLower.includes(word1)) {
-        matchFound = true;
-      }
-    }
-
-    if (matchFound) {
+    const res = verifyFuzzyCommentMatch(ocrText, comment, threshold);
+    if (res.isMatched) {
       return comment;
     }
   }
-
   return null;
 }
 
@@ -208,7 +364,13 @@ async function cropReviewerAvatar(imageBuffer, nameLine, assignedComment = 'scre
 
 module.exports = {
   OCR_SKIP_PATTERNS,
+  normalizeText,
   cleanStr,
+  levenshteinDistance,
+  calculateSimilarityScore,
+  substituteOcrConfusions,
+  verifyFuzzyCommentMatch,
+  verifyFuzzyReviewerMatch,
   runOcrOnBuffer,
   matchAssignedComment,
   extractReviewerName,

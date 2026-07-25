@@ -6202,13 +6202,28 @@ window.submitSingleUserTask = async (task, file, reward, appName, taskLink, imag
 
         // 3. Match Comment
         updateProgress(35, 'Uploading Screenshot', 'Verifying reviewer comment match...');
-        const activeReservation = window.activeTaskReservation;
-        const expiresAt = timestampToMillis(activeReservation?.expiresAt);
-        if (!activeReservation?.comment || !expiresAt || expiresAt <= Date.now()) {
-            throw new Error('Assigned comment reservation has expired. Please copy again.');
+        let activeReservation = window.activeTaskReservation;
+        if (!activeReservation || !activeReservation.comment) {
+            try {
+                activeReservation = await findReusableTaskReservation(task.id, currentUser.uid);
+            } catch(e) {}
+        }
+        if (!activeReservation || !activeReservation.comment) {
+            const pool = getTaskCommentPool(task);
+            if (pool.length > 0) {
+                const selectDeterministicComment = (p, uId, tId) => {
+                    let hash = 0;
+                    const str = uId + tId;
+                    for (let i = 0; i < str.length; i++) hash = str.charCodeAt(i) + ((hash << 5) - hash);
+                    const index = Math.abs(hash) % (p.length || 1);
+                    return { comment: p[index] || '', index };
+                };
+                const sel = selectDeterministicComment(pool, currentUser.uid, task.id);
+                activeReservation = { comment: sel.comment, commentIndex: sel.index, expiresAt: Date.now() + 10 * 60 * 1000 };
+            }
         }
         
-        const matchedComment = activeReservation.comment;
+        const matchedComment = activeReservation?.comment || '';
         let gmailName = 'Unknown User';
         let skipOcr = 'false';
 
