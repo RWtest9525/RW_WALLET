@@ -3769,8 +3769,8 @@ const showReferEarnPage = () => {
                 <div class="flex items-center justify-between gap-2">
                     <div class="min-w-0 text-left flex-1">
                         <p class="text-[9px] font-black uppercase text-emerald-700 dark:text-emerald-400 tracking-wider">YOUR REFERRAL CODE</p>
-                        <div class="flex items-center gap-2 mt-0.5">
-                            <h3 class="${referralCode.length > 10 ? 'text-sm' : referralCode.length > 8 ? 'text-base' : 'text-xl'} font-black text-emerald-900 dark:text-emerald-200 truncate tracking-wide">${escapeHtml(referralCode)}</h3>
+                        <div class="flex items-center gap-1.5 mt-0.5">
+                            <h3 class="text-xs sm:text-sm font-mono font-black text-emerald-950 dark:text-emerald-100 tracking-wider select-all break-all leading-tight">${escapeHtml(referralCode)}</h3>
                             <button type="button" id="main-copy-code-btn" title="Copy Referral Code" class="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-emerald-100 dark:bg-emerald-900/60 text-emerald-800 dark:text-emerald-200 hover:bg-emerald-200 border border-emerald-300/60 dark:border-emerald-700/60 transition active:scale-90 shadow-xs">
                                 <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
                                     <path stroke-linecap="round" stroke-linejoin="round" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
@@ -3778,7 +3778,7 @@ const showReferEarnPage = () => {
                             </button>
                         </div>
                     </div>
-                    <button type="button" id="open-track-referrals-btn" onclick="window.showTrackReferralsPage()" class="shrink-0 flex items-center gap-1.5 rounded-xl bg-white dark:bg-slate-800 border border-emerald-400/80 dark:border-emerald-600 px-3.5 py-2 text-xs font-extrabold text-emerald-700 dark:text-emerald-300 hover:bg-emerald-50 transition active:scale-95 shadow-xs">
+                    <button type="button" id="open-track-referrals-btn" onclick="window.showTrackReferralsPage()" class="shrink-0 flex items-center gap-1 rounded-xl bg-white dark:bg-slate-800 border border-emerald-400/80 dark:border-emerald-600 px-2.5 py-1.5 text-[11px] font-extrabold text-emerald-700 dark:text-emerald-300 hover:bg-emerald-50 transition active:scale-95 shadow-xs">
                         <span>Track Referrals</span>
                         <span class="text-xs font-black">›</span>
                     </button>
@@ -3788,9 +3788,9 @@ const showReferEarnPage = () => {
                 <div class="flex items-center justify-between gap-2 pt-2 border-t border-emerald-200/60 dark:border-emerald-800/60">
                     <div class="min-w-0 flex-1 text-left">
                         <p class="text-[9px] font-black uppercase text-slate-400 dark:text-slate-400 tracking-wider">REFERRAL LINK</p>
-                        <p class="text-xs font-mono font-semibold text-emerald-800 dark:text-emerald-300 truncate">${escapeHtml(referralLink)}</p>
+                        <p class="text-[11px] font-mono font-semibold text-emerald-800 dark:text-emerald-300 select-all break-all leading-tight">${escapeHtml(referralLink)}</p>
                     </div>
-                    <button type="button" id="main-share-link-btn" title="Share Link" class="shrink-0 flex items-center gap-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white px-3.5 py-1.5 text-xs font-black shadow-xs transition active:scale-95">
+                    <button type="button" id="main-share-link-btn" title="Share Link" class="shrink-0 flex items-center gap-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white px-3 py-1.5 text-xs font-black shadow-xs transition active:scale-95">
                         <svg class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z"/></svg>
                         <span>Share Link</span>
                     </button>

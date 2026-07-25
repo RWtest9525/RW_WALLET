@@ -32,6 +32,14 @@ import './core/firebase.js';
 // Setup Event listeners and routing at DOM load
 applyTheme(initialTheme);
 
+// Instant Asset Preloader for Referral and Profile Banners
+try {
+    ['/assets/images/referral_banner.png', '/assets/images/referral_howitworks_cards.png'].forEach(src => {
+        const img = new Image();
+        img.src = src;
+    });
+} catch (e) {}
+
 const syncBottomNavFromCache = () => {
     try {
         const cachedRole = localStorage.getItem('user_role');

@@ -978,6 +978,7 @@ const showSettingsPage = () => {
             const content = `
                 ${getPageHeader('Setting', { showBack: false })}
                 <div class="max-w-lg mx-auto space-y-4">
+                    ${profileCardHtml}
                     <div class="bg-white dark:bg-gray-800 p-5 rounded-2xl shadow-md border border-gray-100 dark:border-gray-700 space-y-3">
                         ${renderSettingAction('settings-profile-btn', 'My Profile', 'https://cdn-icons-png.flaticon.com/512/3135/3135715.png', 'blue')}
                         ${renderSettingAction('settings-track-income-btn', 'Track Income', 'https://cdn-icons-png.flaticon.com/512/3135/3135706.png', 'emerald')}
