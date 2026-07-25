@@ -5,6 +5,7 @@ import './core/globals.js';
 import './utils/ui-utils.js';
 import './pages/auth.js';
 import './pages/user/single/dashboard.js';
+import './pages/user/single/user-tasks.js';
 import './pages/user/single/recharge.js';
 import './pages/user/single/withdraw.js';
 import './pages/user/single/loan.js';
