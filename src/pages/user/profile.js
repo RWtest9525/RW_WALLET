@@ -953,32 +953,9 @@ const showSettingsPage = () => {
             const currentTheme = localStorage.getItem('theme') || 'light';
             const isAdmin = currentUser && currentUser.uid === ADMIN_UID;
             
-            const userAvatarUrl = getProfileAvatarUrl(currentUserData);
-            const userName = currentUserData?.name || 'User';
-            const userEmail = currentUserData?.email || '';
-            const profileCardHtml = `
-                <div class="flex items-center gap-4 bg-white dark:bg-gray-800 p-5 rounded-2xl shadow-md border border-gray-150 dark:border-gray-700 text-left">
-                    <div class="relative cursor-pointer group shrink-0" id="settings-avatar-trigger-btn">
-                        <img id="settings-avatar-preview" src="${escapeHtml(userAvatarUrl)}" class="h-16 w-16 rounded-2xl border border-gray-200 dark:border-gray-750 bg-white p-1 object-cover" alt="Profile Photo">
-                        ${!isAdmin ? `
-                        <div class="absolute inset-0 bg-black/40 rounded-2xl flex items-center justify-center opacity-0 group-hover:opacity-100 transition duration-200">
-                            <span class="text-[8px] font-black text-white uppercase tracking-wider">Edit</span>
-                        </div>
-                        ` : ''}
-                    </div>
-                    <div class="min-w-0 flex-1">
-                        <h3 class="text-lg font-black text-gray-900 dark:text-white truncate">${escapeHtml(userName)}</h3>
-                        <p class="text-xs text-gray-500 dark:text-gray-400 truncate mt-0.5">${escapeHtml(userEmail)}</p>
-                        <span class="inline-flex items-center gap-1 rounded-full bg-blue-50 dark:bg-blue-900/30 px-2.5 py-0.5 text-[9px] font-black text-blue-600 dark:text-blue-300 uppercase mt-2">
-                            ${isAdmin ? 'ADMIN' : 'MEMBER'}
-                        </span>
-                    </div>
-                </div>`;
-
             const content = `
                 ${getPageHeader('Setting', { showBack: false })}
                 <div class="max-w-lg mx-auto space-y-4">
-                    ${profileCardHtml}
                     <div class="bg-white dark:bg-gray-800 p-5 rounded-2xl shadow-md border border-gray-100 dark:border-gray-700 space-y-3">
                         ${renderSettingAction('settings-profile-btn', 'My Profile', 'https://cdn-icons-png.flaticon.com/512/3135/3135715.png', 'blue')}
                         ${renderSettingAction('settings-track-income-btn', 'Track Income', 'https://cdn-icons-png.flaticon.com/512/3135/3135706.png', 'emerald')}
@@ -1025,17 +1002,6 @@ const showSettingsPage = () => {
                 if (whatsNewBtn) whatsNewBtn.onclick = showWhatsNewSettingsPage;
             }
 
-            if (!isAdmin) {
-                const settingsAvatarTrigger = document.getElementById('settings-avatar-trigger-btn');
-                if (settingsAvatarTrigger) {
-                    settingsAvatarTrigger.onclick = () => {
-                        const currentAvatar = getProfileAvatarUrl(currentUserData);
-                        window.showProfilePhotoSelectionModal(currentAvatar, async (chosenUrl) => {
-                            await syncProfilePhotoToDatabase(chosenUrl);
-                        });
-                    };
-                }
-            }
         };
 
 const showMaintenanceSettingsPage = () => {
