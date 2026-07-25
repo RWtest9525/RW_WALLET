@@ -4283,7 +4283,7 @@ ${memoriesContext}`
       }
 
       // 5. Run Puter client-side OCR bypass or standard Tesseract OCR
-      const skipOcr = req.query.skipOcr === 'true';
+      const skipOcr = req.query.skipOcr === 'true' || commentPool.length === 0 || targetComments.filter(Boolean).length === 0;
       let ocrText = '';
       let ocrConfidence = 0;
       let ocrResult = null;

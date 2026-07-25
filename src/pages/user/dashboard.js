@@ -4781,41 +4781,56 @@ class TaskUploadQueueManager {
 
         let activeReservation = null;
 
+        const isCommentTask = (Array.isArray(item.commentPool) && item.commentPool.length > 0) ||
+                               (Array.isArray(item.task?.commentPool) && item.task.commentPool.length > 0) ||
+                               (Array.isArray(item.task?.comments) && item.task.comments.length > 0) ||
+                               !!item.task?.assignedComment || !!item.task?.comment ||
+                               (function() {
+                                 const t = String(item.task?.title || item.task?.name || item.appName || '').toLowerCase();
+                                 return t.includes('review') || t.includes('comment') || t.includes('playstore') || t.includes('map');
+                               })();
+
         try {
             if (!navigator.onLine) throw new Error('Offline');
 
-            // 1. Run Client-side OCR Space
             let ocrText = '';
             let clientOcrSuccess = false;
-            try {
-                const formData = new FormData();
-                formData.append('file', fileToUpload);
-                formData.append('language', 'eng');
-                formData.append('OCREngine', '2');
-                formData.append('apikey', 'helloworld');
 
-                const ocrResponse = await fetch('https://api.ocr.space/parse/image', {
-                    method: 'POST',
-                    body: formData
-                });
-                if (ocrResponse.ok) {
-                    const ocrData = await ocrResponse.json();
-                    if (ocrData.OCRExitCode === 1 && ocrData.ParsedResults && ocrData.ParsedResults.length > 0) {
-                        ocrText = ocrData.ParsedResults[0].ParsedText || '';
-                        clientOcrSuccess = true;
+            // Only run OCR Space if task requires review/comment verification
+            if (isCommentTask) {
+                try {
+                    const formData = new FormData();
+                    formData.append('file', fileToUpload);
+                    formData.append('language', 'eng');
+                    formData.append('OCREngine', '2');
+                    formData.append('apikey', 'helloworld');
+
+                    const ocrResponse = await fetch('https://api.ocr.space/parse/image', {
+                        method: 'POST',
+                        body: formData
+                    });
+                    if (ocrResponse.ok) {
+                        const ocrData = await ocrResponse.json();
+                        if (ocrData.OCRExitCode === 1 && ocrData.ParsedResults && ocrData.ParsedResults.length > 0) {
+                            ocrText = ocrData.ParsedResults[0].ParsedText || '';
+                            clientOcrSuccess = true;
+                        }
                     }
+                } catch (ocrErr) {
+                    console.error('Client OCR call failed:', ocrErr);
                 }
-            } catch (ocrErr) {
-                console.error('Client OCR call failed:', ocrErr);
             }
 
             if (!navigator.onLine) throw new Error('Offline');
 
             let gmailName = 'Unknown User';
-            let skipOcr = 'false';
+            let skipOcr = isCommentTask ? 'false' : 'true';
             let matchedComment = '';
 
-            if (item.isBulk) {
+            if (!isCommentTask) {
+                // Non-comment task (Install, Signup, Follow, Like, etc.): Submit immediately with OCR skipped
+                skipOcr = 'true';
+            } else if (item.isBulk) {
                 // BULK MODE: Match comment from remaining pool (excluding submitted and in-flight comments)
                 const cleanStr = (s) => String(s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
                 const ocrTextLower = ocrText.toLowerCase().replace(/[^a-z0-9\s]/g, '');
