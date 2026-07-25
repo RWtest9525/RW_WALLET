@@ -2,15 +2,17 @@
 
 const isTaskVisibleToAdmin = (task) => {
     const isOwner = currentUser?.uid === ADMIN_UID || currentUser?.email === 'reviewsworld51@gmail.com' || currentUser?.email === 'reviewsworld01@gmail.com' || currentUserData?.role === 'owner';
-    if (isOwner) return true;
-    
     const taskCreator = task.createdBy || '';
-    const isOwnerTask = !taskCreator || taskCreator === ADMIN_UID || taskCreator === 'owner' || taskCreator === 'REVIEWS_WORLD_ADMIN';
+    const isOwnerTask = !taskCreator || taskCreator === ADMIN_UID || taskCreator === 'owner' || taskCreator === 'REVIEWS_WORLD_ADMIN' || taskCreator === 'reviewsworld01@gmail.com';
     const assigned = Array.isArray(task.assignedToSubAdmins) ? task.assignedToSubAdmins : [];
 
-    if (taskCreator === currentUser?.uid) return true;
-    if (isOwnerTask && (assigned.includes(currentUser?.uid) || assigned.includes('all'))) return true;
-    return false;
+    if (isOwner) {
+        return isOwnerTask;
+    } else {
+        if (taskCreator === currentUser?.uid) return true;
+        if (isOwnerTask && (assigned.includes(currentUser?.uid) || assigned.includes('all'))) return true;
+        return false;
+    }
 };
 
 const canAdminManageTask = (task) => {
