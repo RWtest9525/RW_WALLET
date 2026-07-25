@@ -783,12 +783,28 @@ document.body.addEventListener('click', (e) => {
                     break;
 
                 case 'open-user-task': {
+                    const resolvedTaskId = taskid || target.dataset.taskid || target.dataset.taskId || target.dataset.id || target.closest('[data-taskid]')?.dataset?.taskid || target.closest('[data-id]')?.dataset?.id;
+                    console.log('[TaskClick] Opening user task with ID:', resolvedTaskId);
+                    if (!resolvedTaskId) {
+                        console.warn('[TaskClick] Could not resolve taskId from clicked target:', target);
+                        if (typeof showNotification === 'function') showNotification('Could not identify task. Please try again.', true);
+                        break;
+                    }
                     if (typeof window.showUserTaskDetailsPage === 'function') {
-                        window.showUserTaskDetailsPage(taskid).catch(err => {
-                            console.error('Failed to open task details:', err);
+                        try {
+                            window.showUserTaskDetailsPage(resolvedTaskId).catch(err => {
+                                console.error('[TaskClick] Failed to open task details page:', err);
+                                if (typeof hideLoading === 'function') hideLoading();
+                                if (typeof showNotification === 'function') showNotification(err.message || 'Could not open task. Please try again.', true);
+                            });
+                        } catch (err) {
+                            console.error('[TaskClick] Exception in showUserTaskDetailsPage call:', err);
                             if (typeof hideLoading === 'function') hideLoading();
                             if (typeof showNotification === 'function') showNotification(err.message || 'Could not open task. Please try again.', true);
-                        });
+                        }
+                    } else {
+                        console.error('[TaskClick] window.showUserTaskDetailsPage is not defined!');
+                        if (typeof showNotification === 'function') showNotification('Task handler not ready. Please refresh.', true);
                     }
                     break;
                 }

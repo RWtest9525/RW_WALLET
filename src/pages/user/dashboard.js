@@ -3979,7 +3979,7 @@ const showUserTaskPage = () => {
                     const isBulker = isBulkTaskUser();
                     const hideNewTasksForDailyLimit = !isBulker && userTaskTodaySubmissionIds.size >= NORMAL_USER_DAILY_TASK_LIMIT;
 
-                    allTasksCache
+                    (Array.isArray(allTasksCache) ? allTasksCache : [])
                         .filter(isTaskVisibleToUser)
                         .filter(task => getAdminTaskEffectiveStatus(task) === 'active')
                         .filter(task => {
@@ -5163,48 +5163,70 @@ class TaskUploadQueueManager {
 window.TaskUploadQueueManager = new TaskUploadQueueManager();
 
 const showUserTaskDetailsPage = async (taskId) => {
-            localStorage.setItem('last_active_task_id', taskId);
-            localStorage.setItem('last_active_section', 'task_details');
-            let task = allTasksCache.find(item => item.id === taskId);
-            if (!task) {
-                if (typeof db !== 'undefined' && typeof appId !== 'undefined' && typeof doc === 'function' && typeof getDoc === 'function') {
-                    try {
-                        const docSnap = await getDoc(doc(db, `artifacts/${appId}/public/data/tasks`, taskId));
-                        if (docSnap.exists()) {
-                            task = { id: docSnap.id, ...docSnap.data() };
-                            allTasksCache.push(task);
+            try {
+                if (!taskId) {
+                    console.warn('[TaskDetails] Missing taskId parameter');
+                    return showNotification('Task ID missing. Please try again.', true);
+                }
+
+                const cleanTaskId = String(taskId).trim();
+                localStorage.setItem('last_active_task_id', cleanTaskId);
+                localStorage.setItem('last_active_section', 'task_details');
+
+                const tasksList = Array.isArray(allTasksCache) ? allTasksCache : [];
+                let task = tasksList.find(item => item && (String(item.id) === cleanTaskId || String(item._id) === cleanTaskId));
+
+                if (!task) {
+                    if (typeof db !== 'undefined' && typeof appId !== 'undefined' && typeof doc === 'function' && typeof getDoc === 'function') {
+                        try {
+                            const docSnap = await getDoc(doc(db, `artifacts/${appId}/public/data/tasks`, cleanTaskId));
+                            if (docSnap.exists()) {
+                                const rawData = { id: docSnap.id, _id: docSnap.id, ...docSnap.data() };
+                                const normalized = normalizeTasksArray([rawData]);
+                                task = normalized[0] || rawData;
+                                if (Array.isArray(allTasksCache)) {
+                                    allTasksCache.push(task);
+                                }
+                            }
+                        } catch (e) {
+                            console.warn('[TaskDetails] Failed to recover task details on boot:', e);
                         }
-                    } catch (e) {
-                        console.warn('Failed to recover task details on boot:', e);
                     }
                 }
-            }
-            if (!task) {
-                localStorage.removeItem('last_active_task_id');
-                localStorage.removeItem('last_active_task_data');
-                if (typeof showUserTaskPage === 'function') {
-                    showUserTaskPage();
-                } else if (typeof hidePage === 'function') {
-                    hidePage();
+
+                if (!task) {
+                    localStorage.removeItem('last_active_task_id');
+                    localStorage.removeItem('last_active_task_data');
+                    if (typeof showUserTaskPage === 'function') {
+                        showUserTaskPage();
+                    } else if (typeof hidePage === 'function') {
+                        hidePage();
+                    }
+                    return showNotification('Task not found. Please refresh tasks.', true);
                 }
-                return showNotification('Task not found. Please refresh tasks.', true);
-            }
-            localStorage.setItem('last_active_task_data', JSON.stringify(task));
-            if (getAdminTaskEffectiveStatus(task) !== 'active') {
-                localStorage.removeItem('last_active_task_id');
-                localStorage.removeItem('last_active_task_data');
-                if (typeof showUserTaskPage === 'function') {
-                    showUserTaskPage();
-                } else if (typeof hidePage === 'function') {
-                    hidePage();
+
+                // Ensure task object properties are normalized
+                const normalizedList = normalizeTasksArray([task]);
+                task = normalizedList[0] || task;
+
+                localStorage.setItem('last_active_task_data', JSON.stringify(task));
+
+                const effectiveStatus = getAdminTaskEffectiveStatus(task);
+                if (effectiveStatus !== 'active') {
+                    localStorage.removeItem('last_active_task_id');
+                    localStorage.removeItem('last_active_task_data');
+                    if (typeof showUserTaskPage === 'function') {
+                        showUserTaskPage();
+                    } else if (typeof hidePage === 'function') {
+                        hidePage();
+                    }
+                    return showNotification('This task is closed.', true);
                 }
-                return showNotification('This task is closed.', true);
-            }
-            
-            if (task.taskSubtype === 'read_news') {
-                showUserReadNewsTaskPage(task);
-                return;
-            }
+                
+                if (task.taskSubtype === 'read_news' || task.subtype === 'read_news') {
+                    showUserReadNewsTaskPage(task);
+                    return;
+                }
 
             const isBulk = isBulkTaskUser();
             if (isBulk) {
@@ -6095,6 +6117,11 @@ const showUserTaskDetailsPage = async (taskId) => {
                 retryBtn.onclick = () => {
                     window.TaskUploadQueueManager.retryFailed(task.id);
                 };
+            }
+            } catch (err) {
+                console.error('[TaskDetails] Error loading task details page:', err);
+                if (typeof hideLoading === 'function') hideLoading();
+                showNotification(err?.message || 'Could not open task details. Please try again.', true);
             }
         };
 

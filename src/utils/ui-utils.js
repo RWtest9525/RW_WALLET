@@ -1947,6 +1947,94 @@ const handleDisableWhatsNew = async () => {
             }
         };
 
+const getAdminTaskFamily = (task = {}) => {
+            if (!task || typeof task !== 'object') return 'review';
+            const raw = String(task.taskFamily || task.taskType || task.family || '').toLowerCase();
+            if (raw.includes('social')) return 'social';
+            if (raw.includes('review')) return 'review';
+            const text = [task.category, task.title, task.taskSubtype || task.subtype].join(' ').toLowerCase();
+            return text.includes('instagram') || text.includes('youtube') || text.includes('download') || text.includes('social') || text.includes('news') || text.includes('read') ? 'social' : 'review';
+        };
+
+const getAdminTaskSubtype = (task = {}) => {
+            if (!task || typeof task !== 'object') return 'app_review';
+            const family = getAdminTaskFamily(task);
+            const subtype = String(task.taskSubtype || task.subtype || '').trim();
+            if (subtype) return subtype;
+            const text = [task.category, task.title].join(' ').toLowerCase();
+            if (family === 'social') {
+                if (text.includes('youtube')) return 'youtube_task';
+                if (text.includes('download') || text.includes('install')) return 'app_download_task';
+                if (text.includes('facebook')) return 'facebook_task';
+                if (text.includes('telegram')) return 'telegram_task';
+                if (text.includes('news') || text.includes('read')) return 'read_news';
+                return 'instagram_task';
+            }
+            if (text.includes('map')) return 'map_review';
+            if (text.includes('trustpilot')) return 'trustpilot_review';
+            if (text.includes('website')) return 'website_review';
+            return 'app_review';
+        };
+
+const getAdminTaskEffectiveStatus = (task = {}) => {
+            if (!task || typeof task !== 'object') return 'draft';
+            const status = String(task.status || task.state || task.taskStatus || 'draft').toLowerCase().trim();
+            const isON = status === 'active' || status === 'on' || status === 'enabled' || status === 'live' || status === 'published' || task.isActive === true || task.isON === true || task.is_active === true;
+            if (!isON) {
+                return status || 'draft';
+            }
+            const expiresAt = timestampToMillis(task.expiresAt || task.autoCloseAt || task.closeAt);
+            if (expiresAt && expiresAt <= Date.now()) {
+                return 'closed';
+            }
+            return 'active';
+        };
+
+const normalizeTasksArray = (response) => {
+            if (!response) return [];
+            let rawList = [];
+            if (Array.isArray(response)) {
+                rawList = response;
+            } else if (Array.isArray(response.tasks)) {
+                rawList = response.tasks;
+            } else if (Array.isArray(response.data)) {
+                rawList = response.data;
+            } else if (Array.isArray(response.items)) {
+                rawList = response.items;
+            } else if (response.task && typeof response.task === 'object') {
+                rawList = [response.task];
+            } else if (typeof response === 'object' && response !== null) {
+                for (const k of Object.keys(response)) {
+                    if (Array.isArray(response[k])) {
+                        rawList = response[k];
+                        break;
+                    }
+                }
+            }
+
+            return rawList.map(task => {
+                if (!task || typeof task !== 'object') return null;
+                const id = String(task.id || task._id || task.taskId || task.task_id || task.taskCode || '').trim();
+                if (!id) return null;
+                const subtype = task.subtype || task.taskSubtype || getAdminTaskSubtype(task);
+                return {
+                    ...task,
+                    id,
+                    _id: id,
+                    title: task.title || task.appName || task.name || 'Task Mission',
+                    appName: task.appName || task.title || 'Task Mission',
+                    taskLink: task.taskLink || task.appLink || task.link || task.url || '',
+                    appLink: task.appLink || task.taskLink || task.link || task.url || '',
+                    reward: Number(task.reward ?? task.rate ?? task.price ?? 0),
+                    rate: Number(task.rate ?? task.reward ?? task.price ?? 0),
+                    subtype,
+                    taskSubtype: subtype,
+                    status: task.status || (task.isActive || task.isON ? 'active' : 'draft'),
+                    targetReviewers: task.targetReviewers || task.totalSlots || task.limit || 60
+                };
+            }).filter(Boolean);
+        };
+
 const getNextTaskMidnightMillis = () => {
             const next = new Date();
             next.setHours(24, 0, 0, 0);
@@ -1954,13 +2042,16 @@ const getNextTaskMidnightMillis = () => {
         };
 
 const getTaskCommentPool = (task = {}) => {
+            if (!task || typeof task !== 'object') return [];
             const family = getAdminTaskFamily(task);
             if (family !== 'review') return [];
             const source = Array.isArray(task.reviewComments) && task.reviewComments.length
                 ? task.reviewComments
-                : String(task.reviewComment || task.commentToCopy || task.reviewText || task.copyText || '').split(/\r?\n/);
+                : (Array.isArray(task.comments) && task.comments.length
+                    ? task.comments
+                    : String(task.reviewComment || task.commentToCopy || task.reviewText || task.copyText || task.commentsText || task.instructions || '').split(/\r?\n/));
             const unique = [];
-            source.map(value => String(value || '').trim()).filter(Boolean).forEach(comment => {
+            (source || []).map(value => String(value || '').trim()).filter(Boolean).forEach(comment => {
                 if (!unique.includes(comment)) unique.push(comment);
             });
             return unique;
@@ -3972,6 +4063,10 @@ window.closeWhatsNewPopup = closeWhatsNewPopup;
 window.showWhatsNewPopupIfNeeded = showWhatsNewPopupIfNeeded;
 window.handleTurnOffMaintenance = handleTurnOffMaintenance;
 window.handleDisableWhatsNew = handleDisableWhatsNew;
+window.getAdminTaskFamily = getAdminTaskFamily;
+window.getAdminTaskSubtype = getAdminTaskSubtype;
+window.getAdminTaskEffectiveStatus = getAdminTaskEffectiveStatus;
+window.normalizeTasksArray = normalizeTasksArray;
 window.getNextTaskMidnightMillis = getNextTaskMidnightMillis;
 window.getTaskCommentPool = getTaskCommentPool;
 window.getTaskTier = getTaskTier;

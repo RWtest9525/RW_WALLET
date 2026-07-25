@@ -106,7 +106,7 @@ const showUserTaskPage = () => {
             const isBulker = isBulkTaskUser();
             const hideNewTasksForDailyLimit = !isBulker && userTaskTodaySubmissionIds.size >= NORMAL_USER_DAILY_TASK_LIMIT;
 
-            allTasksCache
+            (Array.isArray(allTasksCache) ? allTasksCache : [])
                 .filter(isTaskVisibleToUser)
                 .filter(task => getAdminTaskEffectiveStatus(task) === 'active')
                 .filter(task => {
