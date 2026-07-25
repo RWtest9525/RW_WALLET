@@ -17,10 +17,11 @@ const isTaskVisibleToAdmin = (task) => {
 
 const canAdminManageTask = (task) => {
     const isOwner = currentUser?.uid === ADMIN_UID || currentUser?.email === 'reviewsworld51@gmail.com' || currentUser?.email === 'reviewsworld01@gmail.com' || currentUserData?.role === 'owner';
-    if (isOwner) return true; // Owner can manage all tasks
-    const isOwnerTask = !task.createdBy || task.createdBy === ADMIN_UID || task.createdBy === 'owner';
+    const taskCreator = task?.createdBy || task?.creatorUid || '';
+    const isOwnerTask = !taskCreator || taskCreator === ADMIN_UID || taskCreator === 'owner' || taskCreator === 'REVIEWS_WORLD_ADMIN' || taskCreator === 'reviewsworld01@gmail.com' || taskCreator === 'reviewsworld51@gmail.com';
+    if (isOwner) return isOwnerTask; // Owner can manage ONLY owner-created tasks (Sub-admin data is secret)
     if (isOwnerTask) return false; // Sub-admins cannot edit/delete/manage owner tasks
-    return task.createdBy === currentUser?.uid; // Sub-admin can manage their own tasks
+    return taskCreator === currentUser?.uid; // Sub-admin can manage their own tasks
 };
 const isAdminReviewTask = (task = {}) => getAdminTaskFamily(task) === 'review';
 

@@ -1461,11 +1461,19 @@ const renderAdminSubmissions = () => {
     // Filter submissions by ownership
     let subs = [...adminSubmissionsCache];
     const isOwner = currentUser?.uid === ADMIN_UID || currentUser?.email === 'reviewsworld51@gmail.com' || currentUser?.email === 'reviewsworld01@gmail.com' || currentUserData?.role === 'owner';
-    if (!isOwner) {
-        // Sub-admins only see submissions for tasks they created
+    const isOwnerCreator = (creator) => !creator || creator === ADMIN_UID || creator === 'owner' || creator === 'REVIEWS_WORLD_ADMIN' || creator === 'reviewsworld01@gmail.com' || creator === 'reviewsworld51@gmail.com';
+
+    if (isOwner) {
         subs = subs.filter(sub => {
             const task = (window.allTasksCache || []).find(t => t.id === (sub.task_id || sub.taskId));
-            return task && task.createdBy === currentUser.uid;
+            const creator = task ? (task.createdBy || task.creatorUid || '') : (sub.taskCreatedBy || sub.task_created_by || '');
+            return isOwnerCreator(creator);
+        });
+    } else {
+        subs = subs.filter(sub => {
+            const task = (window.allTasksCache || []).find(t => t.id === (sub.task_id || sub.taskId));
+            const creator = task ? (task.createdBy || task.creatorUid || '') : (sub.taskCreatedBy || sub.task_created_by || '');
+            return creator === currentUser.uid;
         });
     }
 
@@ -1499,11 +1507,11 @@ const renderAdminSubmissions = () => {
     const activeTaskIds = new Set(dateSubs.map(s => s.task_id || s.taskId).filter(Boolean));
     const totalTasksCount = activeTaskIds.size;
 
-
-
-    // Group rows by EVERY task in our cache so that OFF tasks also show up!
+    // Group rows by EVERY task in our cache for the current role
     let filteredTasks = [...(window.allTasksCache || [])];
-    if (!isOwner && filteredTasks.length > 0) {
+    if (isOwner) {
+        filteredTasks = filteredTasks.filter(task => isOwnerCreator(task.createdBy || task.creatorUid || ''));
+    } else {
         filteredTasks = filteredTasks.filter(task => task.createdBy === currentUser.uid);
     }
 
