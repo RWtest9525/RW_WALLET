@@ -1285,26 +1285,70 @@ const showAdminInvestmentUserDetailsPage = (userId) => {
             const totalAmount = investments.reduce((sum, inv) => sum + Number(inv.amount || 0), 0);
             const activeAmount = active.reduce((sum, inv) => sum + Number(inv.amount || 0), 0);
             const paidInterest = investments.reduce((sum, inv) => sum + Number(inv.paidInterest || 0), 0);
+            const formatDateStr = (dateVal) => {
+                if (!dateVal) return 'N/A';
+                const d = toDate(dateVal);
+                if (!d || isNaN(d.getTime())) return 'N/A';
+                const dd = String(d.getDate()).padStart(2, '0');
+                const mm = String(d.getMonth() + 1).padStart(2, '0');
+                const yyyy = d.getFullYear();
+                return `${dd}/${mm}/${yyyy}`;
+            };
+
             const cards = investments.length ? investments.map(inv => {
-                const next = toDate(inv.nextPayoutAt);
-                const end = toDate(inv.endDate);
-                const due = inv.status === 'active' && next && next <= new Date();
+                const start = toDate(inv.startDate) || toDate(inv.createdAt) || new Date();
+                const months = inv.months || inv.tenureMonths || 12;
+                let end = toDate(inv.endDate);
+                if (!end && start) {
+                    end = new Date(start.getTime());
+                    end.setMonth(end.getMonth() + months);
+                }
+                let next = toDate(inv.nextPayoutAt);
+                if (!next && start && (inv.status || 'active') === 'active') {
+                    next = new Date(start.getTime());
+                    next.setMonth(next.getMonth() + 1);
+                }
+                const now = new Date();
+                const due = inv.status === 'active' && next && next <= now;
+                const isCompleted = inv.status === 'completed' || (end && end <= now && (inv.paidInterest || 0) >= (inv.totalInterest || 0));
+
                 return `
-                    <div class="rounded-2xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-4 text-sm">
-                        <div class="flex justify-between gap-3">
+                    <div class="rounded-2xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-4 text-sm space-y-3 shadow-sm">
+                        <div class="flex justify-between items-start gap-3 border-b border-gray-100 dark:border-gray-700 pb-3">
                             <div>
-                                <p class="font-black">${formatCurrency(inv.amount || 0)} <span class="text-[10px] uppercase text-gray-500">${escapeHtml(inv.status || 'active')}</span></p>
-                                <p class="text-xs text-gray-500">Invoice: ${escapeHtml(inv.invoiceId || inv.id)}</p>
-                                <p class="text-xs text-gray-500">Next: ${next && inv.status === 'active' ? next.toLocaleDateString('en-IN') : 'Done'} | End: ${end ? end.toLocaleDateString('en-IN') : 'N/A'}</p>
+                                <p class="text-lg font-black text-gray-900 dark:text-white">${formatCurrency(inv.amount || 0)}</p>
+                                <p class="text-xs text-gray-500 font-mono">Invoice #${escapeHtml(inv.invoiceId || inv.id)}</p>
                             </div>
-                            <div class="text-right">
-                                <p class="font-black">${formatCurrency(inv.paidInterest || 0)}</p>
-                                <p class="text-xs text-gray-500">Interest paid</p>
+                            <span class="rounded-full px-3 py-1 text-xs font-black ${isCompleted ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300' : 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-300'}">
+                                ${isCompleted ? 'Completed' : (inv.status || 'active').toUpperCase()}
+                            </span>
+                        </div>
+
+                        <div class="grid grid-cols-2 gap-2 text-xs bg-gray-50 dark:bg-gray-750 p-3 rounded-xl">
+                            <div>
+                                <span class="text-[10px] font-bold text-gray-400 uppercase block">📅 Invested Date</span>
+                                <p class="font-extrabold text-gray-800 dark:text-gray-200 mt-0.5">${formatDateStr(start)}</p>
+                            </div>
+                            <div>
+                                <span class="text-[10px] font-bold text-gray-400 uppercase block">🏆 Maturity / Return Date</span>
+                                <p class="font-extrabold text-emerald-600 dark:text-emerald-400 mt-0.5">${formatDateStr(end)}</p>
                             </div>
                         </div>
-                        <div class="mt-3 flex flex-wrap gap-2">
-                            <button data-action="process-investment-interest" data-investmentid="${inv.id}" ${due ? '' : 'disabled'} class="rounded-lg px-3 py-2 text-xs font-black ${due ? 'bg-emerald-600 text-white' : 'bg-gray-200 text-gray-500 dark:bg-gray-700'}">Give Interest</button>
-                            <button data-action="download-admin-investment-invoice" data-investmentid="${inv.id}" class="rounded-lg bg-slate-900 px-3 py-2 text-xs font-black text-white dark:bg-slate-100 dark:text-slate-900">Invoice</button>
+
+                        <div class="grid grid-cols-2 gap-2 text-xs">
+                            <div class="rounded-xl bg-emerald-50/60 dark:bg-emerald-950/20 p-2.5">
+                                <span class="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 uppercase">Interest Paid</span>
+                                <p class="font-black text-emerald-700 dark:text-emerald-300 mt-0.5">${formatCurrency(inv.paidInterest || 0)}</p>
+                            </div>
+                            <div class="rounded-xl bg-blue-50/60 dark:bg-blue-950/20 p-2.5">
+                                <span class="text-[10px] font-bold text-blue-600 dark:text-blue-400 uppercase">Next Payout</span>
+                                <p class="font-black text-blue-700 dark:text-blue-300 mt-0.5">${isCompleted ? 'All Paid' : formatDateStr(next)}</p>
+                            </div>
+                        </div>
+
+                        <div class="flex flex-wrap gap-2 pt-1">
+                            <button data-action="process-investment-interest" data-investmentid="${inv.id}" ${due ? '' : 'disabled'} class="rounded-xl px-4 py-2 text-xs font-black transition ${due ? 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm' : 'bg-gray-200 text-gray-400 dark:bg-gray-700 dark:text-gray-500 cursor-not-allowed'}">${due ? '⚡ Process Monthly Interest' : 'Interest Unlocks in 30 Days'}</button>
+                            <button data-action="download-admin-investment-invoice" data-investmentid="${inv.id}" class="rounded-xl bg-slate-900 hover:bg-slate-800 px-4 py-2 text-xs font-black text-white dark:bg-slate-100 dark:hover:bg-white dark:text-slate-900 shadow-sm">📄 Invoice PDF</button>
                         </div>
                     </div>`;
             }).join('') : '<p class="rounded-2xl border border-dashed border-gray-200 dark:border-gray-700 p-5 text-center text-sm font-bold text-gray-500">No investment history.</p>';

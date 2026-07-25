@@ -114,30 +114,85 @@ const showPartnerPage = () => {
         };
 
 const renderUserInvestmentCard = (inv) => {
+            const formatDateStr = (dateVal) => {
+                if (!dateVal) return 'N/A';
+                const d = toDate(dateVal);
+                if (!d || isNaN(d.getTime())) return 'N/A';
+                const dd = String(d.getDate()).padStart(2, '0');
+                const mm = String(d.getMonth() + 1).padStart(2, '0');
+                const yyyy = d.getFullYear();
+                return `${dd}/${mm}/${yyyy}`;
+            };
+
             const start = toDate(inv.startDate) || toDate(inv.createdAt) || new Date();
-            const end = toDate(inv.endDate);
-            const next = toDate(inv.nextPayoutAt);
+            const months = inv.months || inv.tenureMonths || 12;
+            let end = toDate(inv.endDate);
+            if (!end && start) {
+                end = new Date(start.getTime());
+                end.setMonth(end.getMonth() + months);
+            }
+            let next = toDate(inv.nextPayoutAt);
+            if (!next && start && (inv.status || 'active') === 'active') {
+                next = new Date(start.getTime());
+                next.setMonth(next.getMonth() + 1);
+            }
+
             const paidInterest = inv.paidInterest || 0;
-            const totalInterest = inv.totalInterest || 0;
+            const totalInterest = inv.totalInterest || (inv.amount ? Math.round(inv.amount * 0.01 * months) : 0);
             const progress = totalInterest > 0 ? Math.min(100, Math.round((paidInterest / totalInterest) * 100)) : 0;
+            
+            const now = new Date();
+            const isCompleted = inv.status === 'completed' || (end && end <= now && paidInterest >= totalInterest);
+            const statusLabel = isCompleted ? 'Completed & Paid' : (end && end <= now ? 'Matured (Payout Due)' : 'Active (Earning Interest)');
+            const statusBg = isCompleted ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300' : 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-300';
+
             return `
-                <div class="rounded-2xl bg-white dark:bg-gray-800 border border-gray-100 dark:border-gray-700 p-4 shadow-sm">
-                    <div class="flex justify-between gap-3">
+                <div class="rounded-2xl bg-white dark:bg-gray-800 border border-gray-150 dark:border-gray-700 p-4 shadow-md space-y-3">
+                    <div class="flex justify-between items-start gap-3 border-b border-gray-100 dark:border-gray-700 pb-3">
                         <div>
-                            <p class="text-xs uppercase text-gray-500">Investment</p>
-                            <p class="text-xl font-bold">${formatCurrency(inv.amount || 0)}</p>
-                            <p class="text-xs text-gray-500 mt-1">${start.toLocaleDateString('en-IN')} - ${end ? end.toLocaleDateString('en-IN') : 'N/A'}</p>
+                            <p class="text-[10px] font-extrabold uppercase tracking-wider text-emerald-600 dark:text-emerald-400">RW Partner Plan (${months} Months @ 1%/mo)</p>
+                            <p class="text-2xl font-black text-gray-900 dark:text-white mt-0.5">${formatCurrency(inv.amount || 0)}</p>
+                            <p class="text-xs text-gray-400 font-mono mt-0.5">Invoice #${escapeHtml(inv.invoiceId || inv.id || 'INV-000')}</p>
                         </div>
-                        <span class="h-fit rounded-full px-3 py-1 text-xs font-bold ${inv.status === 'completed' ? 'bg-green-100 text-green-700' : 'bg-emerald-100 text-emerald-700'}">${inv.status || 'active'}</span>
+                        <span class="rounded-full px-3 py-1 text-[11px] font-black ${statusBg}">${statusLabel}</span>
                     </div>
-                    <div class="mt-3 h-2 rounded-full bg-gray-100 dark:bg-gray-700 overflow-hidden">
-                        <div class="h-full bg-emerald-500" style="width:${progress}%"></div>
+
+                    <!-- Investment Timeline -->
+                    <div class="grid grid-cols-2 gap-2 text-xs bg-gray-50 dark:bg-gray-750 p-3 rounded-xl border border-gray-100 dark:border-gray-700/60">
+                        <div>
+                            <span class="text-[10px] font-bold uppercase text-gray-400 block">📅 Invested Date</span>
+                            <p class="font-extrabold text-gray-800 dark:text-gray-200 mt-0.5">${formatDateStr(start)}</p>
+                        </div>
+                        <div>
+                            <span class="text-[10px] font-bold uppercase text-gray-400 block">🏆 Maturity / Return Date</span>
+                            <p class="font-extrabold text-emerald-600 dark:text-emerald-400 mt-0.5">${formatDateStr(end)}</p>
+                        </div>
                     </div>
-                    <div class="mt-3 grid grid-cols-2 gap-2 text-xs">
-                        <div class="rounded-xl bg-gray-50 dark:bg-gray-700 p-2"><span class="text-gray-500">Interest got</span><p class="font-bold">${formatCurrency(paidInterest)}</p></div>
-                        <div class="rounded-xl bg-gray-50 dark:bg-gray-700 p-2"><span class="text-gray-500">Next interest</span><p class="font-bold">${next && inv.status === 'active' ? next.toLocaleDateString('en-IN') : 'Done'}</p></div>
+
+                    <!-- Progress Bar -->
+                    <div class="space-y-1">
+                        <div class="flex justify-between text-[11px] font-bold text-gray-500 dark:text-gray-400">
+                            <span>Interest Progress</span>
+                            <span>${progress}% (${formatCurrency(paidInterest)} / ${formatCurrency(totalInterest)})</span>
+                        </div>
+                        <div class="h-2 rounded-full bg-gray-100 dark:bg-gray-700 overflow-hidden">
+                            <div class="h-full bg-gradient-to-r from-emerald-500 to-teal-500 rounded-full transition-all duration-300" style="width:${progress}%"></div>
+                        </div>
                     </div>
-                    <button data-action="download-investment-invoice" data-investmentid="${inv.id}" class="mt-3 w-full rounded-xl bg-slate-900 dark:bg-slate-100 text-white dark:text-slate-900 py-2 text-sm font-semibold">Download PDF Invoice</button>
+
+                    <!-- Return Status & Payout Info -->
+                    <div class="grid grid-cols-2 gap-2 text-xs">
+                        <div class="rounded-xl bg-emerald-50/60 dark:bg-emerald-950/20 p-2.5 border border-emerald-100 dark:border-emerald-900/30">
+                            <span class="text-[10px] font-bold uppercase text-emerald-600 dark:text-emerald-400">Total Interest Earned</span>
+                            <p class="font-black text-emerald-700 dark:text-emerald-300 text-sm mt-0.5">${formatCurrency(paidInterest)}</p>
+                        </div>
+                        <div class="rounded-xl bg-blue-50/60 dark:bg-blue-950/20 p-2.5 border border-blue-100 dark:border-blue-900/30">
+                            <span class="text-[10px] font-bold uppercase text-blue-600 dark:text-blue-400">Next Interest Payout</span>
+                            <p class="font-black text-blue-700 dark:text-blue-300 text-sm mt-0.5">${isCompleted ? 'All Paid' : formatDateStr(next)}</p>
+                        </div>
+                    </div>
+
+                    <button data-action="download-investment-invoice" data-investmentid="${inv.id}" class="w-full rounded-xl bg-slate-900 hover:bg-slate-800 dark:bg-slate-100 dark:hover:bg-white text-white dark:text-slate-900 py-2.5 text-xs font-black transition shadow-sm">📄 Download PDF Receipt & Invoice</button>
                 </div>`;
         };
 
