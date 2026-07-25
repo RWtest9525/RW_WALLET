@@ -1372,16 +1372,55 @@ const renderHomeTaskCategories = () => {
             });
         };
 
+const applyAdminTasksSnapshot = (docs = []) => {
+            try {
+                const rawList = (docs || []).map(d => (typeof d?.data === 'function' ? { id: d.id, _id: d.id, ...d.data() } : d));
+                allTasksCache = normalizeTasksArray(rawList);
+                try { localStorage.setItem('all_tasks_cache', JSON.stringify(allTasksCache)); } catch(e){}
+
+                if (typeof currentMainSection !== 'undefined') {
+                    if (currentMainSection === 'home' && typeof renderHomeTaskCategories === 'function') {
+                        renderHomeTaskCategories();
+                    } else if (currentMainSection === 'task' && typeof showUserTaskPage === 'function') {
+                        showUserTaskPage();
+                    }
+                }
+                if (typeof renderAdminTaskList === 'function' && document.getElementById('admin-task-list')) {
+                    renderAdminTaskList();
+                }
+            } catch (e) {
+                console.warn('applyAdminTasksSnapshot skipped:', e);
+            }
+        };
+
+let publicHomeRealtimeStarted = false;
+let tasksSnapshotUnsubscribe = null;
+
 const initializePublicHomeRealtime = () => {
             if (publicHomeRealtimeStarted) return;
             publicHomeRealtimeStarted = true;
-            Promise.allSettled([
-                getDocs(query(collection(db, `artifacts/${appId}/public/data/ads`), orderBy("createdAt", "desc"), firestoreLimit(30))),
-                getDocs(query(collection(db, `artifacts/${appId}/public/data/tasks`), orderBy("createdAt", "desc"), firestoreLimit(50)))
-            ]).then(([adsResult, tasksResult]) => {
-                if (adsResult.status === 'fulfilled') applyAdsSnapshot(adsResult.value.docs);
-                if (tasksResult.status === 'fulfilled') applyAdminTasksSnapshot(tasksResult.value.docs);
-            }).catch(error => console.warn('Public home data load skipped:', error));
+            
+            if (typeof db !== 'undefined' && typeof appId !== 'undefined' && typeof collection === 'function' && typeof getDocs === 'function') {
+                getDocs(query(collection(db, `artifacts/${appId}/public/data/ads`), orderBy("createdAt", "desc"), firestoreLimit(30)))
+                    .then(adsResult => {
+                        if (typeof applyAdsSnapshot === 'function') applyAdsSnapshot(adsResult.docs);
+                    }).catch(e => console.warn('Public ads load skipped:', e));
+            }
+
+            if (typeof db !== 'undefined' && typeof appId !== 'undefined' && typeof collection === 'function' && typeof onSnapshot === 'function') {
+                try {
+                    const tasksQuery = query(collection(db, `artifacts/${appId}/public/data/tasks`), orderBy("createdAt", "desc"));
+                    tasksSnapshotUnsubscribe = onSnapshot(tasksQuery, (snapshot) => {
+                        console.log('[RealtimeTasks] Live tasks updated. Count:', snapshot.docs.length);
+                        applyAdminTasksSnapshot(snapshot.docs);
+                    }, (err) => {
+                        console.warn('[RealtimeTasks] Snapshot error, falling back to one-time fetch:', err);
+                        getDocs(tasksQuery).then(snap => applyAdminTasksSnapshot(snap.docs)).catch(() => {});
+                    });
+                } catch (err) {
+                    console.warn('[RealtimeTasks] Failed to bind realtime listener:', err);
+                }
+            }
         };
 
 const toTitleText = (value = '') => String(value)
@@ -4063,6 +4102,8 @@ window.closeWhatsNewPopup = closeWhatsNewPopup;
 window.showWhatsNewPopupIfNeeded = showWhatsNewPopupIfNeeded;
 window.handleTurnOffMaintenance = handleTurnOffMaintenance;
 window.handleDisableWhatsNew = handleDisableWhatsNew;
+window.applyAdminTasksSnapshot = applyAdminTasksSnapshot;
+window.initializePublicHomeRealtime = initializePublicHomeRealtime;
 window.getAdminTaskFamily = getAdminTaskFamily;
 window.getAdminTaskSubtype = getAdminTaskSubtype;
 window.getAdminTaskEffectiveStatus = getAdminTaskEffectiveStatus;

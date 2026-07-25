@@ -824,19 +824,21 @@ document.body.addEventListener('change', (e) => {
             handleSetWithdrawalGiftCardType(userid, requestid, target.value);
         });
 
-document.getElementById('auth-form').addEventListener('submit', handleAuth);
+document.getElementById('auth-form')?.addEventListener('submit', handleAuth);
 
-document.getElementById('auth-toggle').addEventListener('click', (e) => { e.preventDefault(); toggleAuthMode(); });
+document.getElementById('auth-toggle')?.addEventListener('click', (e) => { e.preventDefault(); toggleAuthMode(); });
 
-document.getElementById('password-toggle').addEventListener('click', () => {
+document.getElementById('password-toggle')?.addEventListener('click', () => {
             const passInput = document.getElementById('password');
-            const isOpen = passInput.type === 'password';
-            passInput.type = isOpen ? 'text' : 'password';
-            document.getElementById('eye-open').classList.toggle('hidden', isOpen);
-            document.getElementById('eye-closed').classList.toggle('hidden', !isOpen);
+            if (passInput) {
+                const isOpen = passInput.type === 'password';
+                passInput.type = isOpen ? 'text' : 'password';
+                document.getElementById('eye-open')?.classList.toggle('hidden', isOpen);
+                document.getElementById('eye-closed')?.classList.toggle('hidden', !isOpen);
+            }
         });
 
-document.getElementById('tabs-container').addEventListener('click', (e) => {
+document.getElementById('tabs-container')?.addEventListener('click', (e) => {
             if (e.target.matches('.tab-button')) {
                 const tabId = e.target.dataset.tab;
                 if (tabId === 'admin-panel' && !hasAdminSessionReadyOrCached()) {
@@ -849,12 +851,12 @@ document.getElementById('tabs-container').addEventListener('click', (e) => {
             }
         });
 
-document.getElementById('bottom-home-btn').addEventListener('click', () => {
+document.getElementById('bottom-home-btn')?.addEventListener('click', () => {
             window.pendingTabRedirect = null;
             showHomeMainPage();
         });
 
-document.getElementById('bottom-refer-btn').addEventListener('click', () => {
+document.getElementById('bottom-refer-btn')?.addEventListener('click', () => {
             if (!currentUser && hasCachedLoginSession()) {
                 window.pendingTabRedirect = 'refer';
                 showNotification('App is opening. Please wait a moment.', true, false);
@@ -863,7 +865,7 @@ document.getElementById('bottom-refer-btn').addEventListener('click', () => {
             showReferEarnPage();
         });
 
-document.getElementById('bottom-admin-btn').addEventListener('click', () => {
+document.getElementById('bottom-admin-btn')?.addEventListener('click', () => {
             if (!currentUser && hasCachedLoginSession()) {
                 window.pendingTabRedirect = 'admin';
                 showNotification('App is opening. Please wait a moment.', true, false);
@@ -872,7 +874,7 @@ document.getElementById('bottom-admin-btn').addEventListener('click', () => {
             showAdminMainPage();
         });
 
-document.getElementById('bottom-task-btn').addEventListener('click', () => {
+document.getElementById('bottom-task-btn')?.addEventListener('click', () => {
             if (!currentUser && hasCachedLoginSession()) {
                 window.pendingTabRedirect = 'task';
                 showNotification('App is opening. Please wait a moment.', true, false);
@@ -881,7 +883,7 @@ document.getElementById('bottom-task-btn').addEventListener('click', () => {
             showUserTaskPage();
         });
 
-document.getElementById('bottom-help-btn').addEventListener('click', () => {
+document.getElementById('bottom-help-btn')?.addEventListener('click', () => {
             if (!currentUser && hasCachedLoginSession()) {
                 window.pendingTabRedirect = 'help';
                 showNotification('App is opening. Please wait a moment.', true, false);
@@ -890,11 +892,11 @@ document.getElementById('bottom-help-btn').addEventListener('click', () => {
             showHelpSupportPage();
         });
 
-document.getElementById('bottom-settings-btn').addEventListener('click', showSettingsPage);
+document.getElementById('bottom-settings-btn')?.addEventListener('click', showSettingsPage);
 
-document.getElementById('notification-header-btn').addEventListener('click', showNotificationsPage);
+document.getElementById('notification-header-btn')?.addEventListener('click', showNotificationsPage);
 
-document.getElementById('manage-admin-wallet-btn').addEventListener('click', () => openAdminQuickAction(showManageAdminWalletModal));
+document.getElementById('manage-admin-wallet-btn')?.addEventListener('click', () => openAdminQuickAction(showManageAdminWalletModal));
 
 document.getElementById('admin-manage-tasks-btn')?.addEventListener('click', () => openAdminQuickAction(showAdminTaskPage));
 
@@ -902,59 +904,60 @@ document.getElementById('admin-manage-tasks-secondary-btn')?.addEventListener('c
 
 document.getElementById('wallet-history-action-btn')?.addEventListener('click', () => openUserQuickAction(showAllTransactionsPage));
 
-document.getElementById('analytics-total-users-card').addEventListener('click', () => openAdminQuickAction(() => showAdminUsersPageWithFilter('all')));
+document.getElementById('analytics-total-users-card')?.addEventListener('click', () => openAdminQuickAction(() => showAdminUsersPageWithFilter('all')));
 
-document.getElementById('analytics-new-members-card').addEventListener('click', () => openAdminQuickAction(() => showAdminUsersPageWithFilter('new')));
+document.getElementById('analytics-new-members-card')?.addEventListener('click', () => openAdminQuickAction(() => showAdminUsersPageWithFilter('new')));
 
-document.getElementById('analytics-pending-withdrawals-card').addEventListener('click', () => openAdminQuickAction(showAdminWithdrawalsPage));
+document.getElementById('analytics-pending-withdrawals-card')?.addEventListener('click', () => openAdminQuickAction(showAdminWithdrawalsPage));
 
-document.getElementById('analytics-minus-balance-card').addEventListener('click', () => openAdminQuickAction(() => showAdminUsersPageWithFilter('minus_balance')));
+document.getElementById('analytics-minus-balance-card')?.addEventListener('click', () => openAdminQuickAction(() => showAdminUsersPageWithFilter('minus_balance')));
 
-document.getElementById('analytics-total-funds-card').addEventListener('click', () => openAdminQuickAction(() => showAdminUsersPageWithFilter('all')));
+document.getElementById('analytics-total-funds-card')?.addEventListener('click', () => openAdminQuickAction(() => showAdminUsersPageWithFilter('all')));
 
-document.getElementById('analytics-gift-cards-card').addEventListener('click', () => openAdminQuickAction(showAdminGiftCodesPage));
+document.getElementById('analytics-gift-cards-card')?.addEventListener('click', () => openAdminQuickAction(showAdminGiftCodesPage));
 
-document.getElementById('admin-withdrawals-btn').addEventListener('click', () => openAdminQuickAction(showAdminWithdrawalsPage));
+document.getElementById('admin-withdrawals-btn')?.addEventListener('click', () => openAdminQuickAction(showAdminWithdrawalsPage));
 
-document.getElementById('admin-users-btn').addEventListener('click', () => openAdminQuickAction(showAdminUsersPage));
+document.getElementById('admin-users-btn')?.addEventListener('click', () => openAdminQuickAction(showAdminUsersPage));
 
 document.getElementById('admin-manage-settings-btn')?.addEventListener('click', () => openAdminQuickAction(showAdminManageSettingsPage));
 
 document.getElementById('admin-manage-admins-btn')?.addEventListener('click', () => openAdminQuickAction(showAdminManageAdminsPage));
 
-document.getElementById('admin-gift-codes-btn').addEventListener('click', () => openAdminQuickAction(showAdminGiftCodesPage));
+document.getElementById('admin-gift-codes-btn')?.addEventListener('click', () => openAdminQuickAction(showAdminGiftCodesPage));
 
-document.getElementById('admin-recharge-requests-btn').addEventListener('click', () => openAdminQuickAction(showAdminRechargeRequestsPage));
+document.getElementById('admin-recharge-requests-btn')?.addEventListener('click', () => openAdminQuickAction(showAdminRechargeRequestsPage));
 
-document.getElementById('admin-loans-btn').addEventListener('click', () => openAdminQuickAction(showAdminLoanPage));
+document.getElementById('admin-loans-btn')?.addEventListener('click', () => openAdminQuickAction(showAdminLoanPage));
 
-document.getElementById('admin-investments-btn').addEventListener('click', () => openAdminQuickAction(showAdminInvestmentsPage));
+document.getElementById('admin-investments-btn')?.addEventListener('click', () => openAdminQuickAction(showAdminInvestmentsPage));
 
-document.getElementById('admin-chats-btn').addEventListener('click', () => openAdminQuickAction(showAdminChatsPage));
+document.getElementById('admin-chats-btn')?.addEventListener('click', () => openAdminQuickAction(showAdminChatsPage));
 
-document.getElementById('admin-tasks-btn').addEventListener('click', () => openAdminQuickAction(showAdminTaskPage));
+document.getElementById('admin-tasks-btn')?.addEventListener('click', () => openAdminQuickAction(showAdminTaskPage));
 document.getElementById('admin-settlement-btn')?.addEventListener('click', () => openAdminQuickAction(showAdminSettlementPage));
 document.getElementById('admin-check-referral-btn')?.addEventListener('click', () => openAdminQuickAction(showAdminReferralLookupPage));
 document.getElementById('admin-train-ai-btn')?.addEventListener('click', () => openAdminQuickAction(() => openRevyBotChatPage(true)));
 
-document.getElementById('withdraw-fund-btn').addEventListener('click', () => openUserQuickAction(showWithdrawPage));
+document.getElementById('withdraw-fund-btn')?.addEventListener('click', () => openUserQuickAction(showWithdrawPage));
 
-document.getElementById('redeem-gift-card-btn').addEventListener('click', () => {
+document.getElementById('redeem-gift-card-btn')?.addEventListener('click', () => {
             renderModal('Redeem Gift Card',
                 `<input type="text" id="gift-code-input" placeholder="Enter your code" class="w-full px-4 py-3 bg-gray-100 dark:bg-gray-700 rounded-lg">`,
                 `<button onclick="window.closeModal()" class="px-4 py-2 text-sm bg-gray-200 dark:bg-gray-600 rounded-lg">Cancel</button>
                  <button id="modal-submit-btn" class="px-4 py-2 text-sm bg-green-500 text-white rounded-lg">Redeem</button>`);
-            document.getElementById('modal-submit-btn').onclick = handleRedeem;
+            const subBtn = document.getElementById('modal-submit-btn');
+            if (subBtn) subBtn.onclick = handleRedeem;
         });
 
-document.getElementById('pay-to-wallet-btn').addEventListener('click', () => openUserQuickAction(showPayToWalletPage));
+document.getElementById('pay-to-wallet-btn')?.addEventListener('click', () => openUserQuickAction(showPayToWalletPage));
 
-document.getElementById('mobile-recharge-btn').addEventListener('click', () => openUserQuickAction(showMobileRechargePage));
+document.getElementById('mobile-recharge-btn')?.addEventListener('click', () => openUserQuickAction(showMobileRechargePage));
 
 const loanBtn = document.getElementById('loan-btn');
 if (loanBtn) loanBtn.addEventListener('click', openLoanQuickAction);
 
-document.getElementById('partner-btn').addEventListener('click', () => openUserQuickAction(showPartnerPage));
+document.getElementById('partner-btn')?.addEventListener('click', () => openUserQuickAction(showPartnerPage));
 
 document.addEventListener('DOMContentLoaded', function () {
             console.log('DOM loaded, initializing app...');
