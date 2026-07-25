@@ -340,9 +340,9 @@ const renderSupportMessages = (messages, viewerRole) => {
 
                     const isSelected = selectedMessageIds.has(message.id);
                     const selectionCheckHtml = isMultiSelectMode
-                        ? `<div class="flex items-center justify-center pr-2 pl-2 shrink-0 select-none">
-                               <div class="h-5 w-5 rounded-full border-2 flex items-center justify-center transition-all ${isSelected ? 'bg-blue-600 border-blue-600 text-white shadow-sm' : 'border-gray-300 dark:border-gray-600 bg-transparent'}">
-                                   ${isSelected ? '<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="3" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"></path></svg>' : ''}
+                        ? `<div class="msg-select-check flex items-center justify-center px-2 shrink-0 select-none cursor-pointer" data-msg-id="${message.id}">
+                               <div class="h-5 w-5 min-w-[20px] min-h-[20px] max-w-[20px] max-h-[20px] aspect-square rounded-full border-2 flex items-center justify-center shrink-0 transition-all ${isSelected ? 'bg-blue-600 border-blue-600 text-white shadow-sm' : 'border-gray-300 dark:border-gray-600 bg-transparent'}">
+                                   ${isSelected ? '<svg class="w-3.5 h-3.5 shrink-0" fill="none" stroke="currentColor" stroke-width="3" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"></path></svg>' : ''}
                                </div>
                            </div>`
                         : '';
@@ -384,6 +384,14 @@ const renderSupportMessages = (messages, viewerRole) => {
                 }
                 renderSupportMessages(messages, viewerRole);
             };
+
+            list.querySelectorAll('.msg-select-check').forEach(checkEl => {
+                checkEl.onclick = (e) => {
+                    e.stopPropagation();
+                    const msgId = Number(checkEl.dataset.msgId);
+                    toggleBubbleSelection(msgId);
+                };
+            });
 
             // Bind message bubble click and hold handlers
             list.querySelectorAll('.support-chat-bubble').forEach(bubble => {
@@ -692,7 +700,9 @@ const fetchSupportChatHistory = async (roomId, limit = 80) => {
         };
 
 const calculateSupportUnreadCount = (roomId, messages = readSupportChatCache(roomId)) => {
-            const lastSeen = Number(localStorage.getItem(getSupportChatSeenKey(roomId)) || 0);
+            const localSeen = Number(localStorage.getItem(getSupportChatSeenKey(roomId)) || 0);
+            const firestoreSeen = Number(currentUserData?.[`lastChatSeen_${roomId}`] || currentUserData?.lastChatSeenTimestamp || 0);
+            const lastSeen = Math.max(localSeen, firestoreSeen);
             return messages
                 .map(normalizeBackendMessage)
                 .filter(message => message.senderRole === 'admin' && timestampToMillis(message.createdAt) > lastSeen)
@@ -713,6 +723,19 @@ const markSupportChatSeen = (roomId, messages = readSupportChatCache(roomId)) =>
             const latestAdminTime = getLatestAdminMessageTime(messages);
             if (latestAdminTime) {
                 localStorage.setItem(getSupportChatSeenKey(roomId), String(latestAdminTime));
+                if (currentUser?.uid && typeof db !== 'undefined') {
+                    try {
+                        const userRef = doc(db, `artifacts/${appId}/public/data/users`, currentUser.uid);
+                        updateDoc(userRef, {
+                            [`lastChatSeen_${roomId}`]: latestAdminTime,
+                            lastChatSeenTimestamp: latestAdminTime
+                        }).catch(() => {});
+                        if (currentUserData) {
+                            currentUserData[`lastChatSeen_${roomId}`] = latestAdminTime;
+                            currentUserData.lastChatSeenTimestamp = latestAdminTime;
+                        }
+                    } catch (e) {}
+                }
             }
             refreshSupportUnreadFromCache();
         };
@@ -1823,15 +1846,18 @@ window.openRevyBotChatPage = openRevyBotChatPage;
 window.showHelpSupportPage = showHelpSupportPage;
 window.openAdminInspectDetailsModal = openAdminInspectDetailsModal;
 
-const showDeleteSupportMessageModal = (messageId, isMine, viewerRole) => {
+const showDeleteSupportMessageModal = (messageId, isMine, viewerRole, messageObj = null) => {
     const isSender = isMine || viewerRole === 'admin';
+    const targetMsg = messageObj || (typeof activeSupportMessages !== 'undefined' ? activeSupportMessages.find(m => String(m.id) === String(messageId)) : null);
+    const isReadByRecipient = !!(targetMsg && (targetMsg.readAt || targetMsg.read || targetMsg.status === 'read'));
+    const canDeleteForEveryone = isSender && !isReadByRecipient;
 
     renderModal('Delete Message', `
         <div class="space-y-4 text-center">
             <p class="text-sm text-gray-600 dark:text-gray-300">Choose how you want to delete this message:</p>
             <div class="space-y-2 pt-2">
-                <button id="delete-for-me-btn" class="w-full py-3 bg-gray-105 hover:bg-gray-200 dark:bg-gray-700 dark:hover:bg-gray-600 rounded-xl text-sm font-bold text-gray-800 dark:text-white transition">🗑️ Delete for me</button>
-                ${isSender ? `
+                <button id="delete-for-me-btn" class="w-full py-3 bg-gray-100 hover:bg-gray-200 dark:bg-gray-700 dark:hover:bg-gray-600 rounded-xl text-sm font-bold text-gray-800 dark:text-white transition">🗑️ Delete for me</button>
+                ${canDeleteForEveryone ? `
                 <button id="delete-for-everyone-btn" class="w-full py-3 bg-rose-50 hover:bg-rose-100 dark:bg-rose-950/30 dark:hover:bg-rose-950/50 rounded-xl text-sm font-bold text-rose-600 dark:text-rose-400 transition">🌍 Delete for everyone</button>
                 ` : ''}
             </div>
@@ -1854,7 +1880,7 @@ const showDeleteSupportMessageModal = (messageId, isMine, viewerRole) => {
         }
     };
 
-    if (isSender) {
+    if (canDeleteForEveryone) {
         document.getElementById('delete-for-everyone-btn').onclick = async () => {
             const socket = window.activeSupportSocket;
             if (!socket || !socket.connected) {
