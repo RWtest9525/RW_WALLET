@@ -3947,33 +3947,43 @@ const showUserTaskPage = () => {
                     const socialTaskItems = [];
 
                     const isTaskVisibleToUser = (task) => {
+                        if (!task || typeof task !== 'object') return false;
                         const userRole = String(currentUserData?.role || '').toLowerCase();
                         const isOwner = currentUser?.uid === ADMIN_UID || currentUser?.email === 'reviewsworld51@gmail.com' || currentUser?.email === 'reviewsworld01@gmail.com' || userRole === 'owner';
                         const isUserSubAdmin = userRole === 'admin' || userRole === 'subadmin';
-                        const userUid = currentUser?.uid || currentUserData?.uid || '';
-                        const parentAdminId = currentUserData?.parentAdmin || currentUserData?.parent_admin || currentUserData?.assignedSubAdmin || currentUserData?.subAdminId || '';
+                        const userUid = String(currentUser?.uid || currentUserData?.uid || '').trim();
 
-                        const effectiveSubAdminId = isUserSubAdmin ? userUid : parentAdminId;
-                        const taskCreator = task.createdBy || '';
-                        const assigned = Array.isArray(task.assignedToSubAdmins) ? task.assignedToSubAdmins : [];
+                        const userParentAdmin = String(currentUserData?.parentAdmin || currentUserData?.parent_admin || currentUserData?.assignedSubAdmin || currentUserData?.subAdminId || currentUserData?.adminId || '').trim();
 
-                        const isOwnerTask = !taskCreator || taskCreator === ADMIN_UID || taskCreator === 'owner' || taskCreator === 'REVIEWS_WORLD_ADMIN';
+                        const taskCreator = String(task.createdBy || task.created_by || task.adminId || task.subAdminId || '').trim();
+                        const assigned = Array.isArray(task.assignedToSubAdmins) ? task.assignedToSubAdmins.map(s => String(s).trim()) : [];
 
-                        if (isOwner) return isOwnerTask;
-                        if (assigned.includes('all')) return true;
+                        const isOwnerTask = !taskCreator || taskCreator === ADMIN_UID || taskCreator === 'owner' || taskCreator === 'REVIEWS_WORLD_ADMIN' || taskCreator === 'reviewsworld01@gmail.com' || taskCreator === 'reviewsworld51@gmail.com';
+
+                        if (isOwner) return true;
+
+                        if (isUserSubAdmin) {
+                            return isOwnerTask || taskCreator === userUid || assigned.includes(userUid) || assigned.includes('all');
+                        }
+
+                        if (assigned.includes('all') || assigned.includes('all_users')) {
+                            return true;
+                        }
+
+                        if (!isOwnerTask && taskCreator) {
+                            if (userParentAdmin) {
+                                return taskCreator === userParentAdmin || assigned.includes(userParentAdmin);
+                            }
+                            return assigned.includes('all');
+                        }
 
                         if (isOwnerTask) {
-                            if (!effectiveSubAdminId || effectiveSubAdminId === ADMIN_UID) {
-                                return assigned.length === 0;
-                            } else {
-                                return assigned.length === 0 || assigned.includes(effectiveSubAdminId);
-                            }
-                        } else {
-                            if (!effectiveSubAdminId || effectiveSubAdminId === ADMIN_UID) {
-                                return false;
-                            }
-                            return taskCreator === effectiveSubAdminId || assigned.includes(effectiveSubAdminId);
+                            if (assigned.length === 0) return true;
+                            if (userParentAdmin && assigned.includes(userParentAdmin)) return true;
+                            return false;
                         }
+
+                        return true;
                     };
 
                     const isBulker = isBulkTaskUser();
