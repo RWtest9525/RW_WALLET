@@ -1417,8 +1417,12 @@ const renderAdminTaskList = () => {
         const status = getAdminTaskEffectiveStatus(task);
         const isLive = status === 'active';
         const logo = task.logoUrl || task.imageUrl || task.iconUrl || getTaskLogoFromLink(family, subtype, task.taskLink);
-        const expiresAt = timestampToMillis(task.expiresAt || task.autoCloseAt || task.closeAt);
-        const closesText = isLive && expiresAt ? new Date(expiresAt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }) : 'Off';
+        
+        const commentPool = typeof getTaskCommentPool === 'function' ? getTaskCommentPool(task) : [];
+        const totalComments = commentPool.length;
+        const takenList = Array.isArray(window.lastTakenCommentsMap?.[task.id]) ? window.lastTakenCommentsMap[task.id] : [];
+        const usedOrReservedCount = Math.min(totalComments > 0 ? totalComments : (task.submissionsLimit || task.limit || 60), Math.max(task.submissionsCount || 0, takenList.length));
+
         const statusClass = {
             active: 'bg-emerald-50 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-200',
             draft: 'bg-amber-50 text-amber-700 dark:bg-amber-900/30 dark:text-amber-200',
@@ -1441,8 +1445,7 @@ const renderAdminTaskList = () => {
                                 <div class="mt-1 flex items-center gap-1 flex-wrap">
                                     <span class="rounded bg-cyan-50 dark:bg-cyan-900/20 px-1.5 py-0.5 text-[9px] font-bold text-cyan-700 dark:text-cyan-300">${escapeHtml(getAdminTaskFamilyLabel(family))}</span>
                                     <span class="rounded px-1.5 py-0.5 text-[9px] font-bold ${statusClass}">${status === 'active' ? 'Open' : status === 'closed' ? 'Closed' : status === 'over' ? 'Over' : 'Off'}</span>
-                                    <span class="text-[9px] font-bold text-gray-400 dark:text-gray-500">Lim: ${task.limit || 'Open'}</span>
-                                    ${expiresAt ? `<span class="text-[9px] font-bold text-amber-600 dark:text-amber-400">Close: ${escapeHtml(closesText)}</span>` : ''}
+                                    <span class="rounded bg-indigo-50 dark:bg-indigo-900/20 px-1.5 py-0.5 text-[9px] font-black text-indigo-600 dark:text-indigo-400">Used / Reserved: ${usedOrReservedCount} / ${totalComments || task.submissionsLimit || 'Open'}</span>
                                 </div>
                             </div>
                         </div>
