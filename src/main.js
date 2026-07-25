@@ -31,6 +31,22 @@ import './core/firebase.js';
 // Setup Event listeners and routing at DOM load
 applyTheme(initialTheme);
 
+const syncBottomNavFromCache = () => {
+    try {
+        const cachedRole = localStorage.getItem('user_role');
+        const adminBtn = document.getElementById('bottom-admin-btn');
+        const helpBtn = document.getElementById('bottom-help-btn');
+        if (cachedRole === 'admin' || cachedRole === 'subadmin' || cachedRole === 'owner') {
+            if (adminBtn) { adminBtn.hidden = false; adminBtn.classList.remove('hidden'); }
+            if (helpBtn) { helpBtn.hidden = true; helpBtn.classList.add('hidden'); }
+        } else if (cachedRole === 'user') {
+            if (adminBtn) { adminBtn.hidden = true; adminBtn.classList.add('hidden'); }
+            if (helpBtn) { helpBtn.hidden = false; helpBtn.classList.remove('hidden'); }
+        }
+    } catch (e) {}
+};
+syncBottomNavFromCache();
+
 // Clean up task restoration state if refreshing from inside a task or any other subpage
 try {
     const lastActiveSec = localStorage.getItem('last_active_section');
@@ -250,27 +266,17 @@ onAuthStateChanged(auth, async (user) => {
                         localStorage.removeItem('original_owner_token');
                         localStorage.removeItem('original_owner_data');
                     }
-                    if (window.OneSignalManager && ownerUid) {
-                        window.OneSignalManager.linkUserPushIdentity(ownerUid);
-                    }
                     showNotification('Switched back to Owner successfully!');
                     window.location.reload();
                 };
 
                 localStorage.setItem('lastLoggedInUser', isImpersonating ? localStorage.getItem('impersonated_sub_admin_uid') : user.uid);
 
-                // OneSignal user identification
-                if (window.OneSignalManager) {
-                    const effectivePushId = isImpersonating ? localStorage.getItem('impersonated_sub_admin_uid') : user.uid;
-                    window.OneSignalManager.linkUserPushIdentity(effectivePushId);
-                    if (user.email) {
-                        window.OneSignalManager.setEmail(user.email);
-                    }
-                }
-
                 if (currentUser.uid !== ADMIN_UID && localSignupApprovalInProgress) return;
 
                 const isAdmin = checkIsUserAdmin(currentUser, currentUserData);
+                const role = (currentUserData?.role || (isAdmin ? 'admin' : 'user'));
+                localStorage.setItem('user_role', role);
 
                 // INSTANT UNBLOCK: Show app UI immediately so user sees 0ms latency without any white screen delay
                 hideLoading();
@@ -538,11 +544,6 @@ onAuthStateChanged(auth, async (user) => {
                     console.warn('Saved login was found but Firebase session is not active. Showing login again.');
                 }
                 localStorage.removeItem('lastLoggedInUser');
-
-                // OneSignal logout
-                if (window.OneSignalManager) {
-                    window.OneSignalManager.logout();
-                }
 
                 // Reset login button state so it never gets stuck in loading/spinning mode on logout
                 const authBtn = document.getElementById('auth-button');

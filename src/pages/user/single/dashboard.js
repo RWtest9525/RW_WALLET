@@ -4159,14 +4159,22 @@ const showUserTaskPage = () => {
 
                 let bodyContent = '';
                 if (taskCategories.length === 0) {
-                    bodyContent = `
-                        <div class="rounded-3xl border border-dashed border-gray-200 dark:border-gray-700 p-8 text-center bg-white dark:bg-gray-800 shadow-sm">
-                            <div class="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-indigo-50 dark:bg-indigo-900/20 mb-4">
-                                <img src="https://cdn-icons-png.flaticon.com/512/3176/3176366.png" alt="Coming soon" class="h-8 w-8 object-contain">
-                            </div>
-                            <h3 class="text-lg font-black text-gray-900 dark:text-white">Missions Coming Soon</h3>
-                            <p class="mt-2 text-sm text-gray-500 dark:text-gray-400">New activities and updates are coming soon. Keep the app updated for future releases.</p>
-                        </div>`;
+                    if (window.isFetchingTasksInitial) {
+                        bodyContent = `
+                            <div class="flex flex-col gap-4 animate-pulse py-2">
+                                <div class="h-36 bg-slate-200/60 dark:bg-slate-800/60 rounded-[1.75rem] w-full"></div>
+                                <div class="h-36 bg-slate-200/60 dark:bg-slate-800/60 rounded-[1.75rem] w-full"></div>
+                            </div>`;
+                    } else {
+                        bodyContent = `
+                            <div class="rounded-3xl border border-dashed border-gray-200 dark:border-gray-700 p-8 text-center bg-white dark:bg-gray-800 shadow-sm">
+                                <div class="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-indigo-50 dark:bg-indigo-900/20 mb-4">
+                                    <img src="https://cdn-icons-png.flaticon.com/512/3176/3176366.png" alt="Coming soon" class="h-8 w-8 object-contain">
+                                </div>
+                                <h3 class="text-lg font-black text-gray-900 dark:text-white">Missions Coming Soon</h3>
+                                <p class="mt-2 text-sm text-gray-500 dark:text-gray-400">New activities and updates are coming soon. Keep the app updated for future releases.</p>
+                            </div>`;
+                    }
                 } else {
                     bodyContent = taskCategories.map(renderCategory).join('');
                 }

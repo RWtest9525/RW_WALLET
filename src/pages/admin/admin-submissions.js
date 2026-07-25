@@ -574,28 +574,7 @@ const loadAdminSubmissions = async () => {
             const currentUid = currentUser?.uid || '';
 
             if (isOwner) {
-                // OWNER VIEW: Only show submissions for Owner-created tasks!
-                const ownerTaskIds = new Set(
-                    (window.allTasksCache || [])
-                        .filter(t => {
-                            const creator = t.createdBy || '';
-                            return !creator || creator === ADMIN_UID || creator === 'owner' || creator === 'REVIEWS_WORLD_ADMIN';
-                        })
-                        .map(t => t.id)
-                );
-
-                adminSubmissionsCache = adminSubmissionsCache.filter(sub => {
-                    const taskId = sub.task_id || sub.taskId;
-                    const taskObj = (window.allTasksCache || []).find(t => t.id === taskId);
-                    
-                    if (taskObj) {
-                        const creator = taskObj.createdBy || '';
-                        return !creator || creator === ADMIN_UID || creator === 'owner' || creator === 'REVIEWS_WORLD_ADMIN';
-                    }
-
-                    const taskCreator = sub.taskCreatedBy || sub.task_created_by || '';
-                    return !taskCreator || taskCreator === ADMIN_UID || taskCreator === 'owner' || taskCreator === 'REVIEWS_WORLD_ADMIN';
-                });
+                // OWNER VIEW: Owner sees ALL submissions across the entire platform!
             } else if (currentUid) {
                 // SUB-ADMIN VIEW: Only show submissions for tasks created by/assigned to sub-admin or users under sub-admin
                 const subAdminUid = currentUid;
