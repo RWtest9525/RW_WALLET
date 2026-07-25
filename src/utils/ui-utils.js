@@ -1958,6 +1958,55 @@ const handleTurnOffMaintenance = async () => {
             }
         };
 
+const getPayoutDelayText = (t) => {
+    if (!t) return 'Instant Payout';
+    const days = t.paymentDelayDays ?? t.paymentDays ?? t.payoutDelayDays ?? 7;
+    const numDays = Number(days);
+    if (isNaN(numDays) || numDays <= 0) return 'Instant Payout';
+    if (numDays === 1) return '1 Day Payout';
+    return `${numDays} Days Payout`;
+};
+
+const getPayoutCleanVal = (t) => {
+    if (!t) return 'Instant';
+    const days = t.paymentDelayDays ?? t.paymentDays ?? t.payoutDelayDays ?? 7;
+    const numDays = Number(days);
+    if (isNaN(numDays) || numDays <= 0) return 'Instant';
+    if (numDays === 1) return '1 Day';
+    return `${numDays} Days`;
+};
+
+const getTaskAccent = (subtype) => {
+    if (subtype === 'app_review' || subtype === 'app_download_task') {
+        return {
+            color: 'indigo',
+            bgPill: 'bg-indigo-50 dark:bg-indigo-950/40 text-indigo-600 dark:text-indigo-400 border-indigo-200/40',
+            bgBtn: 'bg-indigo-600 hover:bg-indigo-500 text-white shadow-indigo-600/10 hover:shadow-indigo-600/20',
+            textClass: 'text-indigo-600 dark:text-indigo-400 font-extrabold',
+            iconBg: 'bg-indigo-500/10 text-indigo-600 dark:text-indigo-400',
+            bannerGradient: 'from-indigo-600 to-violet-600'
+        };
+    } else if (subtype === 'map_review') {
+        return {
+            color: 'emerald',
+            bgPill: 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 border-emerald-200/40',
+            bgBtn: 'bg-emerald-600 hover:bg-emerald-500 text-white shadow-emerald-600/10 hover:shadow-emerald-600/20',
+            textClass: 'text-emerald-600 dark:text-emerald-400 font-extrabold',
+            iconBg: 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400',
+            bannerGradient: 'from-emerald-600 to-teal-600'
+        };
+    } else {
+        return {
+            color: 'orange',
+            bgPill: 'bg-orange-50 dark:bg-orange-950/40 text-orange-600 dark:text-orange-400 border-orange-200/40',
+            bgBtn: 'bg-orange-600 hover:bg-orange-500 text-white shadow-orange-600/10 hover:shadow-orange-600/20',
+            textClass: 'text-orange-600 dark:text-orange-400 font-extrabold',
+            iconBg: 'bg-orange-500/10 text-orange-600 dark:text-orange-400',
+            bannerGradient: 'from-orange-500 to-amber-500'
+        };
+    }
+};
+
 const handleDisableWhatsNew = async () => {
             if (!currentUser || currentUser.uid !== ADMIN_UID) return showNotification('Admin access only.', true);
             const offBtn = document.getElementById('whats-new-disable-btn');
@@ -4104,6 +4153,9 @@ window.handleTurnOffMaintenance = handleTurnOffMaintenance;
 window.handleDisableWhatsNew = handleDisableWhatsNew;
 window.applyAdminTasksSnapshot = applyAdminTasksSnapshot;
 window.initializePublicHomeRealtime = initializePublicHomeRealtime;
+window.getTaskAccent = getTaskAccent;
+window.getPayoutDelayText = getPayoutDelayText;
+window.getPayoutCleanVal = getPayoutCleanVal;
 window.getAdminTaskFamily = getAdminTaskFamily;
 window.getAdminTaskSubtype = getAdminTaskSubtype;
 window.getAdminTaskEffectiveStatus = getAdminTaskEffectiveStatus;
