@@ -4982,14 +4982,9 @@ class TaskUploadQueueManager {
                 this.notify(taskId);
             });
 
-            const uploadData = uploadResult.data;
-
-            const verification = uploadData.verification;
-            if (!verification) {
-                throw new Error('Verification data missing from upload response');
-            }
-
-            const finalComment = verification.matchedComment || matchedComment;
+            const uploadData = uploadResult.data || {};
+            const verification = uploadData.verification || {};
+            const finalComment = verification.matchedComment || matchedComment || activeReservation?.comment || '';
             if (item.isBulk && !matchedComment && finalComment) {
                 matchedComment = finalComment;
                 this.inFlightComments[taskId].add(String(finalComment).trim());
@@ -6283,26 +6278,25 @@ window.submitSingleUserTask = async (task, file, reward, appName, taskLink, imag
             updateProgress(overallPct, 'Uploading Screenshot', `Uploading image proof (${percent}%)...`);
         });
 
-        const uploadData = uploadResult.data;
-        const verification = uploadData.verification;
-        if (!verification) {
-            throw new Error('Verification data missing from upload response');
-        }
+        const uploadData = uploadResult.data || {};
+        const verification = uploadData.verification || {};
 
-        // Post-upload OCR validation (if OCR extracted some text)
-        const finalOcrText = verification.ocrText || ocrText || '';
-        const cleanedOcr = finalOcrText.replace(/[^a-z0-9]/ig, '');
-        if (cleanedOcr.length > 0) {
-            if (!verifyCommentMatch(finalOcrText, matchedComment)) {
-                throw new Error('Comment mismatch. Ensure screenshot displays the correct assigned review.');
-            }
-        }
+        const finalComment = verification.matchedComment || matchedComment || activeReservation?.comment || '';
+        const screenshotUrl = uploadData?.screenshot?.url 
+            || uploadData?.screenshot?.viewUrl 
+            || uploadData?.screenshot?.view_url 
+            || uploadData?.screenshotUrl 
+            || uploadData?.url 
+            || uploadData?.screenshot?.drivePath 
+            || uploadData?.key 
+            || '';
+        const screenshotKey = uploadData?.screenshot?.key || uploadData?.key || '';
+        const screenshotViewUrl = uploadData?.screenshot?.viewUrl || uploadData?.viewUrl || screenshotUrl;
+        const screenshotDrivePath = uploadData?.screenshot?.drivePath || uploadData?.drivePath || '';
 
-        const finalComment = verification.matchedComment || matchedComment;
-        const screenshotUrl = uploadData.screenshot.url || '';
-        const screenshotKey = uploadData.screenshot.key || '';
-        const screenshotViewUrl = uploadData.screenshot.viewUrl || '';
-        const screenshotDrivePath = uploadData.screenshot.drivePath || '';
+        if (!screenshotUrl) {
+            throw new Error('Screenshot upload failed to generate image URL. Please re-upload your screenshot.');
+        }
 
         // 5. Submit to Backend
         updateProgress(90, 'Uploading Screenshot', 'Submitting verification details...');
