@@ -987,15 +987,17 @@ const showSettingsPage = () => {
                     </div>
                     ${isAdmin ? `
                     <div class="bg-white dark:bg-gray-800 p-5 rounded-2xl shadow-md border border-gray-100 dark:border-gray-700 space-y-3">
-                        <p class="text-xs font-bold uppercase text-gray-400 px-1">Admin</p>
+                        <p class="text-xs font-bold uppercase text-gray-400 px-1">Admin Tools</p>
                         ${renderSettingAction('settings-admin-withdrawals', 'Pending Requests', 'https://cdn-icons-png.flaticon.com/512/7939/7939990.png', 'blue')}
                         ${renderSettingAction('settings-admin-users', 'User Management', 'https://cdn-icons-png.flaticon.com/512/681/681494.png', 'green')}
                         ${renderSettingAction('settings-admin-gift-codes', 'Gift Codes', 'https://cdn-icons-png.flaticon.com/512/2611/2611152.png', 'purple')}
                         ${renderSettingAction('settings-admin-history', 'Withdrawal History', 'https://cdn-icons-png.flaticon.com/512/3652/3652191.png', 'yellow')}
                         ${renderSettingAction('settings-admin-chat', 'Manage Chat', 'https://cdn-icons-png.flaticon.com/512/5962/5962463.png', 'rose')}
                         ${renderSettingAction('settings-admin-rates', 'Rate Settings', 'https://cdn-icons-png.flaticon.com/512/3524/3524659.png', 'emerald')}
+                        ${(currentUser?.uid === ADMIN_UID || currentUser?.email === 'reviewsworld51@gmail.com' || currentUser?.email === 'reviewsworld01@gmail.com' || String(currentUserData?.role).toLowerCase() === 'owner') ? `
                         ${renderSettingAction('settings-admin-maintenance', 'Maintenance Mode', 'https://cdn-icons-png.flaticon.com/512/2099/2099058.png', 'red')}
                         ${renderSettingAction('settings-admin-whats-new', "What's New Popup", 'https://cdn-icons-png.flaticon.com/512/1828/1828884.png', 'blue')}
+                        ` : ''}
                     </div>` : ''}
                     <button id="settings-logout-btn" class="flex items-center justify-center w-full p-4 rounded-2xl bg-red-50 dark:bg-red-900/20 border border-red-100 dark:border-red-800 text-red-600 dark:text-red-300 font-bold">Logout</button>
                 </div>
@@ -1016,8 +1018,10 @@ const showSettingsPage = () => {
                 document.getElementById('settings-admin-history').onclick = showWithdrawalHistoryPage;
                 document.getElementById('settings-admin-chat').onclick = showAdminChatsPage;
                 document.getElementById('settings-admin-rates').onclick = showAdminWithdrawSettingsModal;
-                document.getElementById('settings-admin-maintenance').onclick = showMaintenanceSettingsPage;
-                document.getElementById('settings-admin-whats-new').onclick = showWhatsNewSettingsPage;
+                const maintBtn = document.getElementById('settings-admin-maintenance');
+                if (maintBtn) maintBtn.onclick = showMaintenanceSettingsPage;
+                const whatsNewBtn = document.getElementById('settings-admin-whats-new');
+                if (whatsNewBtn) whatsNewBtn.onclick = showWhatsNewSettingsPage;
             }
 
             if (!isAdmin) {
