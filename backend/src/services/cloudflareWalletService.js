@@ -4133,19 +4133,32 @@ ${memoriesContext}`
         return res.status(403).json({ ok: false, error: 'BULKER_ROLE_REQUIRED' });
       }
       
-      const taskDoc = await db.doc(`artifacts/digital-wallet-prod/public/data/tasks/${taskId}`).get();
-      if (!taskDoc.exists) {
-        return res.status(404).json({ ok: false, error: 'TASK_NOT_FOUND' });
+      let taskData = {};
+      try {
+        const querySnap = await db.collectionGroup('tasks').where('id', '==', taskId).limit(1).get();
+        if (!querySnap.empty) {
+          taskData = querySnap.docs[0].data() || {};
+        } else {
+          const directSnap = await db.doc(`artifacts/digital-wallet-prod/public/data/tasks/${taskId}`).get();
+          if (directSnap.exists) {
+            taskData = directSnap.data() || {};
+          }
+        }
+      } catch (e) {
+        console.warn('Backend task doc lookup fallback in bulk reservation:', e);
       }
       
-      const taskData = taskDoc.data() || {};
       const getTaskCommentPool = (t = {}) => {
         const src = Array.isArray(t.reviewComments) && t.reviewComments.length
             ? t.reviewComments
-            : String(t.commentToCopy || t.reviewComment || '').split(/\r?\n/);
+            : (Array.isArray(t.comments) && t.comments.length ? t.comments : String(t.commentToCopy || t.reviewComment || '').split(/\r?\n/));
         return src.map(v => String(v || '').trim()).filter(Boolean);
       };
-      const commentPool = getTaskCommentPool(taskData);
+      let commentPool = getTaskCommentPool(taskData);
+      if (commentPool.length === 0 && Array.isArray(req.body.commentsPool) && req.body.commentsPool.length > 0) {
+        commentPool = req.body.commentsPool.map(v => String(v || '').trim()).filter(Boolean);
+      }
+
       if (commentPool.length === 0) {
         return res.status(400).json({ ok: false, error: 'NO_COMMENTS_AVAILABLE' });
       }

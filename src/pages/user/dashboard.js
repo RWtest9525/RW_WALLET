@@ -5882,12 +5882,13 @@ const showUserTaskDetailsPage = async (taskId) => {
                         let newlyReserved = [];
 
                         // 1. Try Backend API first
+                        const fullPool = getTaskCommentPool(task);
                         try {
                             const token = await getBackendAuthToken();
                             const response = await fetchWithTimeout(`${BACKEND_BASE_URL}/api/task-reservations/bulk`, {
                                 method: 'POST',
                                 headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-                                body: JSON.stringify({ taskId: task.id, count: limit })
+                                body: JSON.stringify({ taskId: task.id, count: limit, commentsPool: fullPool })
                             }, 8000).catch(() => null);
 
                             if (response && response.ok) {
@@ -5902,15 +5903,13 @@ const showUserTaskDetailsPage = async (taskId) => {
 
                         // 2. Local Fallback if backend API did not return comments
                         if (newlyReserved.length === 0) {
-                            const fullPool = getTaskCommentPool(task);
                             const usedSet = new Set([
                                 ...generatedComments.map(c => String(c).trim()),
                                 ...submittedComments.map(c => String(c).trim())
                             ]);
 
                             const availablePool = fullPool.filter(c => !usedSet.has(String(c).trim()));
-                            const fallbackPool = availablePool.length > 0 ? availablePool : fullPool;
-                            newlyReserved = fallbackPool.slice(0, limit);
+                            newlyReserved = availablePool.slice(0, limit);
                         }
 
                         if (newlyReserved.length === 0) {
