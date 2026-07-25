@@ -501,6 +501,11 @@ window.extractReviewerName = async (ocrText, targetComment) => {
         };
 
 const loadAdminSubmissions = async () => {
+            // Instant Render from Cache if available
+            if (adminSubmissionsCache && adminSubmissionsCache.length > 0) {
+                renderAdminSubmissions();
+            }
+
             const fetchTasksPromise = (async () => {
                 if (window.allTasksCache && window.allTasksCache.length > 0) {
                     return;
@@ -523,14 +528,14 @@ const loadAdminSubmissions = async () => {
                     const token = await getBackendAuthToken();
                     const response = await fetchWithTimeout(`${BACKEND_BASE_URL}/api/admin/task-submissions?limit=500`, {
                         headers: { Authorization: `Bearer ${token}` }
-                    }, 15000);
+                    }, 3500);
                     const data = await response.json().catch(() => ({}));
                     if (data.ok && Array.isArray(data.submissions)) {
                         adminSubmissionsCache = data.submissions;
                         console.log('[AdminSubs] Backend submissions loaded:', adminSubmissionsCache.length);
                     }
                 } catch (err) {
-                    console.warn('[AdminSubs] Backend load failed, trying Firebase:', err);
+                    console.warn('[AdminSubs] Backend load failed/timed out, trying Firebase:', err);
                     try {
                         const snap = await getDocs(query(
                             collection(db, `artifacts/${appId}/public/data/task_submissions`),
@@ -574,7 +579,7 @@ const loadAdminSubmissions = async () => {
             const currentUid = currentUser?.uid || '';
 
             if (isOwner) {
-                // OWNER VIEW: Only show submissions for Owner-created tasks (Sub-admin data is secret)
+                // OWNER VIEW: Only show submissions for Owner-created tasks (Sub-admin data is 100% secret)
                 const isOwnerTask = (t) => window.isOwnerTaskCreator ? window.isOwnerTaskCreator(t.createdBy || t.creatorUid || '') : (!t.createdBy || t.createdBy === 'owner' || t.createdBy === 'reviewsworld01@gmail.com');
                 const ownerTaskIds = new Set(
                     (window.allTasksCache || [])
@@ -1457,14 +1462,16 @@ const renderAdminSubmissions = () => {
 
     // Filter submissions by ownership
     let subs = [...adminSubmissionsCache];
-    const isOwner = currentUser?.uid === ADMIN_UID || currentUser?.email === 'reviewsworld51@gmail.com' || currentUser?.email === 'reviewsworld01@gmail.com' || currentUserData?.role === 'owner';
-    const isOwnerCreator = (creator) => !creator || creator === ADMIN_UID || creator === 'owner' || creator === 'REVIEWS_WORLD_ADMIN' || creator === 'reviewsworld01@gmail.com' || creator === 'reviewsworld51@gmail.com';
+    const isOwner = window.checkIsOwner ? window.checkIsOwner() : (currentUser?.email === 'reviewsworld51@gmail.com' || currentUser?.email === 'reviewsworld01@gmail.com' || currentUserData?.role === 'owner');
+    const isOwnerTask = (t) => window.isOwnerTaskCreator ? window.isOwnerTaskCreator(t.createdBy || t.creatorUid || '') : (!t.createdBy || t.createdBy === 'owner' || t.createdBy === 'reviewsworld01@gmail.com');
 
     if (isOwner) {
         subs = subs.filter(sub => {
-            const task = (window.allTasksCache || []).find(t => t.id === (sub.task_id || sub.taskId));
-            const creator = task ? (task.createdBy || task.creatorUid || '') : (sub.taskCreatedBy || sub.task_created_by || '');
-            return isOwnerCreator(creator);
+            const taskId = sub.task_id || sub.taskId;
+            const taskObj = (window.allTasksCache || []).find(t => t.id === taskId);
+            if (taskObj) return isOwnerTask(taskObj);
+            const taskCreator = sub.taskCreatedBy || sub.task_created_by || '';
+            return window.isOwnerTaskCreator ? window.isOwnerTaskCreator(taskCreator) : false;
         });
     } else {
         subs = subs.filter(sub => {
@@ -1507,7 +1514,7 @@ const renderAdminSubmissions = () => {
     // Group rows by EVERY task in our cache for the current role
     let filteredTasks = [...(window.allTasksCache || [])];
     if (isOwner) {
-        filteredTasks = filteredTasks.filter(task => isOwnerCreator(task.createdBy || task.creatorUid || ''));
+        filteredTasks = filteredTasks.filter(isOwnerTask);
     } else {
         filteredTasks = filteredTasks.filter(task => task.createdBy === currentUser.uid);
     }
