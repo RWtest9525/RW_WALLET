@@ -5284,13 +5284,16 @@ const showUserTaskDetailsPage = async (taskId) => {
             }
 
             const localCommentPool = getTaskCommentPool(task);
+            const takenForTask = new Set((window.lastTakenCommentsMap?.[task.id] || []).map(c => String(c).trim()));
+            const localAvailableComments = localCommentPool.filter(c => !takenForTask.has(String(c).trim()));
+
             const commentPool = (isBulk && Array.isArray(availability.availableComments) && availability.availableComments.length > 0)
                 ? availability.availableComments
-                : localCommentPool;
-            const totalCommentsCount = (isBulk && availability.totalCount > 0)
+                : (localAvailableComments.length > 0 ? localAvailableComments : localCommentPool);
+            const totalCommentsCount = (isBulk && Number.isFinite(availability.totalCount) && availability.totalCount > 0)
                 ? availability.totalCount
                 : localCommentPool.length;
-            const availableCommentsCount = (isBulk && availability.availableCount > 0)
+            const availableCommentsCount = (isBulk && Number.isFinite(availability.availableCount) && availability.availableCount > 0)
                 ? availability.availableCount
                 : commentPool.length;
             const taskLink = task.taskLink || task.link || task.url || '';

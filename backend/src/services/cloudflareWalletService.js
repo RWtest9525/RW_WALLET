@@ -4071,12 +4071,21 @@ ${memoriesContext}`
       const userId = req.auth.sub;
       const isBulker = await checkIsBulker(d1, userId);
       
-      const taskDoc = await db.doc(`artifacts/digital-wallet-prod/public/data/tasks/${req.params.taskId}`).get();
-      if (!taskDoc.exists) {
-        return res.status(404).json({ ok: false, error: 'TASK_NOT_FOUND' });
+      let taskData = {};
+      try {
+        const querySnap = await db.collectionGroup('tasks').where('id', '==', req.params.taskId).limit(1).get();
+        if (!querySnap.empty) {
+          taskData = querySnap.docs[0].data() || {};
+        } else {
+          const directSnap = await db.doc(`artifacts/digital-wallet-prod/public/data/tasks/${req.params.taskId}`).get();
+          if (directSnap.exists) {
+            taskData = directSnap.data() || {};
+          }
+        }
+      } catch (e) {
+        console.warn('Backend task doc lookup fallback:', e);
       }
-      
-      const taskData = taskDoc.data() || {};
+
       const getTaskCommentPool = (t = {}) => {
         const src = Array.isArray(t.reviewComments) && t.reviewComments.length
             ? t.reviewComments
