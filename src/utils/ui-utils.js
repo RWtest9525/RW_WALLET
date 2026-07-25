@@ -796,16 +796,31 @@ const showNativePushNotification = (title, body, data = {}) => {
 };
 
 const checkIsOwner = (user = currentUser, userData = currentUserData) => {
-    if (user && (user.uid === ADMIN_UID || user.email === 'reviewsworld51@gmail.com' || user.email === 'reviewsworld01@gmail.com')) return true;
+    if (user && (user.email === 'reviewsworld51@gmail.com' || user.email === 'reviewsworld01@gmail.com')) return true;
     if (userData && (userData.role === 'owner' || userData.email === 'reviewsworld51@gmail.com' || userData.email === 'reviewsworld01@gmail.com')) return true;
+    const email = user?.email || userData?.email || '';
+    if (email === 'reviewsworld51@gmail.com' || email === 'reviewsworld01@gmail.com') return true;
     const uid = user?.uid || userData?.uid || userData?.id || getCachedSessionUserId();
-    if (uid === ADMIN_UID) return true;
     if (uid) {
         const cached = readJsonCache(getUserCacheKey(uid));
-        if (cached && (cached.role === 'owner' || cached.email === 'reviewsworld51@gmail.com' || cached.email === 'reviewsworld01@gmail.com' || cached.id === ADMIN_UID || cached.uid === ADMIN_UID)) return true;
+        if (cached && (cached.role === 'owner' || cached.email === 'reviewsworld51@gmail.com' || cached.email === 'reviewsworld01@gmail.com')) return true;
     }
     return false;
 };
+
+const isOwnerTaskCreator = (creator) => {
+    if (!creator) return true;
+    if (creator === 'owner' || creator === 'REVIEWS_WORLD_ADMIN' || creator === 'reviewsworld01@gmail.com' || creator === 'reviewsworld51@gmail.com') return true;
+
+    const creatorUser = (window.allUsersCache || []).find(u => (u.id === creator || u.uid === creator || u.email === creator));
+    if (creatorUser) {
+        return creatorUser.email === 'reviewsworld01@gmail.com' || creatorUser.email === 'reviewsworld51@gmail.com' || creatorUser.role === 'owner';
+    }
+
+    return false;
+};
+window.checkIsOwner = checkIsOwner;
+window.isOwnerTaskCreator = isOwnerTaskCreator;
 
 const checkIsUserAdmin = (user = currentUser, userData = currentUserData) => {
     if (checkIsOwner(user, userData)) return true;

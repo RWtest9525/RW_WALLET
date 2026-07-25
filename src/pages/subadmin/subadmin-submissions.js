@@ -570,17 +570,15 @@ const loadAdminSubmissions = async () => {
 
             await Promise.all([fetchTasksPromise, fetchSubmissionsPromise]);
 
-            const isOwner = currentUser?.uid === ADMIN_UID || currentUser?.email === 'reviewsworld51@gmail.com' || currentUser?.email === 'reviewsworld01@gmail.com' || currentUserData?.role === 'owner';
+            const isOwner = window.checkIsOwner ? window.checkIsOwner() : (currentUser?.email === 'reviewsworld51@gmail.com' || currentUser?.email === 'reviewsworld01@gmail.com' || currentUserData?.role === 'owner');
             const currentUid = currentUser?.uid || '';
 
             if (isOwner) {
                 // OWNER VIEW: Only show submissions for Owner-created tasks (Sub-admin data is secret)
+                const isOwnerTask = (t) => window.isOwnerTaskCreator ? window.isOwnerTaskCreator(t.createdBy || t.creatorUid || '') : (!t.createdBy || t.createdBy === 'owner' || t.createdBy === 'reviewsworld01@gmail.com');
                 const ownerTaskIds = new Set(
                     (window.allTasksCache || [])
-                        .filter(t => {
-                            const creator = t.createdBy || '';
-                            return !creator || creator === ADMIN_UID || creator === 'owner' || creator === 'REVIEWS_WORLD_ADMIN' || creator === 'reviewsworld01@gmail.com';
-                        })
+                        .filter(isOwnerTask)
                         .map(t => t.id)
                 );
 
@@ -590,12 +588,11 @@ const loadAdminSubmissions = async () => {
                     
                     const taskObj = (window.allTasksCache || []).find(t => t.id === taskId);
                     if (taskObj) {
-                        const creator = taskObj.createdBy || '';
-                        return !creator || creator === ADMIN_UID || creator === 'owner' || creator === 'REVIEWS_WORLD_ADMIN' || creator === 'reviewsworld01@gmail.com';
+                        return isOwnerTask(taskObj);
                     }
 
                     const taskCreator = sub.taskCreatedBy || sub.task_created_by || '';
-                    return !taskCreator || taskCreator === ADMIN_UID || taskCreator === 'owner' || taskCreator === 'REVIEWS_WORLD_ADMIN' || taskCreator === 'reviewsworld01@gmail.com';
+                    return window.isOwnerTaskCreator ? window.isOwnerTaskCreator(taskCreator) : false;
                 });
             } else if (currentUid) {
                 // SUB-ADMIN VIEW: Only show submissions for tasks created by/assigned to sub-admin or users under sub-admin

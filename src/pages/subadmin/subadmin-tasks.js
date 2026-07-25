@@ -1,9 +1,9 @@
 // File: src/pages/admin/admin-tasks.js
 
 const isTaskVisibleToAdmin = (task) => {
-    const isOwner = currentUser?.uid === ADMIN_UID || currentUser?.email === 'reviewsworld51@gmail.com' || currentUser?.email === 'reviewsworld01@gmail.com' || currentUserData?.role === 'owner';
-    const taskCreator = task.createdBy || '';
-    const isOwnerTask = !taskCreator || taskCreator === ADMIN_UID || taskCreator === 'owner' || taskCreator === 'REVIEWS_WORLD_ADMIN' || taskCreator === 'reviewsworld01@gmail.com';
+    const isOwner = window.checkIsOwner ? window.checkIsOwner() : (currentUser?.email === 'reviewsworld51@gmail.com' || currentUser?.email === 'reviewsworld01@gmail.com' || currentUserData?.role === 'owner');
+    const taskCreator = task?.createdBy || task?.creatorUid || '';
+    const isOwnerTask = window.isOwnerTaskCreator ? window.isOwnerTaskCreator(taskCreator) : (!taskCreator || taskCreator === 'owner' || taskCreator === 'reviewsworld01@gmail.com');
     const assigned = Array.isArray(task.assignedToSubAdmins) ? task.assignedToSubAdmins : [];
 
     if (isOwner) {
@@ -16,9 +16,9 @@ const isTaskVisibleToAdmin = (task) => {
 };
 
 const canAdminManageTask = (task) => {
-    const isOwner = currentUser?.uid === ADMIN_UID || currentUser?.email === 'reviewsworld51@gmail.com' || currentUser?.email === 'reviewsworld01@gmail.com' || currentUserData?.role === 'owner';
+    const isOwner = window.checkIsOwner ? window.checkIsOwner() : (currentUser?.email === 'reviewsworld51@gmail.com' || currentUser?.email === 'reviewsworld01@gmail.com' || currentUserData?.role === 'owner');
     const taskCreator = task?.createdBy || task?.creatorUid || '';
-    const isOwnerTask = !taskCreator || taskCreator === ADMIN_UID || taskCreator === 'owner' || taskCreator === 'REVIEWS_WORLD_ADMIN' || taskCreator === 'reviewsworld01@gmail.com' || taskCreator === 'reviewsworld51@gmail.com';
+    const isOwnerTask = window.isOwnerTaskCreator ? window.isOwnerTaskCreator(taskCreator) : (!taskCreator || taskCreator === 'owner' || taskCreator === 'reviewsworld01@gmail.com');
     if (isOwner) return isOwnerTask; // Owner can manage ONLY owner-created tasks (Sub-admin data is secret)
     if (isOwnerTask) return false; // Sub-admins cannot edit/delete/manage owner tasks
     return taskCreator === currentUser?.uid; // Sub-admin can manage their own tasks
