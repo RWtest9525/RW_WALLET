@@ -48,16 +48,11 @@ const syncBottomNavFromCache = () => {
 };
 syncBottomNavFromCache();
 
-// Clean up task restoration state if refreshing from inside a task or any other subpage
+// Always default to Wallet (Home) page on initial boot/refresh
 try {
-    const lastActiveSec = localStorage.getItem('last_active_section');
-    const wasInTaskDetails = localStorage.getItem('last_active_task_id');
-    
-    if (wasInTaskDetails || lastActiveSec !== 'task') {
-        localStorage.removeItem('last_active_task_id');
-        localStorage.removeItem('last_active_task_data');
-        localStorage.setItem('last_active_section', 'home');
-    }
+    localStorage.removeItem('last_active_task_id');
+    localStorage.removeItem('last_active_task_data');
+    localStorage.setItem('last_active_section', 'home');
 } catch (e) {
     console.warn('Boot check failed:', e);
 }
@@ -90,10 +85,7 @@ window.closeSlideMenu = closeSlideMenu;
 
 onAuthStateChanged(auth, async (user) => {
             console.log("Auth state changed, user:", user ? user.uid : 'null');
-            const lastActiveSec = localStorage.getItem('last_active_section');
-            if (user && lastActiveSec === 'task') {
-                window.pendingTabRedirect = 'task';
-            }
+            localStorage.setItem('last_active_section', 'home');
             const pageContainerAtAuth = document.getElementById('page-container');
             const mainContentAtAuth = document.getElementById('main-content');
             const dashboardAtAuth = document.getElementById('dashboard-content');
