@@ -2169,20 +2169,20 @@ const getNextTaskMidnightMillis = () => {
         };
 
 const getTaskCommentPool = (task = {}) => {
-            if (!task || typeof task !== 'object') return [];
-            const family = getAdminTaskFamily(task);
-            if (family !== 'review') return [];
-            const source = Array.isArray(task.reviewComments) && task.reviewComments.length
-                ? task.reviewComments
-                : (Array.isArray(task.comments) && task.comments.length
-                    ? task.comments
-                    : String(task.reviewComment || task.commentToCopy || task.reviewText || task.copyText || task.commentsText || task.instructions || '').split(/\r?\n/));
-            const unique = [];
-            (source || []).map(value => String(value || '').trim()).filter(Boolean).forEach(comment => {
-                if (!unique.includes(comment)) unique.push(comment);
-            });
-            return unique;
-        };
+    if (!task || typeof task !== 'object') return [];
+    const family = getAdminTaskFamily(task);
+    if (family !== 'review') return [];
+    const source = Array.isArray(task.reviewComments) && task.reviewComments.length
+        ? task.reviewComments
+        : (Array.isArray(task.comments) && task.comments.length
+            ? task.comments
+            : String(task.reviewComment || task.commentToCopy || task.reviewText || task.copyText || task.commentsText || '').split(/\r?\n/));
+    const unique = [];
+    (source || []).map(value => String(value || '').trim()).filter(Boolean).forEach(comment => {
+        if (!unique.includes(comment)) unique.push(comment);
+    });
+    return unique;
+};
 
 const getTaskTier = (u) => {
             if (!u) return 'single';
