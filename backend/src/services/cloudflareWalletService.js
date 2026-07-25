@@ -10,6 +10,7 @@ const { google } = require('googleapis');
 const { Readable } = require('stream');
 const gplayRaw = require('google-play-scraper');
 const gplay = gplayRaw.default || gplayRaw;
+const ocrService = require('./ocrService');
 
 const REQUIRED_ENV = [
   'APP_JWT_SECRET',

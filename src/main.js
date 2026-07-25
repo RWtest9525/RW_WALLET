@@ -3,6 +3,7 @@
 
 import './core/globals.js';
 import './utils/ui-utils.js';
+import './utils/ocrService.js';
 import './pages/auth.js';
 import './pages/user/dashboard.js';
 import './pages/user/user-tasks.js';
