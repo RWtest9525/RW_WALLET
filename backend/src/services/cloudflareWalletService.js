@@ -4010,9 +4010,8 @@ ${memoriesContext}`
       const takenComments = await d1.all(
         `SELECT task_id, comment FROM task_comment_reservations 
          WHERE status IN ('reserved', 'submitted') 
-           AND (expires_at > ? OR status = 'submitted')
-           AND NOT (user_id = ? AND status = 'reserved')`,
-        [nowMs(), userId]
+           AND (expires_at > ? OR status = 'submitted')`,
+        [nowMs()]
       );
 
       const takenMap = {};

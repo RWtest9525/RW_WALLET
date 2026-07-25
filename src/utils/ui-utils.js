@@ -1421,7 +1421,46 @@ const initializePublicHomeRealtime = () => {
                     console.warn('[RealtimeTasks] Failed to bind realtime listener:', err);
                 }
             }
+
+            startAvailabilityPolling();
         };
+
+let availabilityPollerInterval = null;
+
+const refreshTaskAvailabilityRealtime = async () => {
+    try {
+        if (!currentUser) return;
+        const token = await getBackendAuthToken();
+        const resp = await fetchWithTimeout(`${BACKEND_BASE_URL}/api/tasks/availability`, {
+            headers: { Authorization: `Bearer ${token}` }
+        }, 5000);
+        const d = await resp.json();
+        if (d.ok && d.takenComments) {
+            const newMap = d.takenComments;
+            const strOld = JSON.stringify(window.lastTakenCommentsMap || {});
+            const strNew = JSON.stringify(newMap);
+            window.lastTakenCommentsMap = newMap;
+
+            if (strOld !== strNew) {
+                if (typeof currentMainSection !== 'undefined') {
+                    if (currentMainSection === 'task' && typeof showUserTaskPage === 'function') {
+                        showUserTaskPage();
+                    } else if (currentMainSection === 'home' && typeof renderHomeTaskCategories === 'function') {
+                        renderHomeTaskCategories();
+                    }
+                }
+            }
+        }
+    } catch (e) {
+        console.warn('Realtime availability poll skipped:', e);
+    }
+};
+
+const startAvailabilityPolling = () => {
+    if (availabilityPollerInterval) return;
+    refreshTaskAvailabilityRealtime();
+    availabilityPollerInterval = setInterval(refreshTaskAvailabilityRealtime, 8000);
+};
 
 const toTitleText = (value = '') => String(value)
             .replace(/[_-]+/g, ' ')
@@ -4153,6 +4192,8 @@ window.handleTurnOffMaintenance = handleTurnOffMaintenance;
 window.handleDisableWhatsNew = handleDisableWhatsNew;
 window.applyAdminTasksSnapshot = applyAdminTasksSnapshot;
 window.initializePublicHomeRealtime = initializePublicHomeRealtime;
+window.refreshTaskAvailabilityRealtime = refreshTaskAvailabilityRealtime;
+window.startAvailabilityPolling = startAvailabilityPolling;
 window.getTaskAccent = getTaskAccent;
 window.getPayoutDelayText = getPayoutDelayText;
 window.getPayoutCleanVal = getPayoutCleanVal;

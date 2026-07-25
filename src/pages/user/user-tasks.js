@@ -200,9 +200,10 @@ const showUserTaskPage = () => {
             const payoutVal = payoutDelayText.replace(' Payout', '');
             const approvalVal = payoutVal === 'Instant' ? 'Instant' : `${payoutVal} Later`;
 
-            const totalSlots = getTaskCommentPool(task).length || 60;
+            const commentPool = getTaskCommentPool(task);
+            const totalSlots = commentPool.length > 0 ? commentPool.length : (task.submissionsLimit || task.totalSlots || 60);
             const takenList = Array.isArray(takenCommentsMap[task.id]) ? takenCommentsMap[task.id] : [];
-            const submissionsCount = Math.max(task.submissionsCount || 0, takenList.length);
+            const usedOrReservedCount = Math.min(totalSlots, Math.max(task.submissionsCount || 0, takenList.length));
 
             if (isLive) {
                 return `
@@ -258,8 +259,8 @@ const showUserTaskPage = () => {
                                     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2M9 5a2 2 0 0 0 2 2h2a2 2 0 0 0 2-2M9 5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01"></path></svg>
                                 </span>
                                 <div class="min-w-0">
-                                    <p class="text-[8px] font-black text-gray-400 uppercase tracking-wider leading-none">Used</p>
-                                    <p class="text-[11px] font-bold text-slate-800 dark:text-slate-200 mt-1 truncate">${submissionsCount}/${totalSlots}</p>
+                                    <p class="text-[8px] font-black text-gray-400 uppercase tracking-wider leading-none">Used / Reserved</p>
+                                    <p class="text-[11px] font-bold text-slate-800 dark:text-slate-200 mt-1 truncate">${usedOrReservedCount}/${totalSlots}</p>
                                 </div>
                             </div>
                         </div>
