@@ -120,6 +120,9 @@ async function createApp(io, { startedAt = new Date().toISOString() } = {}) {
 
   app.get('/health', createHealthHandler(app, startedAt));
 
+  const ocrRoutes = require('./routes/ocrRoutes');
+  app.use('/api/ocr', ocrRoutes);
+
   app.use('/', linkRoutes);
 
   try {

@@ -103,12 +103,42 @@ export function verifyClientCommentMatch(ocrText = '', targetComment = '') {
   return false;
 }
 
+/**
+ * Calls Backend OCR Verification endpoint (/api/ocr/verify)
+ */
+export async function verifyReviewScreenshotApi({ image, screenshotUrl, base64, reviewerName, expectedComment }) {
+  const baseUrl = typeof window !== 'undefined' && window.BACKEND_BASE_URL ? window.BACKEND_BASE_URL : 'https://rw-wallet.onrender.com';
+  try {
+    const response = await fetch(`${baseUrl}/api/ocr/verify`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        image,
+        screenshotUrl,
+        base64,
+        reviewerName,
+        expectedComment
+      })
+    });
+    if (response.ok) {
+      return await response.json();
+    }
+  } catch (err) {
+    console.warn('[Frontend-OCR] Backend OCR endpoint call failed:', err);
+  }
+  return { success: false, isMatched: false, error: 'OCR_ENDPOINT_FAILED' };
+}
+
 // Expose globally for backward compatibility across all legacy modules
 if (typeof window !== 'undefined') {
   window.extractActualReviewText = extractActualReviewText;
+  window.verifyReviewScreenshotApi = verifyReviewScreenshotApi;
   window.ocrService = {
     extractActualReviewText,
     runClientOcrSpace,
-    verifyClientCommentMatch
+    verifyClientCommentMatch,
+    verifyReviewScreenshotApi
   };
 }
