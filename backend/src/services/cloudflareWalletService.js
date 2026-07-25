@@ -5743,6 +5743,32 @@ async function fetchPlayStoreReviewsForDate(packageId, targetDateMs) {
     }
   });
 
+  // Admin: Purge ALL old task submissions & reservations from D1
+  app.delete('/api/admin/purge-task-data', requireHttpAuth, async (req, res) => {
+    try {
+      const uid = req.auth.sub;
+      const email = req.auth.email || '';
+      const isOwner = uid === ADMIN_UID || email === 'reviewsworld01@gmail.com' || email === 'reviewsworld51@gmail.com';
+      if (!isOwner) {
+        return res.status(403).json({ ok: false, error: 'OWNER_ONLY' });
+      }
+
+      // Delete all task_submissions from D1
+      const subResult = await d1.query('DELETE FROM task_submissions');
+      const subsDeleted = subResult?.changes || 0;
+
+      // Delete all task_comment_reservations from D1
+      const resResult = await d1.query('DELETE FROM task_comment_reservations');
+      const reservationsDeleted = resResult?.changes || 0;
+
+      console.log(`[PURGE] Owner ${email} purged D1 task data: ${subsDeleted} submissions, ${reservationsDeleted} reservations`);
+      res.json({ ok: true, subsDeleted, reservationsDeleted });
+    } catch (error) {
+      console.error('Purge task data failed:', error);
+      res.status(500).json({ ok: false, error: 'PURGE_FAILED' });
+    }
+  });
+
   // Live Lists management API (List Finder integration)
   app.get('/api/lists', async (req, res) => {
     try {
