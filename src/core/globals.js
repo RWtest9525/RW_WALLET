@@ -82,7 +82,20 @@ window.RECHARGE_STATES = [
 window.BACKEND_BASE_URL = (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
             ? 'https://rw-wallet.onrender.com'
             : 'https://rw-wallet.onrender.com';
-window.RW_LOGO_URL = 'https://i.ibb.co/x8YBYwGG/6233389803554672153.jpg';
+window.RW_LOGO_URL = '/assets/images/logo_512.png';
+window.handleLogout = async () => {
+    try {
+        localStorage.removeItem('user_role');
+        localStorage.removeItem('user_uid');
+        localStorage.removeItem('last_active_section');
+        localStorage.removeItem('last_active_task_id');
+        localStorage.removeItem('last_active_task_data');
+    } catch (e) {}
+    if (typeof auth !== 'undefined' && auth) {
+        await signOut(auth).catch(() => {});
+    }
+    window.location.reload();
+};
 window.PLAY_STORE_LOGO_URL = 'https://upload.wikimedia.org/wikipedia/commons/d/d0/Google_Play_Arrow_logo.svg';
 window.REFER_ICON_URL = 'https://cdn-icons-png.flaticon.com/512/929/929610.png';
 window.WALLET_ICON_URL = 'https://cdn-icons-png.flaticon.com/512/1946/1946436.png';

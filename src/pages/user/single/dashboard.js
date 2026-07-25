@@ -665,7 +665,7 @@ const openSlideMenu = () => {
                 document.getElementById('slide-menu-admin-withdrawal-history').onclick = () => { showWithdrawalHistoryPage(); closeSlideMenu(); };
             }
             document.getElementById('slide-menu-logout-btn').onclick = () => {
-                signOut(auth);
+                window.handleLogout();
             };
         };
 

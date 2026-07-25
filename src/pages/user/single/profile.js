@@ -1008,7 +1008,7 @@ const showSettingsPage = () => {
             document.getElementById('settings-invoice-btn').onclick = showWithdrawalInvoicesPage;
             document.getElementById('settings-task-history-btn').onclick = showUserTaskHistoryPage;
             document.getElementById('settings-live-lists-btn').onclick = showUserLiveListsPage;
-            document.getElementById('settings-logout-btn').onclick = () => signOut(auth);
+            document.getElementById('settings-logout-btn').onclick = () => window.handleLogout();
             if (isAdmin) {
                 document.getElementById('settings-admin-withdrawals').onclick = showAdminWithdrawalsPage;
                 document.getElementById('settings-admin-users').onclick = showAdminUsersPage;

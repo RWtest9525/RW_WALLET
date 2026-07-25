@@ -4,7 +4,10 @@ if (!root) {
     throw new Error('RW Wallet root not found');
 }
 
-root.outerHTML = String.raw`
+const cachedRole = (localStorage.getItem('user_role') || '').toLowerCase();
+const isCachedAdminRole = cachedRole === 'admin' || cachedRole === 'subadmin' || cachedRole === 'owner';
+
+root.outerHTML = `
 <!-- Loading Overlay -->
     <div id="loading-overlay" class="loading-overlay hidden">
         <div class="loading-spinner"></div>
@@ -20,7 +23,7 @@ root.outerHTML = String.raw`
                         <div class="logo-placeholder mr-4" id="auth-logo-fallback">
                             RW
                         </div>
-                        <img src="https://i.ibb.co/x8YBYwGG/6233389803554672153.jpg" alt="Reviews World Logo"
+                        <img src="/assets/images/logo_512.png" alt="Reviews World Logo"
                             class="w-12 h-12 rounded-full mr-4 hidden" loading="eager" fetchpriority="high" decoding="async" width="48"
                             height="48" id="auth-logo"
                             onload="this.classList.remove('hidden'); this.classList.add('loaded'); document.getElementById('auth-logo-fallback')?.classList.add('hidden');"
@@ -120,7 +123,7 @@ root.outerHTML = String.raw`
                 class="flex justify-between items-center mb-6 bg-white dark:bg-gray-800 p-4 rounded-xl shadow-md header-border">
                 <div class="flex items-center">
                     <!-- Logo with fallback -->
-                    <img src="/logo_192.png" alt="Reviews World Logo"
+                    <img src="/assets/images/logo_512.png" alt="Reviews World Logo"
                         class="w-10 h-10 rounded-full mr-4 object-cover shadow-sm" loading="eager" fetchpriority="high" decoding="async"
                         width="40" height="40" id="header-logo">
                     <div>
@@ -459,13 +462,13 @@ root.outerHTML = String.raw`
                         </span>
                         <span>Task</span>
                     </button>
-                    <button id="bottom-admin-btn" hidden class="bottom-nav-btn hidden flex flex-col items-center gap-1 py-1">
+                    <button id="bottom-admin-btn" ${isCachedAdminRole ? '' : 'hidden'} class="bottom-nav-btn ${isCachedAdminRole ? '' : 'hidden'} flex flex-col items-center gap-1 py-1">
                         <span class="bottom-nav-icon flex h-9 w-9 items-center justify-center rounded-xl bg-gray-100 dark:bg-gray-700 transition">
                             <img src="https://cdn-icons-png.flaticon.com/512/3135/3135715.png" alt="Admin" class="bottom-nav-img" loading="eager" fetchpriority="high" decoding="async">
                         </span>
                         <span>Admin</span>
                     </button>
-                    <button id="bottom-help-btn" class="bottom-nav-btn flex flex-col items-center gap-1 py-1">
+                    <button id="bottom-help-btn" ${isCachedAdminRole ? 'hidden' : ''} class="bottom-nav-btn ${isCachedAdminRole ? 'hidden' : ''} flex flex-col items-center gap-1 py-1">
                         <span class="bottom-nav-icon relative flex h-9 w-9 items-center justify-center rounded-xl bg-gray-100 dark:bg-gray-700 transition">
                             <img src="https://cdn-icons-png.flaticon.com/512/5962/5962463.png" alt="Help" class="bottom-nav-img" loading="eager" fetchpriority="high" decoding="async">
                             <span id="bottom-help-unread-badge" class="hidden absolute -right-1 -top-1 min-w-5 h-5 rounded-full bg-red-600 px-1 text-[10px] font-black leading-5 text-white shadow"></span>
