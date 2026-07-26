@@ -1570,6 +1570,7 @@ const startAIVoiceCallModal = () => {
     let isSpeakerOn = true;
     let selectedLang = 'Hindi';
     let recognitionInstance = null;
+    let isSpeaking = false;
 
     const formatTimer = (sec) => {
         const m = String(Math.floor(sec / 60)).padStart(2, '0');
@@ -1577,114 +1578,185 @@ const startAIVoiceCallModal = () => {
         return `${m}:${s}`;
     };
 
+    const setStatus = (statusText, state = 'connected') => {
+        const statusEl = document.getElementById('ai-call-status-badge');
+        const waveContainer = document.getElementById('ai-call-soundwave');
+        const avatarRing = document.getElementById('ai-avatar-call-wave');
+
+        if (statusEl) statusEl.textContent = statusText;
+
+        if (waveContainer) {
+            if (state === 'speaking') {
+                waveContainer.className = 'flex items-center justify-center gap-1.5 h-10 my-3 opacity-100 transition';
+                waveContainer.querySelectorAll('.wave-bar').forEach((bar, idx) => {
+                    bar.style.animation = `bounce 0.8s ease-in-out infinite alternate ${idx * 0.15}s`;
+                });
+            } else if (state === 'listening') {
+                waveContainer.className = 'flex items-center justify-center gap-1.5 h-10 my-3 opacity-80 transition';
+                waveContainer.querySelectorAll('.wave-bar').forEach((bar) => {
+                    bar.style.animation = 'pulse 1.2s ease-in-out infinite';
+                });
+            } else {
+                waveContainer.className = 'flex items-center justify-center gap-1.5 h-10 my-3 opacity-30 transition';
+                waveContainer.querySelectorAll('.wave-bar').forEach((bar) => {
+                    bar.style.animation = 'none';
+                });
+            }
+        }
+
+        if (avatarRing) {
+            if (state === 'speaking') {
+                avatarRing.className = 'absolute -inset-4 rounded-full bg-emerald-500/30 blur-md animate-ping';
+            } else if (state === 'listening') {
+                avatarRing.className = 'absolute -inset-3 rounded-full bg-teal-400/30 blur-sm animate-pulse';
+            } else {
+                avatarRing.className = 'absolute -inset-2 rounded-full bg-emerald-500/10 blur-xs';
+            }
+        }
+    };
+
+    const getFemaleVoice = (lang) => {
+        if (!('speechSynthesis' in window)) return null;
+        const voices = window.speechSynthesis.getVoices();
+        if (!voices || voices.length === 0) return null;
+
+        let langPrefix = 'hi';
+        if (lang === 'English') langPrefix = 'en';
+        if (lang === 'Bengali') langPrefix = 'bn';
+
+        const femaleKeywords = ['female', 'zira', 'swara', 'samantha', 'victoria', 'karen', 'google hi-in', 'google english', 'heera', 'serena'];
+        const matchedLangVoices = voices.filter(v => v.lang && v.lang.toLowerCase().startsWith(langPrefix));
+
+        for (const kw of femaleKeywords) {
+            const found = matchedLangVoices.find(v => v.name.toLowerCase().includes(kw));
+            if (found) return found;
+        }
+
+        return matchedLangVoices[0] || voices.find(v => v.lang && v.lang.toLowerCase().startsWith('hi')) || voices[0];
+    };
+
     const speakText = (text, lang = selectedLang) => {
         if (!('speechSynthesis' in window) || !isSpeakerOn) return;
         window.speechSynthesis.cancel();
+        
         const utterance = new SpeechSynthesisUtterance(text);
         
         let voiceLang = 'hi-IN';
         if (lang === 'English') voiceLang = 'en-IN';
         if (lang === 'Bengali') voiceLang = 'bn-IN';
-        if (lang === 'Marathi') voiceLang = 'mr-IN';
-        if (lang === 'Gujarati') voiceLang = 'gu-IN';
-        if (lang === 'Telugu') voiceLang = 'te-IN';
-        if (lang === 'Tamil') voiceLang = 'ta-IN';
+        if (lang === 'Hinglish') voiceLang = 'hi-IN';
         
         utterance.lang = voiceLang;
-        utterance.rate = 1.0;
-        utterance.pitch = 1.0;
+        utterance.rate = 0.96;
+        utterance.pitch = 1.25;
 
-        const statusEl = document.getElementById('ai-call-status-badge');
-        if (statusEl) statusEl.textContent = '🗣️ AI Speaking...';
+        const femaleVoice = getFemaleVoice(lang);
+        if (femaleVoice) {
+            utterance.voice = femaleVoice;
+        }
+
+        isSpeaking = true;
+        setStatus('🗣️ Revy Speaking...', 'speaking');
 
         utterance.onend = () => {
-            if (statusEl) statusEl.textContent = `🎧 Connected • ${formatTimer(callDurationSec)}`;
+            isSpeaking = false;
+            setStatus(`🟢 Connected • ${formatTimer(callDurationSec)}`, 'connected');
+            if (!isMicMuted && recognitionInstance) {
+                try {
+                    setStatus('🎙️ Listening...', 'listening');
+                } catch (_) {}
+            }
         };
+
         utterance.onerror = () => {
-            if (statusEl) statusEl.textContent = `🎧 Connected • ${formatTimer(callDurationSec)}`;
+            isSpeaking = false;
+            setStatus(`🟢 Connected • ${formatTimer(callDurationSec)}`, 'connected');
         };
 
         window.speechSynthesis.speak(utterance);
     };
 
-    const appendCallTranscript = (sender, text) => {
-        const box = document.getElementById('ai-call-transcript-list');
-        if (!box) return;
-        const msgDiv = document.createElement('div');
-        msgDiv.className = `p-2.5 rounded-2xl text-xs max-w-[85%] ${sender === 'ai' ? 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-950 dark:text-emerald-100 border border-emerald-100 dark:border-emerald-800 self-start' : 'bg-blue-600 text-white self-end ml-auto'}`;
-        msgDiv.innerHTML = `<span class="font-bold opacity-75 block text-[10px] uppercase mb-0.5">${sender === 'ai' ? '🤖 Revy AI Support' : '👤 You'}</span>${escapeHtml(text)}`;
-        box.appendChild(msgDiv);
-        box.scrollTop = box.scrollHeight;
-    };
-
     const getAIKnowledgeResponse = (userQuery, lang) => {
-        const query = userQuery.toLowerCase();
+        const query = (userQuery || '').toLowerCase();
         
         if (query.includes('english')) {
             selectedLang = 'English';
-            return "Sure! I will speak in English. How can I assist you with Reviews World today? You can ask about withdrawals, task earnings, or account rules.";
+            return "Sure! I am switching to English. Hello, I am Revy, your Reviews World support executive. How can I assist you with your account, task earnings, or withdrawals today?";
         }
         if (query.includes('hindi') || query.includes('हिंदी')) {
             selectedLang = 'Hindi';
-            return "Bilkul! Hum Hindi mein baat karenge. Aap bataiye Reviews World app me aapko kya madad chahiye?";
+            return "Bilkul! Hum Hindi mein baat karenge. Main Revy bol rahee hoon. Aap bataiye Reviews World app me aapko kya sahayata chahiye?";
         }
         if (query.includes('bengali') || query.includes('বাংলা')) {
             selectedLang = 'Bengali';
-            return "Shure! Amra Banglay kotha bolbo. Reviews World app niye apnar ki sahajjo lagbe?";
+            return "Shure! Amra Banglay kotha bolbo. Ami Revy. Reviews World app niye apnar ki sahajjo lagbe bolun?";
         }
 
-        if (query.includes('withdraw') || query.includes('paise') || query.includes('nikal') || query.includes('payout') || query.includes('upi') || query.includes('bank')) {
+        if (query.includes('withdraw') || query.includes('paise') || query.includes('nikal') || query.includes('payout') || query.includes('upi') || query.includes('bank') || query.includes('paytm')) {
             if (lang === 'English') {
-                return "You can request withdrawals directly in the app via UPI, Bank Transfer, Paytm, or Wallet. Once submitted, our Admin team verifies and credits the payout safely.";
+                return "You can request your withdrawals directly in the app via UPI, Bank Transfer, Paytm, or Wallet. Once submitted, our Admin team verifies and credits the payout safely to your account!";
             }
-            return "Aap Reviews World app me Direct UPI, Bank Transfer, Paytm ya Wallet se Withdrawal request laga sakte hain. Withdrawal request aane ke baad Admin team verify karke aapka payout approve aur account me credit karti hai.";
+            if (lang === 'Bengali') {
+                return "Aapni Reviews World app theke UPI, Bank Transfer, ba Paytm-er madhyame Withdrawal request korte parben. Request pawar por humader Admin team verify kore taka apnar account-e credit kore debe.";
+            }
+            return "Aap Reviews World app me Direct UPI, Bank Transfer, Paytm ya Wallet se Withdrawal request laga saktee hain. Withdrawal request submit hone ke baad Admin team verify karke aapka payout approve kar degee aur aapke account me credit ho jayega!";
         }
 
-        if (query.includes('fund') || query.includes('add') || query.includes('deposit') || query.includes('recharge')) {
+        if (query.includes('fund') || query.includes('add') || query.includes('deposit') || query.includes('recharge') || query.includes('balance')) {
             if (lang === 'English') {
-                return "Important Notice: Users cannot manually add funds or deposit money. All wallet balances and fund additions are strictly credited by Admin only.";
+                return "Please note that users cannot manually deposit or add funds. All wallet balances and deposits are strictly credited by our Admin team directly.";
             }
-            return "Zaroori Jaankari: Users khud se fund add nahi kar sakte. Fund add aur wallet balance deposit strictly Admin ke dwara hi kiya jata hai.";
+            return "Main aapko bata doon ki users khud se fund add nahi kar saktee. Fund add aur wallet balance deposit strictly Admin dwaara hi aapke account me credit kiya jata hai.";
         }
 
-        if (query.includes('task') || query.includes('earn') || query.includes('kamai') || query.includes('refer') || query.includes('reward')) {
+        if (query.includes('task') || query.includes('earn') || query.includes('kamai') || query.includes('refer') || query.includes('reward') || query.includes('work')) {
             if (lang === 'English') {
-                return "You can earn by completing daily review tasks, submitting screenshots, and sharing your referral code with friends to get instant referral bonuses!";
+                return "You can earn money by completing daily review tasks, submitting screenshots, and sharing your referral link with friends to get instant referral rewards!";
             }
-            return "Aap Daily Review Tasks complete karke, screenshot submit karke aur apne Referral link se dosto ko invite karke instant referral bonus kama sakte hain.";
+            return "Aap Daily Review Tasks complete karke, screenshot submit karke aur apne Referral link se dosto ko invite karke instant referral bonus kama saktee hain!";
+        }
+
+        if (query.includes('hi') || query.includes('hello') || query.includes('namaste') || query.includes('kaise') || query.includes('kya kar')) {
+            if (lang === 'English') {
+                return "Hello! I am Revy, your Revy AI Customer Support Representative. I am delighted to talk to you. How can I help you with Reviews World today?";
+            }
+            return "Namaste! Main Revy, Reviews World ki AI Support Executive bol rahee hoon. Main aapki kya sahayata kar saktee hoon?";
         }
 
         if (lang === 'English') {
-            return "I am here to help you with Reviews World! You can ask about withdrawal processing, completing review tasks, referral bonuses, or admin approvals.";
+            return "I am right here to help you! You can ask me about withdrawal processing, review tasks, referral bonuses, or admin approvals.";
         }
-        return "Namaste! Main Reviews World Voice Assistant hoon. Aap withdrawal, daily review tasks, referral bonus ya admin approval ke baare mein kuch bhi pooch sakte hain!";
+        return "Main Reviews World support se Revy bol rahee hoon. Aap withdrawal, daily review tasks, referral bonus ya account approval ke baare me kuch bhi pooch saktee hain!";
     };
 
     const processUserInput = (text) => {
-        if (!text.trim()) return;
-        appendCallTranscript('user', text);
+        if (!text || !text.trim() || isSpeaking) return;
         
-        const statusEl = document.getElementById('ai-call-status-badge');
-        if (statusEl) statusEl.textContent = '🤖 Thinking...';
+        setStatus('🧠 Thinking...', 'listening');
 
         setTimeout(() => {
             const aiReply = getAIKnowledgeResponse(text, selectedLang);
-            appendCallTranscript('ai', aiReply);
             speakText(aiReply, selectedLang);
-        }, 600);
+        }, 500);
     };
 
     const startSpeechRecognition = () => {
         const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
-        if (!SpeechRec) return;
+        if (!SpeechRec) {
+            console.warn('Speech recognition not supported on this browser.');
+            return;
+        }
         try {
             recognitionInstance = new SpeechRec();
             recognitionInstance.continuous = true;
             recognitionInstance.interimResults = false;
-            recognitionInstance.lang = selectedLang === 'English' ? 'en-IN' : 'hi-IN';
+            
+            if (selectedLang === 'English') recognitionInstance.lang = 'en-IN';
+            else if (selectedLang === 'Bengali') recognitionInstance.lang = 'bn-IN';
+            else recognitionInstance.lang = 'hi-IN';
 
             recognitionInstance.onresult = (event) => {
-                if (isMicMuted) return;
+                if (isMicMuted || isSpeaking) return;
                 const lastResultIndex = event.results.length - 1;
                 const transcript = event.results[lastResultIndex][0].transcript;
                 if (transcript && transcript.trim()) {
@@ -1692,8 +1764,18 @@ const startAIVoiceCallModal = () => {
                 }
             };
 
+            recognitionInstance.onstart = () => {
+                if (!isSpeaking) setStatus('🎙️ Listening...', 'listening');
+            };
+
             recognitionInstance.onerror = (e) => {
                 console.warn('Speech recognition error:', e.error);
+            };
+
+            recognitionInstance.onend = () => {
+                if (!isMicMuted && recognitionInstance) {
+                    try { recognitionInstance.start(); } catch (_) {}
+                }
             };
 
             recognitionInstance.start();
@@ -1702,60 +1784,71 @@ const startAIVoiceCallModal = () => {
         }
     };
 
-    renderModal('AI Voice Support Call', `
-        <div class="space-y-4 text-center py-2 relative overflow-hidden select-none">
-            <div class="relative w-28 h-28 mx-auto flex items-center justify-center my-2">
-                <div id="ai-avatar-call-wave" class="absolute inset-0 rounded-full bg-emerald-500/20 animate-pulse"></div>
-                <div class="relative w-24 h-24 rounded-full bg-gradient-to-tr from-emerald-500 via-teal-600 to-emerald-700 p-1 shadow-xl flex items-center justify-center">
-                    <img src="${CHATBOT_ICON_URL}" alt="Revy AI" class="w-full h-full rounded-full object-cover border-2 border-white/50">
+    renderModal('', `
+        <div class="space-y-5 text-center py-4 px-2 relative overflow-hidden select-none bg-gradient-to-b from-gray-950 via-slate-900 to-emerald-950 text-white rounded-3xl -m-6 p-6 shadow-2xl border border-emerald-500/20">
+            <div class="absolute -top-12 -right-12 w-36 h-36 bg-emerald-500/20 rounded-full blur-2xl pointer-events-none"></div>
+            <div class="absolute -bottom-12 -left-12 w-36 h-36 bg-teal-500/20 rounded-full blur-2xl pointer-events-none"></div>
+
+            <div class="flex items-center justify-between px-2">
+                <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-[11px] font-extrabold text-emerald-400">
+                    <span class="w-2 h-2 rounded-full bg-emerald-400 animate-ping"></span>
+                    24/7 Voice AI
+                </span>
+                <span class="text-xs font-bold text-gray-400">REVIEWS WORLD</span>
+            </div>
+
+            <div class="relative w-32 h-32 mx-auto flex items-center justify-center my-3">
+                <div id="ai-avatar-call-wave" class="absolute -inset-3 rounded-full bg-emerald-500/20 blur-md animate-pulse"></div>
+                <div class="relative w-28 h-28 rounded-full bg-gradient-to-tr from-emerald-400 via-teal-500 to-emerald-600 p-1 shadow-2xl flex items-center justify-center ring-4 ring-emerald-500/30">
+                    <img src="${CHATBOT_ICON_URL}" alt="Revy AI Executive" class="w-full h-full rounded-full object-cover border-2 border-white/80 shadow-inner">
                 </div>
             </div>
 
             <div>
-                <h3 class="text-lg font-black text-gray-900 dark:text-white flex items-center justify-center gap-1.5">
-                    REVIEWS WORLD AI CALL ${getVerifiedBadge()}
+                <h3 class="text-xl font-black text-white flex items-center justify-center gap-1.5 tracking-tight">
+                    REVY - FEMALE AI SUPPORT ${getVerifiedBadge()}
                 </h3>
-                <p id="ai-call-status-badge" class="text-xs font-bold text-emerald-600 dark:text-emerald-400 mt-1">
-                    🎧 Connected • 00:00
+                <p id="ai-call-status-badge" class="text-xs font-extrabold text-emerald-400 mt-1 animate-pulse">
+                    🟢 Connected • 00:00
                 </p>
+            </div>
+
+            <div id="ai-call-soundwave" class="flex items-center justify-center gap-1.5 h-10 my-3 opacity-80 transition">
+                <span class="wave-bar w-1.5 h-6 bg-gradient-to-t from-emerald-500 to-teal-300 rounded-full"></span>
+                <span class="wave-bar w-1.5 h-10 bg-gradient-to-t from-emerald-500 to-teal-300 rounded-full"></span>
+                <span class="wave-bar w-1.5 h-8 bg-gradient-to-t from-emerald-500 to-teal-300 rounded-full"></span>
+                <span class="wave-bar w-1.5 h-10 bg-gradient-to-t from-emerald-500 to-teal-300 rounded-full"></span>
+                <span class="wave-bar w-1.5 h-6 bg-gradient-to-t from-emerald-500 to-teal-300 rounded-full"></span>
             </div>
 
             <div class="flex items-center justify-center gap-1.5 flex-wrap px-2">
                 ${['Hindi', 'Hinglish', 'English', 'Bengali'].map(lang => `
-                    <button class="call-lang-chip px-2.5 py-1 rounded-full text-[11px] font-bold border transition ${lang === selectedLang ? 'bg-emerald-600 text-white border-emerald-600 shadow-sm' : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 border-gray-200 dark:border-gray-700'}" data-lang="${lang}">
+                    <button class="call-lang-chip px-3 py-1 rounded-full text-[11px] font-bold border transition ${lang === selectedLang ? 'bg-emerald-500 text-white border-emerald-400 shadow-lg shadow-emerald-500/30' : 'bg-gray-800/80 text-gray-300 border-gray-700/80 hover:bg-gray-700'}" data-lang="${lang}">
                         ${lang === 'Hindi' ? '🇮🇳 Hindi' : lang === 'English' ? '🇬🇧 English' : lang === 'Bengali' ? '🇧🇩 Bengali' : '🇮🇳 Hinglish'}
                     </button>
                 `).join('')}
             </div>
 
-            <div id="ai-call-transcript-list" class="h-40 overflow-y-auto space-y-2 p-3 bg-gray-50 dark:bg-gray-900/60 rounded-2xl border border-gray-100 dark:border-gray-800 text-left flex flex-col scroll-smooth shadow-inner">
-            </div>
-
-            <div class="flex items-center gap-2 pt-1">
-                <input id="ai-call-text-input" type="text" placeholder="Type message or speak into mic..." class="flex-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl px-3 py-2 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-emerald-500 text-gray-900 dark:text-white">
-                <button id="ai-call-send-btn" class="h-9 px-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-extrabold shadow-sm transition active:scale-95">Send</button>
-            </div>
-
-            <div class="flex items-center justify-center gap-6 pt-2">
-                <button id="ai-call-mute-btn" class="flex flex-col items-center gap-1 text-[10px] font-extrabold text-gray-600 dark:text-gray-300">
-                    <div class="w-12 h-12 rounded-full bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 border border-gray-200 dark:border-gray-700 flex items-center justify-center text-lg shadow-sm transition">
+            <div class="flex items-center justify-center gap-8 pt-4">
+                <button id="ai-call-mute-btn" class="flex flex-col items-center gap-1.5 text-[11px] font-extrabold text-gray-300 hover:text-white transition group">
+                    <div class="w-14 h-14 rounded-full bg-gray-800/90 hover:bg-gray-700 border border-gray-700 flex items-center justify-center text-xl shadow-lg transition transform group-active:scale-90">
                         🎤
                     </div>
-                    <span>Mute</span>
+                    <span id="ai-call-mute-label">Mute</span>
                 </button>
 
-                <button id="ai-call-end-btn" class="flex flex-col items-center gap-1 text-[10px] font-extrabold text-rose-600">
-                    <div class="w-14 h-14 rounded-full bg-rose-600 hover:bg-rose-700 text-white flex items-center justify-center text-xl shadow-lg transition transform active:scale-90">
+                <button id="ai-call-end-btn" class="flex flex-col items-center gap-1.5 text-[11px] font-extrabold text-rose-400 hover:text-rose-300 transition group">
+                    <div class="w-16 h-16 rounded-full bg-gradient-to-tr from-rose-600 to-red-500 hover:from-rose-500 hover:to-red-400 text-white flex items-center justify-center text-2xl shadow-xl shadow-rose-600/50 transition transform group-active:scale-90 border-2 border-rose-400/50">
                         📞
                     </div>
                     <span>End Call</span>
                 </button>
 
-                <button id="ai-call-speaker-btn" class="flex flex-col items-center gap-1 text-[10px] font-extrabold text-gray-600 dark:text-gray-300">
-                    <div class="w-12 h-12 rounded-full bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 flex items-center justify-center text-lg shadow-sm transition">
+                <button id="ai-call-speaker-btn" class="flex flex-col items-center gap-1.5 text-[11px] font-extrabold text-emerald-400 hover:text-emerald-300 transition group">
+                    <div class="w-14 h-14 rounded-full bg-emerald-950/80 border border-emerald-500/50 text-emerald-400 flex items-center justify-center text-xl shadow-lg shadow-emerald-950/50 transition transform group-active:scale-90">
                         🔊
                     </div>
-                    <span>Speaker</span>
+                    <span id="ai-call-speaker-label">Speaker</span>
                 </button>
             </div>
         </div>
@@ -1763,49 +1856,48 @@ const startAIVoiceCallModal = () => {
 
     callTimerInterval = setInterval(() => {
         callDurationSec++;
-        const statusEl = document.getElementById('ai-call-status-badge');
-        if (statusEl && !statusEl.textContent.includes('Speaking')) {
-            statusEl.textContent = `🎧 Connected • ${formatTimer(callDurationSec)}`;
+        if (!isSpeaking) {
+            const statusEl = document.getElementById('ai-call-status-badge');
+            if (statusEl && !statusEl.textContent.includes('Speaking') && !statusEl.textContent.includes('Thinking')) {
+                statusEl.textContent = `🟢 Connected • ${formatTimer(callDurationSec)}`;
+            }
         }
     }, 1000);
 
-    const welcomeMsg = "Namaste! Welcome to Reviews World Support AI Call. Aap kis bhasha mein baat karna chahte hain? Main aapki kya madad kar sakta hoon?";
-    appendCallTranscript('ai', welcomeMsg);
-    setTimeout(() => speakText(welcomeMsg, selectedLang), 500);
+    const welcomeMsg = "Namaste! Main Revy, Reviews World ki AI Support Executive bol rahee hoon. Aap bataiye, main aapki kya sahayata kar saktee hoon?";
+    setTimeout(() => speakText(welcomeMsg, selectedLang), 400);
 
     document.querySelectorAll('.call-lang-chip').forEach(chip => {
         chip.onclick = () => {
             selectedLang = chip.dataset.lang;
             document.querySelectorAll('.call-lang-chip').forEach(c => {
-                c.className = `call-lang-chip px-2.5 py-1 rounded-full text-[11px] font-bold border transition ${c.dataset.lang === selectedLang ? 'bg-emerald-600 text-white border-emerald-600 shadow-sm' : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 border-gray-200 dark:border-gray-700'}`;
+                c.className = `call-lang-chip px-3 py-1 rounded-full text-[11px] font-bold border transition ${c.dataset.lang === selectedLang ? 'bg-emerald-500 text-white border-emerald-400 shadow-lg shadow-emerald-500/30' : 'bg-gray-800/80 text-gray-300 border-gray-700/80 hover:bg-gray-700'}`;
             });
-            const switchMsg = selectedLang === 'English' ? "Language set to English. How can I help you?" : `Aapki bhasha ${selectedLang} select ho gayi hai. Bataiye kya madad chahiye?`;
-            appendCallTranscript('ai', switchMsg);
+            
+            if (recognitionInstance) {
+                try {
+                    recognitionInstance.stop();
+                    if (selectedLang === 'English') recognitionInstance.lang = 'en-IN';
+                    else if (selectedLang === 'Bengali') recognitionInstance.lang = 'bn-IN';
+                    else recognitionInstance.lang = 'hi-IN';
+                } catch (_) {}
+            }
+
+            let switchMsg = `Aapki bhasha ${selectedLang} select ho gayi hai. Main aapki kya help kar saktee hoon?`;
+            if (selectedLang === 'English') switchMsg = "Language set to English. I am ready to help you!";
+            if (selectedLang === 'Bengali') switchMsg = "Apnar bhasa Bengali select hoyechhe. Bolun ami ki sahajjo korte pari?";
+            
             speakText(switchMsg, selectedLang);
         };
     });
-
-    const textInput = document.getElementById('ai-call-text-input');
-    const sendBtn = document.getElementById('ai-call-send-btn');
-    const handleSend = () => {
-        if (!textInput) return;
-        const val = textInput.value;
-        textInput.value = '';
-        processUserInput(val);
-    };
-    if (sendBtn) sendBtn.onclick = handleSend;
-    if (textInput) {
-        textInput.onkeydown = (e) => {
-            if (e.key === 'Enter') handleSend();
-        };
-    }
 
     const muteBtn = document.getElementById('ai-call-mute-btn');
     if (muteBtn) {
         muteBtn.onclick = () => {
             isMicMuted = !isMicMuted;
-            muteBtn.querySelector('div').className = `w-12 h-12 rounded-full ${isMicMuted ? 'bg-rose-100 dark:bg-rose-950/60 text-rose-600 border border-rose-300' : 'bg-gray-100 dark:bg-gray-800 text-gray-700 border border-gray-200 dark:border-gray-700'} flex items-center justify-center text-lg shadow-sm transition`;
-            muteBtn.querySelector('span').textContent = isMicMuted ? 'Muted' : 'Mute';
+            const label = document.getElementById('ai-call-mute-label');
+            if (label) label.textContent = isMicMuted ? 'Muted' : 'Mute';
+            muteBtn.querySelector('div').className = `w-14 h-14 rounded-full ${isMicMuted ? 'bg-rose-900/80 text-rose-400 border border-rose-500/50' : 'bg-gray-800/90 text-gray-300 border border-gray-700'} flex items-center justify-center text-xl shadow-lg transition`;
             showNotification(isMicMuted ? 'Microphone Muted' : 'Microphone Unmuted');
         };
     }
@@ -1815,7 +1907,9 @@ const startAIVoiceCallModal = () => {
         speakerBtn.onclick = () => {
             isSpeakerOn = !isSpeakerOn;
             if (!isSpeakerOn) window.speechSynthesis?.cancel();
-            speakerBtn.querySelector('div').className = `w-12 h-12 rounded-full ${isSpeakerOn ? 'bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 border border-emerald-200' : 'bg-gray-100 dark:bg-gray-800 text-gray-500 border border-gray-200 dark:border-gray-700'} flex items-center justify-center text-lg shadow-sm transition`;
+            const label = document.getElementById('ai-call-speaker-label');
+            if (label) label.textContent = isSpeakerOn ? 'Speaker' : 'Muted';
+            speakerBtn.querySelector('div').className = `w-14 h-14 rounded-full ${isSpeakerOn ? 'bg-emerald-950/80 border border-emerald-500/50 text-emerald-400' : 'bg-gray-800/90 border border-gray-700 text-gray-500'} flex items-center justify-center text-xl shadow-lg transition`;
             showNotification(isSpeakerOn ? 'Speaker On' : 'Speaker Off');
         };
     }
@@ -2465,3 +2559,38 @@ const showSupportMessageContextMenu = (messageId, isMine, viewerRole) => {
 
 window.updateMultiSelectBar = updateMultiSelectBar;
 window.showSupportMessageContextMenu = showSupportMessageContextMenu;
+
+window.handlePushNotificationChatOpen = (roomId, senderUserId) => {
+    try {
+        console.log('[handlePushNotificationChatOpen] Direct deep-link to chat for roomId:', roomId, 'sender:', senderUserId);
+        const currentUserData = window.currentUserData || {};
+        const role = currentUserData.role;
+        
+        const cleanRoomId = (roomId || '').replace(/^support_/, '');
+        const parts = cleanRoomId.split('_');
+        const targetUserId = parts[0] || senderUserId;
+        const targetAdminId = parts[1] || 'ADMIN';
+
+        if (role === 'sub_admin' || role === 'admin' || role === 'owner') {
+            if (typeof window.openSubAdminSupportChatModal === 'function') {
+                window.openSubAdminSupportChatModal(targetUserId);
+            } else if (typeof window.openSubAdminChatsPage === 'function') {
+                window.openSubAdminChatsPage();
+            }
+        } else {
+            if (typeof window.openSupportChatPage === 'function') {
+                window.openSupportChatPage(targetUserId, 'user', { adminId: targetAdminId });
+            }
+        }
+    } catch (err) {
+        console.error('Error opening chat from push notification:', err);
+    }
+};
+
+if (window.__pendingNotificationChat) {
+    const pending = window.__pendingNotificationChat;
+    window.__pendingNotificationChat = null;
+    setTimeout(() => {
+        window.handlePushNotificationChatOpen(pending.roomId, pending.userId);
+    }, 800);
+}

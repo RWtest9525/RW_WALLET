@@ -141,6 +141,30 @@
                 }).then(function () {
                     window.__rwOneSignalInitSuccess = true;
                     console.log('[OneSignal] ✅ Initialized (appId=' + window.__rwOneSignalAppId.slice(0, 8) + '...)');
+                    
+                    try {
+                        if (OneSignal && OneSignal.Notifications && typeof OneSignal.Notifications.addEventListener === 'function') {
+                            OneSignal.Notifications.addEventListener('click', function (event) {
+                                try {
+                                    console.log('[OneSignal Click] Notification clicked:', event);
+                                    var notifData = (event && event.notification && (event.notification.additionalData || event.notification.data)) || {};
+                                    if (notifData && (notifData.type === 'chat' || notifData.roomId)) {
+                                        var roomId = notifData.roomId || '';
+                                        var senderUserId = notifData.userId || '';
+                                        window.__pendingNotificationChat = { roomId: roomId, userId: senderUserId };
+                                        if (typeof window.handlePushNotificationChatOpen === 'function') {
+                                            window.handlePushNotificationChatOpen(roomId, senderUserId);
+                                        }
+                                    }
+                                } catch (clickErr) {
+                                    console.warn('[OneSignal Click] Handling click error:', clickErr);
+                                }
+                            });
+                        }
+                    } catch (e) {
+                        console.warn('[OneSignal Click] Failed to add click listener:', e);
+                    }
+
                     try {
                         window.dispatchEvent(new CustomEvent('onesignal:initialized', { detail: { appId: window.__rwOneSignalAppId } }));
                     } catch (_) { /* CustomEvent polyfill on old WebViews */ }
