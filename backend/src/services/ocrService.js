@@ -4,7 +4,10 @@
  * fuzzy & relaxed review comment matching (targeting FIRST 4 WORDS), and avatar cropping.
  */
 
-const Tesseract = require('tesseract.js');
+const { execFile } = require('child_process');
+const path = require('path');
+const fs = require('fs');
+const os = require('os');
 const Jimp = require('jimp');
 
 // Regex patterns to skip system status bar items and Play Store UI headers
@@ -265,13 +268,14 @@ async function runOcrOnBuffer(imageBuffer, originalName = 'screenshot.jpg', cont
 
   if (!ocrSuccess) {
     try {
-      ocrResult = await Tesseract.recognize(imageBuffer, 'eng');
-      ocrText = (ocrResult.data.text || '').trim();
-      ocrConfidence = (ocrResult.data.confidence || 0) / 100;
-      console.log('[OCR-Service] Tesseract fallback completed.');
+      const pyResult = await verifyAppReviewWithPython(imageBuffer, '');
+      ocrText = pyResult.extracted_text || '';
+      ocrConfidence = pyResult.score ? pyResult.score / 100 : 0.85;
+      console.log('[OCR-Service] Python EasyOCR fallback completed.');
     } catch (ocrErr) {
-      console.error('[OCR-Service] Tesseract OCR failed:', ocrErr);
-      throw new Error('OCR_RECOGNITION_FAILED');
+      console.error('[OCR-Service] Python EasyOCR fallback failed:', ocrErr);
+      ocrText = '';
+      ocrConfidence = 0;
     }
   }
 
@@ -364,6 +368,45 @@ async function cropReviewerAvatar(imageBuffer, nameLine, assignedComment = 'scre
   return null;
 }
 
+/**
+ * Executes the Python verify_app_review.py script to handle EasyOCR scanning,
+ * smart comment truncation, dynamic cropping, and RapidFuzz partial ratio verification.
+ */
+async function verifyAppReviewWithPython(imagePathOrBuffer, assignedComment = '') {
+  return new Promise((resolve) => {
+    let tempFilePath = null;
+    let imagePath = imagePathOrBuffer;
+
+    if (Buffer.isBuffer(imagePathOrBuffer)) {
+      tempFilePath = path.join(os.tmpdir(), `ocr_verify_${Date.now()}_${Math.random().toString(36).substring(7)}.jpg`);
+      fs.writeFileSync(tempFilePath, imagePathOrBuffer);
+      imagePath = tempFilePath;
+    }
+
+    const scriptPath = path.resolve(__dirname, '../../../verify_app_review.py');
+    const pythonCmd = process.platform === 'win32' ? 'python' : 'python3';
+
+    execFile(pythonCmd, [scriptPath, imagePath, assignedComment], { maxBuffer: 1024 * 1024 * 10 }, (error, stdout, stderr) => {
+      if (tempFilePath && fs.existsSync(tempFilePath)) {
+        try { fs.unlinkSync(tempFilePath); } catch (e) {}
+      }
+
+      if (error) {
+        console.error('[OCR-Service] Python OCR verification error:', error.message);
+        return resolve({ verified: false, score: 0, error: error.message, extracted_text: '' });
+      }
+
+      try {
+        const jsonResult = JSON.parse(stdout.trim());
+        resolve(jsonResult);
+      } catch (parseErr) {
+        console.error('[OCR-Service] Failed to parse Python OCR response:', stdout);
+        resolve({ verified: false, score: 0, error: 'JSON_PARSE_ERROR', extracted_text: stdout.trim() });
+      }
+    });
+  });
+}
+
 module.exports = {
   OCR_SKIP_PATTERNS,
   normalizeText,
@@ -376,5 +419,6 @@ module.exports = {
   runOcrOnBuffer,
   matchAssignedComment,
   extractReviewerName,
-  cropReviewerAvatar
+  cropReviewerAvatar,
+  verifyAppReviewWithPython
 };

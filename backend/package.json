@@ -17,7 +17,6 @@
     "googleapis": "^173.0.0",
     "jimp": "^1.6.1",
     "jsonwebtoken": "^9.0.2",
-    "socket.io": "^4.8.1",
-    "tesseract.js": "^5.1.1"
+    "socket.io": "^4.8.1"
   }
 }

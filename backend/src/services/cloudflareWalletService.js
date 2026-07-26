@@ -4,7 +4,7 @@ const jwt = require('jsonwebtoken');
 const admin = require('firebase-admin');
 const path = require('path');
 const { S3Client, PutObjectCommand, GetObjectCommand } = require('@aws-sdk/client-s3');
-const Tesseract = require('tesseract.js');
+// Tesseract removed in favor of Python EasyOCR service (verify_app_review.py)
 const Jimp = require('jimp');
 const { google } = require('googleapis');
 const { Readable } = require('stream');
@@ -1799,10 +1799,10 @@ async function processOcrAndGmailProfile(d1, r2, submissionId) {
     if (!imgResponse.ok) throw new Error(`Image download failed: ${imgResponse.status}`);
     const imgBuffer = Buffer.from(await imgResponse.arrayBuffer());
 
-    // Run Tesseract OCR
-    const { data } = await Tesseract.recognize(imgBuffer, 'eng');
-    const text = (data.text || '').trim();
-    const confidence = (data.confidence || 0) / 100;
+    // Run Python EasyOCR
+    const pyRes = await ocrService.verifyAppReviewWithPython(imgBuffer, submission.assigned_comment || '');
+    const text = pyRes.extracted_text || '';
+    const confidence = pyRes.score ? pyRes.score / 100 : 0.85;
 
     let gmailName = '';
     let gmailLogoUrl = '';
@@ -4436,13 +4436,13 @@ ${memoriesContext}`
         let tesseractLines = [];
         if (!ocrSuccess) {
           try {
-            ocrResult = await Tesseract.recognize(body, 'eng');
-            ocrText = (ocrResult.data.text || '').trim();
-            ocrConfidence = (ocrResult.data.confidence || 0) / 100;
-            tesseractLines = ocrResult.data.lines || [];
-            console.log('[OCR-Upload] Tesseract fallback completed.');
+            const pyRes = await ocrService.verifyAppReviewWithPython(body, '');
+            ocrText = pyRes.extracted_text || '';
+            ocrConfidence = pyRes.score ? pyRes.score / 100 : 0.85;
+            tesseractLines = ocrText.split(/\r?\n/).map(l => ({ text: l }));
+            console.log('[OCR-Upload] Python EasyOCR fallback completed.');
           } catch (ocrErr) {
-            console.error('[OCR-Upload] Tesseract OCR failed:', ocrErr);
+            console.error('[OCR-Upload] EasyOCR failed:', ocrErr);
             return res.status(500).json({ ok: false, error: 'OCR_FAILED', detail: 'Screenshot text recognition failed' });
           }
         }
@@ -4766,15 +4766,15 @@ ${memoriesContext}`
           return res.status(400).json({ ok: false, error: 'SCREENSHOT_FETCH_FAILED', detail: 'Could not retrieve screenshot for validation' });
         }
 
-        // 2. Run Tesseract OCR synchronously
+        // 2. Run Python EasyOCR synchronously
         let data = null;
         try {
-          const ocrResult = await Tesseract.recognize(imgBuffer, 'eng');
-          data = ocrResult.data;
-          ocrText = (data.text || '').trim();
-          ocrConfidence = (data.confidence || 0) / 100;
+          const pyRes = await ocrService.verifyAppReviewWithPython(imgBuffer, assignedComment || '');
+          ocrText = pyRes.extracted_text || '';
+          ocrConfidence = pyRes.score ? pyRes.score / 100 : 0.85;
+          data = { text: ocrText, confidence: ocrConfidence, lines: ocrText.split(/\r?\n/).map(l => ({ text: l })) };
         } catch (ocrErr) {
-          console.error('[OCR-Submit] Tesseract OCR failed:', ocrErr);
+          console.error('[OCR-Submit] Python EasyOCR failed:', ocrErr);
           return res.status(500).json({ ok: false, error: 'OCR_FAILED', detail: 'Screenshot text recognition failed' });
         }
 
@@ -5060,15 +5060,13 @@ ${memoriesContext}`
             console.warn('[Admin-OCR] OCR.space API failed, falling back to Tesseract:', spaceErr.message);
           }
 
-          // Fallback to Tesseract
+          // Fallback to Python EasyOCR
           if (!ocrSuccess) {
-            const { data } = await Tesseract.recognize(imgBuffer, 'eng', {
-              logger: () => {}
-            });
-            ocrResult.text = (data.text || '').trim();
-            ocrResult.confidence = (data.confidence || 0) / 100;
-            ocrResult.status = ocrResult.text ? 'completed' : 'completed';
-            console.log(`[Admin-OCR] Tesseract fallback completed for ${req.params.submissionId}`);
+            const pyRes = await ocrService.verifyAppReviewWithPython(imgBuffer, '');
+            ocrResult.text = pyRes.extracted_text || '';
+            ocrResult.confidence = pyRes.score ? pyRes.score / 100 : 0.85;
+            ocrResult.status = 'completed';
+            console.log(`[Admin-OCR] Python EasyOCR fallback completed for ${req.params.submissionId}`);
           }
         } catch (ocrError) {
           console.error('[Admin-OCR] OCR process error:', ocrError);
