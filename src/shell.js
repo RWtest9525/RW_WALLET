@@ -1,10 +1,36 @@
+(() => {
+    const criticalImages = [
+        '/assets/images/referral_banner.png',
+        '/assets/images/referral_howitworks_cards.png',
+        '/assets/images/profile_card_bg.png'
+    ];
+    try {
+        const frag = document.createDocumentFragment();
+        criticalImages.forEach(src => {
+            if (document.querySelector(`link[rel="preload"][href="${src}"]`)) return;
+            const link = document.createElement('link');
+            link.rel = 'preload';
+            link.as = 'image';
+            link.href = src;
+            link.setAttribute('fetchpriority', 'high');
+            frag.appendChild(link);
+            const img = document.createElement('link');
+            img.rel = 'prefetch';
+            img.as = 'image';
+            img.href = src;
+            frag.appendChild(img);
+        });
+        document.head.appendChild(frag);
+    } catch (_) {}
+})();
+
 const root = document.getElementById('rw-wallet-root');
 
 if (!root) {
     throw new Error('RW Wallet root not found');
 }
 
-const cachedRole = (localStorage.getItem('user_role') || '').toLowerCase();
+const cachedRole = (localStorage.getItem('user_role') || sessionStorage.getItem('user_role_ss') || '').toLowerCase();
 const isCachedAdminRole = cachedRole === 'admin' || cachedRole === 'subadmin' || cachedRole === 'owner';
 
 root.outerHTML = `

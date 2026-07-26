@@ -33,13 +33,37 @@ import './core/firebase.js';
 // Setup Event listeners and routing at DOM load
 applyTheme(initialTheme);
 
-// Instant Asset Preloader for Referral and Profile Banners
-try {
-    ['/assets/images/referral_banner.png', '/assets/images/referral_howitworks_cards.png'].forEach(src => {
-        const img = new Image();
-        img.src = src;
-    });
-} catch (e) {}
+// Instant Asset Preloader for Referral and Profile Banners (Anti-Flicker Dual-Cache Ready)
+(() => {
+    const criticalImages = [
+        '/assets/images/referral_banner.png',
+        '/assets/images/referral_howitworks_cards.png',
+        '/assets/images/profile_card_bg.png'
+    ];
+    const MARKER_LS = 'rw_critical_images_loaded_v1';
+    const MARKER_SS = 'rw_critical_images_loaded_ss_v1';
+    try {
+        const alreadyReady = localStorage.getItem(MARKER_LS) === '1' || sessionStorage.getItem(MARKER_SS) === '1';
+        criticalImages.forEach(src => {
+            const img = new Image();
+            img.decoding = 'sync';
+            img.fetchPriority = 'high';
+            img.onload = img.onerror = () => {
+                try {
+                    localStorage.setItem(MARKER_LS, '1');
+                    sessionStorage.setItem(MARKER_SS, '1');
+                } catch (_) {}
+            };
+            img.src = src;
+        });
+        if (alreadyReady) {
+            try {
+                localStorage.setItem(MARKER_LS, '1');
+                sessionStorage.setItem(MARKER_SS, '1');
+            } catch (_) {}
+        }
+    } catch (_) {}
+})();
 
 const syncBottomNavFromCache = () => {
     try {

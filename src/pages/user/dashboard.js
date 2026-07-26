@@ -3738,29 +3738,65 @@ const showReferEarnPage = () => {
         activeChatUnsubscribe();
         activeChatUnsubscribe = null;
     }
+    const userUid = String(currentUser?.uid || '').trim();
+    const REFERRAL_PAGE_CACHE_LS = `rw_refer_page_cache_v1_${userUid}`;
+    const REFERRAL_PAGE_CACHE_SS = `rw_refer_page_cache_ss_v1_${userUid}`;
+    const IMG_READY_LS = 'rw_critical_images_loaded_v1';
+    const IMG_READY_SS = 'rw_critical_images_loaded_ss_v1';
+    let imagesReady = false;
+    try {
+        imagesReady = localStorage.getItem(IMG_READY_LS) === '1' || sessionStorage.getItem(IMG_READY_SS) === '1';
+    } catch (_) {}
+
+    const pageContainer = document.getElementById('page-container');
+    if (currentMainSection === 'refer' && pageContainer && !pageContainer.classList.contains('hidden')) {
+        setBottomNavActive('bottom-refer-btn');
+        return;
+    }
+
     const reward = getReferralRewardAmount();
     const rewardText = formatCurrency(reward).replace('.00', '');
     const referralCode = getProfileReferralCode();
     const referralLink = getProfileReferralLink(referralCode);
 
-    // Instant image preloader
     ['/assets/images/referral_banner.png', '/assets/images/referral_howitworks_cards.png'].forEach(src => {
-        const img = new Image();
-        img.src = src;
+        try {
+            const img = new Image();
+            img.decoding = 'sync';
+            img.fetchPriority = 'high';
+            img.src = src;
+        } catch (_) {}
     });
 
-    const content = `
+    const bannerSkeletonBg = 'linear-gradient(135deg,#064e3b 0%,#065f46 25%,#047857 50%,#10b981 75%,#a7f3d0 100%)';
+    const howItWorksSkeletonBg = 'linear-gradient(135deg,#f8fafc 0%,#f1f5f9 35%,#e2e8f0 70%,#cbd5e1 100%)';
+    const bannerShellDisplay = imagesReady ? 'block' : 'none';
+    const howItWorksShellDisplay = imagesReady ? 'block' : 'none';
+
+    const buildContent = () => `
         ${getPageHeader('Refer & Earn', { showBack: false })}
         <div class="max-w-md mx-auto space-y-3 text-left px-0.5 pt-1 pb-24">
             
-            <!-- Refer & Earn Top Banner Image -->
-            <div class="relative overflow-hidden rounded-2xl shadow-md border border-emerald-900/40 bg-slate-900 min-h-[140px]">
-                <img src="/assets/images/referral_banner.png" alt="Refer & Earn - Invite Friends, Earn Together" loading="eager" fetchpriority="high" decoding="sync" class="w-full h-auto object-cover rounded-2xl block">
+            <!-- Refer & Earn Top Banner Image (Anti-Flicker: gradient skeleton + opacity reveal) -->
+            <div class="relative overflow-hidden rounded-2xl shadow-md border border-emerald-900/40 bg-slate-900 min-h-[140px]"
+                 style="background-image:${bannerSkeletonBg};background-size:cover;background-position:center;will-change:transform;">
+                <img src="/assets/images/referral_banner.png" alt="Refer & Earn - Invite Friends, Earn Together"
+                     loading="eager" fetchpriority="high" decoding="sync"
+                     style="opacity:0;transition:opacity 160ms ease-out;display:${bannerShellDisplay};will-change:opacity;"
+                     onload="try{this.style.opacity='1';this.style.display='block';}catch(e){}"
+                     onerror="try{this.style.opacity='1';this.style.display='block';}catch(e){}"
+                     class="w-full h-auto object-cover rounded-2xl block">
             </div>
 
-            <!-- Refer & Earn Middle Premium Stats & How It Works Image Card -->
-            <div class="relative overflow-hidden rounded-2xl shadow-xs border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 min-h-[180px]">
-                <img src="/assets/images/referral_howitworks_cards.png" alt="Referral Rewards & How It Works" loading="eager" fetchpriority="high" decoding="sync" class="w-full h-auto object-cover rounded-2xl block">
+            <!-- Refer & Earn Middle Premium Stats & How It Works Image Card (Anti-Flicker) -->
+            <div class="relative overflow-hidden rounded-2xl shadow-xs border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 min-h-[180px]"
+                 style="background-image:${howItWorksSkeletonBg};background-size:cover;background-position:center;will-change:transform;">
+                <img src="/assets/images/referral_howitworks_cards.png" alt="Referral Rewards & How It Works"
+                     loading="eager" fetchpriority="high" decoding="sync"
+                     style="opacity:0;transition:opacity 160ms ease-out;display:${howItWorksShellDisplay};will-change:opacity;"
+                     onload="try{this.style.opacity='1';this.style.display='block';}catch(e){}"
+                     onerror="try{this.style.opacity='1';this.style.display='block';}catch(e){}"
+                     class="w-full h-auto object-cover rounded-2xl block">
             </div>
 
             <!-- Referral Code & Actions Box (Redesigned Light Premium Style) -->
@@ -3810,25 +3846,94 @@ const showReferEarnPage = () => {
         ${getPageFooter()}
     `;
 
-    showPage(content, { keepBottomNav: true, returnTo: currentUser?.uid === ADMIN_UID ? 'admin' : 'home' });
-    currentMainSection = 'refer';
-    setBottomNavActive('bottom-refer-btn');
+    let usedCached = false;
+    try {
+        const cachedHTML = localStorage.getItem(REFERRAL_PAGE_CACHE_LS) || sessionStorage.getItem(REFERRAL_PAGE_CACHE_SS);
+        if (cachedHTML && typeof cachedHTML === 'string' && cachedHTML.length > 200) {
+            showPage(cachedHTML, { keepBottomNav: true, returnTo: currentUser?.uid === ADMIN_UID ? 'admin' : 'home' });
+            currentMainSection = 'refer';
+            setBottomNavActive('bottom-refer-btn');
+            usedCached = true;
 
-    document.getElementById('main-copy-code-btn')?.addEventListener('click', () => {
-        if (navigator.clipboard && navigator.clipboard.writeText) {
-            navigator.clipboard.writeText(referralCode).then(() => showNotification('Referral code copied to clipboard!'));
-        } else {
-            showNotification(`Referral Code: ${referralCode}`);
+            const cachedCopy = document.getElementById('main-copy-code-btn');
+            if (cachedCopy) {
+                cachedCopy.addEventListener('click', () => {
+                    if (navigator.clipboard && navigator.clipboard.writeText) {
+                        navigator.clipboard.writeText(referralCode).then(() => showNotification('Referral code copied to clipboard!'));
+                    } else {
+                        showNotification(`Referral Code: ${referralCode}`);
+                    }
+                });
+            }
+            const cachedShare = document.getElementById('main-share-link-btn');
+            if (cachedShare) {
+                cachedShare.addEventListener('click', () => window.showShareReferralModal(referralCode));
+            }
+            const cachedTrack = document.getElementById('open-track-referrals-btn');
+            if (cachedTrack) {
+                cachedTrack.addEventListener('click', () => window.showTrackReferralsPage());
+            }
+
+            requestAnimationFrame(() => {
+                try {
+                    document.querySelectorAll('#page-container img[src*="referral_"]').forEach(el => {
+                        el.style.opacity = '1';
+                        el.style.display = 'block';
+                    });
+                } catch (_) {}
+            });
         }
-    });
+    } catch (_) {}
 
-    document.getElementById('main-share-link-btn')?.addEventListener('click', () => {
-        window.showShareReferralModal(referralCode);
-    });
+    const content = buildContent();
 
-    document.getElementById('open-track-referrals-btn')?.addEventListener('click', () => {
-        window.showTrackReferralsPage();
-    });
+    if (!usedCached) {
+        showPage(content, { keepBottomNav: true, returnTo: currentUser?.uid === ADMIN_UID ? 'admin' : 'home' });
+        currentMainSection = 'refer';
+        setBottomNavActive('bottom-refer-btn');
+    }
+
+    const attachHandlers = () => {
+        document.getElementById('main-copy-code-btn')?.addEventListener('click', () => {
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                navigator.clipboard.writeText(referralCode).then(() => showNotification('Referral code copied to clipboard!'));
+            } else {
+                showNotification(`Referral Code: ${referralCode}`);
+            }
+        });
+        document.getElementById('main-share-link-btn')?.addEventListener('click', () => {
+            window.showShareReferralModal(referralCode);
+        });
+        document.getElementById('open-track-referrals-btn')?.addEventListener('click', () => {
+            window.showTrackReferralsPage();
+        });
+    };
+    attachHandlers();
+
+    const persistCacheSoon = () => {
+        setTimeout(() => {
+            try {
+                const pc = document.getElementById('page-container');
+                if (pc && currentMainSection === 'refer') {
+                    const rendered = pc.innerHTML;
+                    if (rendered && rendered.length > 200) {
+                        try { localStorage.setItem(REFERRAL_PAGE_CACHE_LS, rendered); } catch (_) {}
+                        try { sessionStorage.setItem(REFERRAL_PAGE_CACHE_SS, rendered); } catch (_) {}
+                    }
+                }
+            } catch (_) {}
+        }, 450);
+    };
+    if (usedCached) {
+        setTimeout(() => {
+            try {
+                localStorage.setItem(REFERRAL_PAGE_CACHE_LS, content);
+                sessionStorage.setItem(REFERRAL_PAGE_CACHE_SS, content);
+            } catch (_) {}
+        }, 0);
+    } else {
+        persistCacheSoon();
+    }
 };
 
 

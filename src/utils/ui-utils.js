@@ -141,7 +141,9 @@ const readJsonCache = (key) => {
 const writeJsonCache = (key, value) => {
             try {
                 localStorage.setItem(key, JSON.stringify(value));
+                try { sessionStorage.setItem(key + '_ss', JSON.stringify(value)); } catch (_) {}
             } catch (e) {
+                try { sessionStorage.setItem(key + '_ss', JSON.stringify(value)); } catch (_) {}
                 console.warn('Cache write failed:', e);
             }
         };
@@ -3963,17 +3965,30 @@ const preloadLogoImages = () => {
                 PARTNER_ICON_URL
             ])];
 
+            // Initialize anti-flicker image system (global observer + loaded cache)
+            initAntiFlickerImages();
+
+            // Mark already-known URLs as preloaded so instant-show on render
+            criticalLogoUrls.forEach((u) => markImagePreloaded(u));
+            idleLogoUrls.forEach((u) => markImagePreloaded(u));
+
             const preloadImage = (logoUrl, priority = 'low') => {
+                if (!logoUrl) return;
                 const img = new Image();
-                img.decoding = 'async';
+                img.decoding = priority === 'high' ? 'sync' : 'async';
                 img.loading = 'eager';
                 img.fetchPriority = priority;
+                img.referrerPolicy = 'no-referrer-when-downgrade';
+                img.setAttribute('data-preload-priority', priority);
                 img.src = logoUrl;
                 img.onload = function () {
-                    document.querySelectorAll(`img[src="${logoUrl}"]`).forEach(logo => {
-                        logo.classList.add('loaded');
-                        logo.style.opacity = '1';
+                    markImageLoaded(logoUrl);
+                    document.querySelectorAll(`img[src="${logoUrl}"]`).forEach((logo) => {
+                        applyImageLoadedClass(logo, logoUrl);
                     });
+                };
+                img.onerror = function () {
+                    markImageFailed(logoUrl);
                 };
             };
 
@@ -3985,6 +4000,228 @@ const preloadLogoImages = () => {
                 setTimeout(loadIdleImages, 1200);
             }
         };
+
+        /* ============================================================
+         * GLOBAL IMAGE ANTI-FLICKER CACHE + MUTATION OBSERVER SYSTEM
+         * Prevent blinking/logo flash every time user navigates pages
+         * ============================================================ */
+        const RW_IMG_LOADED_CACHE_KEY = 'rw_img_loaded_cache';
+        const RW_IMG_FAILED_CACHE_KEY = 'rw_img_failed_cache';
+
+        const readImageLoadedCache = () => {
+            try {
+                const raw = localStorage.getItem(RW_IMG_LOADED_CACHE_KEY) || sessionStorage.getItem(RW_IMG_LOADED_CACHE_KEY + '_ss') || '{}';
+                const obj = JSON.parse(raw);
+                return obj && typeof obj === 'object' ? obj : {};
+            } catch (_) { return {}; }
+        };
+
+        const readImageFailedCache = () => {
+            try {
+                const raw = localStorage.getItem(RW_IMG_FAILED_CACHE_KEY) || sessionStorage.getItem(RW_IMG_FAILED_CACHE_KEY + '_ss') || '{}';
+                const obj = JSON.parse(raw);
+                return obj && typeof obj === 'object' ? obj : {};
+            } catch (_) { return {}; }
+        };
+
+        const writeImageCacheToStorage = () => {
+            try {
+                const snapshot = Object.keys(window.__rwImgLoadedCache || {}).length > 400
+                    ? Object.fromEntries(Object.entries(window.__rwImgLoadedCache || {}).slice(-250))
+                    : (window.__rwImgLoadedCache || {});
+                localStorage.setItem(RW_IMG_LOADED_CACHE_KEY, JSON.stringify(snapshot));
+                sessionStorage.setItem(RW_IMG_LOADED_CACHE_KEY + '_ss', JSON.stringify(snapshot));
+            } catch (_) {
+                try { sessionStorage.setItem(RW_IMG_LOADED_CACHE_KEY + '_ss', JSON.stringify(window.__rwImgLoadedCache || {})); } catch (_) {}
+            }
+        };
+
+        window.__rwImgLoadedCache = readImageLoadedCache();
+        window.__rwImgFailedCache = readImageFailedCache();
+        window.__rwImgPreloadedCache = window.__rwImgPreloadedCache || {};
+        window.__rwImgFlushDebounceTimer = null;
+
+        const flushImageCacheStorage = () => {
+            if (window.__rwImgFlushDebounceTimer) return;
+            window.__rwImgFlushDebounceTimer = setTimeout(() => {
+                window.__rwImgFlushDebounceTimer = null;
+                writeImageCacheToStorage();
+            }, 1500);
+        };
+
+        const markImageLoaded = (src) => {
+            if (!src) return;
+            try {
+                (window.__rwImgLoadedCache || {})[String(src)] = Date.now();
+                delete (window.__rwImgFailedCache || {})[String(src)];
+                flushImageCacheStorage();
+            } catch (_) {}
+        };
+
+        const markImagePreloaded = (src) => {
+            if (!src) return;
+            try {
+                window.__rwImgPreloadedCache[String(src)] = Date.now();
+            } catch (_) {}
+        };
+
+        const markImageFailed = (src) => {
+            if (!src) return;
+            try {
+                (window.__rwImgFailedCache || {})[String(src)] = Date.now();
+                try {
+                    localStorage.setItem(RW_IMG_FAILED_CACHE_KEY, JSON.stringify(window.__rwImgFailedCache || {}));
+                    sessionStorage.setItem(RW_IMG_FAILED_CACHE_KEY + '_ss', JSON.stringify(window.__rwImgFailedCache || {}));
+                } catch (_) {}
+            } catch (_) {}
+        };
+
+        const isImageLoadedBefore = (src) => {
+            if (!src) return false;
+            try { return !!(window.__rwImgLoadedCache && window.__rwImgLoadedCache[String(src)]); } catch (_) { return false; }
+        };
+        const isImagePreloadedNow = (src) => {
+            if (!src) return false;
+            try { return !!(window.__rwImgPreloadedCache && window.__rwImgPreloadedCache[String(src)]); } catch (_) { return false; }
+        };
+        const isImageFailedBefore = (src) => {
+            if (!src) return false;
+            try { return !!(window.__rwImgFailedCache && window.__rwImgFailedCache[String(src)]); } catch (_) { return false; }
+        };
+
+        const classifyImgType = (img, src = '') => {
+            const classes = img.classList || [];
+            const srcLower = String(src || img.src || '').toLowerCase();
+            const sizes = `${img.getAttribute('width') || ''}${img.getAttribute('height') || ''}${img.className || ''}`;
+            if (/banner|hero|cover|header|background|bg_?card|megaphone|how_?it|withdraw_?methods|layout/i.test(srcLower + ' ' + (img.alt || ''))) return 'banner';
+            if (/avatar|profile|user|flaticon\.com\/512\/4140/.test(srcLower + ' ' + (img.alt || ''))) return 'avatar';
+            if (/logo|icon|app\/play|withdraw|upi|bank|amazon|flipkart|paypal|crypto|playstore/i.test(srcLower)) return 'logo';
+            return 'default';
+        };
+
+        const applyImageLoadedClass = (img, src = '') => {
+            if (!img || img.__rwImgDone) return;
+            try { img.__rwImgDone = true; } catch (_) {}
+            img.classList.add('rw-img-loaded');
+            img.classList.remove('rw-img-failed');
+        };
+
+        const applyAntiFlickerToImg = (img) => {
+            if (!img || img.tagName !== 'IMG') return;
+            if (img.__rwAntiFlickerReady) return;
+            try { img.__rwAntiFlickerReady = true; } catch (_) {}
+
+            let src = img.getAttribute('src') || img.src || '';
+            if (!src) {
+                // No src yet -> wait until data-src or src is set by MutationObserver (parent will re-trigger)
+                const waitForSrc = new MutationObserver(() => {
+                    const s = img.getAttribute('src') || img.src || '';
+                    if (s) {
+                        waitForSrc.disconnect();
+                        applyAntiFlickerToImg(img);
+                    }
+                });
+                waitForSrc.observe(img, { attributes: true, attributeFilter: ['src', 'data-src'] });
+                return;
+            }
+
+            const type = classifyImgType(img, src);
+            img.classList.add('rw-img');
+            img.classList.add(type === 'banner' ? 'rw-img-banner' : (type === 'avatar' ? 'rw-img-avatar' : 'rw-img-logo'));
+
+            const complete = img.complete && img.naturalWidth !== 0 && img.naturalHeight !== 0 && !/data:$/.test(src);
+            const wasLoaded = isImageLoadedBefore(src);
+            const wasPreloaded = isImagePreloadedNow(src);
+            const wasFailed = isImageFailedBefore(src);
+
+            // INSTANT SHOW (no blink): if previously loaded OR already in-memory complete
+            if (complete || wasLoaded || wasPreloaded) {
+                img.classList.add('rw-img-instant');
+                img.classList.add('rw-img-loaded');
+                markImageLoaded(src);
+                try { img.__rwImgDone = true; } catch (_) {}
+                return;
+            }
+
+            if (wasFailed) {
+                img.classList.add('rw-img-failed');
+                return;
+            }
+
+            // First-time load: show skeleton-ish background (via .rw-img CSS opacity=0 + bg) + fade in after load
+            img.addEventListener('load', () => {
+                setTimeout(() => applyImageLoadedClass(img, src), 8);
+                markImageLoaded(src);
+            }, { once: true, passive: true });
+
+            img.addEventListener('error', () => {
+                img.classList.remove('rw-img-loaded');
+                img.classList.add('rw-img-failed');
+                markImageFailed(src);
+            }, { once: true, passive: true });
+        };
+
+        const initAntiFlickerImages = () => {
+            if (window.__rwImgObserverStarted) return;
+            window.__rwImgObserverStarted = true;
+
+            // Pass 1: all existing images BEFORE observer starts
+            try {
+                const allImgs = document.querySelectorAll('img');
+                allImgs.forEach(applyAntiFlickerToImg);
+            } catch (err) {
+                console.warn('Anti-flicker first pass failed:', err);
+            }
+
+            // Pass 2: MutationObserver that catches every new <img> injected
+            const observer = new MutationObserver((mutations) => {
+                for (let i = 0; i < mutations.length; i++) {
+                    const mut = mutations[i];
+                    if (mut.type === 'attributes' && mut.target && mut.target.tagName === 'IMG') {
+                        applyAntiFlickerToImg(mut.target);
+                        continue;
+                    }
+                    if (mut.type !== 'childList') continue;
+                    const addedNodes = mut.addedNodes;
+                    for (let j = 0; j < addedNodes.length; j++) {
+                        const node = addedNodes[j];
+                        if (!node || node.nodeType !== 1) continue;
+                        if (node.tagName === 'IMG') {
+                            applyAntiFlickerToImg(node);
+                        } else if (node.querySelectorAll) {
+                            const nestedImgs = node.querySelectorAll('img');
+                            if (nestedImgs && nestedImgs.length) {
+                                nestedImgs.forEach(applyAntiFlickerToImg);
+                            }
+                        }
+                    }
+                }
+            });
+
+            const mountObserver = () => {
+                observer.observe(document.documentElement || document.body, {
+                    childList: true,
+                    subtree: true,
+                    attributes: true,
+                    attributeFilter: ['src', 'data-src', 'class']
+                });
+            };
+            if (document.readyState === 'complete' || document.readyState === 'interactive') {
+                mountObserver();
+            } else {
+                window.addEventListener('DOMContentLoaded', mountObserver, { once: true });
+            }
+
+            // Flush cache to storage before user navigates away
+            window.addEventListener('beforeunload', writeImageCacheToStorage, { passive: true });
+            window.addEventListener('pagehide', writeImageCacheToStorage, { passive: true });
+        };
+        // Initialize anti-flicker as early as possible
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', initAntiFlickerImages, { once: true });
+        } else {
+            setTimeout(initAntiFlickerImages, 0);
+        }
 
 const checkForUpdates = async () => {
             // 1. Create a document in Firestore at 'settings/app_config' 
