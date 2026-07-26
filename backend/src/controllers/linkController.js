@@ -233,7 +233,35 @@ function createLinkController(cfStore) {
   };
 }
 
+/**
+ * Calculates available review slots for a task.
+ * Formula: totalTargetReviews - (submittedCount + pendingCount + activeReservedCount)
+ */
+function calculateAvailableSlots({ totalTargetReviews = 0, submittedCount = 0, pendingCount = 0, activeReservedCount = 0 } = {}) {
+  const target = Number(totalTargetReviews) || 0;
+  const used = Number(submittedCount || 0) + Number(pendingCount || 0) + Number(activeReservedCount || 0);
+  return Math.max(0, target - used);
+}
+
+/**
+ * Filters out tasks where availableSlots <= 0, automatically hiding them from user feed.
+ */
+function filterAvailableTasks(tasks = []) {
+  if (!Array.isArray(tasks)) return [];
+  return tasks.filter(task => {
+    const slots = calculateAvailableSlots({
+      totalTargetReviews: task.targetReviews || task.totalReviews || task.targetCount || 100,
+      submittedCount: task.submittedCount || task.completedCount || 0,
+      pendingCount: task.pendingCount || 0,
+      activeReservedCount: task.activeReservedCount || task.reservedCount || 0
+    });
+    return slots > 0;
+  });
+}
+
 module.exports = {
   createLinkController,
-  getClientIp
+  getClientIp,
+  calculateAvailableSlots,
+  filterAvailableTasks
 };

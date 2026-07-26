@@ -10,4 +10,7 @@ const ocrController = require('../controllers/ocrController');
 // POST /api/ocr/verify
 router.post('/verify', (req, res) => ocrController.verifyReviewScreenshot(req, res));
 
+// POST /api/ocr/bulk-verify
+router.post('/bulk-verify', (req, res) => ocrController.verifyBulkReviewScreenshots(req, res));
+
 module.exports = router;

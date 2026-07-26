@@ -95,6 +95,118 @@ async function verifyReviewScreenshot(req, res) {
   }
 }
 
+/**
+ * Verifies multiple review screenshots for Bulker users, performs fuzzy OCR comment extraction,
+ * auto-skips duplicate submissions, and returns a summary response:
+ * { success: true, processed: X, skippedDuplicates: Y, failed: Z }
+ */
+async function verifyBulkReviewScreenshots(req, res, d1Store = null) {
+  try {
+    const { screenshots, items, taskId } = req.body || {};
+    const list = Array.isArray(screenshots) ? screenshots : (Array.isArray(items) ? items : []);
+
+    if (!list.length) {
+      return res.status(400).json({
+        success: false,
+        processed: 0,
+        skippedDuplicates: 0,
+        failed: 0,
+        error: 'NO_SCREENSHOTS_PROVIDED',
+        message: 'Please provide an array of screenshots to verify.'
+      });
+    }
+
+    let processed = 0;
+    let skippedDuplicates = 0;
+    let failed = 0;
+
+    const seenComments = new Set();
+
+    for (const item of list) {
+      const rawImage = item.image || item.base64 || item.screenshotUrl;
+      const expectedComment = (item.assignedComment || item.expectedComment || item.comment || '').trim();
+      const currentTaskId = item.taskId || taskId || 'unknown';
+
+      if (!rawImage) {
+        failed++;
+        continue;
+      }
+
+      let imgBuffer = null;
+      if (typeof rawImage === 'string' && rawImage.startsWith('data:image')) {
+        imgBuffer = Buffer.from(rawImage.replace(/^data:image\/\w+;base64,/, ''), 'base64');
+      } else if (typeof rawImage === 'string' && rawImage.startsWith('http')) {
+        try {
+          const fetchRes = await fetch(rawImage);
+          if (fetchRes.ok) imgBuffer = Buffer.from(await fetchRes.arrayBuffer());
+        } catch {}
+      } else if (Buffer.isBuffer(rawImage)) {
+        imgBuffer = rawImage;
+      }
+
+      if (!imgBuffer) {
+        failed++;
+        continue;
+      }
+
+      // OCR Extraction
+      const { ocrText } = await ocrService.runOcrOnBuffer(imgBuffer);
+      const cleanOcr = ocrService.cleanStr(ocrText);
+      const cleanComment = ocrService.cleanStr(expectedComment);
+
+      // Check duplicate in-memory or DB
+      if ((cleanComment && seenComments.has(cleanComment)) || (cleanOcr && seenComments.has(cleanOcr.slice(0, 50)))) {
+        skippedDuplicates++;
+        continue;
+      }
+
+      // DB check for existing submissions if d1Store is available
+      if (d1Store && typeof d1Store.first === 'function' && currentTaskId) {
+        const existing = await d1Store.first(
+          `SELECT id FROM task_submissions 
+           WHERE task_id = ? AND (assigned_comment = ? OR screenshot_url = ?) AND manual_status != 'rejected' LIMIT 1`,
+          [currentTaskId, expectedComment, item.screenshotUrl || 'NO_URL']
+        ).catch(() => null);
+
+        if (existing) {
+          skippedDuplicates++;
+          continue;
+        }
+      }
+
+      // Track comment to prevent intra-batch duplicates
+      if (cleanComment) seenComments.add(cleanComment);
+      if (cleanOcr) seenComments.add(cleanOcr.slice(0, 50));
+
+      // Match verification check
+      const fuzzyMatch = ocrService.verifyFuzzyCommentMatch(ocrText, expectedComment, 0.60);
+      if (fuzzyMatch.isMatched || expectedComment.length === 0) {
+        processed++;
+      } else {
+        failed++;
+      }
+    }
+
+    return res.json({
+      success: true,
+      processed,
+      skippedDuplicates,
+      failed
+    });
+  } catch (error) {
+    console.error('[OCR-Controller] Bulk verification failed:', error);
+    return res.status(500).json({
+      success: false,
+      processed: 0,
+      skippedDuplicates: 0,
+      failed: 0,
+      error: 'BULK_OCR_FAILED',
+      detail: error.message
+    });
+  }
+}
+
 module.exports = {
-  verifyReviewScreenshot
+  verifyReviewScreenshot,
+  verifyBulkReviewScreenshots
 };

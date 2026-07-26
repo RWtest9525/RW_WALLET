@@ -1521,7 +1521,7 @@ function readRequestBody(req, maxBytes) {
 }
 
 // ── Task Reservation helpers ───────────────────────────────────────────────
-const TASK_RESERVATION_MS = 10 * 60 * 1000; // 10 minutes default
+const TASK_RESERVATION_MS = 15 * 60 * 1000; // 15 minutes default lock
 const TASK_SCREENSHOT_MAX_BYTES = 5 * 1024 * 1024;
 
 async function checkIsBulker(d1, userId) {
@@ -1592,7 +1592,7 @@ async function reserveTaskComment(d1, { taskId, userId, userName, userEmail, com
       // If NOT taken by anyone else and exists in current task commentsList, RE-ASSIGN IT for fresh 10 mins!
       if (!conflict && commentsList.includes(prevComment)) {
         const now = nowMs();
-        const expiresAt = now + (10 * 60 * 1000); // Fresh 10 minutes
+        const expiresAt = now + (15 * 60 * 1000); // Fresh 15 minutes lock
         const commentIndex = commentsList.indexOf(prevComment);
         const id = `res_${taskId.slice(0,12)}_${userId.slice(0,12)}_${now}`;
         const detailsObj = { userName: userName || '', userEmail: userEmail || '' };
@@ -1635,7 +1635,7 @@ async function reserveTaskComment(d1, { taskId, userId, userName, userEmail, com
     const commentIndex = commentsList.indexOf(comment);
 
     const now = nowMs();
-    let expiresAt = now + (10 * 60 * 1000); // 10 minutes for single user
+    let expiresAt = now + (15 * 60 * 1000); // 15 minutes for single user
     if (isBulker) {
       const d = new Date();
       const istOffset = 5.5 * 60 * 60 * 1000;
@@ -1690,27 +1690,23 @@ async function saveTaskSubmission(d1, { id, taskId, userId, reservationId, assig
   const submittedAt = nowMs();
   const cleanComment = String(assignedComment || '').trim();
 
-  // 1. Check if user already submitted this task / comment / screenshot to prevent duplicate scam entries!
-  const existing = await d1.first(
-    `SELECT id FROM task_submissions 
-     WHERE user_id = ? AND task_id = ? 
-     AND (assigned_comment = ? OR (reservation_id IS NOT NULL AND reservation_id = ?) OR screenshot_url = ?)
-     AND manual_status != 'rejected'
-     LIMIT 1`,
-    [userId, taskId, cleanComment, reservationId || 'NO_RES', screenshotUrl || 'NO_URL']
-  ).catch(() => null);
+  // 1. Strict Duplicate Check: Ensure user CANNOT submit the same task/app more than once
+  const isBulkerUser = await checkIsBulker(d1, userId);
+  if (!isBulkerUser) {
+    const existing = await d1.first(
+      `SELECT id FROM task_submissions 
+       WHERE user_id = ? AND (task_id = ? OR (app_name IS NOT NULL AND app_name = ? AND app_name != ''))
+       AND manual_status != 'rejected'
+       LIMIT 1`,
+      [userId, taskId, appName || 'NO_APP']
+    ).catch(() => null);
 
-  const submissionId = existing?.id || id || `sub_${taskId.slice(0,12)}_${userId.slice(0,12)}_${submittedAt}`;
-
-  if (existing && existing.id) {
-    console.log(`[D1-Submit] Existing submission ${existing.id} found for user ${userId} task ${taskId}. Updating existing record to prevent duplicates.`);
-    await d1.query(
-      `UPDATE task_submissions 
-       SET screenshot_url = ?, screenshot_key = ?, screenshot_view_url = ?, screenshot_drive_path = ?, details_json = ?
-       WHERE id = ?`,
-      [screenshotUrl || '', screenshotKey || '', screenshotViewUrl || '', screenshotDrivePath || '', JSON.stringify(details || {}), existing.id]
-    ).catch(e => console.warn('[D1-Submit] Update existing submission failed:', e));
-    return existing.id;
+    if (existing && existing.id) {
+      console.log(`[D1-Submit] Duplicate submission detected for user ${userId} task ${taskId}. Aborting submission.`);
+      const err = new Error('Aapne yeh task pehle hi submit kar diya hai.');
+      err.isDuplicateSubmission = true;
+      throw err;
+    }
   }
 
   await d1.query(
@@ -1735,12 +1731,18 @@ async function listTaskSubmissions(d1, { taskId = null, userId = null, manualSta
   if (payoutStatus) { conditions.push('ts.payout_status = ?'); params.push(payoutStatus); }
   if (parentAdmin) { conditions.push('u.parent_admin = ?'); params.push(parentAdmin); }
   params.push(limit);
+  
+  // Deduplicate user history records by task_id to guarantee unique submission records
+  const groupByClause = userId && !taskId ? 'GROUP BY ts.task_id' : '';
+
   const rows = await d1.all(
     `SELECT ts.*, u.mobile as user_mobile 
      FROM task_submissions ts
-     LEFT JOIN users u ON ts.user_id = u.id OR ts.user_id = u.firebase_uid
-     ${conditions.length ? 'WHERE ' + conditions.join(' AND ') : ''} 
-     ORDER BY ts.submitted_at DESC LIMIT ?`,
+     LEFT JOIN users u ON ts.user_id = u.uid
+     ${conditions.length ? 'WHERE ' + conditions.join(' AND ') : ''}
+     ${groupByClause}
+     ORDER BY ts.submitted_at DESC
+     LIMIT ?`,
     params
   );
 
@@ -4027,7 +4029,7 @@ ${memoriesContext}`
         userName: req.body.userName || '',
         userEmail: req.auth.email || '',
         comments: Array.isArray(comments) ? comments : [],
-        reservationMs: Math.min(Number(reservationMs || TASK_RESERVATION_MS), 10 * 60 * 1000)
+        reservationMs: Math.min(Number(reservationMs || TASK_RESERVATION_MS), 15 * 60 * 1000)
       });
       res.json({ ok: true, reservation });
     } catch (error) {
@@ -4914,6 +4916,9 @@ ${memoriesContext}`
       console.log(`[OCR-Submit] Save completed for ${submissionId}`);
       res.json({ ok: true, submissionId });
     } catch (error) {
+      if (error && (error.isDuplicateSubmission || error.message === 'Aapne yeh task pehle hi submit kar diya hai.')) {
+        return res.status(400).json({ success: false, message: "Aapne yeh task pehle hi submit kar diya hai.", ok: false, error: "DUPLICATE_SUBMISSION" });
+      }
       console.error('[OCR-Submit] Task submission save failed:', error);
       res.status(500).json({ ok: false, error: 'SUBMISSION_FAILED' });
     }
