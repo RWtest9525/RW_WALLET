@@ -9,6 +9,35 @@
     <meta name="application-name" content="Reviews World">
     <meta name="robots" content="index, follow">
     <meta name="theme-color" content="#2563eb">
+    <!-- ======================================================================
+         Content Security Policy — MIRRORS vercel.json response header.
+         CRITICAL for Render-hosted frontend + APK WebView (which often ignore
+         response headers and only enforce CSP via <meta> tag).
+         Fixes "style-src/connect-src/worker-src blocked" errors for OneSignal.
+         ====================================================================== -->
+    <meta http-equiv="Content-Security-Policy"
+          content="default-src 'self';
+                   base-uri 'self';
+                   object-src 'none';
+                   frame-ancestors 'none';
+                   form-action 'self';
+                   script-src 'self' 'unsafe-inline' 'unsafe-eval' https://www.gstatic.com https://apis.google.com https://rw-wallet.onrender.com https://cdn.onesignal.com https://*.onesignal.com https://onesignal.com;
+                   worker-src 'self' blob: https://cdn.onesignal.com https://*.onesignal.com https://onesignal.com;
+                   style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdnjs.cloudflare.com https://onesignal.com https://cdn.onesignal.com https://*.onesignal.com;
+                   img-src 'self' data: blob: https:;
+                   media-src 'self';
+                   font-src 'self' https://fonts.gstatic.com https://cdnjs.cloudflare.com;
+                   connect-src 'self'
+                               https://*.googleapis.com https://www.gstatic.com
+                               https://securetoken.googleapis.com https://identitytoolkit.googleapis.com
+                               https://firestore.googleapis.com https://firebasestorage.googleapis.com
+                               https://open.er-api.com
+                               https://rw-wallet.onrender.com wss://rw-wallet.onrender.com
+                               https://rw-wallet-cloudflare-backend.onrender.com
+                               https://onesignal.com https://*.onesignal.com
+                               https://os.tc https://*.os.tc;
+                   frame-src https://www.youtube.com https://www.youtube-nocookie.com;
+                   upgrade-insecure-requests">
     <link rel="icon" href="/assets/images/logo_192.png">
     <link rel="apple-touch-icon" href="/assets/images/logo_192.png">
     <link rel="preconnect" href="https://fonts.googleapis.com">
