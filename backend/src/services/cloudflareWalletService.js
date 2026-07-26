@@ -1226,153 +1226,43 @@ async function sendOneSignalPush(d1OrTarget, targetOrTitle, titleOrMessage, mess
     extraData = messageOnly;
   }
 
-  const osAppId = process.env.ONESIGNAL_APP_ID || '465e22bd-8540-437b-ba7b-efa14ef4069f';
-  const fsAppId = process.env.FIREBASE_APP_ID || 'digital-wallet-prod';
-  const defaultKey = ['os_v2_app_', 'izpcfpmfibbxxot356qu55agt722zfi4ddmueaebrcgmldg7h4gbhekweg4oya7iw2mc6doh55mzi67krhmhphd4jryt36px5y4bnxa'].join('');
-  const apiKey = (process.env.ONESIGNAL_REST_API_KEY && process.env.ONESIGNAL_REST_API_KEY !== 'your_onesignal_rest_api_key')
-    ? process.env.ONESIGNAL_REST_API_KEY
-    : defaultKey;
-
   const cleanTitle = String(title || '').trim();
   const cleanMsg = String(message || '').trim();
   if (!cleanTitle && !cleanMsg) return;
 
+  console.log(`\n========== [sendOneSignalPush → Delegating to oneSignalService] ==========`);
+  console.log(`target=${JSON.stringify(target).slice(0, 200)} | title="${cleanTitle}" | msg="${cleanMsg.slice(0, 100)}"`);
+
   try {
     if (target === 'all' || target === 'broadcast') {
-      const payloadBroadcast = {
-        app_id: osAppId,
-        included_segments: ['Subscribed Users', 'All'],
-        headings: { en: cleanTitle },
-        contents: { en: cleanMsg }
-      };
-      if (extraData) {
-        payloadBroadcast.data = extraData;
+      const r = await oneSignalService.sendPushNotificationToAll({ title: cleanTitle, message: cleanMsg, data: extraData });
+      console.log(`[sendOneSignalPush] Broadcast result:`, JSON.stringify(r).slice(0, 300));
+      return r;
+    }
+
+    const targetsArr = Array.isArray(target) ? target : [target];
+    if (targetsArr.length === 0) return;
+
+    // Broadcast to each target via service (service handles playerId + externalId internally)
+    const results = [];
+    for (const tgt of targetsArr) {
+      try {
+        const r = await oneSignalService.sendPushNotificationToUser({
+          userId: tgt,
+          title: cleanTitle,
+          message: cleanMsg,
+          data: extraData
+        }, d1);
+        results.push(r);
+      } catch (e) {
+        console.error(`[sendOneSignalPush] Error pushing to ${JSON.stringify(tgt).slice(0, 100)}:`, e?.message || e);
       }
-      const result = await postOneSignalApi(payloadBroadcast, apiKey);
-      console.log('[OneSignal] Broadcast push result:', result);
-      return result;
     }
-
-    const externalIds = await resolveUserOneSignalIds(d1, target);
-    if (!externalIds.length) {
-      console.warn(`[OneSignal] Skipping push: no resolved external IDs for target=${JSON.stringify(target).slice(0, 200)} title="${cleanTitle}"`);
-      return;
-    }
-
-    // Resolve direct OneSignal player IDs from Firestore user profiles
-    const playerIds = [];
-    try {
-      if (admin.apps && admin.apps.length > 0) {
-        for (const extId of externalIds) {
-          const userDoc = await admin.firestore().doc(`artifacts/${fsAppId}/public/data/users/${extId}`).get();
-          if (userDoc.exists) {
-            const uData = userDoc.data() || {};
-            const pid = uData.onesignalPlayerId || uData.onesignal_player_id || null;
-            if (pid && typeof pid === 'string' && pid.trim()) {
-              playerIds.push(pid.trim());
-            }
-          }
-        }
-      }
-    } catch (e) {
-      console.warn('[OneSignal] Firestore player ID lookup failed:', e);
-    }
-
-    if (playerIds.length > 0) {
-      // 1. Target via subscription IDs (v11 API)
-      const payloadSubIds = {
-        app_id: osAppId,
-        include_subscription_ids: playerIds,
-        headings: { en: cleanTitle },
-        contents: { en: cleanMsg },
-        priority: 10,
-        ttl: 259200
-      };
-      if (extraData) {
-        payloadSubIds.data = extraData;
-      }
-      postOneSignalApi(payloadSubIds, apiKey).then(r => {
-        console.log(`[OneSignal] Direct Player ID (v11 sub) Push sent successfully:`, r);
-      }).catch(() => {});
-
-      // 2. Target via legacy player IDs API
-      const payloadPlayerIds = {
-        app_id: osAppId,
-        include_player_ids: playerIds,
-        headings: { en: cleanTitle },
-        contents: { en: cleanMsg },
-        priority: 10,
-        ttl: 259200
-      };
-      if (extraData) {
-        payloadPlayerIds.data = extraData;
-      }
-      postOneSignalApi(payloadPlayerIds, apiKey).then(r => {
-        console.log(`[OneSignal] Direct Player ID (legacy) Push sent successfully:`, r);
-      }).catch(() => {});
-    } else {
-      console.warn(`[OneSignal] No player IDs resolved from Firestore for externalIds=${JSON.stringify(externalIds).slice(0, 300)}. Falling back to alias-only delivery.`);
-    }
-
-    const payloadV11 = {
-      app_id: osAppId,
-      include_aliases: { external_id: externalIds },
-      target_channel: 'push',
-      headings: { en: cleanTitle },
-      contents: { en: cleanMsg },
-      priority: 10,
-      ttl: 259200
-    };
-    if (extraData) {
-      payloadV11.data = extraData;
-    }
-
-    let res = await postOneSignalApi(payloadV11, apiKey);
-    if (res && !res.errors) {
-      console.log(`[OneSignal] Push sent successfully to ${JSON.stringify(externalIds)}:`, res);
-    }
-
-    const payloadLegacy = {
-      app_id: osAppId,
-      include_external_user_ids: externalIds,
-      channel_for_external_user_ids: 'push',
-      headings: { en: cleanTitle },
-      contents: { en: cleanMsg },
-      priority: 10,
-      ttl: 259200
-    };
-    if (extraData) {
-      payloadLegacy.data = extraData;
-    }
-
-    const resLegacy = await postOneSignalApi(payloadLegacy, apiKey);
-    console.log(`[OneSignal] Legacy Push sent to ${JSON.stringify(externalIds)}:`, resLegacy);
-
-    // Dynamic Filter & Tag-based fallback delivery for WebView wrappers
-    const filters = [];
-    externalIds.forEach((id, idx) => {
-      if (idx > 0) filters.push({ operator: "OR" });
-      filters.push({ field: "tag", key: "userId", relation: "=", value: id });
-    });
-    if (filters.length > 0) {
-      const payloadFilters = {
-        app_id: osAppId,
-        filters: filters,
-        headings: { en: cleanTitle },
-        contents: { en: cleanMsg },
-        priority: 10,
-        ttl: 259200
-      };
-      if (extraData) {
-        payloadFilters.data = extraData;
-      }
-      const resFilters = await postOneSignalApi(payloadFilters, apiKey);
-      console.log(`[OneSignal] Tag Filter Push sent to ${JSON.stringify(externalIds)}:`, resFilters);
-    }
-
-    return res || resLegacy;
+    const okCount = results.filter(r => r && r.ok).length;
+    console.log(`[sendOneSignalPush] Targeted results: ${okCount}/${results.length} successful.`);
+    return { ok: okCount > 0, results };
   } catch (err) {
-    console.error('[OneSignal] Push failed:', err);
+    console.error('[sendOneSignalPush] Fatal error:', err);
   }
 }
 
@@ -1442,26 +1332,13 @@ async function sendFcmPushToUser(d1OrUserId, userIdOrTitle, titleOrMessage, extr
 }
 
 async function sendNotification(d1, userId, title, message, customData = null) {
-  // Send FCM Push via Firebase Admin SDK
-  sendFcmPushToUser(d1, userId, title, message, customData).catch((e) => console.warn('[sendNotification] FCM error:', e?.message || e));
+  const cleanTitle = String(title || '').trim();
+  const cleanMsg = String(message || '').trim();
+  console.log(`\n========== [sendNotification START] userId=${JSON.stringify(userId).slice(0, 100)} | title="${cleanTitle}" | msg="${cleanMsg.slice(0, 120)}" ==========`);
 
-  // Send OneSignal Push via local function (with fixes)
-  sendOneSignalPush(d1, userId, title, message, customData).catch((e) => console.warn('[sendNotification] Local OneSignal error:', e?.message || e));
+  sendFcmPushToUser(d1, userId, cleanTitle, cleanMsg, customData).catch((e) => console.warn('[sendNotification] FCM error:', e?.message || e));
 
-  // BELT + SUSPENDERS: Also send via imported oneSignalService which has correct Firestore paths
-  (async () => {
-    try {
-      const res = await oneSignalService.sendPushNotificationToUser({
-        userId,
-        title,
-        message,
-        data: customData
-      }, d1);
-      console.log(`[sendNotification] oneSignalService result for ${userId}:`, JSON.stringify(res || {}).slice(0, 300));
-    } catch (e) {
-      console.warn('[sendNotification] Imported oneSignalService error:', e?.message || e);
-    }
-  })();
+  sendOneSignalPush(d1, userId, cleanTitle, cleanMsg, customData).catch((e) => console.warn('[sendNotification] Delegated push error:', e?.message || e));
 }
 
 async function putR2Object(r2, key, body, contentType = 'application/json') {
