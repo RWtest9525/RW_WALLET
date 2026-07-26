@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, interactive-widget=resizes-content">
+    <title>Reviews World</title>
+    <meta name="description" content="Reviews World is the official companion app for managing tasks, reward points, community updates, and support.">
+    <meta name="application-name" content="Reviews World">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#2563eb">
+    <!-- ======================================================================
+         Content Security Policy — MIRRORS vercel.json response header.
+         CRITICAL for Render-hosted frontend + APK WebView (which often ignore
+         response headers and only enforce CSP via <meta> tag).
+         Fixes "style-src/connect-src/worker-src blocked" errors for OneSignal.
+         ====================================================================== -->
+    <meta http-equiv="Content-Security-Policy"
+          content="default-src 'self';
+                   base-uri 'self';
+                   object-src 'none';
+                   frame-ancestors 'none';
+                   form-action 'self';
+                   script-src 'self' 'unsafe-inline' 'unsafe-eval' https://www.gstatic.com https://apis.google.com https://rw-wallet.onrender.com https://cdn.onesignal.com https://*.onesignal.com https://onesignal.com;
+                   worker-src 'self' blob: https://cdn.onesignal.com https://*.onesignal.com https://onesignal.com;
+                   style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdnjs.cloudflare.com https://onesignal.com https://cdn.onesignal.com https://*.onesignal.com;
+                   img-src 'self' data: blob: https:;
+                   media-src 'self';
+                   font-src 'self' https://fonts.gstatic.com https://cdnjs.cloudflare.com;
+                   connect-src 'self'
+                               https://*.googleapis.com https://www.gstatic.com
+                               https://securetoken.googleapis.com https://identitytoolkit.googleapis.com
+                               https://firestore.googleapis.com https://firebasestorage.googleapis.com
+                               https://open.er-api.com
+                               https://rw-wallet.onrender.com wss://rw-wallet.onrender.com
+                               https://rw-wallet-cloudflare-backend.onrender.com
+                               https://onesignal.com https://*.onesignal.com
+                               https://os.tc https://*.os.tc;
+                   frame-src https://www.youtube.com https://www.youtube-nocookie.com;
+                   upgrade-insecure-requests">
+    <link rel="icon" href="/assets/images/logo_192.png">
+    <link rel="apple-touch-icon" href="/assets/images/logo_192.png">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <link rel="stylesheet" href="/src/styles/tailwind.generated.css">
+    <link rel="stylesheet" href="/src/styles/app.css">
+    <link rel="manifest" href="/manifest.json">
+    <!-- Fast Image & Asset Preloaders (Eliminates flicker and slow loads) -->
+    <link rel="preload" as="image" href="/assets/images/logo_192.png" fetchpriority="high">
+    <link rel="preload" as="image" href="/assets/images/logo_512.png" fetchpriority="high">
+    <link rel="preload" as="image" href="/assets/images/profile_card_bg.png" fetchpriority="high">
+    <link rel="preload" as="image" href="/assets/images/referral_banner.png" fetchpriority="high">
+    <link rel="preload" as="image" href="/assets/images/referral_howitworks_cards.png" fetchpriority="high">
+    <link rel="preload" as="image" href="/assets/images/notification_bell.png" fetchpriority="high">
+    <link rel="preload" as="image" href="/assets/images/whats_new_megaphone.png" fetchpriority="high">
+    <link rel="preload" as="image" href="/assets/images/withdraw_confirm_bg.png" fetchpriority="high">
+    <link rel="preload" as="image" href="/assets/images/withdraw_upi.png" fetchpriority="high">
+    <link rel="preload" as="image" href="/assets/images/withdraw_bank.png" fetchpriority="high">
+    <link rel="preload" as="image" href="/assets/images/withdraw_crypto.png" fetchpriority="high">
+    <link rel="preload" as="image" href="/assets/images/withdraw_amazon.png" fetchpriority="high">
+    <link rel="preload" as="image" href="/assets/images/withdraw_playstore.png" fetchpriority="high">
+    <link rel="preload" as="image" href="/assets/images/withdraw_flipkart.png" fetchpriority="high">
+    <link rel="preload" as="image" href="/assets/images/withdraw_paypal.png" fetchpriority="high">
+    <script>
+        (function instantPreloadAssets() {
+            var assets = [
+                '/assets/images/logo_192.png',
+                '/assets/images/logo_512.png',
+                '/assets/images/profile_card_bg.png',
+                '/assets/images/referral_banner.png',
+                '/assets/images/referral_howitworks_cards.png',
+                '/assets/images/notification_bell.png',
+                '/assets/images/whats_new_megaphone.png',
+                '/assets/images/withdraw_confirm_bg.png',
+                '/assets/images/withdraw_upi.png',
+                '/assets/images/withdraw_bank.png',
+                '/assets/images/withdraw_crypto.png',
+                '/assets/images/withdraw_amazon.png',
+                '/assets/images/withdraw_playstore.png',
+                '/assets/images/withdraw_flipkart.png',
+                '/assets/images/withdraw_paypal.png'
+            ];
+            assets.forEach(function(src) {
+                var img = new Image();
+                img.decoding = 'async';
+                img.fetchPriority = 'high';
+                img.src = src;
+            });
+        })();
+    </script>
+    <style>
+        html, body {
+            background-color: #f3f4f6;
+            min-height: 100vh;
+            margin: 0;
+            padding: 0;
+        }
+        html.dark, html.dark body {
+            background-color: #0f172a !important;
+        }
+    </style>
+    <!-- ======================================================================
+         OneSignal Web SDK v16 Bootstrap - OFFICIAL DEFERRED PATTERN
+         IMPORTANT: This block runs BEFORE app.js / main.js so window.OneSignal
+         and window.OneSignalDeferred are populated when auth state fires.
+         App ID value matches backend oneSignalService.js DEFAULT_APP_ID_FALLBACK.
+         ====================================================================== -->
+    <script>
+        console.log('[OneSignal] Installing window.OneSignalDeferred bootstrap (HEAD)');
+        window.OneSignalDeferred = window.OneSignalDeferred || [];
+        window.__rwOneSignalAppId = '465e22bd-8540-437b-ba7b-efa14ef4069f';
+
+        // ---- 1. OneSignal SDK script injector (async, so never blocks) ----
+        (function injectOneSignalSdk() {
+            var s = document.createElement('script');
+            s.src = 'https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.page.js';
+            s.defer = true;
+            s.async = true;
+            s.onerror = function () {
+                console.warn('[OneSignal] SDK script failed to load. Push will not work on this environment.');
+            };
+            document.head.appendChild(s);
+        })();
+
+        // ---- 2. Init FIRST, as soon as SDK is ready (no Firebase dependency) ----
+        window.__rwOneSignalInitSuccess = null;
+        window.OneSignalDeferred.push(function initOneSignal(OneSignal) {
+            try {
+                console.log('[OneSignal] SDK loaded. Running OneSignal.init()...');
+                OneSignal.init({
+                    appId: window.__rwOneSignalAppId,
+                    serviceWorkerParam: { scope: '/' },
+                    serviceWorkerPath: 'OneSignalSDKWorker.js',
+                    serviceWorkerUpdaterPath: 'OneSignalSDKUpdaterWorker.js',
+                    allowLocalhostAsSecureOrigin: true,
+                    notifyButton: { enable: false },
+                    persistNotification: false,
+                    welcomeNotification: { disable: true }
+                }).then(function () {
+                    window.__rwOneSignalInitSuccess = true;
+                    console.log('[OneSignal] ✅ Initialized (appId=' + window.__rwOneSignalAppId.slice(0, 8) + '...)');
+                    try {
+                        window.dispatchEvent(new CustomEvent('onesignal:initialized', { detail: { appId: window.__rwOneSignalAppId } }));
+                    } catch (_) { /* CustomEvent polyfill on old WebViews */ }
+                }).catch(function (err) {
+                    window.__rwOneSignalInitSuccess = false;
+                    var errMsg = err && err.message ? err.message : String(err || '');
+                    console.warn('[OneSignal] ⚠️ OneSignal push skipped for domain ' + window.location.hostname + ': ' + errMsg);
+                });
+            } catch (err) {
+                window.__rwOneSignalInitSuccess = false;
+                console.warn('[OneSignal] ⚠️ OneSignal.init() threw synchronously:', err && err.message ? err.message : err);
+            }
+        });
+
+        // ---- 3. Track last resolved user UID so auth state can re-run correctly ----
+        window.__rwLastOneSignalUid = '';
+
+        // ---- 4. Helper: safely call OneSignal.{login,logout} via OneSignalDeferred
+        // (works regardless of whether SDK has finished loading yet)
+        window.__rwOneSignalLogin = function (uid) {
+            try {
+                uid = String(uid || '').trim();
+                if (!uid) {
+                    console.warn('[OneSignal] __rwOneSignalLogin called with empty uid, skipping.');
+                    return Promise.resolve();
+                }
+                if (window.__rwLastOneSignalUid === uid) {
+                    console.log('[OneSignal] Already logged in as ' + uid.slice(0, 8) + '... (skipping duplicate login)');
+                    return Promise.resolve();
+                }
+                console.log('[OneSignal] Queuing OneSignal.login(' + uid.slice(0, 8) + '...) via OneSignalDeferred');
+                var p = new Promise(function (resolve) {
+                    window.OneSignalDeferred.push(function doLogin(OneSignal) {
+                        try {
+                            if (window.__rwOneSignalInitSuccess === false) {
+                                console.warn('[OneSignal] Skipping login: OneSignal initialization was disabled/restricted for this domain.');
+                                resolve();
+                                return;
+                            }
+                            console.log('[OneSignal] Executing OneSignal.login(' + uid.slice(0, 8) + '...)');
+                            if (!OneSignal || typeof OneSignal.login !== 'function') {
+                                console.warn('[OneSignal] OneSignal.login not available on this environment.');
+                                if (OneSignal && typeof OneSignal.setExternalUserId === 'function') {
+                                    OneSignal.setExternalUserId(uid).catch(function () {});
+                                }
+                                resolve();
+                                return;
+                            }
+                            var loginPromise = OneSignal.login(uid);
+                            if (loginPromise && typeof loginPromise.then === 'function') {
+                                loginPromise.then(function () {
+                                    window.__rwLastOneSignalUid = uid;
+                                    console.log('[OneSignal] ✅ Logged in as ' + uid.slice(0, 8) + '... (external_id alias set)');
+                                    try {
+                                        window.dispatchEvent(new CustomEvent('onesignal:logged-in', { detail: { uid: uid } }));
+                                    } catch (_) {}
+                                    resolve();
+                                }).catch(function (e) {
+                                    console.warn('[OneSignal] ⚠️ Login rejected gracefully:', e && e.message ? e.message : e);
+                                    resolve();
+                                });
+                            } else {
+                                window.__rwLastOneSignalUid = uid;
+                                resolve();
+                            }
+                        } catch (e) {
+                            console.warn('[OneSignal] ⚠️ Exception during login call:', e && e.message ? e.message : e);
+                            resolve();
+                        }
+                    });
+                });
+                return p;
+            } catch (err) {
+                console.warn('[OneSignal] __rwOneSignalLogin caught:', err && err.message ? err.message : err);
+                return Promise.resolve();
+            }
+        };
+
+        window.__rwOneSignalLogout = function () {
+            try {
+                console.log('[OneSignal] Queuing OneSignal.logout() via OneSignalDeferred');
+                window.__rwLastOneSignalUid = '';
+                window.OneSignalDeferred.push(function doLogout(OneSignal) {
+                    try {
+                        if (window.__rwOneSignalInitSuccess === false) {
+                            console.warn('[OneSignal] Skipping logout: OneSignal initialization was disabled/restricted for this domain.');
+                            return;
+                        }
+                        console.log('[OneSignal] Executing OneSignal.logout()');
+                        if (OneSignal && typeof OneSignal.logout === 'function') {
+                            OneSignal.logout()
+                                .then(function () { console.log('[OneSignal] ✅ Logged out'); })
+                                .catch(function (e) { console.warn('[OneSignal] logout error:', e && e.message ? e.message : e); });
+                        } else if (OneSignal && typeof OneSignal.removeExternalUserId === 'function') {
+                            OneSignal.removeExternalUserId()
+                                .then(function () { console.log('[OneSignal] ✅ External user id removed (fallback logout)'); })
+                                .catch(function (e) { console.warn('[OneSignal] removeExternalUserId error:', e && e.message ? e.message : e); });
+                        }
+                    } catch (e) {
+                        console.warn('[OneSignal] logout threw:', e && e.message ? e.message : e);
+                    }
+                });
+            } catch (e) {
+                console.warn('[OneSignal] __rwOneSignalLogout caught:', e && e.message ? e.message : e);
+            }
+        };
+    </script>
+</head>
+
+<body class="bg-gray-100 dark:bg-gray-900 text-gray-800 dark:text-gray-200 font-sans">
+    <div id="rw-wallet-root"></div>
+
+    <script type="module" src="/src/shell.js"></script>
+    <script type="module" src="/src/app.js"></script>
+    <script type="module" src="/src/main.js"></script>
+</body>
+
+</html>

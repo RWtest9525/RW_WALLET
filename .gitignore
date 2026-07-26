@@ -1,0 +1,21 @@
+# IDE files
+.vscode/
+.trae/
+
+# Temp files
+temp.js
+*.tmp
+*.log
+.env
+.env.*
+!backend/.env.example
+backend/.env
+node_modules/
+backend/node_modules/
+dist/
+
+# OS files
+Thumbs.db
+.DS_Store
+.vercel
+.env*

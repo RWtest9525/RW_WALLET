@@ -1,0 +1,6712 @@
+const bcrypt = require('bcrypt');
+const crypto = require('crypto');
+const jwt = require('jsonwebtoken');
+const admin = require('firebase-admin');
+const path = require('path');
+const { S3Client, PutObjectCommand, GetObjectCommand } = require('@aws-sdk/client-s3');
+// Tesseract removed in favor of Python EasyOCR service (verify_app_review.py)
+const Jimp = require('jimp');
+const { google } = require('googleapis');
+const { Readable } = require('stream');
+const gplayRaw = require('google-play-scraper');
+const gplay = gplayRaw.default || gplayRaw;
+const ocrService = require('./ocrService');
+const oneSignalService = require('./oneSignalService');
+
+const REQUIRED_ENV = [
+  'APP_JWT_SECRET',
+  'CLOUDFLARE_ACCOUNT_ID',
+  'CLOUDFLARE_D1_DATABASE_ID',
+  'CLOUDFLARE_API_TOKEN',
+  'FIREBASE_WEB_API_KEY'
+];
+
+function assertEnv(env = process.env) {
+  const missing = REQUIRED_ENV.filter((key) => !env[key]);
+  if (missing.length) {
+    throw new Error(`Missing required environment variables: ${missing.join(', ')}`);
+  }
+}
+
+function initFirebaseAdmin() {
+  if (admin.apps.length) return admin.app();
+
+  if (process.env.FIREBASE_SERVICE_ACCOUNT_JSON) {
+    const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT_JSON);
+    if (serviceAccount.private_key) {
+      serviceAccount.private_key = serviceAccount.private_key.replace(/\\n/g, '\n');
+    }
+    return admin.initializeApp({
+      credential: admin.credential.cert(serviceAccount)
+    });
+  }
+
+  return admin.initializeApp({
+    credential: admin.credential.applicationDefault()
+  });
+}
+
+class D1Client {
+  constructor({
+    accountId = process.env.CLOUDFLARE_ACCOUNT_ID,
+    databaseId = process.env.CLOUDFLARE_D1_DATABASE_ID,
+    apiToken = process.env.CLOUDFLARE_API_TOKEN
+  } = {}) {
+    this.accountId = accountId;
+    this.databaseId = databaseId;
+    this.apiToken = apiToken;
+    this.endpoint = `https://api.cloudflare.com/client/v4/accounts/${accountId}/d1/database/${databaseId}/query`;
+  }
+
+  async query(sql, params = []) {
+    const response = await fetch(this.endpoint, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${this.apiToken}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ sql, params })
+    });
+
+    const payload = await response.json().catch(() => null);
+    if (!response.ok || !payload?.success) {
+      const message = payload?.errors?.map((e) => e.message).join('; ') || response.statusText;
+      throw new Error(`D1 query failed: ${message}`);
+    }
+
+    return payload.result?.[0] || payload.result || {};
+  }
+
+  async first(sql, params = []) {
+    const result = await this.query(sql, params);
+    return result.results?.[0] || null;
+  }
+
+  async all(sql, params = []) {
+    const result = await this.query(sql, params);
+    return result.results || [];
+  }
+}
+
+function createR2Client() {
+  if (!process.env.CLOUDFLARE_R2_ACCESS_KEY_ID || !process.env.CLOUDFLARE_R2_SECRET_ACCESS_KEY) {
+    return null;
+  }
+
+  return new S3Client({
+    region: 'auto',
+    endpoint: `https://${process.env.CLOUDFLARE_ACCOUNT_ID}.r2.cloudflarestorage.com`,
+    credentials: {
+      accessKeyId: process.env.CLOUDFLARE_R2_ACCESS_KEY_ID,
+      secretAccessKey: process.env.CLOUDFLARE_R2_SECRET_ACCESS_KEY
+    }
+  });
+}
+
+function normalizeEmail(email) {
+  return String(email || '').trim().toLowerCase();
+}
+
+function nowMs() {
+  return Date.now();
+}
+
+const ADMIN_UID = process.env.ADMIN_UID || 'mOs5Fmp4RoRzeBDH4pZLMOpQx7Q2';
+const CHAT_RETENTION_AFTER_ADMIN_READ_MS = 15 * 24 * 60 * 60 * 1000;
+const NOTIFICATION_RETENTION_MS = 7 * 24 * 60 * 60 * 1000;
+const LOAN_DOCUMENT_UPLOAD_MAX_BYTES = 8 * 1024 * 1024;
+const LOAN_DOCUMENT_TYPES = new Set(['aadhaar', 'selfie']);
+
+function createAppToken(user) {
+  const firebaseUid = user.firebase_uid || user.firebaseUid || null;
+  const email = normalizeEmail(user.email);
+  const effectiveUserId = firebaseUid || user.id;
+  const role = (user.id === ADMIN_UID || firebaseUid === ADMIN_UID || email === 'reviewsworld01@gmail.com') ? 'owner' : (user.role || 'user');
+  const isAdmin = role === 'owner' || role === 'admin';
+  return jwt.sign(
+    {
+      sub: effectiveUserId,
+      d1UserId: user.id,
+      email,
+      firebaseUid,
+      isAdmin,
+      role,
+      status: user.status || 'active'
+    },
+    process.env.APP_JWT_SECRET,
+    { expiresIn: '7d' }
+  );
+}
+
+function verifyAppToken(token) {
+  return jwt.verify(token, process.env.APP_JWT_SECRET);
+}
+
+async function signInFirebaseEmailPassword(email, password) {
+  const url = `https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=${process.env.FIREBASE_WEB_API_KEY}`;
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email, password, returnSecureToken: true })
+  });
+
+  const payload = await response.json().catch(() => null);
+  if (!response.ok) {
+    const code = payload?.error?.message || 'FIREBASE_LOGIN_FAILED';
+    const error = new Error(code);
+    error.code = code;
+    throw error;
+  }
+
+  return payload;
+}
+
+async function initSchema(d1) {
+  await d1.query(`
+    CREATE TABLE IF NOT EXISTS users (
+      id TEXT PRIMARY KEY,
+      firebase_uid TEXT UNIQUE,
+      email TEXT UNIQUE NOT NULL,
+      password_hash TEXT,
+      name TEXT,
+      mobile TEXT,
+      created_at INTEGER NOT NULL,
+      migrated_at INTEGER
+    )
+  `);
+
+  await ensureColumn(d1, 'users', 'name', 'TEXT');
+  await ensureColumn(d1, 'users', 'mobile', 'TEXT');
+  await ensureColumn(d1, 'users', 'role', 'TEXT');
+  await ensureColumn(d1, 'users', 'status', 'TEXT');
+  await ensureColumn(d1, 'users', 'parent_admin', 'TEXT');
+  await ensureColumn(d1, 'users', 'referral_code', 'TEXT');
+
+  await d1.query(`
+    CREATE TABLE IF NOT EXISTS chat_rooms (
+      room_id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      user_name TEXT,
+      user_email TEXT,
+      user_mobile TEXT,
+      last_message TEXT,
+      last_sender_id TEXT,
+      updated_at INTEGER NOT NULL
+    )
+  `);
+
+  await d1.query(`
+    CREATE INDEX IF NOT EXISTS idx_chat_rooms_updated
+    ON chat_rooms (updated_at DESC)
+  `);
+
+  await d1.query(`
+    CREATE TABLE IF NOT EXISTS chats (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      room_id TEXT NOT NULL,
+      sender_id TEXT NOT NULL,
+      message TEXT NOT NULL,
+      timestamp INTEGER NOT NULL,
+      read_by_admin_at INTEGER,
+      read_by_user_at INTEGER,
+      client_message_id TEXT
+    )
+  `);
+
+  await ensureColumn(d1, 'chats', 'read_by_admin_at', 'INTEGER');
+  await ensureColumn(d1, 'chats', 'read_by_user_at', 'INTEGER');
+  await ensureColumn(d1, 'chats', 'client_message_id', 'TEXT');
+
+  await d1.query(`
+    CREATE INDEX IF NOT EXISTS idx_chats_room_time
+    ON chats (room_id, timestamp DESC)
+  `);
+
+  await d1.query(`
+    CREATE INDEX IF NOT EXISTS idx_chats_admin_read_cleanup
+    ON chats (read_by_admin_at)
+  `);
+
+  await d1.query(`
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_chats_client_message_id
+    ON chats (client_message_id)
+    WHERE client_message_id IS NOT NULL
+  `);
+
+  await d1.query(`
+    CREATE TABLE IF NOT EXISTS transactions (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id TEXT NOT NULL,
+      transaction_id TEXT UNIQUE NOT NULL,
+      type TEXT NOT NULL,
+      amount REAL NOT NULL,
+      status TEXT NOT NULL,
+      timestamp INTEGER NOT NULL,
+      details_json TEXT
+    )
+  `);
+
+  await ensureColumn(d1, 'transactions', 'details_json', 'TEXT');
+
+  await d1.query(`
+    CREATE INDEX IF NOT EXISTS idx_transactions_user_time
+    ON transactions (user_id, timestamp DESC)
+  `);
+
+  await d1.query(`
+    CREATE TABLE IF NOT EXISTS fund_requests (
+      request_id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      type TEXT NOT NULL,
+      amount REAL NOT NULL,
+      status TEXT NOT NULL,
+      requested_at INTEGER NOT NULL,
+      processed_at INTEGER,
+      details_json TEXT
+    )
+  `);
+
+  await d1.query(`
+    CREATE INDEX IF NOT EXISTS idx_fund_requests_status_time
+    ON fund_requests (status, requested_at DESC)
+  `);
+
+  await d1.query(`
+    CREATE INDEX IF NOT EXISTS idx_fund_requests_user_status
+    ON fund_requests (user_id, status)
+  `);
+
+  await d1.query(`
+    CREATE TABLE IF NOT EXISTS loan_requests (
+      request_id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      status TEXT NOT NULL,
+      requested_at INTEGER NOT NULL,
+      processed_at INTEGER,
+      details_json TEXT
+    )
+  `);
+
+  await d1.query(`
+    CREATE INDEX IF NOT EXISTS idx_loan_requests_status_time
+    ON loan_requests (status, requested_at DESC)
+  `);
+
+  await d1.query(`
+    CREATE INDEX IF NOT EXISTS idx_loan_requests_user_status
+    ON loan_requests (user_id, status)
+  `);
+
+  await d1.query(`
+    CREATE TABLE IF NOT EXISTS notifications (
+      id TEXT PRIMARY KEY,
+      title TEXT,
+      message TEXT NOT NULL,
+      sender_id TEXT NOT NULL,
+      audience TEXT NOT NULL,
+      created_at INTEGER NOT NULL,
+      expires_at INTEGER NOT NULL,
+      deleted_at INTEGER
+    )
+  `);
+
+  await ensureColumn(d1, 'notifications', 'title', 'TEXT');
+  await ensureColumn(d1, 'notifications', 'deleted_at', 'INTEGER');
+
+  await d1.query(`
+    CREATE TABLE IF NOT EXISTS notification_recipients (
+      notification_id TEXT NOT NULL,
+      user_id TEXT NOT NULL,
+      delivered_at INTEGER NOT NULL,
+      read_at INTEGER,
+      PRIMARY KEY (notification_id, user_id)
+    )
+  `);
+
+  await d1.query(`
+    CREATE INDEX IF NOT EXISTS idx_notifications_created
+    ON notifications (created_at DESC)
+  `);
+
+  await d1.query(`
+    CREATE INDEX IF NOT EXISTS idx_notifications_expiry
+    ON notifications (expires_at, deleted_at)
+  `);
+
+  await d1.query(`
+    CREATE INDEX IF NOT EXISTS idx_notification_recipients_user
+    ON notification_recipients (user_id, read_at)
+  `);
+
+  await d1.query(`
+    CREATE TABLE IF NOT EXISTS task_comment_reservations (
+      id TEXT PRIMARY KEY,
+      task_id TEXT NOT NULL,
+      user_id TEXT NOT NULL,
+      comment TEXT NOT NULL,
+      comment_index INTEGER NOT NULL DEFAULT 0,
+      status TEXT NOT NULL DEFAULT 'reserved',
+      reserved_at INTEGER NOT NULL,
+      expires_at INTEGER NOT NULL,
+      submitted_at INTEGER,
+      details_json TEXT
+    )
+  `);
+  await d1.query(`CREATE INDEX IF NOT EXISTS idx_task_reservations_task_status ON task_comment_reservations (task_id, status, expires_at)`);
+  await d1.query(`CREATE INDEX IF NOT EXISTS idx_task_reservations_user ON task_comment_reservations (user_id, status)`);
+  await d1.query(`CREATE UNIQUE INDEX IF NOT EXISTS idx_active_task_comments ON task_comment_reservations (task_id, comment) WHERE status IN ('reserved', 'submitted')`);
+
+
+  await d1.query(`
+    CREATE TABLE IF NOT EXISTS task_submissions (
+      id TEXT PRIMARY KEY,
+      task_id TEXT NOT NULL,
+      user_id TEXT NOT NULL,
+      reservation_id TEXT,
+      assigned_comment TEXT,
+      screenshot_url TEXT,
+      screenshot_key TEXT,
+      screenshot_view_url TEXT,
+      screenshot_drive_path TEXT,
+      ocr_status TEXT DEFAULT 'pending',
+      ocr_extracted_text TEXT,
+      ocr_extracted_name TEXT,
+      ocr_confidence REAL DEFAULT 0,
+      scraper_status TEXT DEFAULT 'not_configured',
+      scraper_result_json TEXT,
+      manual_status TEXT DEFAULT 'pending',
+      payout_status TEXT DEFAULT 'pending',
+      payout_delay_days INTEGER DEFAULT 7,
+      reward REAL DEFAULT 0,
+      task_link TEXT,
+      app_name TEXT,
+      user_name TEXT,
+      user_email TEXT,
+      submitted_at INTEGER NOT NULL,
+      verified_at INTEGER,
+      paid_at INTEGER,
+      details_json TEXT
+    )
+  `);
+  await d1.query(`CREATE INDEX IF NOT EXISTS idx_task_submissions_task ON task_submissions (task_id, submitted_at DESC)`);
+  await d1.query(`CREATE INDEX IF NOT EXISTS idx_task_submissions_user ON task_submissions (user_id, submitted_at DESC)`);
+  await d1.query(`CREATE INDEX IF NOT EXISTS idx_task_submissions_ocr ON task_submissions (ocr_status)`);
+  await d1.query(`CREATE INDEX IF NOT EXISTS idx_task_submissions_manual ON task_submissions (manual_status, submitted_at DESC)`);
+  await d1.query(`CREATE INDEX IF NOT EXISTS idx_task_submissions_payout ON task_submissions (payout_status, manual_status, submitted_at)`);
+
+  await ensureColumn(d1, 'task_submissions', 'day3_status', 'TEXT');
+  await ensureColumn(d1, 'task_submissions', 'day7_status', 'TEXT');
+  await ensureColumn(d1, 'task_submissions', 'day3_paid', 'INTEGER');
+  await ensureColumn(d1, 'task_submissions', 'day7_paid', 'INTEGER');
+
+  await d1.query(`
+    CREATE TABLE IF NOT EXISTS sync_audit_log (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      entity_type TEXT NOT NULL,
+      entity_id TEXT NOT NULL,
+      source TEXT NOT NULL,
+      target TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'pending',
+      error_message TEXT,
+      created_at INTEGER NOT NULL,
+      resolved_at INTEGER
+    )
+  `);
+  await d1.query(`CREATE INDEX IF NOT EXISTS idx_sync_audit_status ON sync_audit_log (status, created_at DESC)`);
+  await d1.query(`CREATE INDEX IF NOT EXISTS idx_sync_audit_entity ON sync_audit_log (entity_type, entity_id)`);
+
+  await d1.query(`
+    CREATE TABLE IF NOT EXISTS live_lists (
+      id TEXT PRIMARY KEY,
+      app_name TEXT NOT NULL,
+      date TEXT NOT NULL,
+      content TEXT NOT NULL,
+      created_at INTEGER NOT NULL
+    )
+  `);
+
+  await d1.query(`
+    CREATE TABLE IF NOT EXISTS compiled_lists (
+      task_id TEXT NOT NULL,
+      date TEXT NOT NULL,
+      compiled_at INTEGER NOT NULL,
+      drive_folder_id TEXT,
+      PRIMARY KEY (task_id, date)
+    )
+  `);
+}
+
+async function ensureColumn(d1, table, column, type) {
+  try {
+    await d1.query(`ALTER TABLE ${table} ADD COLUMN ${column} ${type}`);
+  } catch (error) {
+    if (!String(error.message || '').toLowerCase().includes('duplicate column')) {
+      throw error;
+    }
+  }
+}
+
+function normalizeProfile(profile = {}) {
+  return {
+    name: String(profile.name || '').trim().slice(0, 120),
+    mobile: String(profile.mobile || '').trim().slice(0, 30)
+  };
+}
+
+async function createUser(d1, { id, firebaseUid = null, email, passwordHash, migratedAt = null, profile = {}, role = 'user', parentAdmin = null, referralCode = null, status = 'active' }) {
+  const createdAt = nowMs();
+  const cleanProfile = normalizeProfile(profile);
+  await d1.query(
+    `INSERT INTO users (id, firebase_uid, email, password_hash, name, mobile, created_at, migrated_at, role, parent_admin, referral_code, status)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [id, firebaseUid, normalizeEmail(email), passwordHash, cleanProfile.name, cleanProfile.mobile, createdAt, migratedAt, role, parentAdmin, referralCode, status]
+  );
+
+  return {
+    id,
+    firebase_uid: firebaseUid,
+    email: normalizeEmail(email),
+    password_hash: passwordHash,
+    name: cleanProfile.name,
+    mobile: cleanProfile.mobile,
+    created_at: createdAt,
+    migrated_at: migratedAt,
+    role,
+    parent_admin: parentAdmin,
+    referral_code: referralCode,
+    status
+  };
+}
+
+async function findUserByEmail(d1, email) {
+  return d1.first('SELECT * FROM users WHERE email = ? LIMIT 1', [normalizeEmail(email)]);
+}
+
+async function upsertFirebaseUser(d1, decodedToken, profile = {}) {
+  const firebaseUid = decodedToken.uid;
+  const email = normalizeEmail(decodedToken.email || `${firebaseUid}@firebase.local`);
+  const cleanProfile = normalizeProfile({
+    name: profile.name || decodedToken.name || '',
+    mobile: profile.mobile || profile.phoneNumber || decodedToken.phone_number || ''
+  });
+
+  let role = (firebaseUid === ADMIN_UID || email === 'reviewsworld01@gmail.com') ? 'owner' : 'user';
+  let parentAdmin = null;
+  let referralCode = null;
+  let status = 'active';
+
+  const appId = process.env.FIREBASE_APP_ID || 'digital-wallet-prod';
+  try {
+    const firestoreUserSnap = await admin.firestore().doc(`artifacts/${appId}/public/data/users/${firebaseUid}`).get();
+    if (firestoreUserSnap.exists) {
+      const fData = firestoreUserSnap.data();
+      role = fData.role || ((firebaseUid === ADMIN_UID || email === 'reviewsworld01@gmail.com') ? 'owner' : 'user');
+      parentAdmin = fData.parent_admin || fData.parentAdmin || null;
+      referralCode = fData.referralCode || fData.referral_code || null;
+      status = fData.status || 'active';
+    }
+  } catch (err) {
+    console.error('Failed to fetch user from Firestore during session creation:', err);
+  }
+
+  const existing = await d1.first(
+    'SELECT * FROM users WHERE firebase_uid = ? OR email = ? LIMIT 1',
+    [firebaseUid, email]
+  );
+
+  if (existing) {
+    if (!existing.firebase_uid) {
+      await d1.query('UPDATE users SET firebase_uid = ? WHERE id = ?', [firebaseUid, existing.id]);
+      existing.firebase_uid = firebaseUid;
+    }
+    await d1.query(
+      `UPDATE users
+       SET name = COALESCE(NULLIF(?, ''), name),
+           mobile = COALESCE(NULLIF(?, ''), mobile),
+           role = ?,
+           parent_admin = ?,
+           referral_code = ?,
+           status = ?
+       WHERE id = ?`,
+      [cleanProfile.name, cleanProfile.mobile, role, parentAdmin, referralCode, status, existing.id]
+    );
+    existing.name = cleanProfile.name || existing.name;
+    existing.mobile = cleanProfile.mobile || existing.mobile;
+    existing.role = role;
+    existing.parent_admin = parentAdmin;
+    existing.referral_code = referralCode;
+    existing.status = status;
+    return existing;
+  }
+
+  return createUser(d1, {
+    id: firebaseUid,
+    firebaseUid,
+    email,
+    passwordHash: '',
+    migratedAt: nowMs(),
+    profile: cleanProfile,
+    role,
+    parentAdmin,
+    referralCode,
+    status
+  });
+}
+
+async function recentChatHistory(d1, roomId, limit = 50) {
+  const rows = await d1.all(
+    `SELECT id, room_id, sender_id, message, timestamp, read_by_admin_at, read_by_user_at, client_message_id
+     FROM chats
+     WHERE room_id = ?
+     ORDER BY timestamp DESC
+     LIMIT ?`,
+    [roomId, limit]
+  );
+
+  return rows.reverse();
+}
+
+async function saveChatMessage(d1, { roomId, senderId, message, timestamp, readByAdminAt = null, readByUserAt = null, clientMessageId = null }) {
+  const cleanClientMessageId = clientMessageId ? String(clientMessageId).slice(0, 120) : null;
+  await d1.query(
+    `INSERT OR IGNORE INTO chats (room_id, sender_id, message, timestamp, read_by_admin_at, read_by_user_at, client_message_id)
+     VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    [roomId, senderId, message, timestamp, readByAdminAt, readByUserAt, cleanClientMessageId]
+  );
+  if (!cleanClientMessageId) return true;
+  const row = await d1.first(
+    `SELECT sender_id, timestamp FROM chats WHERE client_message_id = ? LIMIT 1`,
+    [cleanClientMessageId]
+  );
+  return !!row && row.sender_id === senderId && Number(row.timestamp) === Number(timestamp);
+}
+
+async function markRoomReadByAdmin(d1, roomId, readAt = nowMs()) {
+  await d1.query(
+    `UPDATE chats
+     SET read_by_admin_at = COALESCE(read_by_admin_at, ?)
+     WHERE room_id = ?
+       AND sender_id != ?`,
+    [readAt, roomId, ADMIN_UID]
+  );
+  return readAt;
+}
+
+async function markRoomReadByUser(d1, roomId, readAt = nowMs()) {
+  await d1.query(
+    `UPDATE chats
+     SET read_by_user_at = COALESCE(read_by_user_at, ?)
+     WHERE room_id = ?
+       AND sender_id = ?`,
+    [readAt, roomId, ADMIN_UID]
+  );
+  return readAt;
+}
+
+async function cleanupExpiredReadChats(d1) {
+  const cutoff = nowMs() - CHAT_RETENTION_AFTER_ADMIN_READ_MS;
+  await d1.query(
+    `DELETE FROM chats
+     WHERE read_by_admin_at IS NOT NULL
+       AND read_by_admin_at <= ?`,
+    [cutoff]
+  );
+  await d1.query(
+    `DELETE FROM chat_rooms
+     WHERE NOT EXISTS (
+       SELECT 1 FROM chats
+       WHERE chats.room_id = chat_rooms.room_id
+     )`
+  );
+  await d1.query(
+    `UPDATE chat_rooms
+     SET last_message = (
+         SELECT message FROM chats
+         WHERE chats.room_id = chat_rooms.room_id
+         ORDER BY timestamp DESC
+         LIMIT 1
+       ),
+       last_sender_id = (
+         SELECT sender_id FROM chats
+         WHERE chats.room_id = chat_rooms.room_id
+         ORDER BY timestamp DESC
+         LIMIT 1
+       ),
+       updated_at = (
+         SELECT timestamp FROM chats
+         WHERE chats.room_id = chat_rooms.room_id
+         ORDER BY timestamp DESC
+         LIMIT 1
+       )
+     WHERE EXISTS (
+       SELECT 1 FROM chats
+       WHERE chats.room_id = chat_rooms.room_id
+     )`
+  );
+}
+
+async function upsertChatRoom(d1, { roomId, userId, userName = '', userEmail = '', userMobile = '', lastMessage = '', lastSenderId = '', updatedAt = nowMs() }) {
+  await d1.query(
+    `INSERT INTO chat_rooms (room_id, user_id, user_name, user_email, user_mobile, last_message, last_sender_id, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+     ON CONFLICT(room_id) DO UPDATE SET
+       user_id = COALESCE(NULLIF(excluded.user_id, ''), chat_rooms.user_id),
+       user_name = COALESCE(NULLIF(excluded.user_name, ''), chat_rooms.user_name),
+       user_email = COALESCE(NULLIF(excluded.user_email, ''), chat_rooms.user_email),
+       user_mobile = COALESCE(NULLIF(excluded.user_mobile, ''), chat_rooms.user_mobile),
+       last_message = excluded.last_message,
+       last_sender_id = excluded.last_sender_id,
+       updated_at = excluded.updated_at`,
+    [roomId, userId, userName, userEmail, userMobile, lastMessage, lastSenderId, updatedAt]
+  );
+}
+
+async function listChatRooms(d1, { limit = 100, parentAdmin = null } = {}) {
+  if (parentAdmin) {
+    return d1.all(
+      `SELECT cr.room_id, cr.user_id, cr.user_name, cr.user_email, cr.user_mobile, cr.last_message, cr.last_sender_id, cr.updated_at
+       FROM chat_rooms cr
+       INNER JOIN users u ON (cr.user_id = u.id OR cr.user_id = u.firebase_uid)
+       WHERE u.parent_admin = ?
+       ORDER BY cr.updated_at DESC
+       LIMIT ?`,
+      [parentAdmin, limit]
+    );
+  }
+  return d1.all(
+    `SELECT room_id, user_id, user_name, user_email, user_mobile, last_message, last_sender_id, updated_at
+     FROM chat_rooms
+     ORDER BY updated_at DESC
+     LIMIT ?`,
+    [limit]
+  );
+}
+
+async function saveTransaction(d1, { userId, transactionId, type, amount, status, timestamp = nowMs(), details = {} }) {
+  await d1.query(
+    `INSERT INTO transactions (user_id, transaction_id, type, amount, status, timestamp, details_json)
+     VALUES (?, ?, ?, ?, ?, ?, ?)
+     ON CONFLICT(transaction_id) DO UPDATE SET
+       type = excluded.type,
+       amount = excluded.amount,
+       status = excluded.status,
+       timestamp = excluded.timestamp,
+       details_json = excluded.details_json`,
+    [userId, transactionId, type, Number(amount || 0), status, timestamp, JSON.stringify(details || {})]
+  );
+}
+
+async function getTransactionHistory(d1, userId, { limit = 50, before = Number.MAX_SAFE_INTEGER } = {}) {
+  const rows = await d1.all(
+    `SELECT user_id, transaction_id, type, amount, status, timestamp
+          , details_json
+     FROM transactions
+     WHERE user_id = ? AND timestamp < ?
+     ORDER BY timestamp DESC
+     LIMIT ?`,
+    [userId, before, limit]
+  );
+  return rows.map((row) => {
+    let details = {};
+    try {
+      details = row.details_json ? JSON.parse(row.details_json) : {};
+    } catch {
+      details = {};
+    }
+    return { ...details, ...row, details_json: undefined };
+  });
+}
+
+async function saveFundRequest(d1, { requestId, userId, type = 'withdrawal', amount = 0, status = 'pending', requestedAt = nowMs(), processedAt = null, details = {} }) {
+  await d1.query(
+    `INSERT INTO fund_requests (request_id, user_id, type, amount, status, requested_at, processed_at, details_json)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+     ON CONFLICT(request_id) DO UPDATE SET
+       user_id = excluded.user_id,
+       type = excluded.type,
+       amount = excluded.amount,
+       status = excluded.status,
+       requested_at = excluded.requested_at,
+       processed_at = excluded.processed_at,
+       details_json = excluded.details_json`,
+    [requestId, userId, type, Number(amount || 0), status, requestedAt, processedAt, JSON.stringify(details || {})]
+  );
+
+  // Trigger #6 (Withdrawal) + Trigger #10 (Recharge): Alert Admin on new request
+  if (status === 'pending' && userId) {
+    (async () => {
+      try {
+        const reqType = String(type || 'withdrawal').toLowerCase();
+        const isRecharge = reqType.includes('recharge') || reqType.includes('deposit') || reqType.includes('add_fund');
+        const amountVal = Number(amount || 0);
+        const userRow = await d1.first(`SELECT name, email, mobile FROM users WHERE id = ? OR firebase_uid = ? LIMIT 1`, [userId, userId]).catch(() => null);
+        const userName = userRow?.name || userRow?.email || 'User';
+        const pushData = {
+          type: isRecharge ? 'recharge_request' : 'withdrawal_request',
+          requestId,
+          userId,
+          userName,
+          amount: amountVal
+        };
+        if (isRecharge) {
+          // Trigger #10: Wallet Recharge Request -> Alert Admin
+          await oneSignalService.sendPushNotificationToRole({
+            role: 'admin',
+            title: '💳 Naya Recharge Request',
+            message: `₹${amountVal} ka recharge request ${userName} ne submit kiya hai. Abhi process karein.`,
+            data: pushData
+          }, d1);
+          await oneSignalService.sendPushNotificationToUser({
+            userId: ADMIN_UID,
+            title: '💳 Recharge Request Aaya Hai',
+            message: `New recharge: ${userName} ne ₹${amountVal} ka add fund request diya hai.`,
+            data: pushData
+          }, d1);
+        } else {
+          // Trigger #6: Withdrawal Request -> Alert Admin
+          await oneSignalService.sendPushNotificationToRole({
+            role: 'admin',
+            title: '🏦 Naya Withdrawal Request',
+            message: `₹${amountVal} ka withdrawal ${userName} ne request kiya hai. Abhi approve karein.`,
+            data: pushData
+          }, d1);
+          await oneSignalService.sendPushNotificationToUser({
+            userId: ADMIN_UID,
+            title: '🏦 Withdrawal Request Aaya',
+            message: `New withdrawal: ${userName} ne ₹${amountVal} payout ke liye request di hai.`,
+            data: pushData
+          }, d1);
+        }
+      } catch (pe) {
+        console.warn('[Push] New fund-request admin alert failed:', pe.message);
+      }
+    })();
+  }
+}
+
+async function listFundRequests(d1, { status = 'pending', type = null, userId = null, parentAdmin = null, limit = 200 } = {}) {
+  const conditions = [];
+  const params = [];
+  if (status) {
+    conditions.push('fr.status = ?');
+    params.push(status);
+  }
+  if (type) {
+    conditions.push('fr.type = ?');
+    params.push(type);
+  }
+  if (userId) {
+    conditions.push('fr.user_id = ?');
+    params.push(userId);
+  }
+  if (parentAdmin) {
+    conditions.push('u.parent_admin = ?');
+    params.push(parentAdmin);
+  }
+  params.push(limit);
+
+  const rows = await d1.all(
+    `SELECT fr.request_id, fr.user_id, fr.type, fr.amount, fr.status, fr.requested_at, fr.processed_at, fr.details_json
+     FROM fund_requests fr
+     ${parentAdmin ? 'INNER JOIN users u ON fr.user_id = u.id' : ''}
+     ${conditions.length ? `WHERE ${conditions.join(' AND ')}` : ''}
+     ORDER BY fr.requested_at DESC
+     LIMIT ?`,
+    params
+  );
+
+  return rows.map((row) => {
+    let details = {};
+    try {
+      details = row.details_json ? JSON.parse(row.details_json) : {};
+    } catch {
+      details = {};
+    }
+    return { ...details, ...row, details_json: undefined };
+  });
+}
+
+async function updateFundRequestStatus(d1, { requestId, status, processedAt = nowMs(), details = {} }) {
+  const existing = await d1.first(
+    `SELECT user_id, type, amount, status as prev_status, details_json FROM fund_requests WHERE request_id = ? LIMIT 1`,
+    [requestId]
+  );
+  let currentDetails = {};
+  try {
+    currentDetails = existing?.details_json ? JSON.parse(existing.details_json) : {};
+  } catch {
+    currentDetails = {};
+  }
+
+  await d1.query(
+    `UPDATE fund_requests
+     SET status = ?, processed_at = ?, details_json = ?
+     WHERE request_id = ?`,
+    [status, processedAt, JSON.stringify({ ...currentDetails, ...(details || {}) }), requestId]
+  );
+
+  // Trigger #6 (Withdrawal) + Trigger #10 (Recharge): Alert User on Approval/Rejection
+  if (existing && existing.user_id && status !== existing.prev_status && (status === 'approved' || status === 'rejected' || status === 'completed' || status === 'failed')) {
+    (async () => {
+      try {
+        const userId = existing.user_id;
+        const reqType = String(existing.type || 'withdrawal').toLowerCase();
+        const isRecharge = reqType.includes('recharge') || reqType.includes('deposit') || reqType.includes('add_fund');
+        const amountVal = Number(existing.amount || 0);
+        const mergedDetails = { ...currentDetails, ...(details || {}) };
+        const reason = mergedDetails.reason || mergedDetails.rejectionReason || mergedDetails.remark || '';
+        const isApproved = status === 'approved' || status === 'completed';
+        const pushData = {
+          type: isRecharge ? (isApproved ? 'recharge_approved' : 'recharge_rejected') : (isApproved ? 'withdrawal_approved' : 'withdrawal_rejected'),
+          requestId,
+          amount: amountVal,
+          reason
+        };
+        if (isRecharge) {
+          // Trigger #10: Recharge completion -> Alert User
+          if (isApproved) {
+            await oneSignalService.sendPushNotificationToUser({
+              userId,
+              title: '✅ Recharge Complete Ho Gaya',
+              message: `₹${amountVal} aapke wallet mein successfully add ho gaye hain! Enjoy earning.`,
+              data: pushData
+            }, d1);
+          } else {
+            await oneSignalService.sendPushNotificationToUser({
+              userId,
+              title: '❌ Recharge Reject Ho Gaya',
+              message: `₹${amountVal} ka recharge request reject ho gaya.${reason ? ' Reason: ' + reason : ''}`,
+              data: pushData
+            }, d1);
+          }
+        } else {
+          // Trigger #6: Withdrawal Approval/Rejection -> Alert User
+          if (isApproved) {
+            await oneSignalService.sendPushNotificationToUser({
+              userId,
+              title: '✅ Withdrawal Approve Ho Gaya',
+              message: `₹${amountVal} ka payout aapke account mein bhej diya gaya hai. 24-48 ghanton mein reflect ho jayega.${reason ? ' Note: ' + reason : ''}`,
+              data: pushData
+            }, d1);
+          } else {
+            await oneSignalService.sendPushNotificationToUser({
+              userId,
+              title: '❌ Withdrawal Reject Ho Gaya',
+              message: `₹${amountVal} ka withdrawal request reject ho gaya.${reason ? ' Reason: ' + reason : ' Koi problem ho to admin se contact karein.'}`,
+              data: pushData
+            }, d1);
+          }
+        }
+      } catch (pe) {
+        console.warn('[Push] Fund-request status user alert failed:', pe.message);
+      }
+    })();
+  }
+}
+
+async function saveLoanRequest(d1, { requestId, userId, status = 'pending', requestedAt = nowMs(), processedAt = null, details = {} }) {
+  await d1.query(
+    `INSERT INTO loan_requests (request_id, user_id, status, requested_at, processed_at, details_json)
+     VALUES (?, ?, ?, ?, ?, ?)
+     ON CONFLICT(request_id) DO UPDATE SET
+       user_id = excluded.user_id,
+       status = excluded.status,
+       requested_at = excluded.requested_at,
+       processed_at = excluded.processed_at,
+       details_json = excluded.details_json`,
+    [requestId, userId, status, requestedAt, processedAt, JSON.stringify(details || {})]
+  );
+}
+
+async function listLoanRequests(d1, { status = 'pending', userId = null, limit = 300 } = {}) {
+  const conditions = [];
+  const params = [];
+  if (status) {
+    conditions.push('status = ?');
+    params.push(status);
+  }
+  if (userId) {
+    conditions.push('user_id = ?');
+    params.push(userId);
+  }
+  params.push(limit);
+
+  const rows = await d1.all(
+    `SELECT request_id, user_id, status, requested_at, processed_at, details_json
+     FROM loan_requests
+     ${conditions.length ? `WHERE ${conditions.join(' AND ')}` : ''}
+     ORDER BY requested_at DESC
+     LIMIT ?`,
+    params
+  );
+
+  return rows.map((row) => {
+    let details = {};
+    try {
+      details = row.details_json ? JSON.parse(row.details_json) : {};
+    } catch {
+      details = {};
+    }
+    return { ...details, ...row, details_json: undefined };
+  });
+}
+
+async function updateLoanRequestStatus(d1, { requestId, status, processedAt = nowMs(), details = {} }) {
+  const existing = await d1.first(
+    `SELECT details_json FROM loan_requests WHERE request_id = ? LIMIT 1`,
+    [requestId]
+  );
+  let currentDetails = {};
+  try {
+    currentDetails = existing?.details_json ? JSON.parse(existing.details_json) : {};
+  } catch {
+    currentDetails = {};
+  }
+
+  await d1.query(
+    `UPDATE loan_requests
+     SET status = ?, processed_at = ?, details_json = ?
+     WHERE request_id = ?`,
+    [status, processedAt, JSON.stringify({ ...currentDetails, ...(details || {}) }), requestId]
+  );
+}
+
+async function cleanupExpiredNotifications(d1, now = nowMs()) {
+  const readCutoff = now - NOTIFICATION_RETENTION_MS;
+  await d1.query(
+    `DELETE FROM notification_recipients
+     WHERE read_at IS NOT NULL
+       AND read_at <= ?`,
+    [readCutoff]
+  );
+  await d1.query(
+    `DELETE FROM notification_recipients
+     WHERE notification_id IN (
+       SELECT id FROM notifications
+       WHERE expires_at <= ?
+     )`,
+    [now]
+  );
+  await d1.query('DELETE FROM notifications WHERE expires_at <= ?', [now]);
+  await d1.query(
+    `DELETE FROM notifications
+     WHERE NOT EXISTS (
+       SELECT 1 FROM notification_recipients
+       WHERE notification_recipients.notification_id = notifications.id
+     )`
+  );
+}
+
+function normalizeNotificationRow(row = {}) {
+  return {
+    id: row.id,
+    title: row.title || '',
+    message: row.message || '',
+    senderId: row.sender_id || row.senderId || '',
+    audience: row.audience || '',
+    createdAt: row.created_at || row.createdAt || 0,
+    expiresAt: row.expires_at || row.expiresAt || 0,
+    deliveredAt: row.delivered_at || row.deliveredAt || 0,
+    readAt: row.read_at || row.readAt || null,
+    deliveredCount: row.delivered_count || row.deliveredCount || 0,
+    readCount: row.read_count || row.readCount || 0,
+    unreadCount: row.unread_count || row.unreadCount || 0
+  };
+}
+
+async function createNotification(d1, { title = '', message = '', audience = 'selected', recipients = [], senderId = ADMIN_UID, data = null }) {
+  const cleanMessage = String(message || '').trim().slice(0, 4000);
+  if (!cleanMessage) throw new Error('MESSAGE_REQUIRED');
+
+  const uniqueRecipients = Array.from(new Set((Array.isArray(recipients) ? recipients : [])
+    .map((recipient) => String(recipient || '').trim())
+    .filter(Boolean)));
+  if (!uniqueRecipients.length && audience !== 'all') throw new Error('RECIPIENTS_REQUIRED');
+
+  const createdAt = nowMs();
+  const id = `notif_${createdAt}_${Math.random().toString(36).slice(2, 10)}`;
+  const expiresAt = createdAt + NOTIFICATION_RETENTION_MS;
+  await d1.query(
+    `INSERT INTO notifications (id, title, message, sender_id, audience, created_at, expires_at, deleted_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, NULL)`,
+    [id, String(title || '').trim().slice(0, 160), cleanMessage, senderId, String(audience || 'selected').slice(0, 40), createdAt, expiresAt]
+  );
+
+  if (audience === 'all') {
+    sendOneSignalPush(d1, 'all', title, cleanMessage, data).catch((err) => console.error('[OneSignal] Broadcast push failed:', err));
+  } else if (uniqueRecipients.length > 0) {
+    const chunkSize = 25;
+    for (let index = 0; index < uniqueRecipients.length; index += chunkSize) {
+      const chunk = uniqueRecipients.slice(index, index + chunkSize);
+      const valuesSql = chunk.map(() => '(?, ?, ?, NULL)').join(', ');
+      const params = chunk.flatMap((userId) => [id, userId, createdAt]);
+      await d1.query(
+        `INSERT OR IGNORE INTO notification_recipients (notification_id, user_id, delivered_at, read_at)
+         VALUES ${valuesSql}`,
+        params
+      );
+    }
+    sendOneSignalPush(d1, uniqueRecipients, title, cleanMessage, data).catch((err) => console.error('[OneSignal] Targeted push failed:', err));
+  }
+
+  return { id, title: String(title || '').trim().slice(0, 160), message: cleanMessage, audience, createdAt, expiresAt, deliveredCount: uniqueRecipients.length };
+}
+
+async function listUserNotifications(d1, userId, limit = 80) {
+  const rows = await d1.all(
+    `SELECT n.id, n.title, n.message, n.sender_id, n.audience, n.created_at, n.expires_at,
+            r.delivered_at, r.read_at
+     FROM notifications n
+     INNER JOIN notification_recipients r ON r.notification_id = n.id
+     WHERE r.user_id = ?
+       AND n.deleted_at IS NULL
+       AND n.expires_at > ?
+     ORDER BY n.created_at DESC
+     LIMIT ?`,
+    [userId, nowMs(), limit]
+  );
+  return rows.map(normalizeNotificationRow);
+}
+
+async function listAdminNotifications(d1, limit = 80) {
+  const rows = await d1.all(
+    `SELECT n.id, n.title, n.message, n.sender_id, n.audience, n.created_at, n.expires_at,
+            COUNT(r.user_id) AS delivered_count,
+            SUM(CASE WHEN r.read_at IS NOT NULL THEN 1 ELSE 0 END) AS read_count,
+            SUM(CASE WHEN r.read_at IS NULL THEN 1 ELSE 0 END) AS unread_count
+     FROM notifications n
+     LEFT JOIN notification_recipients r ON r.notification_id = n.id
+     WHERE n.deleted_at IS NULL
+       AND n.expires_at > ?
+     GROUP BY n.id
+     ORDER BY n.created_at DESC
+     LIMIT ?`,
+    [nowMs(), limit]
+  );
+  return rows.map(normalizeNotificationRow);
+}
+
+async function listNotificationRecipients(d1, notificationId, limit = 1000) {
+  const rows = await d1.all(
+    `SELECT notification_id, user_id, delivered_at, read_at
+     FROM notification_recipients
+     WHERE notification_id = ?
+     ORDER BY
+       CASE WHEN read_at IS NOT NULL THEN 0 ELSE 1 END,
+       COALESCE(read_at, delivered_at) DESC
+     LIMIT ?`,
+    [notificationId, limit]
+  );
+  return rows.map((row) => ({
+    notificationId: row.notification_id,
+    userId: row.user_id,
+    deliveredAt: row.delivered_at || 0,
+    readAt: row.read_at || null
+  }));
+}
+
+async function markNotificationRead(d1, notificationId, userId, readAt = nowMs()) {
+  await d1.query(
+    `UPDATE notification_recipients
+     SET read_at = COALESCE(read_at, ?)
+     WHERE notification_id = ?
+       AND user_id = ?`,
+    [readAt, notificationId, userId]
+  );
+}
+
+async function deleteNotification(d1, notificationId, deletedAt = nowMs()) {
+  await d1.query(
+    `UPDATE notifications
+     SET deleted_at = ?
+     WHERE id = ?`,
+    [deletedAt, notificationId]
+  );
+}
+
+async function resolveUserOneSignalIds(d1, target) {
+  if (!target) return [];
+  const targets = Array.isArray(target) ? target : [target];
+  const resolved = new Set();
+
+  for (const t of targets) {
+    if (!t) continue;
+    const str = String(t).trim();
+    if (!str || str === 'all' || str === 'broadcast') continue;
+
+    // ALWAYS add the raw target string FIRST, because:
+    //  - Firestore user doc KEY = Firebase UID (e.g. "mOs5Fmp4RoRzeBDH4pZLMOpQx7Q2")
+    //  - Frontend calls OneSignal.login(userId) with the SAME Firebase UID
+    //  - So include_aliases.external_id MUST include this raw string for delivery.
+    resolved.add(str);
+
+    if (d1 && typeof d1.all === 'function') {
+      try {
+        const rows = await d1.all(
+          `SELECT id, firebase_uid, email FROM users WHERE id = ? OR firebase_uid = ? OR email = ? LIMIT 1`,
+          [str, str, str]
+        );
+        const user = rows?.[0];
+        if (user) {
+          if (user.id) resolved.add(String(user.id).trim());
+          if (user.firebase_uid) resolved.add(String(user.firebase_uid).trim());
+        }
+      } catch {
+        // Continue with collected targets
+      }
+    }
+  }
+
+  return Array.from(resolved);
+}
+
+function getOneSignalAuthHeaders(apiKey) {
+  const cleanKey = String(apiKey || '').replace(/[\r\n\t]+/g, '').trim();
+  if (!cleanKey) return [];
+  if (/^(Basic|Key|Bearer)\s+/i.test(cleanKey)) {
+    return [cleanKey];
+  }
+  if (cleanKey.startsWith('os_v2_')) {
+    return [`Key ${cleanKey}`, `Basic ${cleanKey}`];
+  }
+  return [`Basic ${cleanKey}`, `Key ${cleanKey}`];
+}
+
+async function postOneSignalApi(payload, apiKey) {
+  const headersList = getOneSignalAuthHeaders(apiKey);
+  const endpoints = ['https://api.onesignal.com/notifications', 'https://onesignal.com/api/v1/notifications'];
+  let lastResult = null;
+  let lastError = null;
+
+  for (const endpoint of endpoints) {
+    for (const authHeader of headersList) {
+      try {
+        const cleanHeaderForLog = authHeader ? authHeader.slice(0, 20) + '...' : '(empty)';
+        const response = await fetch(endpoint, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json; charset=utf-8',
+            'Authorization': authHeader
+          },
+          body: JSON.stringify(payload)
+        });
+        const result = await response.json().catch(() => ({}));
+        if (response.ok && !result.errors) {
+          console.log(`[OneSignal] API OK (${endpoint.slice(-28)} auth=${cleanHeaderForLog}): id=${result?.id || 'n/a'}, recipients=${result?.recipients ?? 'n/a'}, external_ids=${JSON.stringify(payload?.include_aliases?.external_id || payload?.include_external_user_ids || payload?.included_segments || payload?.include_player_ids?.slice?.(0, 2) || [])}`);
+          return result;
+        }
+        console.warn(`[OneSignal] API FAIL status=${response.status} (${endpoint.slice(-28)} auth=${cleanHeaderForLog}): response=${JSON.stringify(result).slice(0, 400)}`);
+        lastResult = result;
+      } catch (err) {
+        lastError = err;
+        console.error('[OneSignal] Fetch request error:', err?.message || err);
+      }
+    }
+  }
+  if (lastError) {
+    console.error('[OneSignal] All endpoint/auth combinations FAILED. Last result:', JSON.stringify(lastResult || {}).slice(0, 500));
+  }
+  return lastResult;
+}
+
+async function sendOneSignalPush(d1OrTarget, targetOrTitle, titleOrMessage, messageOnly, customData) {
+  let d1 = null;
+  let target = d1OrTarget;
+  let title = targetOrTitle;
+  let message = titleOrMessage;
+  let extraData = customData;
+
+  if (d1OrTarget && typeof d1OrTarget.query === 'function') {
+    d1 = d1OrTarget;
+    target = targetOrTitle;
+    title = titleOrMessage;
+    message = messageOnly;
+    extraData = customData;
+  } else {
+    extraData = messageOnly;
+  }
+
+  const cleanTitle = String(title || '').trim();
+  const cleanMsg = String(message || '').trim();
+  if (!cleanTitle && !cleanMsg) return;
+
+  console.log(`\n========== [sendOneSignalPush → Delegating to oneSignalService] ==========`);
+  console.log(`target=${JSON.stringify(target).slice(0, 200)} | title="${cleanTitle}" | msg="${cleanMsg.slice(0, 100)}"`);
+
+  try {
+    if (target === 'all' || target === 'broadcast') {
+      const r = await oneSignalService.sendPushNotificationToAll({ title: cleanTitle, message: cleanMsg, data: extraData });
+      console.log(`[sendOneSignalPush] Broadcast result:`, JSON.stringify(r).slice(0, 300));
+      return r;
+    }
+
+    const targetsArr = Array.isArray(target) ? target : [target];
+    if (targetsArr.length === 0) return;
+
+    // Broadcast to each target via service (service handles playerId + externalId internally)
+    const results = [];
+    for (const tgt of targetsArr) {
+      try {
+        const r = await oneSignalService.sendPushNotificationToUser({
+          userId: tgt,
+          title: cleanTitle,
+          message: cleanMsg,
+          data: extraData
+        }, d1);
+        results.push(r);
+      } catch (e) {
+        console.error(`[sendOneSignalPush] Error pushing to ${JSON.stringify(tgt).slice(0, 100)}:`, e?.message || e);
+      }
+    }
+    const okCount = results.filter(r => r && r.ok).length;
+    console.log(`[sendOneSignalPush] Targeted results: ${okCount}/${results.length} successful.`);
+    return { ok: okCount > 0, results };
+  } catch (err) {
+    console.error('[sendOneSignalPush] Fatal error:', err);
+  }
+}
+
+async function sendFcmPushToUser(d1OrUserId, userIdOrTitle, titleOrMessage, extraDataOrNull, maybeExtraData) {
+  let d1 = null;
+  let userId = d1OrUserId;
+  let title = userIdOrTitle;
+  let message = titleOrMessage;
+  let extraData = extraDataOrNull;
+
+  if (d1OrUserId && typeof d1OrUserId.query === 'function') {
+    d1 = d1OrUserId;
+    userId = userIdOrTitle;
+    title = titleOrMessage;
+    message = extraDataOrNull;
+    extraData = maybeExtraData;
+  }
+
+  const fsAppId = process.env.FIREBASE_APP_ID || 'digital-wallet-prod';
+
+  try {
+    let fcmToken = null;
+    const cleanUserId = String(userId || '').trim();
+    if (!cleanUserId) return;
+
+    // Check Firestore user doc for FCM token
+    try {
+      if (admin.apps && admin.apps.length > 0) {
+        const userDoc = await admin.firestore().doc(`artifacts/${fsAppId}/public/data/users/${cleanUserId}`).get();
+        if (userDoc.exists) {
+          const uData = userDoc.data() || {};
+          fcmToken = uData.fcmToken || uData.fcm_token || null;
+        }
+      }
+    } catch (e) {
+      console.warn(`[FCM Push] Firestore lookup failed for ${cleanUserId}:`, e?.message || e);
+    }
+
+    // Check D1 DB if FCM token not in Firestore
+    if (!fcmToken && d1 && typeof d1.all === 'function') {
+      try {
+        const rows = await d1.all(`SELECT fcm_token FROM users WHERE id = ? OR firebase_uid = ? LIMIT 1`, [cleanUserId, cleanUserId]);
+        fcmToken = rows?.[0]?.fcm_token || null;
+      } catch (e) {
+        console.warn(`[FCM Push] D1 lookup failed for ${cleanUserId}:`, e?.message || e);
+      }
+    }
+
+    if (fcmToken && admin.apps && admin.apps.length > 0) {
+      const payload = {
+        token: fcmToken,
+        notification: {
+          title: String(title || 'REVIEWS WORLD').trim(),
+          body: String(message || '').trim()
+        },
+        data: extraData ? Object.fromEntries(Object.entries(extraData).map(([k, v]) => [k, String(v)])) : {}
+      };
+      const res = await admin.messaging().send(payload);
+      console.log(`[FCM Push] Sent to ${cleanUserId}:`, res);
+      return res;
+    } else {
+      console.warn(`[FCM Push] Skipped for ${cleanUserId}: no FCM token resolved${fcmToken ? '' : ' (token missing)'}`);
+    }
+  } catch (err) {
+    console.warn(`[FCM Push] Notification to ${userId} failed:`, err?.message || err);
+  }
+}
+
+async function sendNotification(d1, userId, title, message, customData = null) {
+  const cleanTitle = String(title || '').trim();
+  const cleanMsg = String(message || '').trim();
+  console.log(`\n========== [sendNotification START] userId=${JSON.stringify(userId).slice(0, 100)} | title="${cleanTitle}" | msg="${cleanMsg.slice(0, 120)}" ==========`);
+
+  sendFcmPushToUser(d1, userId, cleanTitle, cleanMsg, customData).catch((e) => console.warn('[sendNotification] FCM error:', e?.message || e));
+
+  sendOneSignalPush(d1, userId, cleanTitle, cleanMsg, customData).catch((e) => console.warn('[sendNotification] Delegated push error:', e?.message || e));
+}
+
+async function putR2Object(r2, key, body, contentType = 'application/json') {
+  if (!r2) throw new Error('R2 is not configured');
+
+  await r2.send(new PutObjectCommand({
+    Bucket: process.env.CLOUDFLARE_R2_BUCKET,
+    Key: key,
+    Body: body,
+    ContentType: contentType
+  }));
+
+  const publicBase = process.env.CLOUDFLARE_R2_PUBLIC_BASE_URL;
+  return publicBase ? `${publicBase.replace(/\/$/, '')}/${key}` : key;
+}
+
+async function getR2Object(r2, key) {
+  if (!r2) throw new Error('R2 is not configured');
+
+  const result = await r2.send(new GetObjectCommand({
+    Bucket: process.env.CLOUDFLARE_R2_BUCKET,
+    Key: key
+  }));
+
+  return result.Body.transformToString();
+}
+
+function sanitizeUploadFileName(fileName = 'document') {
+  const cleaned = String(fileName || 'document')
+    .replace(/[^\w.-]+/g, '_')
+    .replace(/^_+|_+$/g, '')
+    .slice(-80);
+  return cleaned || 'document';
+}
+
+// ── Google Drive Upload Helper (Organized Folders) ──────────────────────────
+let _driveClient = null;
+const _driveFolderCache = new Map(); // cache: "parentId/folderName" → folderId
+
+function getGoogleDriveClient() {
+  if (_driveClient) return _driveClient;
+  // Use dedicated Drive SA key, or fallback to Firebase SA key (same Google Cloud project)
+  const saJson = process.env.GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON || process.env.FIREBASE_SERVICE_ACCOUNT_JSON;
+  if (!saJson) return null;
+  try {
+    const credentials = typeof saJson === 'string' ? JSON.parse(saJson) : saJson;
+    const auth = new google.auth.GoogleAuth({
+      credentials,
+      scopes: ['https://www.googleapis.com/auth/drive.file']
+    });
+    _driveClient = google.drive({ version: 'v3', auth });
+    console.log(`Google Drive client initialized with SA: ${credentials.client_email}`);
+    return _driveClient;
+  } catch (err) {
+    console.error('Google Drive auth failed:', err.message);
+    return null;
+  }
+}
+
+/**
+ * Find or create a subfolder inside a parent folder.
+ * Caches folder IDs in memory to avoid repeated API lookups.
+ */
+async function findOrCreateDriveFolder(drive, parentId, folderName) {
+  const cacheKey = `${parentId}/${folderName}`;
+  if (_driveFolderCache.has(cacheKey)) return _driveFolderCache.get(cacheKey);
+
+  // Search for existing folder
+  const searchResult = await drive.files.list({
+    q: `'${parentId}' in parents AND name = '${folderName.replace(/'/g, "\\'")}' AND mimeType = 'application/vnd.google-apps.folder' AND trashed = false`,
+    fields: 'files(id, name)',
+    pageSize: 1
+  });
+
+  if (searchResult.data.files && searchResult.data.files.length > 0) {
+    const folderId = searchResult.data.files[0].id;
+    _driveFolderCache.set(cacheKey, folderId);
+    return folderId;
+  }
+
+  // Create new folder
+  const createResult = await drive.files.create({
+    requestBody: {
+      name: folderName,
+      mimeType: 'application/vnd.google-apps.folder',
+      parents: [parentId]
+    },
+    fields: 'id'
+  });
+
+  const newFolderId = createResult.data.id;
+
+  // Make folder publicly viewable (so admin can browse from Drive)
+  await drive.permissions.create({
+    fileId: newFolderId,
+    requestBody: { role: 'reader', type: 'anyone' }
+  }).catch(() => {}); // non-critical if parent already has public access
+
+  _driveFolderCache.set(cacheKey, newFolderId);
+  return newFolderId;
+}
+
+/**
+ * Upload screenshot to Google Drive with organized folder structure:
+ *   Root Folder → DD-MM-YYYY → AppName → screenshot files
+ */
+async function uploadToGoogleDrive(buffer, fileName, mimeType, rootFolderId, { appName = 'Unknown App' } = {}) {
+  const drive = getGoogleDriveClient();
+  if (!drive) throw new Error('GOOGLE_DRIVE_NOT_CONFIGURED');
+
+  // Step 1: Find or create date folder (DD-MM-YYYY)
+  const now = new Date();
+  const dateStr = `${String(now.getDate()).padStart(2, '0')}-${String(now.getMonth() + 1).padStart(2, '0')}-${now.getFullYear()}`;
+  const dateFolderId = await findOrCreateDriveFolder(drive, rootFolderId, dateStr);
+
+  // Step 2: Find or create app name folder inside date folder
+  const safeAppName = String(appName || 'Unknown App').replace(/[<>:"/\\|?*]+/g, '_').trim().slice(0, 100) || 'Unknown App';
+  const appFolderId = await findOrCreateDriveFolder(drive, dateFolderId, safeAppName);
+
+  // Step 2.5: Find or create "images" subfolder inside app name folder
+  const imagesFolderId = await findOrCreateDriveFolder(drive, appFolderId, 'images');
+
+  // Step 3: Upload file into images folder
+  const response = await drive.files.create({
+    requestBody: {
+      name: fileName,
+      parents: [imagesFolderId]
+    },
+    media: {
+      mimeType: mimeType || 'image/jpeg',
+      body: buffer
+    },
+    fields: 'id, name, webViewLink, webContentLink, size'
+  });
+
+  const fileId = response.data.id;
+
+  // Make the file publicly viewable
+  await drive.permissions.create({
+    fileId,
+    requestBody: { role: 'reader', type: 'anyone' }
+  });
+
+  return {
+    fileId,
+    name: response.data.name,
+    dateFolderName: dateStr,
+    appFolderName: safeAppName,
+    viewUrl: response.data.webViewLink || `https://drive.google.com/file/d/${fileId}/view`,
+    downloadUrl: response.data.webContentLink || `https://drive.google.com/uc?export=download&id=${fileId}`,
+    thumbnailUrl: `https://drive.google.com/thumbnail?id=${fileId}&sz=w400`,
+    directUrl: `https://lh3.googleusercontent.com/d/${fileId}`
+  };
+}
+
+async function extractAndStoreReviewerAvatar({ imageBuffer, reviewerName, nameLine = null, r2, userId = 'user', appName = 'Avatars' }) {
+  return { avatarUrl: '', avatarHash: '', avatarCrop: null };
+}
+
+// Clear folder cache every hour to pick up any manual Drive changes
+setInterval(() => _driveFolderCache.clear(), 60 * 60 * 1000);
+
+function sanitizePathSegment(value = 'user') {
+  const cleaned = String(value || 'user').replace(/[^\w-]+/g, '_').slice(0, 80);
+  return cleaned || 'user';
+}
+
+function normalizeContentType(value) {
+  return String(value || 'application/octet-stream').split(';')[0].trim().toLowerCase() || 'application/octet-stream';
+}
+
+function getLoanDocumentExtension(fileName, contentType) {
+  const ext = path.extname(String(fileName || '')).toLowerCase();
+  if (ext && ext.length <= 8) return ext;
+  if (contentType === 'application/pdf') return '.pdf';
+  if (contentType === 'image/png') return '.png';
+  if (contentType === 'image/webp') return '.webp';
+  if (contentType === 'image/heic') return '.heic';
+  if (contentType === 'image/heif') return '.heif';
+  return '.jpg';
+}
+
+function isSupportedLoanDocument(documentType, fileName, contentType) {
+  const ext = path.extname(String(fileName || '')).toLowerCase();
+  const isImage = contentType.startsWith('image/') || ['.jpg', '.jpeg', '.png', '.webp', '.heic', '.heif'].includes(ext);
+  const isPdf = contentType === 'application/pdf' || ext === '.pdf';
+  return documentType === 'selfie' ? isImage : isImage || isPdf;
+}
+
+function readRequestBody(req, maxBytes) {
+  return new Promise((resolve, reject) => {
+    const chunks = [];
+    let total = 0;
+    let finished = false;
+
+    const fail = (error) => {
+      if (finished) return;
+      finished = true;
+      reject(error);
+    };
+
+    req.on('data', (chunk) => {
+      if (finished) return;
+      total += chunk.length;
+      if (total > maxBytes) {
+        const error = new Error('UPLOAD_TOO_LARGE');
+        error.code = 'UPLOAD_TOO_LARGE';
+        fail(error);
+        req.destroy();
+        return;
+      }
+      chunks.push(chunk);
+    });
+
+    req.on('end', () => {
+      if (finished) return;
+      finished = true;
+      resolve(Buffer.concat(chunks, total));
+    });
+
+    req.on('error', fail);
+  });
+}
+
+// ── Task Reservation helpers ───────────────────────────────────────────────
+const TASK_RESERVATION_MS = 15 * 60 * 1000; // 15 minutes default lock
+const TASK_SCREENSHOT_MAX_BYTES = 5 * 1024 * 1024;
+
+async function checkIsBulker(d1, userId) {
+  try {
+    const db = admin.firestore();
+    const userDoc = await db.doc(`artifacts/digital-wallet-prod/public/data/users/${userId}`).get();
+    if (userDoc.exists) {
+      const data = userDoc.data();
+      const tier = data.taskTier || '';
+      return !!(tier === 'bulker' || tier === 'super_bulker' || data.bulkTaskMode || data.taskBulkMode || data.isBulkTaskUser);
+    }
+  } catch (err) {
+    console.error('Error checking isBulker in Firestore:', err);
+  }
+  return false;
+}
+
+async function cleanupExpiredReservations(d1) {
+  await d1.query(
+    `UPDATE task_comment_reservations SET status = 'expired' WHERE status = 'reserved' AND expires_at <= ?`,
+    [nowMs()]
+  );
+}
+
+async function reserveTaskComment(d1, { taskId, userId, userName, userEmail, comments, reservationMs = TASK_RESERVATION_MS }) {
+  await cleanupExpiredReservations(d1);
+
+  const isBulker = await checkIsBulker(d1, userId);
+
+  // 1. Check existing active (unexpired) reservation for this user+task
+  const existing = await d1.first(
+    `SELECT * FROM task_comment_reservations WHERE task_id = ? AND user_id = ? AND status = 'reserved' AND expires_at > ? LIMIT 1`,
+    [taskId, userId, nowMs()]
+  );
+  if (existing) {
+    let details = {};
+    try { details = existing.details_json ? JSON.parse(existing.details_json) : {}; } catch { details = {}; }
+    return { ...details, ...existing, details_json: undefined };
+  }
+
+  // Check already submitted (only for non-bulkers)
+  if (!isBulker) {
+    const submitted = await d1.first(
+      `SELECT id FROM task_submissions WHERE task_id = ? AND user_id = ? LIMIT 1`,
+      [taskId, userId]
+    );
+    if (submitted) throw new Error('TASK_ALREADY_SUBMITTED');
+  }
+
+  const commentsList = (Array.isArray(comments) ? comments : []).map(c => String(c || '').trim()).filter(Boolean);
+  if (commentsList.length === 0) {
+    throw new Error('NO_COMMENTS_AVAILABLE');
+  }
+
+  // 2. EXPIRED RESERVATION RE-ASSIGNMENT: Check if user's last expired comment is STILL AVAILABLE
+  if (!isBulker) {
+    const lastExpired = await d1.first(
+      `SELECT * FROM task_comment_reservations WHERE task_id = ? AND user_id = ? ORDER BY reserved_at DESC LIMIT 1`,
+      [taskId, userId]
+    );
+    if (lastExpired && lastExpired.comment) {
+      const prevComment = String(lastExpired.comment).trim();
+      // Check if prevComment is currently reserved or submitted by anyone else
+      const conflict = await d1.first(
+        `SELECT id FROM task_comment_reservations WHERE task_id = ? AND comment = ? AND status IN ('reserved', 'submitted') AND (expires_at > ? OR status = 'submitted') LIMIT 1`,
+        [taskId, prevComment, nowMs()]
+      );
+      // If NOT taken by anyone else and exists in current task commentsList, RE-ASSIGN IT for fresh 10 mins!
+      if (!conflict && commentsList.includes(prevComment)) {
+        const now = nowMs();
+        const expiresAt = now + (15 * 60 * 1000); // Fresh 15 minutes lock
+        const commentIndex = commentsList.indexOf(prevComment);
+        const id = `res_${taskId.slice(0,12)}_${userId.slice(0,12)}_${now}`;
+        const detailsObj = { userName: userName || '', userEmail: userEmail || '' };
+
+        try {
+          await d1.query(
+            `INSERT INTO task_comment_reservations (id, task_id, user_id, comment, comment_index, status, reserved_at, expires_at, details_json)
+             VALUES (?, ?, ?, ?, ?, 'reserved', ?, ?, ?)`,
+            [id, taskId, userId, prevComment, commentIndex, now, expiresAt, JSON.stringify(detailsObj)]
+          );
+          return { id, task_id: taskId, user_id: userId, comment: prevComment, comment_index: commentIndex, status: 'reserved', reserved_at: now, expires_at: expiresAt, ...detailsObj };
+        } catch (reassignErr) {
+          console.warn('Re-assignment failed, falling back to new comment selection:', reassignErr);
+        }
+      }
+    }
+  }
+
+  // 3. Fallback: Pick first available comment with retry loop
+  let attempt = 0;
+  while (attempt < 5) {
+    attempt++;
+    let activeReservations;
+    if (isBulker) {
+      activeReservations = await d1.all(
+        `SELECT comment FROM task_comment_reservations WHERE task_id = ? AND status IN ('reserved', 'submitted') AND (expires_at > ? OR status = 'submitted')`,
+        [taskId, nowMs()]
+      );
+    } else {
+      activeReservations = await d1.all(
+        `SELECT comment FROM task_comment_reservations WHERE task_id = ? AND status IN ('reserved', 'submitted') AND (expires_at > ? OR status = 'submitted') AND user_id != ?`,
+        [taskId, nowMs(), userId]
+      );
+    }
+    const usedComments = new Set(activeReservations.map(r => String(r.comment).trim()));
+    const comment = commentsList.find(c => !usedComments.has(c));
+    if (!comment) {
+      throw new Error('NO_COMMENTS_AVAILABLE');
+    }
+    const commentIndex = commentsList.indexOf(comment);
+
+    const now = nowMs();
+    let expiresAt = now + (15 * 60 * 1000); // 15 minutes for single user
+    if (isBulker) {
+      const d = new Date();
+      const istOffset = 5.5 * 60 * 60 * 1000;
+      const istTime = d.getTime() + istOffset;
+      const istDate = new Date(istTime);
+      const endOfTodayIST = Date.UTC(istDate.getUTCFullYear(), istDate.getUTCMonth(), istDate.getUTCDate() + 1, 0, 0, 0, 0) - istOffset;
+      expiresAt = endOfTodayIST;
+    }
+
+    const id = `res_${taskId.slice(0,12)}_${userId.slice(0,12)}_${now}`;
+    const detailsObj = { userName: userName || '', userEmail: userEmail || '' };
+
+    try {
+      await d1.query(
+        `INSERT INTO task_comment_reservations (id, task_id, user_id, comment, comment_index, status, reserved_at, expires_at, details_json)
+         VALUES (?, ?, ?, ?, ?, 'reserved', ?, ?, ?)`,
+        [id, taskId, userId, comment, commentIndex, now, expiresAt, JSON.stringify(detailsObj)]
+      );
+      return { id, task_id: taskId, user_id: userId, comment, comment_index: commentIndex, status: 'reserved', reserved_at: now, expires_at: expiresAt, ...detailsObj };
+    } catch (err) {
+      if (String(err.message || '').includes('UNIQUE constraint failed')) {
+        console.warn(`Unique constraint hit for comment "${comment}", retrying...`);
+        continue;
+      }
+      throw err;
+    }
+  }
+  throw new Error('NO_COMMENTS_AVAILABLE');
+}
+
+async function getTaskReservation(d1, taskId, userId) {
+  await cleanupExpiredReservations(d1);
+  const row = await d1.first(
+    `SELECT * FROM task_comment_reservations WHERE task_id = ? AND user_id = ? AND status = 'reserved' AND expires_at > ? LIMIT 1`,
+    [taskId, userId, nowMs()]
+  );
+  if (!row) return null;
+  let details = {};
+  try { details = row.details_json ? JSON.parse(row.details_json) : {}; } catch { details = {}; }
+  return { ...details, ...row, details_json: undefined };
+}
+
+async function markReservationSubmitted(d1, reservationId) {
+  await d1.query(
+    `UPDATE task_comment_reservations SET status = 'submitted', submitted_at = ? WHERE id = ?`,
+    [nowMs(), reservationId]
+  );
+}
+
+// ── Task Submission helpers ────────────────────────────────────────────────
+async function saveTaskSubmission(d1, { id, taskId, userId, reservationId, assignedComment, screenshotUrl, screenshotKey, screenshotViewUrl, screenshotDrivePath, reward, taskLink, appName, userName, userEmail, payoutDelayDays = 7, details = {} }) {
+  const submittedAt = nowMs();
+  const cleanComment = String(assignedComment || '').trim();
+
+  // 1. Strict Duplicate Check: Ensure user CANNOT submit the same task/app more than once
+  const isBulkerUser = await checkIsBulker(d1, userId);
+  if (!isBulkerUser) {
+    const existing = await d1.first(
+      `SELECT id FROM task_submissions 
+       WHERE user_id = ? AND (task_id = ? OR (app_name IS NOT NULL AND app_name = ? AND app_name != ''))
+       AND manual_status != 'rejected'
+       LIMIT 1`,
+      [userId, taskId, appName || 'NO_APP']
+    ).catch(() => null);
+
+    if (existing && existing.id) {
+      console.log(`[D1-Submit] Duplicate submission detected for user ${userId} task ${taskId}. Aborting submission.`);
+      const err = new Error('Task already submitted');
+      err.isDuplicateSubmission = true;
+      err.code = 'DUPLICATE_TASK_SUBMISSION';
+      throw err;
+    }
+  }
+
+  await d1.query(
+    `INSERT INTO task_submissions (id, task_id, user_id, reservation_id, assigned_comment, screenshot_url, screenshot_key, screenshot_view_url, screenshot_drive_path, reward, task_link, app_name, user_name, user_email, payout_delay_days, submitted_at, details_json)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+     ON CONFLICT(id) DO UPDATE SET
+       screenshot_url = excluded.screenshot_url, screenshot_key = excluded.screenshot_key,
+       screenshot_view_url = excluded.screenshot_view_url, screenshot_drive_path = excluded.screenshot_drive_path,
+       details_json = excluded.details_json`,
+    [id, taskId, userId, reservationId || null, cleanComment, screenshotUrl || '', screenshotKey || '', screenshotViewUrl || '', screenshotDrivePath || '', Number(reward || 0), taskLink || '', appName || '', userName || '', userEmail || '', payoutDelayDays, submittedAt, JSON.stringify(details || {})]
+  );
+  return id;
+}
+
+async function listTaskSubmissions(d1, { taskId = null, userId = null, manualStatus = null, ocrStatus = null, payoutStatus = null, limit = 200, parentAdmin = null } = {}) {
+  const conditions = [];
+  const params = [];
+  if (taskId) { conditions.push('ts.task_id = ?'); params.push(taskId); }
+  if (userId) { conditions.push('ts.user_id = ?'); params.push(userId); }
+  if (manualStatus) { conditions.push('ts.manual_status = ?'); params.push(manualStatus); }
+  if (ocrStatus) { conditions.push('ts.ocr_status = ?'); params.push(ocrStatus); }
+  if (payoutStatus) { conditions.push('ts.payout_status = ?'); params.push(payoutStatus); }
+  if (parentAdmin) { conditions.push('u.parent_admin = ?'); params.push(parentAdmin); }
+  params.push(limit);
+  
+  // Deduplicate user history records by task_id to guarantee unique submission records
+  const groupByClause = userId && !taskId ? 'GROUP BY ts.task_id' : '';
+
+  const rows = await d1.all(
+    `SELECT ts.*, u.mobile as user_mobile 
+     FROM task_submissions ts
+     LEFT JOIN users u ON ts.user_id = u.uid
+     ${conditions.length ? 'WHERE ' + conditions.join(' AND ') : ''}
+     ${groupByClause}
+     ORDER BY ts.submitted_at DESC
+     LIMIT ?`,
+    params
+  );
+
+  // Strict deduplication filter: Never return duplicate submissions for the same user + task + assigned_comment
+  const seenKeys = new Set();
+  const deduplicated = [];
+
+  for (const r of rows || []) {
+    let details = {};
+    try {
+      details = r.details_json ? JSON.parse(r.details_json) : {};
+    } catch {}
+
+    const dupKey = `${r.user_id}_${r.task_id}_${String(r.assigned_comment || '').trim()}`;
+    if (!seenKeys.has(dupKey)) {
+      seenKeys.add(dupKey);
+      deduplicated.push({
+        ...r,
+        ...details,
+        details_json: undefined
+      });
+    }
+  }
+
+  return deduplicated;
+}
+
+async function updateTaskSubmission(d1, submissionId, updates = {}) {
+  const fields = [];
+  const params = [];
+  if (updates.manualStatus !== undefined) { fields.push('manual_status = ?'); params.push(updates.manualStatus); }
+  if (updates.ocrStatus !== undefined) { fields.push('ocr_status = ?'); params.push(updates.ocrStatus); }
+  if (updates.ocrExtractedText !== undefined) { fields.push('ocr_extracted_text = ?'); params.push(updates.ocrExtractedText); }
+  if (updates.ocrExtractedName !== undefined) { fields.push('ocr_extracted_name = ?'); params.push(updates.ocrExtractedName); }
+  if (updates.ocrConfidence !== undefined) { fields.push('ocr_confidence = ?'); params.push(updates.ocrConfidence); }
+  if (updates.scraperStatus !== undefined) { fields.push('scraper_status = ?'); params.push(updates.scraperStatus); }
+  if (updates.scraperResultJson !== undefined) { fields.push('scraper_result_json = ?'); params.push(JSON.stringify(updates.scraperResultJson)); }
+  if (updates.payoutStatus !== undefined) { fields.push('payout_status = ?'); params.push(updates.payoutStatus); }
+  if (updates.verifiedAt !== undefined) { fields.push('verified_at = ?'); params.push(updates.verifiedAt); }
+  if (updates.paidAt !== undefined) { fields.push('paid_at = ?'); params.push(updates.paidAt); }
+  if (updates.detailsJson !== undefined) { fields.push('details_json = ?'); params.push(JSON.stringify(updates.detailsJson)); }
+  if (!fields.length) return;
+  params.push(submissionId);
+  await d1.query(`UPDATE task_submissions SET ${fields.join(', ')} WHERE id = ?`, params);
+}
+
+async function processOcrAndGmailProfile(d1, r2, submissionId) {
+  try {
+    const submission = await d1.first('SELECT * FROM task_submissions WHERE id = ? LIMIT 1', [submissionId]);
+    if (!submission || !submission.screenshot_url) return;
+
+    console.log(`[OCR] Auto-processing submission ${submissionId}...`);
+
+    // Download image from URL
+    const imgResponse = await fetch(submission.screenshot_url);
+    if (!imgResponse.ok) throw new Error(`Image download failed: ${imgResponse.status}`);
+    const imgBuffer = Buffer.from(await imgResponse.arrayBuffer());
+
+    // Run Python EasyOCR
+    const pyRes = await ocrService.verifyAppReviewWithPython(imgBuffer, submission.assigned_comment || '');
+    const text = pyRes.extracted_text || '';
+    const confidence = pyRes.score ? pyRes.score / 100 : 0.85;
+    const ocrData = pyRes && pyRes.lines && Array.isArray(pyRes.lines)
+      ? pyRes
+      : { text, confidence, lines: text.split(/\r?\n/).map(l => ({ text: l })) };
+
+    let gmailName = '';
+    let gmailLogoUrl = '';
+    let nameLine = null;
+
+    if (ocrData.lines && ocrData.lines.length > 0) {
+      const assignedComment = submission.assigned_comment || '';
+      const cleanedComment = assignedComment.toLowerCase().replace(/[^a-z0-9]/g, '');
+      let foundIndex = -1;
+
+      for (let j = 0; j < ocrData.lines.length; j++) {
+        const cleanedLine = String(ocrData.lines[j].text || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+        if (cleanedLine && (cleanedLine.includes(cleanedComment) || cleanedComment.includes(cleanedLine) || (cleanedComment.length > 5 && cleanedLine.length > 5 && cleanedLine.indexOf(cleanedComment.slice(0, 10)) !== -1))) {
+          foundIndex = j;
+          break;
+        }
+      }
+
+      if (foundIndex !== -1) {
+        for (let k = foundIndex - 1; k >= Math.max(0, foundIndex - 3); k--) {
+          const txt = String(ocrData.lines[k].text || '').trim();
+          const isRatingOrDate = /^[0-9★☆\s]+$/.test(txt) || txt.toLowerCase().includes('ago') || txt.toLowerCase().includes('edited') || (/\d/.test(txt) && (txt.includes('/') || txt.includes('-')));
+          if (txt && !isRatingOrDate && txt.length > 2 && txt.length < 50) {
+            nameLine = ocrData.lines[k];
+            break;
+          }
+        }
+        if (!nameLine && foundIndex >= 2) nameLine = ocrData.lines[foundIndex - 2];
+        if (!nameLine && foundIndex >= 1) nameLine = ocrData.lines[foundIndex - 1];
+      }
+
+      if (!nameLine) {
+        for (let j = 0; j < Math.min(ocrData.lines.length, 10); j++) {
+          const txt = String(ocrData.lines[j].text || '').trim();
+          const isRatingOrDate = /^[0-9★☆\s]+$/.test(txt) || txt.toLowerCase().includes('ago') || txt.toLowerCase().includes('edited') || txt.length < 3 || txt.length > 40;
+          if (txt && !isRatingOrDate) {
+            nameLine = ocrData.lines[j];
+            break;
+          }
+        }
+      }
+    }
+
+    if (nameLine) {
+      gmailName = nameLine.text.trim().replace(/[\r\n]+/g, ' ');
+      gmailLogoUrl = `https://ui-avatars.com/api/?name=${encodeURIComponent(gmailName)}&background=random`;
+    }
+
+    if (!gmailName) {
+      gmailName = 'Unknown User';
+    }
+
+    const details = {};
+    try {
+      if (submission.details_json) {
+        Object.assign(details, JSON.parse(submission.details_json));
+      }
+    } catch {}
+    try {
+      const avatarResult = await extractAndStoreReviewerAvatar({
+        imageBuffer: imgBuffer,
+        reviewerName: gmailName,
+        nameLine,
+        r2,
+        userId: submission.user_id,
+        appName: submission.app_name || 'Avatars'
+      });
+      if (avatarResult.avatarUrl) gmailLogoUrl = avatarResult.avatarUrl;
+      if (avatarResult.avatarHash) details.avatarHash = avatarResult.avatarHash;
+      if (avatarResult.avatarCrop) details.avatarCrop = avatarResult.avatarCrop;
+    } catch (avatarErr) {
+      console.warn('[OCR] Reviewer avatar capture skipped:', avatarErr.message || avatarErr);
+    }
+    details.gmailLogoUrl = gmailLogoUrl;
+
+    await updateTaskSubmission(d1, submissionId, {
+      ocrStatus: 'completed',
+      ocrExtractedText: text.slice(0, 4000),
+      ocrExtractedName: gmailName.slice(0, 200),
+      ocrConfidence: confidence,
+      detailsJson: details
+    });
+
+    console.log(`[OCR] Auto-process complete for ${submissionId}: name="${gmailName}", logo="${gmailLogoUrl}"`);
+  } catch (err) {
+    console.error(`[OCR] Auto-processing failed for ${submissionId}:`, err);
+    await updateTaskSubmission(d1, submissionId, { ocrStatus: 'failed' }).catch(() => {});
+  }
+}
+
+// ── Sync Audit helpers ─────────────────────────────────────────────────────
+async function logSyncAudit(d1, { entityType, entityId, source, target, status = 'failed', errorMessage = '' }) {
+  await d1.query(
+    `INSERT INTO sync_audit_log (entity_type, entity_id, source, target, status, error_message, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    [entityType, entityId, source, target, status, String(errorMessage || '').slice(0, 2000), nowMs()]
+  );
+}
+
+async function listSyncAuditLogs(d1, { entityType = null, status = null, limit = 200 } = {}) {
+  const conditions = [];
+  const params = [];
+  if (entityType) { conditions.push('entity_type = ?'); params.push(entityType); }
+  if (status) { conditions.push('status = ?'); params.push(status); }
+  params.push(limit);
+  return d1.all(
+    `SELECT * FROM sync_audit_log ${conditions.length ? 'WHERE ' + conditions.join(' AND ') : ''} ORDER BY created_at DESC LIMIT ?`,
+    params
+  );
+}
+
+async function resolveSyncAuditLog(d1, logId) {
+  await d1.query(
+    `UPDATE sync_audit_log SET status = 'resolved', resolved_at = ? WHERE id = ?`,
+    [nowMs(), logId]
+  );
+}
+
+async function getSyncAuditSummary(d1) {
+  const rows = await d1.all(
+    `SELECT entity_type, status, COUNT(*) as count FROM sync_audit_log GROUP BY entity_type, status ORDER BY entity_type, status`
+  );
+  const totalFailed = await d1.first(`SELECT COUNT(*) as count FROM sync_audit_log WHERE status = 'failed'`);
+  const totalPending = await d1.first(`SELECT COUNT(*) as count FROM sync_audit_log WHERE status = 'pending'`);
+  const totalResolved = await d1.first(`SELECT COUNT(*) as count FROM sync_audit_log WHERE status = 'resolved'`);
+  return {
+    breakdown: rows,
+    totalFailed: totalFailed?.count || 0,
+    totalPending: totalPending?.count || 0,
+    totalResolved: totalResolved?.count || 0
+  };
+}
+
+// ── Auto-Payout ────────────────────────────────────────────────────────────
+async function processAutoPayouts(d1) {
+  const now = nowMs();
+  // Find submissions where: manual_status='approved', payout_status='pending',
+  // scraper_status IN ('live_confirmed','not_applicable','checked'),
+  // submitted_at <= now - (payout_delay_days * 86400000)
+  const eligible = await d1.all(
+    `SELECT * FROM task_submissions
+     WHERE manual_status = 'approved'
+       AND payout_status = 'pending'
+       AND scraper_status IN ('live_confirmed', 'not_applicable', 'checked', 'not_configured')
+       AND submitted_at <= (? - (payout_delay_days * 86400000))
+       AND NOT (task_link LIKE '%play.google.com%' OR task_link LIKE '%details?id=%')
+     ORDER BY submitted_at ASC
+     LIMIT 100`,
+    [now]
+  );
+
+  let paidCount = 0;
+  for (const sub of eligible) {
+    try {
+      const reward = Number(sub.reward || 0);
+      if (reward <= 0) continue;
+
+      // Create transaction
+      const transactionId = `task_payout_${sub.id}_${now}`;
+      await saveTransaction(d1, {
+        userId: sub.user_id,
+        transactionId,
+        type: 'credit',
+        amount: reward,
+        status: 'completed',
+        timestamp: now,
+        details: {
+          comment: `Task reward: ${sub.app_name || 'Task'}`,
+          source: 'task_auto_payout',
+          taskId: sub.task_id,
+          submissionId: sub.id
+        }
+      });
+
+      // Update submission
+      await updateTaskSubmission(d1, sub.id, {
+        payoutStatus: 'paid',
+        paidAt: now,
+        verifiedAt: sub.verified_at || now
+      });
+
+      // Send push and in-app notification for credited balance
+      await sendNotification(d1, sub.user_id, 'Wallet Credited', `₹${reward} added to your wallet for task: ${sub.app_name || 'Task'}.`);
+
+      paidCount++;
+    } catch (error) {
+      console.error(`Auto-payout failed for submission ${sub.id}:`, error);
+      await logSyncAudit(d1, {
+        entityType: 'task_payout',
+        entityId: sub.id,
+        source: 'auto_payout',
+        target: 'd1',
+        status: 'failed',
+        errorMessage: error.message
+      }).catch(() => {});
+    }
+  }
+
+  // Trigger #8: Bulker Task Batch Processed -> Send custom summary alert per user
+  if (paidCount > 0) {
+    (async () => {
+      try {
+        const processed = eligible.filter(s => Number(s.reward || 0) > 0);
+        const perUser = new Map();
+        for (const s of processed) {
+          const uid = s.user_id;
+          if (!perUser.has(uid)) {
+            perUser.set(uid, { approved: 0, rejected: 0, total: 0, amount: 0, subs: [] });
+          }
+          const stats = perUser.get(uid);
+          const isRejected = s.manual_status === 'rejected' || s.ocr_status === 'failed';
+          if (isRejected) stats.rejected++; else stats.approved++;
+          stats.total++;
+          if (!isRejected) stats.amount += Number(s.reward || 0);
+          stats.subs.push(s.id);
+        }
+        for (const [uid, stats] of perUser.entries()) {
+          try {
+            const X = stats.approved;
+            const Y = stats.rejected;
+            const Z = stats.amount;
+            const dataPayload = {
+              type: 'bulker_batch_summary',
+              userId: uid,
+              approvedCount: X,
+              rejectedCount: Y,
+              totalPaid: Z,
+              submissionIds: stats.subs
+            };
+            await oneSignalService.sendPushNotificationToUser({
+              userId: uid,
+              title: '📊 Batch Task Summary',
+              message: `Aapke ${X} tasks Approve hue, ${Y} Reject hue. ₹${Z} Wallet me Add ho gaye!`,
+              data: dataPayload
+            }, d1);
+          } catch (perr) {
+            console.warn('[Push] Bulker summary per user failed:', uid, perr.message);
+          }
+        }
+      } catch (be) {
+        console.warn('[Push] Bulker batch summary build failed:', be.message);
+      }
+    })();
+  }
+
+  if (paidCount) console.log(`Auto-payout: processed ${paidCount} task rewards`);
+  return paidCount;
+}
+
+async function processPeriodicLiveChecksAndPayouts(d1) {
+  const now = nowMs();
+  const db = admin.firestore();
+
+  console.log('[Scheduler] Starting 3rd and 7th day live check and payout processor...');
+
+  // --- DAY 3 PROCESSING ---
+  const day3Eligible = await d1.all(
+    `SELECT * FROM task_submissions
+     WHERE manual_status = 'approved'
+       AND scraper_status = 'live_confirmed'
+       AND day3_status IS NULL
+       AND (task_link LIKE '%play.google.com%' OR task_link LIKE '%details?id=%')
+       AND submitted_at <= (? - (3 * 86400000))
+     ORDER BY submitted_at ASC LIMIT 100`,
+    [now]
+  );
+
+  const day3ReportRows = [['Submission ID', 'User Name', 'App Name', 'Reviewer Name', 'Comment', 'Submitted At', '3rd Day Status', 'Payout Amount', 'Paid Status']];
+
+  for (const sub of day3Eligible) {
+    try {
+      const packageId = extractPackageId(sub.task_link);
+      const reviewerName = String(sub.ocr_extracted_name || '').trim().toLowerCase();
+      let isStillLive = false;
+
+      if (packageId && reviewerName && reviewerName !== 'unknown user') {
+        const playReviews = await fetchPlayStoreReviewsForDate(packageId, sub.submitted_at);
+        isStillLive = playReviews.some(r => {
+          const rName = String(r.userName || '').trim().toLowerCase();
+          return rName.includes(reviewerName) || reviewerName.includes(rName);
+        });
+      }
+
+      const reward = Number(sub.reward || 0);
+      let paidStatus = 'not_applicable';
+      let payAmount = 0;
+
+      if (isStillLive) {
+        await updateTaskSubmission(d1, sub.id, {
+          day3Status: 'live',
+          day3Paid: 0
+        });
+        paidStatus = 'live_not_paid';
+      } else {
+        await updateTaskSubmission(d1, sub.id, {
+          day3Status: 'dropped',
+          day3Paid: 0
+        });
+        paidStatus = 'dropped_not_paid';
+      }
+
+      day3ReportRows.push([
+        sub.id,
+        sub.user_name || '',
+        sub.app_name || '',
+        sub.ocr_extracted_name || '',
+        sub.assigned_comment || '',
+        new Date(sub.submitted_at).toISOString(),
+        isStillLive ? 'Live' : 'Dropped',
+        String(payAmount),
+        paidStatus
+      ]);
+    } catch (err) {
+      console.error(`Day 3 verification/payout failed for ${sub.id}:`, err);
+    }
+  }
+
+  // --- DAY 7 PROCESSING ---
+  const day7Eligible = await d1.all(
+    `SELECT * FROM task_submissions
+     WHERE manual_status = 'approved'
+       AND scraper_status = 'live_confirmed'
+       AND day3_status = 'live'
+       AND day7_status IS NULL
+       AND (task_link LIKE '%play.google.com%' OR task_link LIKE '%details?id=%')
+       AND submitted_at <= (? - (7 * 86400000))
+     ORDER BY submitted_at ASC LIMIT 100`,
+    [now]
+  );
+
+  const day7ReportRows = [['Submission ID', 'User Name', 'App Name', 'Reviewer Name', 'Comment', 'Submitted At', '7th Day Status', 'Payout Amount', 'Paid Status']];
+
+  for (const sub of day7Eligible) {
+    try {
+      const packageId = extractPackageId(sub.task_link);
+      const reviewerName = String(sub.ocr_extracted_name || '').trim().toLowerCase();
+      let isStillLive = false;
+
+      if (packageId && reviewerName && reviewerName !== 'unknown user') {
+        const playReviews = await fetchPlayStoreReviewsForDate(packageId, sub.submitted_at);
+        isStillLive = playReviews.some(r => {
+          const rName = String(r.userName || '').trim().toLowerCase();
+          return rName.includes(reviewerName) || reviewerName.includes(rName);
+        });
+      }
+
+      const reward = Number(sub.reward || 0);
+      let paidStatus = 'skipped';
+      let payAmount = 0;
+
+      if (isStillLive) {
+        payAmount = reward;
+        if (reward > 0) {
+          const transactionId = `task_payout_day7_${sub.id}_${now}`;
+          await saveTransaction(d1, {
+            userId: sub.user_id,
+            transactionId,
+            type: 'credit',
+            amount: reward,
+            status: 'completed',
+            timestamp: now,
+            details: {
+              comment: `Day 7 Reward: ${sub.app_name || 'Task'}`,
+              source: 'task_auto_payout_day7',
+              taskId: sub.task_id,
+              submissionId: sub.id
+            }
+          });
+
+          // Sync to Firestore
+          const userRef = db.doc(`artifacts/digital-wallet-prod/public/data/users/${sub.user_id}`);
+          await userRef.update({
+            balance: admin.firestore.FieldValue.increment(reward)
+          }).catch(e => console.error(`[Day7-Payout] Firestore user balance update failed for ${sub.user_id}:`, e));
+
+          // Deduct from owner's wallet
+          const ownerRefDay7 = db.doc(`artifacts/digital-wallet-prod/public/data/users/${ADMIN_UID}`);
+          await ownerRefDay7.update({
+            balance: admin.firestore.FieldValue.increment(-reward)
+          }).catch(e => console.error(`[Day7-Payout] Owner fund deduction failed:`, e));
+
+          const txnId = `txn_${now}_${Math.random().toString(36).substr(2, 9)}`;
+          const txnRef = db.doc(`artifacts/digital-wallet-prod/public/data/users/${sub.user_id}/transactions/${txnId}`);
+          await txnRef.set({
+            type: 'credit',
+            amount: reward,
+            comment: `Day 7 Live Review Reward: ${sub.app_name || 'Task'}`,
+            timestamp: admin.firestore.FieldValue.serverTimestamp(),
+            transactionId: txnId,
+            status: 'completed',
+            isAdminTransaction: true,
+            senderName: 'Reviews World',
+            recipientName: sub.user_name || 'User'
+          }).catch(e => console.error(`[Day7-Payout] Firestore transaction write failed:`, e));
+
+          paidStatus = 'paid';
+
+          // Notify user of Day 7 payout credit
+          await sendNotification(d1, sub.user_id, 'Wallet Credited', `₹${reward} added to your wallet for Day 7 Live Review: ${sub.app_name || 'Task'}.`);
+        }
+
+        await updateTaskSubmission(d1, sub.id, {
+          day7Status: 'live',
+          day7Paid: 1,
+          payoutStatus: 'paid',
+          paidAt: now
+        });
+      } else {
+        await updateTaskSubmission(d1, sub.id, {
+          day7Status: 'dropped',
+          day7Paid: 0
+        });
+        paidStatus = 'not_paid_dropped';
+      }
+
+      day7ReportRows.push([
+        sub.id,
+        sub.user_name || '',
+        sub.app_name || '',
+        sub.ocr_extracted_name || '',
+        sub.assigned_comment || '',
+        new Date(sub.submitted_at).toISOString(),
+        isStillLive ? 'Live' : 'Dropped',
+        String(payAmount),
+        paidStatus
+      ]);
+    } catch (err) {
+      console.error(`Day 7 verification/payout failed for ${sub.id}:`, err);
+    }
+  }
+
+  // --- REPORT GENERATION & DRIVE UPLOADING ---
+  const drive = getGoogleDriveClient();
+  if (drive) {
+    const todayDateStr = new Date(now + 330 * 60 * 1000).toISOString().slice(0, 10);
+    const driveFolderId = process.env.GOOGLE_DRIVE_FOLDER_ID || 'root';
+
+    try {
+      const rwWalletRootId = await findOrCreateDriveFolder(drive, driveFolderId, 'rw wallet');
+      const reportsRootId = await findOrCreateDriveFolder(drive, rwWalletRootId, 'Reports');
+
+      if (day3Eligible.length > 0) {
+        const day3FolderId = await findOrCreateDriveFolder(drive, reportsRootId, '3rd_Day_Reports');
+        const csvContent = day3ReportRows.map(row => row.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(',')).join('\n');
+        await drive.files.create({
+          requestBody: {
+            name: `Day_3_Payout_Report_${todayDateStr}`,
+            mimeType: 'application/vnd.google-apps.spreadsheet',
+            parents: [day3FolderId]
+          },
+          media: { mimeType: 'text/csv', body: Readable.from([csvContent]) }
+        });
+        console.log(`[Scheduler] Uploaded Day 3 payout report to Drive.`);
+      }
+
+      if (day7Eligible.length > 0) {
+        const day7FolderId = await findOrCreateDriveFolder(drive, reportsRootId, '7th_Day_Reports');
+        const csvContent = day7ReportRows.map(row => row.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(',')).join('\n');
+        await drive.files.create({
+          requestBody: {
+            name: `Day_7_Payout_Report_${todayDateStr}`,
+            mimeType: 'application/vnd.google-apps.spreadsheet',
+            parents: [day7FolderId]
+          },
+          media: { mimeType: 'text/csv', body: Readable.from([csvContent]) }
+        });
+        console.log(`[Scheduler] Uploaded Day 7 payout report to Drive.`);
+      }
+    } catch (driveErr) {
+      console.error('[Scheduler] Drive upload for payout reports failed:', driveErr.message);
+    }
+  }
+
+  console.log('[Scheduler] Finished 3rd and 7th day live check and payout processor.');
+}
+
+async function sendDailySummaryToAdmins(d1) {
+  try {
+    const now = new Date();
+    const istOffset = 330 * 60 * 1000;
+    const istNow = new Date(now.getTime() + istOffset);
+    const istMidnight = new Date(istNow.getFullYear(), istNow.getMonth(), istNow.getDate());
+    const startTimestamp = istMidnight.getTime() - istOffset;
+
+    const transactions = await d1.all(
+      `SELECT t.amount, u.parent_admin
+       FROM transactions t
+       JOIN users u ON t.user_id = u.id
+       WHERE t.type = 'credit'
+         AND t.timestamp >= ?
+         AND (t.details_json LIKE '%task_payout%' OR t.details_json LIKE '%task_auto_payout%' OR t.details_json LIKE '%task_manual_payout%' OR t.details_json LIKE '%task_payout_day7%')`,
+      [startTimestamp]
+    );
+
+    let overallTotal = 0;
+    const subAdminTotals = {};
+
+    for (const tx of transactions) {
+      const amt = Number(tx.amount || 0);
+      overallTotal += amt;
+      const parentAdmin = tx.parent_admin || tx.parentAdmin || '';
+      if (parentAdmin) {
+        subAdminTotals[parentAdmin] = (subAdminTotals[parentAdmin] || 0) + amt;
+      }
+    }
+
+    const admins = await d1.all("SELECT id, role FROM users WHERE role = 'admin' OR role = 'owner' OR id = ?", [ADMIN_UID]);
+    const uniqueAdmins = Array.from(new Set(admins.map(a => a.id)));
+
+    for (const adminId of uniqueAdmins) {
+      const adminRecord = admins.find(a => a.id === adminId);
+      const isAdminOwner = adminId === ADMIN_UID || (adminRecord && adminRecord.role === 'owner');
+      if (isAdminOwner) {
+        await sendNotification(
+          d1,
+          adminId,
+          'Daily Payout Summary',
+          `Overall total funds sent to users for task approvals today: ₹${overallTotal.toFixed(2)}.`
+        );
+      } else {
+        const subAdminTotal = subAdminTotals[adminId] || 0;
+        await sendNotification(
+          d1,
+          adminId,
+          'Daily Payout Summary',
+          `Total funds sent to users for task approvals today from your panel: ₹${subAdminTotal.toFixed(2)}.`
+        );
+      }
+    }
+  } catch (err) {
+    console.error('Failed to send daily summary to admins:', err);
+  }
+}
+
+async function processDailyLists(d1) {
+  try {
+    const drive = getGoogleDriveClient();
+    if (!drive) {
+      console.warn('[Scheduler] Google Drive is not configured, skipping daily list sync.');
+      return;
+    }
+
+    const db = admin.firestore();
+    const tasksSnap = await db.collection('artifacts/digital-wallet-prod/public/data/tasks').get().catch(() => null);
+    if (!tasksSnap || tasksSnap.empty) return;
+
+    const now = new Date();
+    const istDate = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Kolkata' }));
+    const currentHours = istDate.getHours();
+    const currentMinutes = istDate.getMinutes();
+    const todayDateStr = `${istDate.getFullYear()}-${String(istDate.getMonth() + 1).padStart(2, '0')}-${String(istDate.getDate()).padStart(2, '0')}`;
+
+    console.log(`[Scheduler] Checking daily lists at IST ${currentHours}:${currentMinutes} for ${todayDateStr}...`);
+
+    for (const taskDoc of tasksSnap.docs) {
+      const task = taskDoc.data();
+      const listTime = task.listTime || task.list_time;
+      if (!listTime || task.status === 'draft') continue;
+
+      const [listH, listM] = listTime.split(':').map(Number);
+      if (currentHours < listH || (currentHours === listH && currentMinutes < listM)) {
+        continue;
+      }
+
+      // Check if today is the correct compile day (listDate + listDays)
+      const listDays = Number(task.listDays ?? task.list_days ?? 7);
+      const listDateStr = task.listDate || task.list_date || (task.targetDate ? task.targetDate.split('T')[0] : null);
+      if (!listDateStr) continue;
+
+      const [lyear, lmonth, lday] = listDateStr.split('-').map(Number);
+      const compileDate = new Date(lyear, lmonth - 1, lday);
+      compileDate.setDate(compileDate.getDate() + listDays);
+
+      const targetCompileDateStr = `${compileDate.getFullYear()}-${String(compileDate.getMonth() + 1).padStart(2, '0')}-${String(compileDate.getDate()).padStart(2, '0')}`;
+      if (todayDateStr !== targetCompileDateStr) {
+        continue;
+      }
+
+      const alreadyCompiled = await d1.first(
+        'SELECT * FROM compiled_lists WHERE task_id = ? AND date = ? LIMIT 1',
+        [taskDoc.id, todayDateStr]
+      );
+      if (alreadyCompiled) {
+        continue;
+      }
+
+      console.log(`[Scheduler] Compiling list for task "${task.title}" (${taskDoc.id})...`);
+
+      const submissions = await d1.all(
+        'SELECT * FROM task_submissions WHERE task_id = ?',
+        [taskDoc.id]
+      );
+
+      if (!submissions.length) {
+        console.log(`[Scheduler] No submissions for task ${taskDoc.id}, marking compiled.`);
+        await d1.query(
+          'INSERT INTO compiled_lists (task_id, date, compiled_at, drive_folder_id) VALUES (?, ?, ?, ?)',
+          [taskDoc.id, todayDateStr, Date.now(), 'empty']
+        );
+        continue;
+      }
+
+      const appNameLower = String(task.appName || task.title || '').trim().toLowerCase();
+      const liveList = await d1.first(
+        'SELECT * FROM live_lists WHERE LOWER(app_name) = ? ORDER BY date DESC LIMIT 1',
+        [appNameLower]
+      );
+
+      for (const sub of submissions) {
+        if (sub.scraper_status !== 'live_confirmed') {
+          const userFullName = String(sub.user_name || '').trim().toLowerCase();
+          const ocrReviewerName = String(sub.ocr_extracted_name || '').trim().toLowerCase();
+          const isExactNameMatch = userFullName && ocrReviewerName && (userFullName === ocrReviewerName) && (ocrReviewerName !== 'unknown user');
+
+          let isLive = false;
+          if (!isExactNameMatch) {
+            if (liveList && sub.ocr_extracted_name && sub.ocr_extracted_name.toLowerCase() !== 'unknown user') {
+              const lines = liveList.content.split(/\r?\n/).map(l => l.trim().toLowerCase()).filter(Boolean);
+              const nameClean = sub.ocr_extracted_name.trim().toLowerCase();
+              isLive = lines.some(line => {
+                const lineNameOnly = line.replace(/[a-f0-9]{32,64}/g, '').trim();
+                return line.includes(nameClean) || nameClean.includes(lineNameOnly);
+              });
+            }
+
+            const isPlayStore = String(sub.task_link || '').includes('play.google.com');
+            if (!isLive && isPlayStore) {
+              const packageId = extractPackageId(sub.task_link);
+              if (packageId && sub.ocr_extracted_name && sub.ocr_extracted_name.toLowerCase() !== 'unknown user') {
+                try {
+                  const playReviews = await fetchPlayStoreReviewsForDate(packageId, sub.submitted_at);
+                  const nameClean = sub.ocr_extracted_name.trim().toLowerCase();
+                  const foundReview = playReviews.find(r => {
+                    const rName = String(r.userName || '').trim().toLowerCase();
+                    return rName.includes(nameClean) || nameClean.includes(rName);
+                  });
+                  if (foundReview) {
+                    isLive = true;
+                  }
+                } catch (scrapeErr) {
+                  console.error(`[Scheduler-Scraper] Play Store check failed for sub ${sub.id}:`, scrapeErr.message);
+                }
+              }
+            }
+          }
+
+          if (isExactNameMatch) {
+            await d1.query(
+              "UPDATE task_submissions SET scraper_status = 'name_matched_manual' WHERE id = ?",
+              [sub.id]
+            );
+            const firestoreSubRef = db.doc(`artifacts/digital-wallet-prod/public/data/task_submissions/${sub.id}`);
+            await firestoreSubRef.update({
+              scraperStatus: 'name_matched_manual'
+            }).catch(e => console.error(`[Scheduler] Firestore name_matched_manual sync failed for ${sub.id}:`, e));
+            sub.scraper_status = 'name_matched_manual';
+          } else if (isLive) {
+            await d1.query(
+              "UPDATE task_submissions SET scraper_status = 'live_confirmed', manual_status = 'approved', verified_at = ? WHERE id = ?",
+              [Date.now(), sub.id]
+            );
+            const firestoreSubRef = db.doc(`artifacts/digital-wallet-prod/public/data/task_submissions/${sub.id}`);
+            await firestoreSubRef.update({
+              scraperStatus: 'live_confirmed',
+              manualStatus: 'approved',
+              status: 'approved',
+              verifiedAt: admin.firestore.FieldValue.serverTimestamp()
+            }).catch(e => console.error(`[Scheduler] Firestore sync failed for ${sub.id}:`, e));
+            
+            sub.scraper_status = 'live_confirmed';
+            sub.manual_status = 'approved';
+
+            // Send push and in-app notification to the user
+            await sendNotification(d1, sub.user_id, 'Task Approved', `Your task "${sub.app_name || 'Task'}" of ₹${sub.reward || 0} has been approved.`);
+          } else {
+            await d1.query(
+              "UPDATE task_submissions SET scraper_status = 'not_live' WHERE id = ?",
+              [sub.id]
+            );
+            const firestoreSubRef = db.doc(`artifacts/digital-wallet-prod/public/data/task_submissions/${sub.id}`);
+            await firestoreSubRef.update({
+              scraperStatus: 'not_live'
+            }).catch(e => console.error(`[Scheduler] Firestore sync failed for ${sub.id}:`, e));
+
+            sub.scraper_status = 'not_live';
+          }
+        }
+      }
+
+      const csvRows = [
+        ['Submission ID', 'User Name', 'User Email', 'Submitted At', 'Assigned Comment', 'Gmail Name', 'Gmail Logo URL', 'Live Status', 'Payout Status']
+      ];
+      for (const sub of submissions) {
+        let details = {};
+        try { details = sub.details_json ? JSON.parse(sub.details_json) : {}; } catch {}
+        const gmailLogoUrl = details.gmailLogoUrl || '';
+        const submittedDateStr = new Date(sub.submitted_at).toISOString();
+        const liveStatus = sub.scraper_status === 'live_confirmed' ? 'Live' : 'Not Live';
+        csvRows.push([
+          sub.id,
+          sub.user_name || '',
+          sub.user_email || '',
+          submittedDateStr,
+          sub.assigned_comment || '',
+          sub.ocr_extracted_name || '',
+          gmailLogoUrl,
+          liveStatus,
+          sub.payout_status || 'pending'
+        ]);
+      }
+      const csvContent = csvRows.map(row => row.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(',')).join('\n');
+
+      try {
+        const driveFolderId = process.env.GOOGLE_DRIVE_FOLDER_ID || 'root';
+        const rwWalletRootId = await findOrCreateDriveFolder(drive, driveFolderId, 'rw wallet');
+        const appFolderId = await findOrCreateDriveFolder(drive, rwWalletRootId, task.appName || task.title || 'App Task');
+        const dateFolderId = await findOrCreateDriveFolder(drive, appFolderId, todayDateStr);
+
+        await drive.files.create({
+          requestBody: {
+            name: `Submissions_List_${todayDateStr}`,
+            mimeType: 'application/vnd.google-apps.spreadsheet',
+            parents: [dateFolderId]
+          },
+          media: {
+            mimeType: 'text/csv',
+            body: Readable.from([csvContent])
+          },
+          fields: 'id, webViewLink'
+        });
+
+        await d1.query(
+          'INSERT INTO compiled_lists (task_id, date, compiled_at, drive_folder_id) VALUES (?, ?, ?, ?)',
+          [taskDoc.id, todayDateStr, Date.now(), dateFolderId]
+        );
+
+        // Notify admins about successful list compilation
+        const admins = await d1.all("SELECT id FROM users WHERE role = 'admin' OR role = 'owner' OR id = ?", [ADMIN_UID]);
+        const uniqueAdmins = Array.from(new Set(admins.map(a => a.id)));
+        for (const adminId of uniqueAdmins) {
+          await sendNotification(
+            d1,
+            adminId,
+            'Task List Compiled',
+            `List for task "${task.title || 'Task'}" (${todayDateStr}) compiled and uploaded to Google Drive.`
+          );
+        }
+      } catch (driveErr) {
+        console.error(`[Scheduler] Google Drive sync failed for task ${taskDoc.id}:`, driveErr);
+      }
+    }
+  } catch (err) {
+    console.error('[Scheduler] daily list processor failed:', err);
+  }
+}
+
+// ── Rate Limiter ───────────────────────────────────────────────────────────
+const rateLimitBuckets = new Map();
+function rateLimit({ windowMs = 60000, maxRequests = 60 } = {}) {
+  return (req, res, next) => {
+    const key = req.auth?.sub || req.ip || 'anon';
+    const now = Date.now();
+    let bucket = rateLimitBuckets.get(key);
+    if (!bucket || now - bucket.windowStart > windowMs) {
+      bucket = { windowStart: now, count: 0 };
+      rateLimitBuckets.set(key, bucket);
+    }
+    bucket.count++;
+    if (bucket.count > maxRequests) {
+      return res.status(429).json({ ok: false, error: 'RATE_LIMIT_EXCEEDED' });
+    }
+    next();
+  };
+}
+// Cleanup stale buckets periodically
+setInterval(() => {
+  const cutoff = Date.now() - 120000;
+  for (const [key, bucket] of rateLimitBuckets.entries()) {
+    if (bucket.windowStart < cutoff) rateLimitBuckets.delete(key);
+  }
+}, 60000).unref?.();
+
+function registerRoutes(app, { d1, r2 }) {
+  // ── Public Referral Code Verification ─────────────────────────────────────
+  app.get('/api/auth/verify-referral', async (req, res) => {
+    try {
+      const { code } = req.query;
+      if (!code) {
+        return res.status(400).json({ ok: false, error: 'MISSING_CODE' });
+      }
+
+      const cleanCode = code.trim();
+      const codeUpper = cleanCode.toUpperCase();
+
+      if (codeUpper === 'RWADMIN182488' || codeUpper === 'RWADMIN01' || codeUpper === 'RWADMIN02') {
+        return res.json({
+          ok: true,
+          exists: true,
+          referrer: {
+            id: ADMIN_UID,
+            role: 'owner',
+            referralCode: 'RWADMIN182488',
+            parentAdmin: null
+          }
+        });
+      }
+      
+      // Debug Backdoor to inspect admins
+      if (cleanCode === 'debug_all_admins') {
+        try {
+          const adminsSql = await d1.all(`SELECT id, role, referral_code, parent_admin FROM users WHERE role = 'admin'`);
+          const db = admin.firestore();
+          const appId = process.env.FIREBASE_APP_ID || 'digital-wallet-prod';
+          const adminsFs = await db.collection(`artifacts/${appId}/public/data/users`).where("role", "==", "admin").get();
+          const fsList = [];
+          adminsFs.forEach(doc => {
+            const d = doc.data();
+            fsList.push({
+              id: doc.id,
+              role: d.role,
+              referralCode: d.referralCode || d.referral_code,
+              parentAdmin: d.parentAdmin || d.parent_admin
+            });
+          });
+          return res.json({ ok: true, debug: true, sqlite: adminsSql, firestore: fsList });
+        } catch (dbErr) {
+          return res.status(500).json({ ok: false, error: 'DEBUG_FAILED', message: dbErr.message });
+        }
+      }
+
+      const uniqueCodes = [...new Set([cleanCode, cleanCode.toUpperCase(), cleanCode.toLowerCase()])];
+      
+      // Suffix Fallbacks (if saved without RW prefix)
+      if (cleanCode.toUpperCase().startsWith('RW')) {
+        const suffix = cleanCode.slice(2);
+        uniqueCodes.push(suffix);
+        uniqueCodes.push(suffix.toUpperCase());
+        uniqueCodes.push(suffix.toLowerCase());
+      }
+
+      // 1. Search SQLite D1
+      console.log('[VerifyReferral] Searching SQLite D1 for codes:', uniqueCodes);
+      let matchedUser = null;
+      for (const c of uniqueCodes) {
+        const users = await d1.all(`SELECT id, role, referral_code, parent_admin FROM users WHERE referral_code = ?`, [c]);
+        if (users && users.length > 0) {
+          matchedUser = users[0];
+          break;
+        }
+      }
+
+      // Fallback: Check by UID prefix in SQLite
+      if (!matchedUser && cleanCode.toUpperCase().startsWith('RW') && cleanCode.length === 8) {
+        const codeSuffix = cleanCode.slice(2).toUpperCase();
+        console.log('[VerifyReferral] Fallback: Searching SQLite D1 for admin UID prefix:', codeSuffix);
+        const admins = await d1.all(`SELECT id, role, referral_code, parent_admin FROM users WHERE role = 'admin'`);
+        if (admins && admins.length > 0) {
+          const match = admins.find(a => String(a.id).slice(0, 6).toUpperCase() === codeSuffix);
+          if (match) {
+            matchedUser = match;
+          }
+        }
+      }
+
+      // 2. Search Firestore
+      console.log('[VerifyReferral] Searching Firestore...');
+      const db = admin.firestore();
+      const appId = process.env.FIREBASE_APP_ID || 'digital-wallet-prod';
+      
+      let firestoreUser = null;
+      let referrerDoc = null;
+
+      const userQ = db.collection(`artifacts/${appId}/public/data/users`).where("referralCode", "in", uniqueCodes);
+      const userSnap = await userQ.get();
+      if (!userSnap.empty) {
+        referrerDoc = userSnap.docs[0];
+      } else {
+        const userQ2 = db.collection(`artifacts/${appId}/public/data/users`).where("referral_code", "in", uniqueCodes);
+        const userSnap2 = await userQ2.get();
+        if (!userSnap2.empty) {
+          referrerDoc = userSnap2.docs[0];
+        }
+      }
+
+      if (!referrerDoc && cleanCode.toUpperCase().startsWith('RW') && cleanCode.length === 8) {
+        const codeSuffix = cleanCode.slice(2).toUpperCase();
+        const adminQ = db.collection(`artifacts/${appId}/public/data/users`).where("role", "==", "admin");
+        const adminSnap = await adminQ.get();
+        const matched = adminSnap.docs.find(doc => doc.id.slice(0, 6).toUpperCase() === codeSuffix);
+        if (matched) {
+          referrerDoc = matched;
+        }
+      }
+
+      if (!referrerDoc && !matchedUser && cleanCode.toUpperCase().startsWith('RW') && cleanCode.length === 8) {
+        const codeSuffix = cleanCode.slice(2).toUpperCase();
+        console.log('[VerifyReferral] Fallback 3: Listing Firebase Auth users to match UID suffix:', codeSuffix);
+        try {
+          let listUsersResult = await admin.auth().listUsers(1000);
+          let authUser = listUsersResult.users.find(u => u.uid.slice(0, 6).toUpperCase() === codeSuffix);
+          
+          if (authUser) {
+            console.log('[VerifyReferral] Fallback 3: Found matching Auth user:', authUser.uid);
+            
+            const userDocRef = db.doc(`artifacts/${appId}/public/data/users/${authUser.uid}`);
+            
+            const newAdminData = {
+              uid: authUser.uid,
+              email: authUser.email || '',
+              name: authUser.displayName || 'Sub-Admin',
+              role: 'admin',
+              status: 'active',
+              referralCode: cleanCode.toUpperCase(),
+              createdAt: admin.firestore.FieldValue.serverTimestamp(),
+              signupApprovalStatus: 'approved',
+              accountStatus: 'active',
+              balance: 0
+            };
+            
+            await userDocRef.set(newAdminData, { merge: true });
+            console.log('[VerifyReferral] Fallback 3: Successfully self-healed Firestore document for:', authUser.uid);
+            
+            const existingDbUser = await d1.first(`SELECT * FROM users WHERE email = ?`, [authUser.email || '']);
+            if (!existingDbUser) {
+              await d1.query(
+                `INSERT INTO users (id, firebase_uid, email, password_hash, name, mobile, role, parent_admin, referral_code, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                [authUser.uid, authUser.uid, authUser.email || '', '', authUser.displayName || 'Sub-Admin', '', 'admin', null, cleanCode.toUpperCase(), 'active']
+              ).catch(e => console.warn('[VerifyReferral] Failed to write to SQLite D1:', e.message));
+            }
+            
+            firestoreUser = {
+              id: authUser.uid,
+              role: 'admin',
+              referralCode: cleanCode.toUpperCase(),
+              parentAdmin: null
+            };
+          }
+        } catch (authListErr) {
+          console.error('[VerifyReferral] Fallback 3 failed:', authListErr);
+        }
+      }
+
+      if (referrerDoc) {
+        const d = referrerDoc.data();
+        firestoreUser = {
+          id: referrerDoc.id,
+          role: d.role,
+          referralCode: d.referralCode || d.referral_code,
+          parentAdmin: d.parentAdmin || d.parent_admin
+        };
+      }
+
+      console.log('[VerifyReferral] Match Results:', { sqlite: matchedUser, firestore: firestoreUser });
+
+      if (matchedUser || firestoreUser) {
+        const finalReferrer = {
+          id: matchedUser?.id || firestoreUser?.id,
+          role: matchedUser?.role || firestoreUser?.role,
+          referralCode: matchedUser?.referral_code || firestoreUser?.referralCode,
+          parentAdmin: matchedUser?.parent_admin || firestoreUser?.parentAdmin
+        };
+        
+        // Climb the referral chain in Firestore to find the parent admin if referrer is a user
+        if (finalReferrer.role !== 'admin') {
+          let currentParent = finalReferrer.parentAdmin;
+          if (!currentParent || currentParent === ADMIN_UID) {
+            console.log('[VerifyReferral] Climbing referral chain in Firestore...');
+            let currId = finalReferrer.id;
+            let depth = 0;
+            const db = admin.firestore();
+            const appId = process.env.FIREBASE_APP_ID || 'digital-wallet-prod';
+            
+            while (currId && depth < 5) {
+              try {
+                const uDoc = await db.doc(`artifacts/${appId}/public/data/users/${currId}`).get();
+                if (uDoc.exists) {
+                  const uData = uDoc.data();
+                  if (uData.role === 'admin') {
+                    currentParent = currId;
+                    break;
+                  }
+                  const nextReferrer = uData.referredBy || uData.referred_by || null;
+                  if (!nextReferrer) {
+                    const pAdmin = uData.parentAdmin || uData.parent_admin || null;
+                    if (pAdmin && pAdmin !== ADMIN_UID) {
+                      currentParent = pAdmin;
+                    }
+                    break;
+                  }
+                  currId = nextReferrer;
+                } else {
+                  break;
+                }
+              } catch (fsErr) {
+                console.error('[VerifyReferral] Firestore chain climb error:', fsErr);
+                break;
+              }
+              depth++;
+            }
+          }
+          finalReferrer.parentAdmin = currentParent || ADMIN_UID;
+        }
+        
+        return res.json({ ok: true, exists: true, referrer: finalReferrer });
+      }
+
+      return res.json({ ok: true, exists: false });
+    } catch (e) {
+      console.error('[VerifyReferral] Error:', e);
+      return res.status(500).json({ ok: false, error: 'SERVER_ERROR', message: e.message });
+    }
+  });
+
+  // ── Partner Investment Endpoints ─────────────────────────────────────────
+  app.post('/api/partner-investments', requireHttpAuth, async (req, res) => {
+    try {
+      const userId = req.auth.sub;
+      const { amount, months, monthlyInterest, totalInterest, startDate, endDate } = req.body;
+
+      if (!amount || amount < 25) {
+        return res.status(400).json({ ok: false, error: 'INVALID_AMOUNT', message: 'Minimum partner investment is ₹25.' });
+      }
+      if (!months || months <= 0 || months > 60) {
+        return res.status(400).json({ ok: false, error: 'INVALID_MONTHS', message: 'Invalid investment duration.' });
+      }
+
+      const db = admin.firestore();
+      const userRef = db.doc(`artifacts/digital-wallet-prod/public/data/users/${userId}`);
+      const investmentRef = db.collection(`artifacts/digital-wallet-prod/public/data/partner_investments`).doc();
+      const invoiceId = `INV-${investmentRef.id.slice(0, 8).toUpperCase()}`;
+
+      await db.runTransaction(async (tx) => {
+        const userDoc = await tx.get(userRef);
+        if (!userDoc.exists) throw new Error('User account not found.');
+        const userData = userDoc.data();
+        const balance = Number(userData.balance || 0);
+
+        const getLoanReservedAmount = (user) => {
+          if (Number(user.activeLoanVersion || 0) < 2) return 0;
+          const reserveStartValue = user.loanReserveStartsAt || user.activeLoanDueDate || user.loanDueDate;
+          const reserveStartsAt = reserveStartValue && reserveStartValue.toDate ? reserveStartValue.toDate() : (reserveStartValue ? new Date(reserveStartValue) : null);
+          const repaymentBasis = String(user.activeLoanRepaymentBasis || user.loanRepaymentBasis || '').toLowerCase();
+          if (reserveStartsAt && reserveStartsAt > new Date()) return 0;
+          if (!reserveStartsAt && repaymentBasis.includes('withdrawal')) return 0;
+          const explicit = Number(user.loanLockedAmount ?? user.loan_locked_amount ?? 0);
+          const rawReserve = Number.isFinite(explicit) && explicit > 0 ? explicit : 0;
+          return Math.max(0, Math.min(Number(user.balance || 0), rawReserve));
+        };
+
+        const spendable = Math.max(0, balance - getLoanReservedAmount(userData));
+        if (spendable < amount) throw new Error('Insufficient wallet balance.');
+
+        tx.update(userRef, { balance: balance - amount });
+
+        const start = new Date(startDate);
+        const end = new Date(endDate);
+        const nextPayout = new Date(start);
+        nextPayout.setDate(nextPayout.getDate() + 30);
+
+        tx.set(investmentRef, {
+          userId,
+          userName: userData.name || 'User',
+          userEmail: userData.email || req.auth.email || '',
+          userMobile: userData.mobile || '',
+          amount,
+          months,
+          interestRate: 0.01,
+          monthlyInterest,
+          totalInterest,
+          paidInterest: 0,
+          monthsPaid: 0,
+          startDate: admin.firestore.Timestamp.fromDate(start),
+          endDate: admin.firestore.Timestamp.fromDate(end),
+          nextPayoutAt: admin.firestore.Timestamp.fromDate(nextPayout),
+          status: 'active',
+          invoiceId,
+          createdAt: admin.firestore.FieldValue.serverTimestamp()
+        });
+
+        const txRef = userRef.collection('transactions').doc();
+        tx.set(txRef, {
+          type: 'debit',
+          amount,
+          comment: 'Partner Investment Started',
+          timestamp: admin.firestore.FieldValue.serverTimestamp(),
+          transactionId: investmentRef.id,
+          status: 'completed',
+          recipientName: 'Reviews World Partner Plan',
+          recipientMobile: ''
+        });
+      });
+
+      res.status(201).json({ ok: true, investmentId: investmentRef.id, invoiceId });
+    } catch (error) {
+      console.error('Create partner investment failed:', error);
+      res.status(500).json({ ok: false, error: 'INVESTMENT_FAILED', message: error.message });
+    }
+  });
+
+  app.get('/api/partner-investments/user/:userId', requireHttpAuth, async (req, res) => {
+    try {
+      const userId = req.params.userId;
+      if (req.auth.sub !== userId && !req.auth.isAdmin) {
+        return res.status(403).json({ ok: false, error: 'FORBIDDEN' });
+      }
+
+      const db = admin.firestore();
+      const snap = await db.collection('artifacts/digital-wallet-prod/public/data/partner_investments')
+        .where('userId', '==', userId)
+        .get();
+      const investments = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      investments.sort((a, b) => {
+        const timeA = a.createdAt?.toDate ? a.createdAt.toDate().getTime() : (a.createdAt || 0);
+        const timeB = b.createdAt?.toDate ? b.createdAt.toDate().getTime() : (b.createdAt || 0);
+        return timeB - timeA;
+      });
+      res.json({ ok: true, investments });
+    } catch (error) {
+      console.error('List user partner investments failed:', error);
+      res.status(500).json({ ok: false, error: 'LOAD_INVESTMENTS_FAILED', message: error.message });
+    }
+  });
+
+  app.get('/api/partner-investments', requireHttpAuth, async (req, res) => {
+    try {
+      if (!req.auth.isAdmin) {
+        return res.status(403).json({ ok: false, error: 'ADMIN_REQUIRED' });
+      }
+
+      const db = admin.firestore();
+      const snap = await db.collection('artifacts/digital-wallet-prod/public/data/partner_investments')
+        .orderBy('createdAt', 'desc')
+        .get();
+      const investments = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      res.json({ ok: true, investments });
+    } catch (error) {
+      console.error('List all partner investments failed:', error);
+      res.status(500).json({ ok: false, error: 'LOAD_ALL_INVESTMENTS_FAILED', message: error.message });
+    }
+  });
+
+  app.post('/api/partner-investments/:investmentId/interest', requireHttpAuth, async (req, res) => {
+    try {
+      const investmentId = req.params.investmentId;
+      const db = admin.firestore();
+      const investmentRef = db.doc(`artifacts/digital-wallet-prod/public/data/partner_investments/${investmentId}`);
+
+      const invDocCheck = await investmentRef.get();
+      if (!invDocCheck.exists) {
+        return res.status(404).json({ ok: false, error: 'NOT_FOUND', message: 'Investment not found.' });
+      }
+      const invData = invDocCheck.data();
+      if (invData.userId !== req.auth.sub && !req.auth.isAdmin) {
+        return res.status(403).json({ ok: false, error: 'FORBIDDEN', message: 'Access denied.' });
+      }
+
+      await db.runTransaction(async (tx) => {
+        const invDoc = await tx.get(investmentRef);
+        if (!invDoc.exists) throw new Error('Investment not found.');
+        const inv = invDoc.data();
+        if (inv.status !== 'active') throw new Error('Investment is not active.');
+        const nextPayout = inv.nextPayoutAt && inv.nextPayoutAt.toDate ? inv.nextPayoutAt.toDate() : (inv.nextPayoutAt ? new Date(inv.nextPayoutAt) : null);
+        if (!nextPayout || nextPayout > new Date()) throw new Error('30 days are not completed yet.');
+
+        const userRef = db.doc(`artifacts/digital-wallet-prod/public/data/users/${inv.userId}`);
+        const userDoc = await tx.get(userRef);
+        if (!userDoc.exists) throw new Error('User not found.');
+
+        const monthsPaid = inv.monthsPaid || 0;
+        const nextMonthsPaid = monthsPaid + 1;
+        const monthlyInterest = inv.monthlyInterest || Number(((inv.amount || 0) * (inv.interestRate || 0.01)).toFixed(2));
+        const isFinal = nextMonthsPaid >= (inv.months || 1);
+        const creditAmount = isFinal ? Number((monthlyInterest + (inv.amount || 0)).toFixed(2)) : monthlyInterest;
+
+        tx.update(userRef, { balance: (userDoc.data().balance || 0) + creditAmount });
+
+        const invUpdates = {
+          paidInterest: Number(((inv.paidInterest || 0) + monthlyInterest).toFixed(2)),
+          monthsPaid: nextMonthsPaid,
+          status: isFinal ? 'completed' : 'active'
+        };
+
+        if (isFinal) {
+          invUpdates.nextPayoutAt = admin.firestore.FieldValue.delete();
+          invUpdates.completedAt = admin.firestore.FieldValue.serverTimestamp();
+        } else {
+          const nextPayoutDate = new Date(nextPayout);
+          nextPayoutDate.setDate(nextPayoutDate.getDate() + 30);
+          invUpdates.nextPayoutAt = admin.firestore.Timestamp.fromDate(nextPayoutDate);
+        }
+
+        tx.update(investmentRef, invUpdates);
+
+        const txRef = userRef.collection('transactions').doc();
+        tx.set(txRef, {
+          type: 'credit',
+          amount: creditAmount,
+          comment: isFinal ? 'Partner Investment Maturity' : 'Partner Investment Interest',
+          timestamp: admin.firestore.FieldValue.serverTimestamp(),
+          transactionId: `PARTNER-${investmentId}-${nextMonthsPaid}`,
+          status: 'completed',
+          isAdminTransaction: true,
+          senderName: 'Reviews World',
+          recipientName: inv.userName || 'User',
+          recipientMobile: inv.userMobile || ''
+        });
+      });
+
+      res.json({ ok: true });
+    } catch (error) {
+      console.error('Process partner interest failed:', error);
+      res.status(500).json({ ok: false, error: 'PAYOUT_FAILED', message: error.message });
+    }
+  });
+
+  // [DUPLICATE ROUTE DISABLED] Duplicate GET /api/auth/verify-referral already defined at L2706 above with full features (debug mode, suffix fallbacks).
+  // Keeping this second registration would cause "headers already sent" conflicts and route shadowing.
+  // Disabled block follows:
+  //   app.get('/api/auth/verify-referral', async (req, res) => {
+  //     try { ... } catch (err) { ... }
+  //   });
+  if (process.env.NODE_ENV === 'development') {
+    console.warn('[registerRoutes] Skipped duplicate GET /api/auth/verify-referral route at offset after L3135; using primary definition at L2706.');
+  }
+
+  app.post('/api/session/firebase', async (req, res) => {
+    try {
+      const idToken = String(req.body.idToken || '');
+      if (!idToken) return res.status(400).json({ ok: false, error: 'FIREBASE_ID_TOKEN_REQUIRED' });
+
+      const decoded = await admin.auth().verifyIdToken(idToken);
+      const beforeExists = await d1.first('SELECT id FROM users WHERE firebase_uid = ? OR email = ? LIMIT 1', [decoded.uid, normalizeEmail(decoded.email || `${decoded.uid}@firebase.local`)]).catch(() => null);
+      const user = await upsertFirebaseUser(d1, decoded, req.body.profile || {});
+      const isNewUser = !beforeExists || (user.created_at && Date.now() - Number(user.created_at) < 120000);
+
+      // Trigger #4: New Signup / Password Reset Request -> Alert Admin for pending approval
+      if (isNewUser && user.role !== 'owner' && user.id !== ADMIN_UID) {
+        (async () => {
+          try {
+            const pushData = {
+              type: 'signup_pending',
+              userId: user.id,
+              userName: user.name || user.email || 'New User',
+              userEmail: user.email || ''
+            };
+            await oneSignalService.sendPushNotificationToRole({
+              role: 'admin',
+              title: '🆕 Naya Signup Request',
+              message: `${user.name || user.email || 'Naya User'} ne account banaya hai. Abhi approval karein.`,
+              data: pushData
+            }, d1);
+            await oneSignalService.sendPushNotificationToUser({
+              userId: ADMIN_UID,
+              title: '🆕 Naya Signup Pending',
+              message: `New signup: ${user.name || user.email || 'User'}. Admin panel mein approve karein.`,
+              data: pushData
+            }, d1);
+          } catch (pe) {
+            console.warn('[Push] Signup admin alert failed:', pe.message);
+          }
+        })();
+      }
+
+      return res.json({
+        ok: true,
+        token: createAppToken(user),
+        user: { id: user.id, email: user.email, firebaseUid: user.firebase_uid, name: user.name || '', mobile: user.mobile || '' }
+      });
+    } catch (error) {
+      console.error('Firebase session failed:', error);
+      return res.status(401).json({ ok: false, error: 'INVALID_FIREBASE_TOKEN' });
+    }
+  });
+
+  app.post('/api/chat/send-push', requireHttpAuth, async (req, res) => {
+    try {
+      const { targetUserId, title, message, customData } = req.body;
+      if (!targetUserId || !message) {
+        return res.status(400).json({ ok: false, error: 'MISSING_TARGET_OR_MESSAGE' });
+      }
+      const pushPayload = customData || { type: 'chat' };
+      await sendNotification(d1, targetUserId, title || 'New Chat Message', message, pushPayload);
+      return res.json({ ok: true, message: 'Push notification queued.' });
+    } catch (err) {
+      console.error('[ChatPush] Error:', err);
+      return res.status(500).json({ ok: false, error: err.message });
+    }
+  });
+
+  // Trigger #1: New Task Created -> Send alert to all active Users & Bulkers
+  app.post('/api/admin/tasks/notify-new', requireHttpAuth, async (req, res) => {
+    try {
+      if (!req.auth.isAdmin) return res.status(403).json({ ok: false, error: 'ADMIN_REQUIRED' });
+      const { taskTitle = '', taskId = '', reward = 0, targetAudience = 'all' } = req.body || {};
+      const rewardText = reward ? ` (₹${reward})` : '';
+      const titleText = '🎉 Naya Task Aaya Hai!';
+      const messageText = taskTitle
+        ? `"${taskTitle}"${rewardText} - Abhi complete karein aur paise kamaayein.`
+        : 'Naya Task Aaya Hai! Abhi complete karein.';
+      const pushData = { type: 'new_task', taskId, taskTitle, reward };
+
+      const audience = targetAudience === 'bulkers' ? 'bulker' : (targetAudience === 'users' ? 'users' : 'all');
+      const roleResult = await oneSignalService.sendPushNotificationToRole({
+        role: audience,
+        title: titleText,
+        message: messageText,
+        data: pushData
+      }, d1);
+
+      const broadcastResult = await oneSignalService.sendPushNotificationToAll({
+        title: titleText,
+        message: messageText,
+        data: pushData
+      });
+
+      return res.json({ ok: true, roleResult, broadcastResult });
+    } catch (err) {
+      console.error('[NewTaskNotify] Error:', err);
+      return res.status(500).json({ ok: false, error: err.message || 'NOTIFY_FAILED' });
+    }
+  });
+
+  // Trigger #3: Successful Referral -> Alert Referrer: "Referral Bonus Credit Ho Gaya!"
+  app.post('/api/referral/notify-bonus', requireHttpAuth, async (req, res) => {
+    try {
+      const { referrerUserId, referralUserName = '', bonusAmount = 0 } = req.body || {};
+      if (!referrerUserId) return res.status(400).json({ ok: false, error: 'REFERRER_ID_REQUIRED' });
+      const bonusVal = Number(bonusAmount || 0);
+      const titleHinglish = '🎁 Referral Bonus Credit Ho Gaya!';
+      const messageHinglish = referralUserName
+        ? `${referralUserName} ne aapka referral use kiya! ₹${bonusVal} bonus add ho gaya.`
+        : `Aapka referral bonus ₹${bonusVal} wallet mein credit ho gaya!`;
+      const pushData = { type: 'referral_bonus', referrerUserId, referralUserName, bonusAmount: bonusVal };
+      await sendNotification(d1, referrerUserId, titleHinglish, messageHinglish, pushData);
+      (async () => {
+        try {
+          await oneSignalService.sendPushNotificationToUser({
+            userId: referrerUserId,
+            title: titleHinglish,
+            message: messageHinglish,
+            data: pushData
+          }, d1);
+        } catch (_) {}
+      })();
+      return res.json({ ok: true, pushed: true });
+    } catch (err) {
+      console.error('[ReferralBonusNotify] Error:', err);
+      return res.status(500).json({ ok: false, error: err.message || 'NOTIFY_FAILED' });
+    }
+  });
+
+  // Trigger #4 (part 2): Password Reset Request -> Alert Admin for pending approval
+  app.post('/api/admin/notify-password-reset', async (req, res) => {
+    try {
+      const { userEmail = '', userId = '', userName = '' } = req.body || {};
+      if (!userEmail && !userId) return res.status(400).json({ ok: false, error: 'IDENTIFIER_REQUIRED' });
+      const pushData = { type: 'password_reset_request', userEmail, userId, userName };
+      const message = `${userName || userEmail || 'User'} ne password reset ka request diya hai. Abhi action lein.`;
+      await oneSignalService.sendPushNotificationToRole({
+        role: 'admin',
+        title: '🔐 Password Reset Request',
+        message,
+        data: pushData
+      }, d1);
+      await oneSignalService.sendPushNotificationToUser({
+        userId: ADMIN_UID,
+        title: '🔐 Password Reset Request',
+        message,
+        data: pushData
+      }, d1);
+      return res.json({ ok: true, pushed: true });
+    } catch (err) {
+      console.error('[PasswordResetAdminNotify] Error:', err);
+      return res.status(500).json({ ok: false, error: err.message || 'NOTIFY_FAILED' });
+    }
+  });
+
+  // Trigger #5: Account / Request Approval -> Alert User when Admin approves their signup/password reset
+  app.post('/api/admin/approve-user', requireHttpAuth, async (req, res) => {
+    try {
+      if (!req.auth.isAdmin) return res.status(403).json({ ok: false, error: 'ADMIN_REQUIRED' });
+      const { userId, signup = true, passwordReset = false, reason = '' } = req.body || {};
+      if (!userId) return res.status(400).json({ ok: false, error: 'USER_ID_REQUIRED' });
+
+      const db = admin.firestore();
+      const appId = process.env.FIREBASE_APP_ID || 'digital-wallet-prod';
+      const userRef = db.doc(`artifacts/${appId}/public/data/users/${userId}`);
+      await userRef.set({
+        signupApprovalStatus: 'approved',
+        accountStatus: 'active',
+        status: 'active',
+        isDisabled: false,
+        approvalRejectionReason: admin.firestore.FieldValue.delete()
+      }, { merge: true }).catch(() => {});
+      await d1.query(`UPDATE users SET status = 'active' WHERE id = ? OR firebase_uid = ?`, [userId, userId]).catch(() => {});
+
+      const titleHinglish = signup ? '✅ Account Approve Ho Gaya!' : '🔐 Password Reset Approve Ho Gaya';
+      const messageHinglish = signup
+        ? 'Ab aap apna wallet fully use kar sakte hain. Tasks complete karein aur paise kamaayein!'
+        : `Aapka password reset request approve ho gaya.${reason ? ' Note: ' + reason : ' Ab login karein.'}`;
+      const pushData = {
+        type: signup ? 'signup_approved' : 'password_reset_approved',
+        userId,
+        signup,
+        passwordReset,
+        reason
+      };
+      await sendNotification(d1, userId, titleHinglish, messageHinglish, pushData);
+      (async () => {
+        try {
+          await oneSignalService.sendPushNotificationToUser({
+            userId,
+            title: titleHinglish,
+            message: messageHinglish,
+            data: pushData
+          }, d1);
+        } catch (_) {}
+      })();
+      return res.json({ ok: true, approved: true });
+    } catch (err) {
+      console.error('[ApproveUser] Error:', err);
+      return res.status(500).json({ ok: false, error: err.message || 'APPROVE_FAILED' });
+    }
+  });
+
+  app.post('/api/admin/notifications', requireHttpAuth, async (req, res) => {
+    try {
+      const { title, message, audience, recipients } = req.body;
+      if (!message) return res.status(400).json({ ok: false, error: 'MESSAGE_REQUIRED' });
+
+      const notificationTitle = title || 'REVIEWS WORLD';
+      const recipientList = Array.isArray(recipients) ? recipients : [];
+
+      if (audience === 'broadcast' || audience === 'all' || audience === 'all_new_version') {
+        await sendOneSignalPush(d1, 'broadcast', notificationTitle, message);
+      } else if (recipientList.length > 0) {
+        for (const targetId of recipientList) {
+          await sendNotification(d1, targetId, notificationTitle, message);
+        }
+      }
+
+      return res.json({ ok: true, message: 'Notification delivered via Push.' });
+    } catch (err) {
+      console.error('[AdminNotification] Error:', err);
+      return res.status(500).json({ ok: false, error: err.message });
+    }
+  });
+
+  app.post('/api/notifications/send', async (req, res) => {
+    try {
+      const { title, message, userId, target, customData } = req.body;
+      const targetId = userId || target || 'broadcast';
+      await sendNotification(d1, targetId, title || 'REVIEWS WORLD', message || '', customData);
+      return res.json({ ok: true, message: 'Notification queued.' });
+    } catch (err) {
+      return res.status(500).json({ ok: false, error: err.message });
+    }
+  });
+
+  app.post('/api/admin/create-sub-admin', requireHttpAuth, async (req, res) => {
+    if (req.auth.sub !== ADMIN_UID && req.auth.role !== 'owner') {
+      return res.status(403).json({ ok: false, error: 'ONLY_OWNER_CAN_CREATE_SUB_ADMINS' });
+    }
+
+    const { email, password, name, mobile, referralCode } = req.body;
+    if (!email || !password || !name || !referralCode) {
+      return res.status(400).json({ ok: false, error: 'MISSING_REQUIRED_FIELDS' });
+    }
+
+    try {
+      let uid;
+      let userRecord;
+      const cleanMobile = mobile ? mobile.replace(/\D/g, '').slice(-10) : '';
+
+      const createParams = {
+        email,
+        password,
+        displayName: name
+      };
+      if (cleanMobile && cleanMobile.length === 10) {
+        createParams.phoneNumber = `+91${cleanMobile}`;
+      }
+
+      try {
+        userRecord = await admin.auth().createUser(createParams);
+        uid = userRecord.uid;
+      } catch (authErr) {
+        if (authErr.code === 'auth/invalid-phone-number' || authErr.code === 'auth/phone-number-already-exists') {
+          console.warn('[CreateSubAdmin] Retrying creation without phone number:', authErr.message);
+          delete createParams.phoneNumber;
+          userRecord = await admin.auth().createUser(createParams);
+          uid = userRecord.uid;
+        } else if (authErr.code === 'auth/email-already-exists' || (authErr.message && authErr.message.includes('already in use'))) {
+          userRecord = await admin.auth().getUserByEmail(email);
+          uid = userRecord.uid;
+          const updateParams = {
+            password,
+            displayName: name
+          };
+          if (cleanMobile && cleanMobile.length === 10) {
+            updateParams.phoneNumber = `+91${cleanMobile}`;
+          }
+          try {
+            await admin.auth().updateUser(uid, updateParams);
+          } catch (updErr) {
+            if (updErr.code === 'auth/invalid-phone-number' || updErr.code === 'auth/phone-number-already-exists') {
+              console.warn('[CreateSubAdmin] Retrying update without phone number:', updErr.message);
+              delete updateParams.phoneNumber;
+              await admin.auth().updateUser(uid, updateParams);
+            } else {
+              throw updErr;
+            }
+          }
+        } else {
+          throw authErr;
+        }
+      }
+
+      const db = admin.firestore();
+      const appId = process.env.FIREBASE_APP_ID || 'digital-wallet-prod';
+      await db.doc(`artifacts/${appId}/public/data/users/${uid}`).set({
+        uid,
+        email: normalizeEmail(email),
+        name,
+        mobile: cleanMobile,
+        phoneNumber: cleanMobile,
+        role: 'admin',
+        status: 'active',
+        referralCode: referralCode,
+        passwordText: password,
+        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+        signupApprovalStatus: 'approved',
+        accountStatus: 'active',
+        balance: 0
+      }, { merge: true });
+
+      const passwordHash = await bcrypt.hash(password, 12);
+      const existingDbUser = await findUserByEmail(d1, email);
+      if (existingDbUser) {
+        await d1.query(
+          `UPDATE users SET password_hash = ?, name = ?, mobile = ?, role = ?, referral_code = ?, status = ? WHERE id = ?`,
+          [passwordHash, name, cleanMobile, 'admin', referralCode, 'active', existingDbUser.id]
+        );
+      } else {
+        await createUser(d1, {
+          id: uid,
+          firebaseUid: uid,
+          email,
+          passwordHash,
+          profile: { name, mobile: cleanMobile },
+          role: 'admin',
+          parentAdmin: null,
+          referralCode,
+          status: 'active'
+        });
+      }
+
+      return res.json({ ok: true, uid });
+    } catch (err) {
+      console.error('Failed to create sub-admin:', err);
+      return res.status(500).json({ ok: false, error: err.message || 'FAILED_TO_CREATE_SUB_ADMIN' });
+    }
+  });
+
+  app.post('/api/admin/impersonate-sub-admin', requireHttpAuth, async (req, res) => {
+    return res.status(403).json({ ok: false, error: 'IMPERSONATION_DISABLED' });
+  });
+
+  app.post('/api/admin/transfer-user-parent', requireHttpAuth, async (req, res) => {
+    if (req.auth.sub !== ADMIN_UID && req.auth.role !== 'owner') {
+      return res.status(403).json({ ok: false, error: 'ONLY_OWNER_CAN_TRANSFER_USERS' });
+    }
+
+    const { targetUid, newParentAdminId } = req.body;
+    if (!targetUid || !newParentAdminId) {
+      return res.status(400).json({ ok: false, error: 'TARGET_UID_AND_NEW_PARENT_ADMIN_ID_REQUIRED' });
+    }
+
+    try {
+      const db = admin.firestore();
+      const appId = process.env.FIREBASE_APP_ID || 'digital-wallet-prod';
+
+      // Check task history in Firestore & D1
+      const submissionsSnap = await db.collection(`artifacts/${appId}/public/data/submissions`)
+        .where("userId", "==", targetUid)
+        .limit(1)
+        .get().catch(() => ({ empty: true }));
+
+      const submissionsSnap2 = await db.collection(`artifacts/${appId}/public/data/submissions`)
+        .where("uid", "==", targetUid)
+        .limit(1)
+        .get().catch(() => ({ empty: true }));
+
+      // Check transactions in Firestore
+      const txnsSnap = await db.collection(`artifacts/${appId}/public/data/users/${targetUid}/transactions`).limit(1).get().catch(() => ({ empty: true }));
+      const withdrawalsSnap = await db.collection(`artifacts/${appId}/public/data/withdrawals`)
+        .where("userId", "==", targetUid)
+        .limit(1)
+        .get().catch(() => ({ empty: true }));
+
+      // Check D1 SQLite
+      const d1Submissions = await d1.all(`SELECT id FROM task_submissions WHERE user_id = ? LIMIT 1`, [targetUid]).catch(() => []);
+      const d1Txns = await d1.all(`SELECT id FROM ledger WHERE user_id = ? LIMIT 1`, [targetUid]).catch(() => []);
+
+      const hasTaskHistory = !submissionsSnap.empty || !submissionsSnap2.empty || (d1Submissions && d1Submissions.length > 0);
+      const hasTxnHistory = !txnsSnap.empty || !withdrawalsSnap.empty || (d1Txns && d1Txns.length > 0);
+
+      if (hasTaskHistory || hasTxnHistory) {
+        return res.status(400).json({
+          ok: false,
+          error: 'USER_HAS_EXISTING_HISTORY',
+          message: 'User cannot be transferred because they have existing task or transaction history under the current owner.'
+        });
+      }
+
+      // 1. Update Firestore
+      const userRef = db.doc(`artifacts/${appId}/public/data/users/${targetUid}`);
+      await userRef.update({
+        parentAdmin: newParentAdminId,
+        parent_admin: newParentAdminId
+      });
+
+      // 2. Update D1 SQLite database
+      await d1.query('UPDATE users SET parent_admin = ? WHERE id = ? OR firebase_uid = ?', [newParentAdminId, targetUid, targetUid]);
+
+      return res.json({ ok: true });
+    } catch (err) {
+      console.error('[TransferUserParent] Error:', err);
+      return res.status(500).json({ ok: false, error: err.message || 'FAILED_TO_TRANSFER_USER' });
+    }
+  });
+
+  app.post('/api/admin/suspend-sub-admin', requireHttpAuth, async (req, res) => {
+    if (req.auth.sub !== ADMIN_UID && req.auth.role !== 'owner') {
+      return res.status(403).json({ ok: false, error: 'FORBIDDEN' });
+    }
+    const { targetUid } = req.body;
+    if (!targetUid) return res.status(400).json({ ok: false, error: 'TARGET_UID_REQUIRED' });
+
+    try {
+      const db = admin.firestore();
+      const appId = process.env.FIREBASE_APP_ID || 'digital-wallet-prod';
+      await db.doc(`artifacts/${appId}/public/data/users/${targetUid}`).update({
+        status: 'suspended',
+        isDisabled: true
+      });
+      await d1.query('UPDATE users SET status = ? WHERE id = ?', ['suspended', targetUid]);
+
+      // Trigger #11: Account Status Changed -> Alert User instantly (Blocked)
+      (async () => {
+        try {
+          await oneSignalService.sendPushNotificationToUser({
+            userId: targetUid,
+            title: '🚫 Account Block Ho Gaya',
+            message: 'Aapka account admin dwara temporarily suspend kar diya gaya hai. Details ke liye admin se contact karein.',
+            data: { type: 'account_suspended', status: 'suspended' }
+          }, d1);
+        } catch (pe) {
+          console.warn('[Push] Suspend alert failed:', pe.message);
+        }
+      })();
+
+      return res.json({ ok: true });
+    } catch (err) {
+      return res.status(500).json({ ok: false, error: err.message });
+    }
+  });
+
+  app.post('/api/admin/unsuspend-sub-admin', requireHttpAuth, async (req, res) => {
+    if (req.auth.sub !== ADMIN_UID && req.auth.role !== 'owner') {
+      return res.status(403).json({ ok: false, error: 'FORBIDDEN' });
+    }
+    const { targetUid } = req.body;
+    if (!targetUid) return res.status(400).json({ ok: false, error: 'TARGET_UID_REQUIRED' });
+
+    try {
+      const db = admin.firestore();
+      const appId = process.env.FIREBASE_APP_ID || 'digital-wallet-prod';
+      await db.doc(`artifacts/${appId}/public/data/users/${targetUid}`).update({
+        status: 'active',
+        isDisabled: false
+      });
+      await d1.query('UPDATE users SET status = ? WHERE id = ?', ['active', targetUid]);
+
+      // Trigger #11: Account Status Changed -> Alert User instantly (Unblocked)
+      (async () => {
+        try {
+          await oneSignalService.sendPushNotificationToUser({
+            userId: targetUid,
+            title: '✅ Account Unblock Ho Gaya',
+            message: 'Aapka account dobara active kar diya gaya hai. Ab aap wallet use kar sakte hain.',
+            data: { type: 'account_unsuspended', status: 'active' }
+          }, d1);
+        } catch (pe) {
+          console.warn('[Push] Unsuspend alert failed:', pe.message);
+        }
+      })();
+
+      return res.json({ ok: true });
+    } catch (err) {
+      return res.status(500).json({ ok: false, error: err.message });
+    }
+  });
+
+  app.post('/api/admin/delete-sub-admin', requireHttpAuth, async (req, res) => {
+    if (req.auth.sub !== ADMIN_UID && req.auth.role !== 'owner') {
+      return res.status(403).json({ ok: false, error: 'FORBIDDEN' });
+    }
+    const { targetUid } = req.body;
+    if (!targetUid) return res.status(400).json({ ok: false, error: 'TARGET_UID_REQUIRED' });
+
+    try {
+      await admin.auth().deleteUser(targetUid).catch(() => {});
+      const db = admin.firestore();
+      const appId = process.env.FIREBASE_APP_ID || 'digital-wallet-prod';
+      await db.doc(`artifacts/${appId}/public/data/users/${targetUid}`).delete();
+      await d1.query('DELETE FROM users WHERE id = ?', [targetUid]);
+      return res.json({ ok: true });
+    } catch (err) {
+      return res.status(500).json({ ok: false, error: err.message });
+    }
+  });
+
+  app.post('/api/admin/delete-user', requireHttpAuth, async (req, res) => {
+    const { targetUid } = req.body;
+    if (!targetUid) return res.status(400).json({ ok: false, error: 'TARGET_UID_REQUIRED' });
+
+    try {
+      const db = admin.firestore();
+      const appId = process.env.FIREBASE_APP_ID || 'digital-wallet-prod';
+
+      // Verify user permissions
+      if (req.auth.sub !== ADMIN_UID && req.auth.role !== 'owner') {
+        const userDoc = await db.doc(`artifacts/${appId}/public/data/users/${targetUid}`).get();
+        if (userDoc.exists) {
+          const uData = userDoc.data();
+          const pAdmin = uData.parentAdmin || uData.parent_admin;
+          if (pAdmin !== req.auth.sub) {
+            return res.status(403).json({ ok: false, error: 'NOT_AUTHORIZED_TO_DELETE_THIS_USER' });
+          }
+        }
+      }
+
+      await admin.auth().deleteUser(targetUid).catch(err => console.warn('[DeleteUser] Auth delete skipped:', err.message));
+      await db.doc(`artifacts/${appId}/public/data/users/${targetUid}`).delete().catch(err => console.warn('[DeleteUser] Firestore delete skipped:', err.message));
+      await d1.query('DELETE FROM users WHERE id = ? OR firebase_uid = ?', [targetUid, targetUid]).catch(err => console.warn('[DeleteUser] D1 delete skipped:', err.message));
+
+      return res.json({ ok: true });
+    } catch (err) {
+      console.error('[DeleteUser] Failed:', err);
+      return res.status(500).json({ ok: false, error: err.message || 'FAILED_TO_DELETE_USER' });
+    }
+  });
+
+  app.post('/api/login', rateLimit({ windowMs: 60000, maxRequests: 10 }), async (req, res) => {
+    try {
+      const email = normalizeEmail(req.body.email);
+      const password = String(req.body.password || '');
+
+      if (!email || !password) {
+        return res.status(400).json({ ok: false, error: 'EMAIL_AND_PASSWORD_REQUIRED' });
+      }
+
+      const existing = await findUserByEmail(d1, email);
+      if (existing) {
+        if (!existing.password_hash) return res.status(401).json({ ok: false, error: 'USE_FIREBASE_SESSION' });
+        const valid = await bcrypt.compare(password, existing.password_hash);
+        if (!valid) return res.status(401).json({ ok: false, error: 'INVALID_LOGIN' });
+
+        return res.json({
+          ok: true,
+          migrated: false,
+          token: createAppToken(existing),
+          user: { id: existing.id, email: existing.email, firebaseUid: existing.firebase_uid }
+        });
+      }
+
+      const firebaseUser = await signInFirebaseEmailPassword(email, password);
+      const decoded = await admin.auth().verifyIdToken(firebaseUser.idToken);
+      const passwordHash = await bcrypt.hash(password, 12);
+      const migratedUser = await createUser(d1, {
+        id: decoded.uid,
+        firebaseUid: decoded.uid,
+        email,
+        passwordHash,
+        migratedAt: nowMs()
+      });
+
+      return res.json({
+        ok: true,
+        migrated: true,
+        token: createAppToken(migratedUser),
+        user: { id: migratedUser.id, email: migratedUser.email, firebaseUid: migratedUser.firebase_uid }
+      });
+    } catch (error) {
+      console.error('Login failed:', error);
+      return res.status(401).json({ ok: false, error: 'INVALID_LOGIN' });
+    }
+  });
+
+  app.get('/api/transactions/:userId', requireHttpAuth, async (req, res) => {
+    if (req.auth.sub !== req.params.userId && !req.auth.isAdmin) {
+      return res.status(403).json({ ok: false, error: 'FORBIDDEN' });
+    }
+
+    const history = await getTransactionHistory(d1, req.params.userId, {
+      limit: Number(req.query.limit || 50),
+      before: Number(req.query.before || Number.MAX_SAFE_INTEGER)
+    });
+
+    res.json({ ok: true, history });
+  });
+
+async function verifyTransactionWithFirestore(userId, transaction) {
+  const transactionId = transaction.transactionId || transaction.id;
+  if (!transactionId) return false;
+  
+  const appId = process.env.FIREBASE_APP_ID || 'digital-wallet-prod';
+  const db = admin.firestore();
+  
+  try {
+    // Try directly using transactionId
+    let docRef = db.doc(`artifacts/${appId}/public/data/users/${userId}/transactions/${transactionId}`);
+    let docSnap = await docRef.get();
+    
+    // If not found, try with a sanitized safe ID
+    if (!docSnap.exists) {
+      const safeId = String(transactionId).replace(/[\/\\#?[\]]/g, '-').slice(0, 120);
+      docRef = db.doc(`artifacts/${appId}/public/data/users/${userId}/transactions/${safeId}`);
+      docSnap = await docRef.get();
+    }
+    
+    // If still not found, search the collection
+    if (!docSnap.exists) {
+      const txQuery = await db.collection(`artifacts/${appId}/public/data/users/${userId}/transactions`)
+        .where('transactionId', '==', transactionId)
+        .limit(1)
+        .get();
+      if (!txQuery.empty) {
+        docSnap = txQuery.docs[0];
+      }
+    }
+
+    if (!docSnap.exists) {
+      console.warn(`Transaction verification failed: ${transactionId} not found in Firestore for user ${userId}`);
+      return false;
+    }
+
+    const fData = docSnap.data();
+    
+    // Verify fields match (amount, type)
+    const dbAmount = Number(fData.amount || 0);
+    const postAmount = Number(transaction.amount || 0);
+    if (Math.abs(dbAmount) !== Math.abs(postAmount)) {
+      console.warn(`Transaction verification failed: amount mismatch for ${transactionId} (Firestore: ${dbAmount}, D1 Sync: ${postAmount})`);
+      return false;
+    }
+    
+    return true;
+  } catch (error) {
+    console.error(`Error verifying transaction ${transactionId} in Firestore:`, error);
+    return false;
+  }
+}
+
+  app.post('/api/transactions', requireHttpAuth, async (req, res) => {
+    if (req.auth.sub !== req.body.userId && !req.auth.isAdmin) {
+      return res.status(403).json({ ok: false, error: 'FORBIDDEN' });
+    }
+
+    // Verify transaction with Firestore
+    const isVerified = await verifyTransactionWithFirestore(req.body.userId, req.body);
+    if (!isVerified) {
+      return res.status(400).json({ ok: false, error: 'UNVERIFIED_TRANSACTION_PAYLOAD' });
+    }
+
+    await saveTransaction(d1, req.body);
+    res.json({ ok: true });
+  });
+
+  app.post('/api/transactions/import', requireHttpAuth, async (req, res) => {
+    const userId = String(req.body.userId || '');
+    const transactions = Array.isArray(req.body.transactions) ? req.body.transactions : [];
+    if (req.auth.sub !== userId && !req.auth.isAdmin) {
+      return res.status(403).json({ ok: false, error: 'FORBIDDEN' });
+    }
+
+    const limited = transactions.slice(0, 500);
+    let imported = 0;
+    for (const transaction of limited) {
+      const isVerified = await verifyTransactionWithFirestore(userId, transaction);
+      if (isVerified) {
+        await saveTransaction(d1, { ...transaction, userId });
+        imported++;
+      }
+    }
+    res.json({ ok: true, imported });
+  });
+
+  app.post('/api/transactions/transfer', requireHttpAuth, async (req, res) => {
+    try {
+      const sender = req.body.sender || {};
+      const recipient = req.body.recipient || {};
+      if (req.auth.sub !== sender.userId) {
+        return res.status(403).json({ ok: false, error: 'FORBIDDEN' });
+      }
+      if (!recipient.userId) {
+        return res.status(400).json({ ok: false, error: 'RECIPIENT_REQUIRED' });
+      }
+
+      const senderAmount = Number(sender.amount || 0);
+      const recipientAmount = Number(recipient.amount || 0);
+      if (senderAmount >= 0) {
+        return res.status(400).json({ ok: false, error: 'SENDER_AMOUNT_MUST_BE_NEGATIVE' });
+      }
+      if (recipientAmount <= 0) {
+        return res.status(400).json({ ok: false, error: 'RECIPIENT_AMOUNT_MUST_BE_POSITIVE' });
+      }
+      if (Math.abs(senderAmount) !== Math.abs(recipientAmount)) {
+        return res.status(400).json({ ok: false, error: 'TRANSFER_AMOUNTS_MISMATCH' });
+      }
+
+      const isSenderVerified = await verifyTransactionWithFirestore(sender.userId, sender);
+      if (!isSenderVerified) {
+        return res.status(400).json({ ok: false, error: 'UNVERIFIED_SENDER_TRANSACTION_PAYLOAD' });
+      }
+      const isRecipientVerified = await verifyTransactionWithFirestore(recipient.userId, recipient);
+      if (!isRecipientVerified) {
+        return res.status(400).json({ ok: false, error: 'UNVERIFIED_RECIPIENT_TRANSACTION_PAYLOAD' });
+      }
+
+      await saveTransaction(d1, sender);
+      await saveTransaction(d1, recipient);
+
+      // Trigger #9: Wallet Transfer & Receipt -> Alert both Sender and Receiver
+      (async () => {
+        try {
+          const transferAmount = Math.abs(senderAmount);
+          const senderName = sender.userName || req.auth.name || req.auth.email || 'Sender';
+          const recipientName = recipient.userName || 'User';
+          await oneSignalService.sendPushNotificationToUser({
+            userId: sender.userId,
+            title: '💸 Transfer Ho Gaya',
+            message: `₹${transferAmount} aapke wallet se ${recipientName} ko bhej diya gaya hai.`,
+            data: { type: 'wallet_transfer_sent', amount: transferAmount, recipient: recipient.userId }
+          }, d1);
+          await oneSignalService.sendPushNotificationToUser({
+            userId: recipient.userId,
+            title: '💰 Payment Receive Hua',
+            message: `₹${transferAmount} ${senderName} ke wallet se aapke account mein add ho gaye hain!`,
+            data: { type: 'wallet_transfer_received', amount: transferAmount, sender: sender.userId }
+          }, d1);
+        } catch (pe) {
+          console.warn('[Push] Wallet transfer alerts failed:', pe.message);
+        }
+      })();
+
+      res.json({ ok: true });
+    } catch (err) {
+      console.error('Wallet transfer failed:', err);
+      res.status(500).json({ ok: false, error: err.message || 'TRANSFER_FAILED' });
+    }
+  });
+
+  app.get('/api/fund-requests', requireHttpAuth, async (req, res) => {
+    const userId = req.query.userId ? String(req.query.userId) : null;
+    if (userId && req.auth.sub !== userId && !req.auth.isAdmin) {
+      return res.status(403).json({ ok: false, error: 'FORBIDDEN' });
+    }
+    if (!userId && !req.auth.isAdmin) {
+      return res.status(403).json({ ok: false, error: 'ADMIN_REQUIRED' });
+    }
+
+    // Set parentAdmin limit for sub-admins
+    let parentAdmin = null;
+    if (req.auth.isAdmin && req.auth.role === 'admin') {
+      parentAdmin = req.auth.sub;
+    }
+
+    const requestedStatus = req.query.status ? String(req.query.status) : 'pending';
+    const requests = await listFundRequests(d1, {
+      status: requestedStatus === 'all' ? null : requestedStatus,
+      type: req.query.type ? String(req.query.type) : null,
+      userId,
+      parentAdmin,
+      limit: Math.min(Number(req.query.limit || 200), 500)
+    });
+    res.json({ ok: true, requests });
+  });
+
+  app.post('/api/fund-requests', requireHttpAuth, async (req, res) => {
+    try {
+      if (req.auth.sub !== req.body.userId && !req.auth.isAdmin) {
+        return res.status(403).json({ ok: false, error: 'FORBIDDEN' });
+      }
+      await saveFundRequest(d1, req.body);
+      res.json({ ok: true });
+    } catch (err) {
+      console.error('Fund request submit failed:', err);
+      res.status(500).json({ ok: false, error: err.code === 'SQLITE_CONSTRAINT' || (err.message && err.message.includes('constraint')) ? 'DUPLICATE_REQUEST' : (err.message || 'SUBMIT_FAILED') });
+    }
+  });
+
+  app.post('/api/fund-requests/import', requireHttpAuth, async (req, res) => {
+    try {
+      if (!req.auth.isAdmin) {
+        return res.status(403).json({ ok: false, error: 'ADMIN_REQUIRED' });
+      }
+      const requests = Array.isArray(req.body.requests) ? req.body.requests.slice(0, 500) : [];
+      for (const request of requests) {
+        await saveFundRequest(d1, request);
+      }
+      res.json({ ok: true, imported: requests.length });
+    } catch (err) {
+      console.error('Fund request import failed:', err);
+      res.status(500).json({ ok: false, error: err.message || 'IMPORT_FAILED' });
+    }
+  });
+
+  app.patch('/api/fund-requests/:requestId', requireHttpAuth, async (req, res) => {
+    try {
+      if (!req.auth.isAdmin) {
+        return res.status(403).json({ ok: false, error: 'ADMIN_REQUIRED' });
+      }
+      await updateFundRequestStatus(d1, {
+        requestId: req.params.requestId,
+        status: req.body.status,
+        details: req.body.details || {}
+      });
+      res.json({ ok: true });
+    } catch (err) {
+      console.error('Fund request update failed:', err);
+      res.status(500).json({ ok: false, error: err.message || 'UPDATE_FAILED' });
+    }
+  });
+
+  app.get('/api/loan-requests', requireHttpAuth, async (req, res) => {
+    const userId = req.query.userId ? String(req.query.userId) : null;
+    if (userId && req.auth.sub !== userId && !req.auth.isAdmin) {
+      return res.status(403).json({ ok: false, error: 'FORBIDDEN' });
+    }
+    if (!userId && !req.auth.isAdmin) {
+      return res.status(403).json({ ok: false, error: 'ADMIN_REQUIRED' });
+    }
+
+    const requestedStatus = req.query.status ? String(req.query.status) : 'pending';
+    const requests = await listLoanRequests(d1, {
+      status: requestedStatus === 'all' ? null : requestedStatus,
+      userId,
+      limit: Math.min(Number(req.query.limit || 300), 800)
+    });
+    res.json({ ok: true, requests });
+  });
+
+  app.post('/api/loan-requests', requireHttpAuth, async (req, res) => {
+    try {
+      if (req.auth.sub !== req.body.userId && !req.auth.isAdmin) {
+        return res.status(403).json({ ok: false, error: 'FORBIDDEN' });
+      }
+      await saveLoanRequest(d1, req.body);
+      res.json({ ok: true });
+    } catch (err) {
+      console.error('Loan request save failed:', err);
+      res.status(err?.code === 'SQLITE_CONSTRAINT' || (err?.message && err.message.includes('constraint')) ? 409 : 500)
+        .json({ ok: false, error: err?.code === 'SQLITE_CONSTRAINT' ? 'DUPLICATE_LOAN_REQUEST' : (err?.message || 'LOAN_REQUEST_FAILED') });
+    }
+  });
+
+  app.post('/api/loan-requests/import', requireHttpAuth, async (req, res) => {
+    try {
+      if (!req.auth.isAdmin) {
+        return res.status(403).json({ ok: false, error: 'ADMIN_REQUIRED' });
+      }
+      const requests = Array.isArray(req.body.requests) ? req.body.requests.slice(0, 800) : [];
+      for (const request of requests) {
+        await saveLoanRequest(d1, request);
+      }
+      res.json({ ok: true, imported: requests.length });
+    } catch (err) {
+      console.error('Loan request import failed:', err);
+      res.status(500).json({ ok: false, error: err?.message || 'LOAN_IMPORT_FAILED' });
+    }
+  });
+
+  app.patch('/api/loan-requests/:requestId', requireHttpAuth, async (req, res) => {
+    try {
+      if (!req.auth.isAdmin) {
+        return res.status(403).json({ ok: false, error: 'ADMIN_REQUIRED' });
+      }
+      await updateLoanRequestStatus(d1, {
+        requestId: req.params.requestId,
+        status: req.body.status,
+        details: req.body.details || {}
+      });
+      res.json({ ok: true });
+    } catch (err) {
+      console.error('Loan request status update failed:', err);
+      res.status(500).json({ ok: false, error: err?.message || 'LOAN_STATUS_UPDATE_FAILED' });
+    }
+  });
+
+  app.post('/api/uploads/loan-document', requireHttpAuth, async (req, res) => {
+    try {
+      if (!r2 || !process.env.CLOUDFLARE_R2_BUCKET) {
+        return res.status(503).json({ ok: false, error: 'R2_NOT_CONFIGURED' });
+      }
+      if (!process.env.CLOUDFLARE_R2_PUBLIC_BASE_URL) {
+        return res.status(503).json({ ok: false, error: 'R2_PUBLIC_URL_NOT_CONFIGURED' });
+      }
+
+      const documentType = String(req.query.documentType || '').trim().toLowerCase();
+      if (!LOAN_DOCUMENT_TYPES.has(documentType)) {
+        return res.status(400).json({ ok: false, error: 'INVALID_DOCUMENT_TYPE' });
+      }
+
+      const declaredSize = Number(req.headers['content-length'] || req.query.size || 0);
+      if (declaredSize > LOAN_DOCUMENT_UPLOAD_MAX_BYTES) {
+        return res.status(413).json({ ok: false, error: 'UPLOAD_TOO_LARGE' });
+      }
+
+      const originalName = sanitizeUploadFileName(req.query.fileName || `${documentType}.jpg`);
+      const contentType = normalizeContentType(req.headers['content-type'] || req.query.contentType);
+      if (!isSupportedLoanDocument(documentType, originalName, contentType)) {
+        return res.status(400).json({ ok: false, error: 'UNSUPPORTED_DOCUMENT_TYPE' });
+      }
+
+      const body = await readRequestBody(req, LOAN_DOCUMENT_UPLOAD_MAX_BYTES);
+      if (!body.length) {
+        return res.status(400).json({ ok: false, error: 'EMPTY_UPLOAD' });
+      }
+
+      const ext = getLoanDocumentExtension(originalName, contentType);
+      const baseName = sanitizeUploadFileName(path.basename(originalName, path.extname(originalName)) || documentType);
+      const userSegment = sanitizePathSegment(req.auth.sub || req.auth.firebaseUid || req.auth.d1UserId);
+      const key = `loan-documents/${userSegment}/${Date.now()}-${documentType}-${baseName}${ext}`;
+      const url = await putR2Object(r2, key, body, contentType);
+
+      return res.json({
+        ok: true,
+        document: {
+          name: originalName,
+          size: body.length,
+          type: contentType,
+          path: key,
+          key,
+          url,
+          storage: 'cloudflare-r2',
+          uploadedAt: nowMs()
+        }
+      });
+    } catch (error) {
+      if (error?.code === 'UPLOAD_TOO_LARGE' || error?.message === 'UPLOAD_TOO_LARGE') {
+        return res.status(413).json({ ok: false, error: 'UPLOAD_TOO_LARGE' });
+      }
+      console.error('Loan document upload failed:', error);
+      return res.status(500).json({ ok: false, error: 'LOAN_DOCUMENT_UPLOAD_FAILED' });
+    }
+  });
+
+  app.post('/api/invoices/:invoiceId', requireHttpAuth, async (req, res) => {
+    const key = `invoices/${req.auth.sub}/${req.params.invoiceId}.json`;
+    const urlOrKey = await putR2Object(r2, key, JSON.stringify(req.body, null, 2));
+    res.json({ ok: true, key: urlOrKey });
+  });
+
+  app.post('/api/revy-bot', requireHttpAuth, async (req, res) => {
+    try {
+      const { question, history, userContext } = req.body;
+      if (!question) {
+        return res.status(400).json({ ok: false, error: 'QUESTION_REQUIRED' });
+      }
+
+      const formattedHistory = Array.isArray(history) ? history : [];
+      
+      const db = admin.firestore();
+      
+      // Securely verify user email from Firestore
+      let callerEmail = (req.auth.email || '').toLowerCase().trim();
+      try {
+        const userDoc = await db.doc(`artifacts/digital-wallet-prod/public/data/users/${req.auth.sub}`).get();
+        if (userDoc.exists) {
+          const userData = userDoc.data();
+          if (userData && userData.email) {
+            callerEmail = userData.email.toLowerCase().trim();
+          }
+        }
+      } catch (err) {
+        console.error('Error verifying user email in Firestore:', err);
+      }
+      
+      const isCallerAdmin = (callerEmail === 'reviewsworld01@gmail.com');
+
+      // Fetch dynamic chatbot memories from Firestore
+      let memories = [];
+      const memoryRef = db.doc(`artifacts/digital-wallet-prod/public/data/bot_memory/global`);
+      try {
+        const memoryDoc = await memoryRef.get();
+        if (memoryDoc.exists) {
+          memories = memoryDoc.data().memories || [];
+        }
+      } catch (err) {
+        console.error('Error fetching bot memory:', err);
+      }
+
+      let memoriesContext = "";
+      if (memories.length > 0) {
+        memoriesContext = "\nIMPORTANT: You have stored the following custom information from the admin in your memory. Follow these instructions/facts strictly:\n" + 
+          memories.map((m, idx) => `${idx + 1}. ${m}`).join('\n') + "\n";
+      }
+
+      let contextStr = "None";
+      if (userContext) {
+        contextStr = `
+- User Name: ${userContext.userName || 'User'}
+- Email: ${callerEmail}
+- Mobile: ${userContext.userMobile || ''}
+- Current Wallet Balance: ₹${userContext.balance || 0}
+- Active Loan Status: ${userContext.activeLoan ? `₹${userContext.activeLoan.amount} (${userContext.activeLoan.status})` : 'No active loan'}
+- Active Partner Investment: ${userContext.activeInvestment ? `₹${userContext.activeInvestment.amount} (${userContext.activeInvestment.status})` : 'No active investment'}
+- Pending Withdrawal: ${userContext.pendingWithdrawal ? `₹${userContext.pendingWithdrawal.amount} via ${userContext.pendingWithdrawal.method} requested on ${userContext.pendingWithdrawal.requestedAt} is currently ${userContext.pendingWithdrawal.status}` : 'No pending withdrawal'}
+- Recent 5 Transactions:
+${userContext.latestTransactions && userContext.latestTransactions.length ? userContext.latestTransactions.map((t, idx) => `  ${idx+1}. ${t}`).join('\n') : '  No transactions found.'}
+`;
+      }
+
+      const systemMessage = {
+        role: "system",
+        content: `You are REVY, the official AI support chatbot for the "RW Wallet" (also known as "REVIEWS WORLD") web app, developed by the owner, YASH VISHAL.
+Your job is to answer questions about the app's features (earning, task verification, add fund deposit, pay to wallet transfer, bank/UPI withdrawals, mobile recharges, gift codes, partner investments, loans), the owner, and greetings.
+
+CRITICAL RULES:
+1. Match the user's language/style of communication EXACTLY:
+   * If the user writes in English, reply in English.
+   * If the user writes in Hinglish (Hindi written using Latin/English characters, e.g., "recharge kaise karein"), reply in Hinglish.
+   * If the user writes in Hindi (using Devanagari script, e.g., "रिचार्ज कैसे करें"), reply in Hindi.
+   * Match other languages (e.g. Spanish, Bengali) if the user writes in them.
+   * Keep responses friendly, brief, conversational, and direct.
+2. Keep responses EXTREMELY short, direct, and to-the-point (MAX 2-3 lines). Avoid generic filler paragraphs.
+3. Use the following Live User Context to answer user queries about their balance, transactions, withdrawals, loans, or investments:
+${contextStr}
+4. Address greetings (hi, hello, who are you, help, etc.) naturally and briefly as REVY.
+5. If the user asks anything completely unrelated to the app, the owner, or greetings, reply EXACTLY with this:
+"Sorry, I can help only with RW Wallet, REVIEWS WORLD, earning, account, wallet, transaction, withdrawal, add fund, pay to wallet, recharge, gift code, loan, partner investment, profile, and app usage questions. Would you like me to transfer your problem to ADMIN?"
+
+ADMIN MEMORY TRAINING:
+The user with email 'reviewsworld01@gmail.com' is the ADMIN.
+- If the admin (email: reviewsworld01@gmail.com) explicitly tells you to remember, save, or note down any fact, rule, or information, you must accept and confirm it briefly, AND you MUST append a special tag at the very end of your response: [SAVE_MEMORY: <the exact details/info to save>].
+  * Example instruction: "admin says remember that withdrawal takes 2 hours"
+  * Example response: "Got it admin, I have noted that withdrawals take 2 hours. [SAVE_MEMORY: Withdrawals take 2 hours]"
+- Do NOT output this [SAVE_MEMORY: ...] tag for any other user (non-admin). If a non-admin user asks you to remember or save something, reply that only the administrator can train or update your memory.
+${memoriesContext}`
+      };
+
+      const messages = [systemMessage, ...formattedHistory, { role: "user", content: question }];
+
+      const response = await fetch("https://integrate.api.nvidia.com/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": "Bearer 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"
+        },
+        body: JSON.stringify({
+          model: "meta/llama-3.1-8b-instruct",
+          messages: messages,
+          temperature: 0.2,
+          top_p: 0.7,
+          max_tokens: 300
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error(`Nvidia API error: status ${response.status}`);
+      }
+
+      const data = await response.json();
+      let answer = data.choices?.[0]?.message?.content || "";
+
+      // Process and save memory if admin and [SAVE_MEMORY: ...] tag exists
+      const saveMemoryRegex = /\[SAVE_MEMORY:\s*(.*?)\]/i;
+      const match = answer.match(saveMemoryRegex);
+      if (match) {
+        const newMemory = match[1].trim();
+        if (newMemory && isCallerAdmin) {
+          try {
+            await db.runTransaction(async (transaction) => {
+              const doc = await transaction.get(memoryRef);
+              let currentMemories = [];
+              if (doc.exists) {
+                currentMemories = doc.data().memories || [];
+              }
+              if (!currentMemories.includes(newMemory)) {
+                currentMemories.push(newMemory);
+                transaction.set(memoryRef, { memories: currentMemories }, { merge: true });
+              }
+            });
+            console.log('Saved admin memory:', newMemory);
+          } catch (saveErr) {
+            console.error('Error saving admin memory to Firestore:', saveErr);
+          }
+        }
+        // Always clean up the tag so the end user never sees it in the chat
+        answer = answer.replace(/\[SAVE_MEMORY:\s*(.*?)\]/gi, '').trim();
+      }
+
+      res.json({ ok: true, answer });
+    } catch (error) {
+      console.error('Revy Bot API error:', error);
+      res.status(500).json({ ok: false, error: 'BOT_ERROR', detail: error.message });
+    }
+  });
+
+  app.get('/api/admin/chats', requireHttpAuth, async (req, res) => {
+    if (!req.auth.isAdmin) {
+      return res.status(403).json({ ok: false, error: 'ADMIN_REQUIRED' });
+    }
+
+    const isSubAdmin = req.auth.sub !== ADMIN_UID;
+    const rooms = await listChatRooms(d1, {
+      limit: Math.min(Number(req.query.limit || 100), 300),
+      parentAdmin: isSubAdmin ? req.auth.sub : null
+    });
+
+    res.json({ ok: true, chats: rooms });
+  });
+
+  app.get('/api/chats/:roomId', requireHttpAuth, async (req, res) => {
+    const roomId = String(req.params.roomId || '');
+    const roomUserId = roomId.replace(/^support_/, '');
+    if (!roomId || (!req.auth.isAdmin && req.auth.sub !== roomUserId)) {
+      return res.status(403).json({ ok: false, error: 'FORBIDDEN' });
+    }
+
+    const history = await recentChatHistory(d1, roomId, Math.min(Number(req.query.limit || 80), 200));
+    res.json({ ok: true, history });
+  });
+
+  app.delete('/api/chats/:roomId/messages/:messageId', requireHttpAuth, async (req, res) => {
+    const roomId = String(req.params.roomId || '');
+    const messageId = Number(req.params.messageId);
+    const roomUserId = roomId.replace(/^support_/, '');
+    if (!roomId || !messageId || (!req.auth.isAdmin && req.auth.sub !== roomUserId)) {
+      return res.status(403).json({ ok: false, error: 'FORBIDDEN' });
+    }
+
+    try {
+      if (!req.auth.isAdmin) {
+        const msgRow = await d1.first(`SELECT sender_id FROM chats WHERE id = ? LIMIT 1`, [messageId]);
+        if (!msgRow) {
+          return res.status(404).json({ ok: false, error: 'MESSAGE_NOT_FOUND' });
+        }
+        if (msgRow.sender_id !== req.auth.sub) {
+          return res.status(403).json({ ok: false, error: 'UNAUTHORIZED' });
+        }
+      }
+
+      await d1.query(`DELETE FROM chats WHERE id = ?`, [messageId]);
+
+      const lastMsg = await d1.first(`SELECT message, sender_id, timestamp FROM chats WHERE room_id = ? ORDER BY timestamp DESC LIMIT 1`, [roomId]);
+      if (lastMsg) {
+        await upsertChatRoom(d1, {
+          roomId,
+          userId: roomId.replace(/^support_/, ''),
+          lastMessage: lastMsg.message,
+          lastSenderId: lastMsg.sender_id,
+          updatedAt: lastMsg.timestamp
+        }).catch(() => {});
+      } else {
+        await d1.query(`UPDATE chat_rooms SET last_message = '', last_sender_id = '', updated_at = ? WHERE id = ?`, [nowMs(), roomId]).catch(() => {});
+      }
+
+      res.json({ ok: true });
+    } catch (err) {
+      console.error('HTTP Delete chat message failed:', err);
+      res.status(500).json({ ok: false, error: 'DELETE_FAILED', message: err.message });
+    }
+  });
+
+  app.post('/api/notifications/send', requireHttpAuth, async (req, res) => {
+    const { userId, title, message, data } = req.body;
+    if (!userId || !title || !message) {
+      return res.status(400).json({ ok: false, error: 'MISSING_FIELDS' });
+    }
+    try {
+      await sendNotification(d1, userId, title, message, data);
+      res.json({ ok: true });
+    } catch (err) {
+      console.error('sendNotification endpoint failed:', err);
+      res.status(500).json({ ok: false, error: 'SEND_FAILED', message: err.message });
+    }
+  });
+
+  app.get('/api/notifications', requireHttpAuth, async (req, res) => {
+    const notifications = await listUserNotifications(d1, req.auth.sub, Math.min(Number(req.query.limit || 80), 200));
+    const manualOnly = (notifications || []).filter(item => {
+      if (item.isManualMessage || item.is_manual_message) return true;
+      if (item.senderRole === 'admin' || item.sender_role === 'admin') return true;
+      if (item.type === 'manual_admin_broadcast' || item.type === 'manual_admin_message') return true;
+      return false;
+    });
+    res.json({ ok: true, notifications: manualOnly });
+  });
+
+  app.post('/api/notifications/:notificationId/read', requireHttpAuth, async (req, res) => {
+    await markNotificationRead(d1, req.params.notificationId, req.auth.sub);
+    res.json({ ok: true });
+  });
+
+  app.get('/api/admin/notifications', requireHttpAuth, async (req, res) => {
+    if (!req.auth.isAdmin) {
+      return res.status(403).json({ ok: false, error: 'ADMIN_REQUIRED' });
+    }
+    const notifications = await listAdminNotifications(d1, Math.min(Number(req.query.limit || 80), 200));
+    res.json({ ok: true, notifications });
+  });
+
+  app.get('/api/admin/notifications/:notificationId/recipients', requireHttpAuth, async (req, res) => {
+    if (!req.auth.isAdmin) {
+      return res.status(403).json({ ok: false, error: 'ADMIN_REQUIRED' });
+    }
+    const recipients = await listNotificationRecipients(d1, req.params.notificationId, Math.min(Number(req.query.limit || 1000), 3000));
+    res.json({ ok: true, recipients });
+  });
+
+  app.post('/api/admin/notifications/send-daily-summary', requireHttpAuth, async (req, res) => {
+    if (!req.auth.isAdmin) {
+      return res.status(403).json({ ok: false, error: 'ADMIN_REQUIRED' });
+    }
+    try {
+      await sendDailySummaryToAdmins(d1);
+      res.json({ ok: true });
+    } catch (err) {
+      console.error('Failed to run daily summary:', err);
+      res.status(500).json({ ok: false, error: 'SUMMARY_FAILED', message: err.message });
+    }
+  });
+
+  app.post('/api/admin/notifications', requireHttpAuth, async (req, res) => {
+    if (!req.auth.isAdmin) {
+      return res.status(403).json({ ok: false, error: 'ADMIN_REQUIRED' });
+    }
+    try {
+      const notification = await createNotification(d1, {
+        title: req.body.title,
+        message: req.body.message,
+        audience: req.body.audience,
+        recipients: req.body.recipients,
+        senderId: req.auth.sub
+      });
+      res.json({ ok: true, notification });
+    } catch (error) {
+      console.error('Create notification failed:', error);
+      res.status(500).json({ ok: false, error: 'CREATE_NOTIFICATION_FAILED', message: error.message });
+    }
+  });
+
+  app.delete('/api/admin/notifications/:notificationId', requireHttpAuth, async (req, res) => {
+    if (!req.auth.isAdmin) {
+      return res.status(403).json({ ok: false, error: 'ADMIN_REQUIRED' });
+    }
+    await deleteNotification(d1, req.params.notificationId);
+    res.json({ ok: true });
+  });
+
+  // ── Task Reservation Endpoints ───────────────────────────────────────────
+  app.post('/api/task-reservations', requireHttpAuth, rateLimit({ windowMs: 60000, maxRequests: 20 }), async (req, res) => {
+    try {
+      const { taskId, comments, reservationMs } = req.body;
+      if (!taskId) return res.status(400).json({ ok: false, error: 'TASK_ID_REQUIRED' });
+      const reservation = await reserveTaskComment(d1, {
+        taskId,
+        userId: req.auth.sub,
+        userName: req.body.userName || '',
+        userEmail: req.auth.email || '',
+        comments: Array.isArray(comments) ? comments : [],
+        reservationMs: Math.min(Number(reservationMs || TASK_RESERVATION_MS), 15 * 60 * 1000)
+      });
+      res.json({ ok: true, reservation });
+    } catch (error) {
+      if (error.message === 'TASK_ALREADY_SUBMITTED' || error.code === 'DUPLICATE_TASK_SUBMISSION' || String(error.message || '').toLowerCase().includes('already submitted')) {
+        return res.status(409).json({ ok: false, error: 'Task already submitted' });
+      }
+      if (error.message === 'NO_COMMENTS_AVAILABLE') return res.status(410).json({ ok: false, error: error.message });
+      console.error('Task reservation failed:', error);
+      res.status(500).json({ ok: false, error: 'RESERVATION_FAILED' });
+    }
+  });
+
+  app.get('/api/tasks/availability', requireHttpAuth, async (req, res) => {
+    try {
+      await cleanupExpiredReservations(d1);
+      const userId = req.auth.sub;
+
+      const takenComments = await d1.all(
+        `SELECT task_id, comment FROM task_comment_reservations 
+         WHERE status IN ('reserved', 'submitted') 
+           AND (expires_at > ? OR status = 'submitted')`,
+        [nowMs()]
+      );
+
+      const userReservations = await d1.all(
+        `SELECT DISTINCT task_id FROM task_comment_reservations 
+         WHERE user_id = ? AND status = 'reserved' AND expires_at > ?`,
+        [userId, nowMs()]
+      );
+
+      const takenMap = {};
+      for (const row of takenComments) {
+        if (!row.task_id) continue;
+        if (!takenMap[row.task_id]) {
+          takenMap[row.task_id] = [];
+        }
+        const cleanVal = String(row.comment || '').trim();
+        if (cleanVal && !takenMap[row.task_id].includes(cleanVal)) {
+          takenMap[row.task_id].push(cleanVal);
+        }
+      }
+
+      const userReservedTaskIds = (userReservations || []).map(r => r.task_id).filter(Boolean);
+
+      res.json({ ok: true, takenComments: takenMap, userReservedTaskIds });
+    } catch (err) {
+      console.error('Failed to get task comment availability:', err);
+      res.status(500).json({ ok: false, error: 'GET_AVAILABILITY_FAILED' });
+    }
+  });
+
+  app.get('/api/task-reservations/:taskId', requireHttpAuth, async (req, res) => {
+    try {
+      const isBulker = await checkIsBulker(d1, req.auth.sub);
+      if (isBulker) {
+        const reservations = await d1.all(
+          `SELECT * FROM task_comment_reservations WHERE task_id = ? AND user_id = ? AND status = 'reserved' AND expires_at > ? ORDER BY reserved_at ASC`,
+          [req.params.taskId, req.auth.sub, nowMs()]
+        );
+        const formatted = reservations.map(r => {
+          let details = {};
+          try { details = r.details_json ? JSON.parse(r.details_json) : {}; } catch {}
+          return { ...details, ...r, details_json: undefined };
+        });
+        res.json({ ok: true, isBulker: true, reservations: formatted });
+      } else {
+        const reservation = await getTaskReservation(d1, req.params.taskId, req.auth.sub);
+        res.json({ ok: true, isBulker: false, reservation });
+      }
+    } catch (err) {
+      console.error('Failed to get task reservations:', err);
+      res.status(500).json({ ok: false, error: 'GET_RESERVATIONS_FAILED' });
+    }
+  });
+
+  app.get('/api/tasks/:taskId/availability', requireHttpAuth, async (req, res) => {
+    try {
+      await cleanupExpiredReservations(d1);
+      const userId = req.auth.sub;
+      const isBulker = await checkIsBulker(d1, userId);
+      
+      let taskData = {};
+      try {
+        const querySnap = await db.collectionGroup('tasks').where('id', '==', req.params.taskId).limit(1).get();
+        if (!querySnap.empty) {
+          taskData = querySnap.docs[0].data() || {};
+        } else {
+          const directSnap = await db.doc(`artifacts/digital-wallet-prod/public/data/tasks/${req.params.taskId}`).get();
+          if (directSnap.exists) {
+            taskData = directSnap.data() || {};
+          }
+        }
+      } catch (e) {
+        console.warn('Backend task doc lookup fallback:', e);
+      }
+
+      const getTaskCommentPool = (t = {}) => {
+        const src = Array.isArray(t.reviewComments) && t.reviewComments.length
+            ? t.reviewComments
+            : String(t.reviewComment || t.commentToCopy || '').split(/\r?\n/);
+        return src.map(v => String(v || '').trim()).filter(Boolean);
+      };
+      
+      const commentPool = getTaskCommentPool(taskData);
+      
+      // Get active reservations or submissions by other users for this task
+      const activeReservations = await d1.all(
+        `SELECT comment FROM task_comment_reservations WHERE task_id = ? AND status IN ('reserved', 'submitted') AND (expires_at > ? OR status = 'submitted') AND NOT (user_id = ? AND status = 'reserved')`,
+        [req.params.taskId, nowMs(), userId]
+      ).catch(() => []);
+      
+      const usedSet = new Set(activeReservations.map(r => String(r.comment).trim()));
+      const availableComments = commentPool.filter(c => !usedSet.has(c));
+      
+      res.json({
+        ok: true,
+        totalCount: commentPool.length,
+        availableCount: availableComments.length,
+        availableComments
+      });
+    } catch (error) {
+      console.error('Failed to get task availability:', error);
+      res.status(500).json({ ok: false, error: 'AVAILABILITY_FAILED' });
+    }
+  });
+
+  app.post('/api/task-reservations/bulk', requireHttpAuth, async (req, res) => {
+    try {
+      await cleanupExpiredReservations(d1);
+      const userId = req.auth.sub;
+      const { taskId, count } = req.body;
+      const requestedCount = Math.max(1, parseInt(count) || 1);
+      
+      const isBulker = await checkIsBulker(d1, userId);
+      if (!isBulker) {
+        return res.status(403).json({ ok: false, error: 'BULKER_ROLE_REQUIRED' });
+      }
+      
+      let taskData = {};
+      try {
+        const querySnap = await db.collectionGroup('tasks').where('id', '==', taskId).limit(1).get();
+        if (!querySnap.empty) {
+          taskData = querySnap.docs[0].data() || {};
+        } else {
+          const directSnap = await db.doc(`artifacts/digital-wallet-prod/public/data/tasks/${taskId}`).get();
+          if (directSnap.exists) {
+            taskData = directSnap.data() || {};
+          }
+        }
+      } catch (e) {
+        console.warn('Backend task doc lookup fallback in bulk reservation:', e);
+      }
+      
+      const getTaskCommentPool = (t = {}) => {
+        const src = Array.isArray(t.reviewComments) && t.reviewComments.length
+            ? t.reviewComments
+            : (Array.isArray(t.comments) && t.comments.length ? t.comments : String(t.commentToCopy || t.reviewComment || '').split(/\r?\n/));
+        return src.map(v => String(v || '').trim()).filter(Boolean);
+      };
+      let commentPool = getTaskCommentPool(taskData);
+      if (commentPool.length === 0 && Array.isArray(req.body.commentsPool) && req.body.commentsPool.length > 0) {
+        commentPool = req.body.commentsPool.map(v => String(v || '').trim()).filter(Boolean);
+      }
+
+      if (commentPool.length === 0) {
+        return res.status(400).json({ ok: false, error: 'NO_COMMENTS_AVAILABLE' });
+      }
+      
+      const reservedComments = [];
+      
+      // Calculate midnight expiry for bulkers
+      const d = new Date();
+      const istOffset = 5.5 * 60 * 60 * 1000;
+      const istTime = d.getTime() + istOffset;
+      const istDate = new Date(istTime);
+      const endOfTodayIST = Date.UTC(istDate.getUTCFullYear(), istDate.getUTCMonth(), istDate.getUTCDate() + 1, 0, 0, 0, 0) - istOffset;
+      const expiresAt = endOfTodayIST;
+      
+      const userName = req.auth.name || req.auth.email || 'User';
+      const userEmail = req.auth.email || '';
+      
+      let reservedCount = 0;
+      let attempt = 0;
+      const reservedInBatch = new Set();
+      
+      while (reservedCount < requestedCount && attempt < 100) {
+        attempt++;
+        
+        const activeReservations = await d1.all(
+          `SELECT comment FROM task_comment_reservations WHERE task_id = ? AND status IN ('reserved', 'submitted') AND (expires_at > ? OR status = 'submitted')`,
+          [taskId, nowMs()]
+        ).catch(() => []);
+        
+        const usedSet = new Set(activeReservations.map(r => String(r.comment).trim()));
+        const availableList = commentPool.filter(c => !usedSet.has(c) && !reservedInBatch.has(c));
+        
+        if (availableList.length === 0) {
+          break; 
+        }
+        
+        const commentToReserve = availableList[0];
+        reservedInBatch.add(commentToReserve);
+        const commentIndex = commentPool.indexOf(commentToReserve);
+        const id = `res_bulk_${taskId.slice(0,12)}_${userId.slice(0,12)}_${nowMs()}_${reservedCount}`;
+        const detailsObj = { userName, userEmail };
+        
+        try {
+          await d1.query(
+            `INSERT INTO task_comment_reservations (id, task_id, user_id, comment, comment_index, status, reserved_at, expires_at, details_json)
+             VALUES (?, ?, ?, ?, ?, 'reserved', ?, ?, ?)`,
+            [id, taskId, userId, commentToReserve, commentIndex, nowMs(), expiresAt, JSON.stringify(detailsObj)]
+          );
+          reservedComments.push({
+            id,
+            comment: commentToReserve,
+            commentIndex
+          });
+          reservedCount++;
+        } catch (err) {
+          reservedInBatch.delete(commentToReserve);
+          if (String(err.message || '').includes('UNIQUE constraint failed')) {
+            console.warn(`Unique constraint hit in bulk reserve for comment "${commentToReserve}", retrying...`);
+            continue; 
+          }
+          throw err;
+        }
+      }
+      
+      res.json({
+        ok: true,
+        reservedComments,
+        requestedCount,
+        actualCount: reservedComments.length
+      });
+    } catch (error) {
+      console.error('Failed bulk reservation:', error);
+      res.status(500).json({ ok: false, error: 'BULK_RESERVATION_FAILED' });
+    }
+  });
+
+  app.get('/api/admin/task-reservations/:taskId', requireHttpAuth, async (req, res) => {
+    if (!req.auth.isAdmin) return res.status(403).json({ ok: false, error: 'ADMIN_REQUIRED' });
+    try {
+      await cleanupExpiredReservations(d1);
+      const reservations = await d1.all(
+        `SELECT * FROM task_comment_reservations WHERE task_id = ? ORDER BY reserved_at DESC`,
+        [req.params.taskId]
+      );
+      const formatted = reservations.map(r => {
+        let details = {};
+        try { details = r.details_json ? JSON.parse(r.details_json) : {}; } catch {}
+        return {
+          ...r,
+          userName: details.userName || '',
+          userEmail: details.userEmail || '',
+          expiresAt: r.expires_at // make sure to format matching frontend expectation
+        };
+      });
+      res.json({ ok: true, reservations: formatted });
+    } catch (error) {
+      console.error('Failed to get task reservations:', error);
+      res.status(500).json({ ok: false, error: 'GET_RESERVATIONS_FAILED' });
+    }
+  });
+
+  app.post('/api/task-reservations/:reservationId/submit', requireHttpAuth, async (req, res) => {
+    try {
+      await markReservationSubmitted(d1, req.params.reservationId);
+      res.json({ ok: true });
+    } catch (error) {
+      console.error('Reservation submit marking failed:', error);
+      res.status(500).json({ ok: false, error: 'SUBMISSION_MARKING_FAILED' });
+    }
+  });
+
+  // ── Screenshot Upload Endpoint ───────────────────────────────────────────
+  // ── Screenshot Upload Endpoint ───────────────────────────────────────────
+  app.post('/api/uploads/task-screenshot', requireHttpAuth, rateLimit({ windowMs: 60000, maxRequests: 600 }), async (req, res) => {
+    try {
+      const db = admin.firestore();
+      const declaredSize = Number(req.headers['content-length'] || req.query.size || 0);
+      if (declaredSize > TASK_SCREENSHOT_MAX_BYTES) {
+        return res.status(413).json({ ok: false, error: 'UPLOAD_TOO_LARGE' });
+      }
+
+      const taskId = sanitizePathSegment(req.query.taskId || 'unknown');
+      const originalName = sanitizeUploadFileName(req.query.fileName || 'screenshot.jpg');
+      const appName = req.query.appName || 'Unknown App';
+      const contentType = normalizeContentType(req.headers['content-type'] || 'image/jpeg');
+      if (!contentType.startsWith('image/')) {
+        return res.status(400).json({ ok: false, error: 'ONLY_IMAGES_ALLOWED' });
+      }
+
+      const body = await readRequestBody(req, TASK_SCREENSHOT_MAX_BYTES);
+      if (!body.length) return res.status(400).json({ ok: false, error: 'EMPTY_UPLOAD' });
+
+      const ext = getLoanDocumentExtension(originalName, contentType);
+      const userSegment = sanitizePathSegment(req.auth.sub);
+
+      // --- OCR PRE-VERIFICATION ---
+      // 1. Fetch Task data from Firestore
+      const taskDoc = await db.doc(`artifacts/digital-wallet-prod/public/data/tasks/${taskId}`).get();
+      if (!taskDoc.exists) {
+        return res.status(404).json({ ok: false, error: 'TASK_NOT_FOUND', detail: 'The requested task was not found.' });
+      }
+      const taskData = taskDoc.data();
+
+      // 2. Fetch User data to determine tier/role
+      const userDoc = await db.doc(`artifacts/digital-wallet-prod/public/data/users/${req.auth.sub}`).get();
+      const userData = userDoc.data() || {};
+      const userTier = userData.taskTier || (userData.bulkTaskMode || userData.isBulkTaskUser ? 'bulker' : 'single');
+      const isBulk = (userTier === 'bulker' || userTier === 'super_bulker');
+
+      // 3. Get comment pool for the task
+      const getTaskCommentPool = (t = {}) => {
+        const src = Array.isArray(t.reviewComments) && t.reviewComments.length
+            ? t.reviewComments
+            : String(t.reviewComment || t.commentToCopy || t.reviewText || t.copyText || '').split(/\r?\n/);
+        return src.map(v => String(v || '').trim()).filter(Boolean);
+      };
+      const commentPool = getTaskCommentPool(taskData);
+
+      // 4. Calculate remaining comments
+      let targetComments = [];
+      if (isBulk) {
+        // Query D1 today submissions
+        const todayStart = (() => {
+          const d = new Date();
+          const istTime = d.getTime() + (5.5 * 60 * 60 * 1000);
+          const istDate = new Date(istTime);
+          const startOfTodayIST = Date.UTC(istDate.getUTCFullYear(), istDate.getUTCMonth(), istDate.getUTCDate(), 0, 0, 0, 0);
+          return startOfTodayIST - (5.5 * 60 * 60 * 1000);
+        })();
+
+        const todaySubmissions = await d1.all(
+          `SELECT assigned_comment FROM task_submissions WHERE task_id = ? AND user_id = ? AND submitted_at >= ?`,
+          [taskId, req.auth.sub, todayStart]
+        ).catch(() => []);
+        const submittedComments = new Set(todaySubmissions.map(s => String(s.assigned_comment || '').trim()));
+        targetComments = commentPool.filter(c => !submittedComments.has(String(c).trim()));
+        
+        if (targetComments.length === 0) {
+          return res.status(400).json({ ok: false, error: 'NO_COMMENTS_REMAINING', detail: 'All comments for this task have already been submitted.' });
+        }
+      } else {
+        // Single user gets their active reservation comment or falls back
+        const reservation = await d1.first(
+          `SELECT comment FROM task_comment_reservations WHERE task_id = ? AND user_id = ? AND status = 'reserved' AND expires_at > ? LIMIT 1`,
+          [taskId, req.auth.sub, Date.now()]
+        ).catch(() => null);
+        const targetComment = reservation ? reservation.comment : (req.query.assignedComment || commentPool[0]);
+        targetComments = [targetComment];
+      }
+
+      // 5. Run Puter client-side OCR bypass or standard Tesseract OCR
+      const skipOcr = req.query.skipOcr === 'true' || commentPool.length === 0 || targetComments.filter(Boolean).length === 0;
+      let ocrText = '';
+      let ocrConfidence = 0;
+      let ocrResult = null;
+      let matchedComment = null;
+      let gmailName = 'Unknown User';
+      let gmailLogoUrl = '';
+      let avatarHash = '';
+      let avatarCrop = null;
+
+      if (skipOcr) {
+        ocrText = req.query.ocrText ? String(req.query.ocrText).trim() : '';
+        ocrConfidence = Number(req.query.ocrConfidence || 1.0);
+        gmailName = req.query.gmailName ? String(req.query.gmailName).trim() : 'Unknown User';
+        gmailLogoUrl = req.query.gmailLogoUrl || `https://ui-avatars.com/api/?name=${encodeURIComponent(gmailName)}&background=random`;
+        matchedComment = req.query.matchedComment || req.query.assignedComment || '';
+        if (!matchedComment && targetComments.length > 0) {
+          matchedComment = targetComments[0];
+        }
+      } else {
+        let ocrSuccess = false;
+        const ocrApiKey = process.env.OCR_SPACE_API_KEY || 'helloworld';
+        try {
+          const formData = new FormData();
+          const blob = new Blob([body], { type: contentType });
+          formData.append('file', blob, originalName);
+          formData.append('language', 'eng');
+          formData.append('OCREngine', '2');
+          formData.append('apikey', ocrApiKey);
+
+          const ocrResponse = await fetch('https://api.ocr.space/parse/image', {
+            method: 'POST',
+            body: formData
+          });
+
+          if (ocrResponse.ok) {
+            const ocrData = await ocrResponse.json();
+            if (ocrData.OCRExitCode === 1 && ocrData.ParsedResults && ocrData.ParsedResults.length > 0) {
+              ocrText = ocrData.ParsedResults[0].ParsedText || '';
+              ocrConfidence = 0.99;
+              ocrSuccess = true;
+              console.log('[OCR-Upload] OCR.space Engine 2 completed successfully.');
+            } else {
+              console.warn('[OCR-Upload] OCR.space API returned error exit code:', ocrData.ErrorMessage || ocrData.OCRExitCode);
+            }
+          } else {
+            console.warn('[OCR-Upload] OCR.space HTTP error:', ocrResponse.status);
+          }
+        } catch (err) {
+          console.warn('[OCR-Upload] OCR.space API call failed, falling back to Tesseract:', err.message);
+        }
+
+        let tesseractLines = [];
+        if (!ocrSuccess) {
+          try {
+            const pyRes = await ocrService.verifyAppReviewWithPython(body, '');
+            ocrText = pyRes.extracted_text || '';
+            ocrConfidence = pyRes.score ? pyRes.score / 100 : 0.85;
+            tesseractLines = ocrText.split(/\r?\n/).map(l => ({ text: l }));
+            console.log('[OCR-Upload] Python EasyOCR fallback completed.');
+          } catch (ocrErr) {
+            console.error('[OCR-Upload] EasyOCR failed:', ocrErr);
+            return res.status(500).json({ ok: false, error: 'OCR_FAILED', detail: 'Screenshot text recognition failed' });
+          }
+        }
+
+        // 6. Match comment (first 2 words check with merged fallback)
+        const cleanStr = (s) => String(s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+        const ocrTextLower = ocrText.toLowerCase().replace(/[^a-z0-9\s]/g, '');
+        
+        for (const comment of targetComments) {
+          const expectedCommentWords = String(comment || '').trim().split(/\s+/).filter(Boolean);
+          let matchFound = false;
+
+          if (expectedCommentWords.length >= 2) {
+            const word1 = cleanStr(expectedCommentWords[0]);
+            const word2 = cleanStr(expectedCommentWords[1]);
+            const combined = word1 + word2;
+            const normalizedFullText = ocrTextLower.replace(/\s+/g, '');
+            
+            if (normalizedFullText.includes(combined) || 
+                (ocrTextLower.includes(word1) && ocrTextLower.includes(word2))) {
+              matchFound = true;
+            }
+          } else if (expectedCommentWords.length === 1) {
+            const word1 = cleanStr(expectedCommentWords[0]);
+            if (ocrTextLower.includes(word1)) {
+              matchFound = true;
+            }
+          }
+
+          if (matchFound) {
+            matchedComment = comment;
+            break;
+          }
+        }
+
+        if (!matchedComment) {
+          console.warn(`[OCR-Upload] Comment mismatch for user ${req.auth.sub}. OCR: "${ocrText}"`);
+          return res.status(400).json({
+            ok: false,
+            error: 'COMMENT_NOT_MATCHED',
+            detail: 'Your comment is wrong. Copy the same comment as given.'
+          });
+        }
+
+        // 7. Extract name using older app algorithm (Your review + skip patterns)
+        const lines = ocrText.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+        const skipPatterns = [
+          /^\d{1,2}:\d{2}/,           // Time (e.g., "10:30")
+          /^\d{1,3}%$/,               // Battery percentage
+          /LTE|WIFI|4G|5G|VoLTE|KB\/S/i,  // Carrier + Data speed
+          /Google Play/i,             // "Google Play" header
+          /^Search/i, /^Apps/i, /^Games/i, /^Offers/i,
+          /^Movies/i, /^Books/i,
+          /^Ratings and reviews/i,
+          /^See all reviews/i,
+          /^Post/i, /^Cancel/i,
+          /^Edit your review/i,
+          /^Edit/i,
+          /^Episode/i,
+          /^[★☆* ]+\d{1,2}/,         // Star ratings
+          /^[0-9.]+ stars/,
+          /^[0-9.,]+ reviews/,
+          /^[0-9.]+ [KMG]B/,         // App size
+          /No reviews/i,
+          /VoLTE/i, /KB\/S/i,
+          /Personal into/i,
+          /No data collected/i,
+          /Developer contact/i,
+          /About this app/i,
+          /Rate this app/i,
+          /Tell us what you think/i,
+          /Write a review/i,
+          /Safety/i, /Data privacy/i, /Security/i, /Verified/i,
+        ];
+
+        gmailName = 'Unknown User';
+
+        // STEP 1: Look for "Your review" header in the text
+        const yourReviewPattern = /Your review/i;
+        let yourReviewIdx = -1;
+
+        for (let i = 0; i < lines.length; i++) {
+          if (yourReviewPattern.test(lines[i])) {
+            yourReviewIdx = i;
+            break;
+          }
+        }
+
+        if (yourReviewIdx !== -1) {
+          // Name is usually in the next 3 lines after "Your review"
+          for (let j = 1; j <= 3; j++) {
+            if (yourReviewIdx + j < lines.length) {
+              const line = lines[yourReviewIdx + j];
+              const isSystemLine = skipPatterns.some(p => p.test(line));
+              if (!isSystemLine && line.length > 2 && /[a-zA-Z]/.test(line) && line.length < 35) {
+                gmailName = line;
+                break;
+              }
+            }
+          }
+        }
+
+        // Fallback Logic
+        if (gmailName === 'Unknown User' || gmailName === 'Unknown') {
+          for (const line of lines) {
+            const isSystemLine = skipPatterns.some(p => p.test(line));
+            if (!isSystemLine && line.length > 2 && /[a-zA-Z]/.test(line) && line.length < 35) {
+              gmailName = line;
+              break;
+            }
+          }
+        }
+
+        gmailLogoUrl = `https://ui-avatars.com/api/?name=${encodeURIComponent(gmailName)}&background=random`;
+        avatarHash = '';
+        avatarCrop = null;
+      }
+      const safeComment = (matchedComment || 'screenshot').slice(0, 30).replace(/[<>:"/\\|?*]+/g, '_').trim();
+
+      // 8. Upload Full Screenshot with Date/App nested naming structure
+      const safeGmailName = gmailName.replace(/[<>:"/\\|?*]+/g, '_').trim().slice(0, 30) || 'Unknown';
+      const screenshotFileName = `${safeGmailName} - ${safeComment} (screenshot)${ext}`;
+
+      let screenshotResult = {};
+      const driveFolderId = process.env.GOOGLE_DRIVE_FOLDER_ID;
+      if (driveFolderId && (process.env.GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON || process.env.FIREBASE_SERVICE_ACCOUNT_JSON)) {
+        try {
+          const driveResult = await uploadToGoogleDrive(body, screenshotFileName, contentType, driveFolderId, { appName });
+          screenshotResult = {
+            name: originalName,
+            size: body.length,
+            type: contentType,
+            key: `gdrive:${driveResult.fileId}`,
+            url: driveResult.directUrl,
+            viewUrl: driveResult.viewUrl,
+            thumbnailUrl: driveResult.thumbnailUrl,
+            drivePath: `${driveResult.dateFolderName}/${driveResult.appFolderName}`,
+            storage: 'google_drive',
+            uploadedAt: nowMs()
+          };
+        } catch (driveError) {
+          console.error('[OCR-Upload] Google Drive upload failed, falling back to R2:', driveError);
+        }
+      }
+
+      if (!screenshotResult.url && r2 && process.env.CLOUDFLARE_R2_BUCKET && process.env.CLOUDFLARE_R2_PUBLIC_BASE_URL) {
+        const key = `task-screenshots/${userSegment}/${screenshotFileName}`;
+        const url = await putR2Object(r2, key, body, contentType);
+        screenshotResult = {
+          name: originalName,
+          size: body.length,
+          type: contentType,
+          key,
+          url,
+          storage: 'r2',
+          uploadedAt: nowMs()
+        };
+      }
+
+      if (!screenshotResult.url) {
+        return res.status(503).json({ ok: false, error: 'NO_STORAGE_CONFIGURED' });
+      }
+
+      res.json({
+        ok: true,
+        screenshot: screenshotResult,
+        verification: {
+          ocrStatus: 'completed',
+          ocrText: ocrText.slice(0, 4000),
+          ocrConfidence,
+          gmailName: gmailName.slice(0, 200),
+          gmailLogoUrl,
+          avatarHash,
+          avatarCrop,
+          matchedComment
+        }
+      });
+    } catch (error) {
+      if (error?.code === 'UPLOAD_TOO_LARGE') return res.status(413).json({ ok: false, error: 'UPLOAD_TOO_LARGE' });
+      console.error('Task screenshot upload failed:', error);
+      return res.status(500).json({ ok: false, error: 'SCREENSHOT_UPLOAD_FAILED' });
+    }
+  });
+
+  // ── Task Submission Endpoints ────────────────────────────────────────────
+  app.post('/api/task-submissions', requireHttpAuth, rateLimit({ windowMs: 60000, maxRequests: 600 }), async (req, res) => {
+    try {
+      const { taskId, assignedComment, screenshotUrl } = req.body;
+      const userId = req.auth.sub;
+
+      // check if it's a read_news task
+      const db = admin.firestore();
+      const taskDoc = await db.doc(`artifacts/digital-wallet-prod/public/data/tasks/${taskId}`).get();
+      const taskData = taskDoc.data();
+      if (taskData && taskData.taskSubtype === 'read_news') {
+        const submissionId = `sub_${taskId.slice(0, 12)}_${userId.slice(0, 12)}_${Date.now()}`;
+        const reward = Number(taskData.rate || taskData.reward || 0);
+
+        // 1. Save submission to D1
+        await saveTaskSubmission(d1, {
+          id: submissionId,
+          taskId,
+          userId,
+          assignedComment: 'Read News Task Completed',
+          screenshotUrl: 'https://cdn-icons-png.flaticon.com/512/2540/2540832.png',
+          reward,
+          taskLink: taskData.taskLink || '',
+          appName: taskData.appName || taskData.title || 'News Task',
+          userName: req.auth.name || req.auth.email || 'User',
+          userEmail: req.auth.email || '',
+          payoutDelayDays: 0
+        });
+
+        // 2. Mark submission approved and paid instantly in D1
+        await updateTaskSubmission(d1, submissionId, {
+          ocrStatus: 'completed',
+          manualStatus: 'approved',
+          payoutStatus: 'paid',
+          paidAt: Date.now()
+        });
+
+        // 3. Save credit transaction in D1
+        if (reward > 0) {
+          const transactionId = `task_payout_${submissionId}_${Date.now()}`;
+          await saveTransaction(d1, {
+            userId,
+            transactionId,
+            type: 'credit',
+            amount: reward,
+            status: 'completed',
+            timestamp: Date.now(),
+            details: {
+              comment: `Task reward: ${taskData.title}`,
+              source: 'task_auto_payout',
+              taskId,
+              submissionId
+            }
+          });
+        }
+
+        // 4. Update user balance in Firestore (Cloudflare is source of truth)
+        const userRef = db.doc(`artifacts/digital-wallet-prod/public/data/users/${userId}`);
+        await userRef.update({
+          balance: admin.firestore.FieldValue.increment(reward)
+        }).catch(e => console.error(`[News Task] Firestore user balance update failed:`, e));
+
+        // 4b. Deduct from owner's wallet
+        const ownerRefNews = db.doc(`artifacts/digital-wallet-prod/public/data/users/${ADMIN_UID}`);
+        await ownerRefNews.update({
+          balance: admin.firestore.FieldValue.increment(-reward)
+        }).catch(e => console.error(`[News Task] Owner fund deduction failed:`, e));
+
+        // 5. Save transaction in Firestore
+        const txnId = `txn_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+        const txnRef = db.doc(`artifacts/digital-wallet-prod/public/data/users/${userId}/transactions/${txnId}`);
+        const userDoc = await userRef.get().catch(() => null);
+        const userData = userDoc ? userDoc.data() : null;
+        await txnRef.set({
+          type: 'credit',
+          amount: reward,
+          comment: `Read News Task: ${taskData.title}`,
+          timestamp: admin.firestore.FieldValue.serverTimestamp(),
+          transactionId: txnId,
+          status: 'completed',
+          isAdminTransaction: true,
+          senderName: 'Reviews World',
+          recipientName: userData?.name || req.auth.name || 'User',
+          recipientMobile: userData?.mobile || ''
+        }).catch(e => console.error(`[News Task] Firestore transaction write failed:`, e));
+
+        // 6. Save submission in Firestore
+        const firestoreSubRef = db.doc(`artifacts/digital-wallet-prod/public/data/task_submissions/${submissionId}`);
+        await firestoreSubRef.set({
+          id: submissionId,
+          taskId: taskId,
+          taskCode: taskData.taskCode || taskId,
+          taskTitle: taskData.title,
+          taskFamily: 'social',
+          taskSubtype: 'read_news',
+          taskSubtypeLabel: 'Earn from read news',
+          appName: taskData.appName || taskData.title || 'News Task',
+          userId: userId,
+          userName: userData?.name || req.auth.name || 'User',
+          userEmail: req.auth.email || userData?.email || '',
+          userMobile: userData?.mobile || '',
+          reward: reward,
+          status: 'approved',
+          manualStatus: 'approved',
+          payoutStatus: 'paid',
+          submittedAt: admin.firestore.FieldValue.serverTimestamp(),
+          verifiedAt: admin.firestore.FieldValue.serverTimestamp(),
+          paidAt: admin.firestore.FieldValue.serverTimestamp()
+        }).catch(e => console.error(`[News Task] Firestore submission write failed:`, e));
+
+        return res.json({ ok: true, submissionId, instantPaid: true });
+      }
+
+      if (!screenshotUrl) {
+        return res.status(400).json({ ok: false, error: 'SCREENSHOT_REQUIRED' });
+      }
+
+      let ocrText = req.body.ocrExtractedText || '';
+      let ocrConfidence = req.body.ocrConfidence || 0;
+      let gmailName = req.body.ocrExtractedName || '';
+      let gmailLogoUrl = req.body.details?.gmailLogoUrl || '';
+      let avatarHash = req.body.details?.avatarHash || '';
+      let avatarCrop = req.body.details?.avatarCrop || null;
+      let ocrStatus = req.body.ocrStatus || 'pending';
+      let matched = !!ocrText;
+
+      // Only run OCR if it wasn't pre-verified and passed from client
+      if (!matched) {
+        // 1. Download image from URL synchronously
+        let imgBuffer;
+        try {
+          const imgResponse = await fetch(screenshotUrl);
+          if (!imgResponse.ok) throw new Error(`Status ${imgResponse.status}`);
+          imgBuffer = Buffer.from(await imgResponse.arrayBuffer());
+        } catch (err) {
+          console.error('[OCR-Submit] Image fetch failed:', err);
+          return res.status(400).json({ ok: false, error: 'SCREENSHOT_FETCH_FAILED', detail: 'Could not retrieve screenshot for validation' });
+        }
+
+        // 2. Run Python EasyOCR synchronously
+        let data = null;
+        try {
+          const pyRes = await ocrService.verifyAppReviewWithPython(imgBuffer, assignedComment || '');
+          ocrText = pyRes.extracted_text || '';
+          ocrConfidence = pyRes.score ? pyRes.score / 100 : 0.85;
+          data = { text: ocrText, confidence: ocrConfidence, lines: ocrText.split(/\r?\n/).map(l => ({ text: l })) };
+        } catch (ocrErr) {
+          console.error('[OCR-Submit] Python EasyOCR failed:', ocrErr);
+          return res.status(500).json({ ok: false, error: 'OCR_FAILED', detail: 'Screenshot text recognition failed' });
+        }
+
+        const cleanStr = (s) => String(s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+        const cleanedComment = cleanStr(assignedComment);
+
+        if (data && data.lines && data.lines.length > 0) {
+          let foundIndex = -1;
+          for (let j = 0; j < data.lines.length; j++) {
+            const cleanedLine = cleanStr(data.lines[j].text);
+            if (cleanedLine && (cleanedLine.includes(cleanedComment) || cleanedComment.includes(cleanedLine) || (cleanedComment.length > 5 && cleanedLine.length > 5 && cleanedLine.indexOf(cleanedComment.slice(0, 10)) !== -1))) {
+              matched = true;
+              foundIndex = j;
+              break;
+            }
+          }
+
+          let nameLine = null;
+          if (foundIndex !== -1) {
+            // Look for reviewer name 1-3 lines above comment line
+            for (let k = foundIndex - 1; k >= Math.max(0, foundIndex - 3); k--) {
+              const txt = data.lines[k].text.trim();
+              const isRatingOrDate = /^[0-9★☆\s]+$/.test(txt) || txt.toLowerCase().includes('ago') || txt.toLowerCase().includes('edited') || /\d/.test(txt) && (txt.includes('/') || txt.includes('-'));
+              if (txt && !isRatingOrDate && txt.length > 2 && txt.length < 50) {
+                nameLine = data.lines[k];
+                break;
+              }
+            }
+            if (!nameLine && foundIndex >= 2) nameLine = data.lines[foundIndex - 2];
+            if (!nameLine && foundIndex >= 1) nameLine = data.lines[foundIndex - 1];
+          }
+
+          // Fallback: search first 10 lines
+          if (!nameLine) {
+            for (let j = 0; j < Math.min(data.lines.length, 10); j++) {
+              const txt = data.lines[j].text.trim();
+              const isRatingOrDate = /^[0-9★☆\s]+$/.test(txt) || txt.toLowerCase().includes('ago') || txt.toLowerCase().includes('edited') || txt.length < 3 || txt.length > 40;
+              if (txt && !isRatingOrDate) {
+                nameLine = data.lines[j];
+                break;
+              }
+            }
+          }
+
+          if (nameLine) {
+            gmailName = nameLine.text.trim().replace(/[\r\n]+/g, ' ');
+            // Crop Gmail profile avatar using Jimp synchronously
+            try {
+              const image = await Jimp.read(imgBuffer);
+              const imgWidth = image.bitmap.width;
+              const imgHeight = image.bitmap.height;
+              const bbox = nameLine.bbox;
+
+              if (bbox) {
+                const cropX = Math.max(0, Math.min(bbox.x0 - 85, imgWidth - 75));
+                const cropY = Math.max(0, Math.min(bbox.y0 - 15, imgHeight - 75));
+                const cropW = Math.min(75, imgWidth - cropX);
+                const cropH = Math.min(75, imgHeight - cropY);
+
+                if (cropW > 10 && cropH > 10) {
+                  const avatar = image.clone().crop(cropX, cropY, cropW, cropH);
+                  const avatarBuffer = await avatar.getBufferAsync(Jimp.MIME_JPEG);
+                  const safeComment = assignedComment.slice(0, 30).replace(/[<>:"/\\|?*]+/g, '_').trim();
+                  const safeGmailName = gmailName.replace(/[<>:"/\\|?*]+/g, '_').trim().slice(0, 30) || 'Unknown';
+                  const avatarFileName = `${safeGmailName} - ${safeComment} (logo).jpg`;
+
+                  const driveFolderId = process.env.GOOGLE_DRIVE_FOLDER_ID;
+                  if (driveFolderId && (process.env.GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON || process.env.FIREBASE_SERVICE_ACCOUNT_JSON)) {
+                    try {
+                      const driveResult = await uploadToGoogleDrive(avatarBuffer, avatarFileName, 'image/jpeg', driveFolderId, { appName });
+                      gmailLogoUrl = driveResult.directUrl;
+                    } catch (driveErr) {
+                      console.error('[OCR-Submit] Avatar Drive upload failed:', driveErr.message);
+                    }
+                  }
+
+                  if (!gmailLogoUrl && r2 && process.env.CLOUDFLARE_R2_BUCKET) {
+                    const key = `task-screenshots/avatars/${userId}/${avatarFileName}`;
+                    gmailLogoUrl = await putR2Object(r2, key, avatarBuffer, 'image/jpeg');
+                  }
+                }
+              }
+            } catch (cropErr) {
+              console.error('[OCR-Submit] Avatar cropping failed:', cropErr);
+            }
+          }
+        }
+
+        if (!matched) {
+          console.warn(`[OCR-Submit] Comment mismatch for user ${userId}. Assigned comment: "${assignedComment}". OCR Extracted: "${ocrText}"`);
+          return res.status(400).json({
+            ok: false,
+            error: 'COMMENT_NOT_MATCHED',
+            detail: 'Your comment is wrong. Copy the same comment as given.'
+          });
+        }
+        
+        ocrStatus = 'completed';
+      }
+
+      if (!gmailName) {
+        gmailName = 'Unknown User';
+      }
+
+      // 3. Save task submission to D1
+      const submissionId = await saveTaskSubmission(d1, { ...req.body, userId });
+
+      if (req.body.reservationId) {
+        await markReservationSubmitted(d1, req.body.reservationId).catch(e => console.warn('Reservation mark failed:', e));
+      }
+
+      const details = {};
+      try {
+        if (req.body.details) {
+          Object.assign(details, req.body.details);
+        }
+      } catch {}
+      if (gmailLogoUrl) {
+        details.gmailLogoUrl = gmailLogoUrl;
+      }
+      if (avatarHash) {
+        details.avatarHash = avatarHash;
+      }
+      if (avatarCrop) {
+        details.avatarCrop = avatarCrop;
+      }
+
+      // Update OCR fields directly in D1
+      await updateTaskSubmission(d1, submissionId, {
+        ocrStatus,
+        ocrExtractedText: ocrText.slice(0, 4000),
+        ocrExtractedName: gmailName.slice(0, 200),
+        ocrConfidence,
+        detailsJson: details
+      });
+
+      console.log(`[OCR-Submit] Save completed for ${submissionId}`);
+      res.json({ ok: true, submissionId });
+    } catch (error) {
+      if (error && (error.isDuplicateSubmission || error.code === 'DUPLICATE_TASK_SUBMISSION' || String(error?.message || '').toLowerCase().includes('already submitted'))) {
+        return res.status(409).json({ success: false, ok: false, error: 'Task already submitted', message: 'Task already submitted' });
+      }
+      console.error('[OCR-Submit] Task submission save failed:', error);
+      res.status(500).json({ ok: false, error: 'SUBMISSION_FAILED' });
+    }
+  });
+
+  const taskLogoCache = {};
+
+  app.get('/api/admin/task-submissions', requireHttpAuth, async (req, res) => {
+    if (!req.auth.isAdmin) return res.status(403).json({ ok: false, error: 'ADMIN_REQUIRED' });
+    const isSubAdmin = req.auth.role === 'admin' && req.auth.sub !== ADMIN_UID;
+    const db = admin.firestore();
+    const submissions = await listTaskSubmissions(d1, {
+      taskId: req.query.taskId || null,
+      userId: req.query.userId || null,
+      manualStatus: req.query.manualStatus || null,
+      ocrStatus: req.query.ocrStatus || null,
+      payoutStatus: req.query.payoutStatus || null,
+      limit: Math.min(Number(req.query.limit || 200), 500),
+      parentAdmin: isSubAdmin ? req.auth.sub : null
+    });
+
+    const missingTaskIds = [...new Set(submissions.map(s => s.task_id).filter(id => id && taskLogoCache[id] === undefined))];
+    if (missingTaskIds.length > 0) {
+      await Promise.all(missingTaskIds.map(async (taskId) => {
+        try {
+          const taskDoc = await db.doc(`artifacts/digital-wallet-prod/public/data/tasks/${taskId}`).get();
+          if (taskDoc.exists) {
+            const taskData = taskDoc.data();
+            taskLogoCache[taskId] = taskData.imageUrl || taskData.logoUrl || taskData.iconUrl || '';
+          } else {
+            taskLogoCache[taskId] = '';
+          }
+        } catch (err) {
+          console.warn(`[Admin-Submissions] Failed to load task logo for ${taskId}:`, err.message);
+          taskLogoCache[taskId] = '';
+        }
+      }));
+    }
+
+    for (const s of submissions) {
+      s.app_logo_url = s.task_id ? (taskLogoCache[s.task_id] || '') : '';
+    }
+
+    res.json({ ok: true, submissions });
+  });
+
+  app.patch('/api/admin/task-submissions/:submissionId', requireHttpAuth, async (req, res) => {
+    if (!req.auth.isAdmin) return res.status(403).json({ ok: false, error: 'ADMIN_REQUIRED' });
+    try {
+      const subId = req.params.submissionId;
+      const updates = req.body;
+      const sub = await d1.first('SELECT * FROM task_submissions WHERE id = ? LIMIT 1', [subId]);
+      if (!sub) return res.status(404).json({ ok: false, error: 'SUBMISSION_NOT_FOUND' });
+
+      if (updates.payoutStatus === 'paid' && sub.payout_status !== 'paid') {
+        const reward = Number(sub.reward || 0);
+        if (reward > 0) {
+          const now = Date.now();
+          const transactionId = `task_payout_${sub.id}_${now}`;
+          await saveTransaction(d1, {
+            userId: sub.user_id,
+            transactionId,
+            type: 'credit',
+            amount: reward,
+            status: 'completed',
+            timestamp: now,
+            details: {
+              comment: `Task reward: ${sub.app_name || 'Task'}`,
+              source: 'task_manual_payout',
+              taskId: sub.task_id,
+              submissionId: sub.id
+            }
+          });
+          updates.paidAt = now;
+
+          // Notify user of credited wallet balance
+          await sendNotification(d1, sub.user_id, 'Wallet Credited', `₹${reward} added to your wallet for task: ${sub.app_name || 'Task'}.`);
+        }
+      }
+
+      // Trigger #7: Single User Task Status Update -> Send instant alert to User with review reason
+      if (updates.manualStatus && updates.manualStatus !== sub.manual_status) {
+        const reviewReason = (updates.details && (updates.details.reviewReason || updates.details.reason || updates.details.remark))
+          || (updates.reviewReason || updates.reason || '')
+          || '';
+        const rewardVal = Number(sub.reward || 0);
+        const appName = sub.app_name || sub.task_title || 'Task';
+        const pushDataBase = {
+          type: 'task_status_update',
+          submissionId: subId,
+          taskId: sub.task_id,
+          appName,
+          reward: rewardVal,
+          reviewReason
+        };
+        if (updates.manualStatus === 'approved') {
+          const titleHinglish = '✅ Task Approve Ho Gaya';
+          const messageHinglish = `Aapka "${appName}" task of ₹${rewardVal} admin ne approve kar diya hai!${reviewReason ? ' Note: ' + reviewReason : ' Wallet mein jaldi hi credit ho jayega.'}`;
+          await sendNotification(d1, sub.user_id, titleHinglish, messageHinglish, { ...pushDataBase, status: 'approved' });
+          (async () => {
+            try {
+              await oneSignalService.sendPushNotificationToUser({
+                userId: sub.user_id,
+                title: titleHinglish,
+                message: messageHinglish,
+                data: { ...pushDataBase, status: 'approved' }
+              }, d1);
+            } catch (_) {}
+          })();
+        } else if (updates.manualStatus === 'rejected') {
+          const isAppReview = sub.task_link && (sub.task_link.includes('play.google.com') || sub.task_link.includes('details?id='));
+          const defaultReason = isAppReview ? 'Aapka review Play Store par live nahi aaya hai.' : 'Aapka task approve nahi hua hai.';
+          const finalReason = reviewReason || defaultReason;
+          const titleHinglish = '❌ Task Reject Ho Gaya';
+          const messageHinglish = `Aapka "${appName}" task of ₹${rewardVal} reject ho gaya hai. Reason: ${finalReason}`;
+          await sendNotification(d1, sub.user_id, titleHinglish, messageHinglish, { ...pushDataBase, status: 'rejected' });
+          (async () => {
+            try {
+              await oneSignalService.sendPushNotificationToUser({
+                userId: sub.user_id,
+                title: titleHinglish,
+                message: messageHinglish,
+                data: { ...pushDataBase, status: 'rejected' }
+              }, d1);
+            } catch (_) {}
+          })();
+        }
+      }
+
+      await updateTaskSubmission(d1, subId, updates);
+      res.json({ ok: true });
+    } catch (error) {
+      console.error('Task submission update failed:', error);
+      res.status(500).json({ ok: false, error: 'UPDATE_FAILED' });
+    }
+  });
+
+  // ── OCR Endpoint ─────────────────────────────────────────────────────────
+  app.post('/api/admin/ocr-process/:submissionId', requireHttpAuth, async (req, res) => {
+    if (!req.auth.isAdmin) return res.status(403).json({ ok: false, error: 'ADMIN_REQUIRED' });
+    try {
+      const submission = await d1.first('SELECT * FROM task_submissions WHERE id = ? LIMIT 1', [req.params.submissionId]);
+      if (!submission) return res.status(404).json({ ok: false, error: 'SUBMISSION_NOT_FOUND' });
+
+      let ocrResult = { text: '', confidence: 0, status: 'completed' };
+      let ocrSuccess = false;
+      let imgBuffer = null;
+
+      if (submission.screenshot_url) {
+        try {
+          // Download image from URL
+          const imgResponse = await fetch(submission.screenshot_url);
+          if (!imgResponse.ok) throw new Error(`Image download failed: ${imgResponse.status}`);
+          imgBuffer = Buffer.from(await imgResponse.arrayBuffer());
+
+          // Try OCR.space API first
+          const ocrApiKey = process.env.OCR_SPACE_API_KEY || 'helloworld';
+          try {
+            const formData = new FormData();
+            const blob = new Blob([imgBuffer], { type: 'image/jpeg' });
+            formData.append('file', blob, 'screenshot.jpg');
+            formData.append('language', 'eng');
+            formData.append('OCREngine', '2');
+            formData.append('apikey', ocrApiKey);
+
+            const ocrResponse = await fetch('https://api.ocr.space/parse/image', {
+              method: 'POST',
+              body: formData
+            });
+
+            if (ocrResponse.ok) {
+              const ocrData = await ocrResponse.json();
+              if (ocrData.OCRExitCode === 1 && ocrData.ParsedResults && ocrData.ParsedResults.length > 0) {
+                ocrResult.text = (ocrData.ParsedResults[0].ParsedText || '').trim();
+                ocrResult.confidence = 0.99;
+                ocrResult.status = 'completed';
+                ocrSuccess = true;
+                console.log(`[Admin-OCR] OCR.space completed for ${req.params.submissionId}`);
+              }
+            }
+          } catch (spaceErr) {
+            console.warn('[Admin-OCR] OCR.space API failed, falling back to Tesseract:', spaceErr.message);
+          }
+
+          // Fallback to Python EasyOCR
+          if (!ocrSuccess) {
+            const pyRes = await ocrService.verifyAppReviewWithPython(imgBuffer, '');
+            ocrResult.text = pyRes.extracted_text || '';
+            ocrResult.confidence = pyRes.score ? pyRes.score / 100 : 0.85;
+            ocrResult.status = 'completed';
+            console.log(`[Admin-OCR] Python EasyOCR fallback completed for ${req.params.submissionId}`);
+          }
+        } catch (ocrError) {
+          console.error('[Admin-OCR] OCR process error:', ocrError);
+          ocrResult = { text: '', confidence: 0, status: 'failed' };
+        }
+      } else {
+        ocrResult = { text: '[No screenshot URL available for OCR]', confidence: 0, status: 'failed' };
+      }
+
+      // Extract Name if OCR text is populated
+      let extractedName = submission.ocr_extracted_name || 'Unknown User';
+      if (ocrResult.text) {
+        const lines = ocrResult.text.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+        const skipPatterns = [
+          /^\d{1,2}:\d{2}/,
+          /^\d{1,3}%$/,
+          /LTE|WIFI|4G|5G|VoLTE|KB\/S/i,
+          /Google Play/i,
+          /^Search/i, /^Apps/i, /^Games/i, /^Offers/i,
+          /^Movies/i, /^Books/i,
+          /^Ratings and reviews/i,
+          /^See all reviews/i,
+          /^Post/i, /^Cancel/i,
+          /^Edit your review/i,
+          /^Edit/i,
+          /^Episode/i,
+          /^[★☆* ]+\d{1,2}/,
+          /^[0-9.]+ stars/,
+          /^[0-9.,]+ reviews/,
+          /^[0-9.]+ [KMG]B/,
+          /No reviews/i,
+          /VoLTE/i, /KB\/S/i,
+          /Personal into/i,
+          /No data collected/i,
+          /Developer contact/i,
+          /About this app/i,
+          /Rate this app/i,
+          /Tell us what you think/i,
+          /Write a review/i,
+          /Safety/i, /Data privacy/i, /Security/i, /Verified/i,
+        ];
+
+        let reviewerName = 'Unknown User';
+        const yourReviewPattern = /Your review/i;
+        let yourReviewIdx = -1;
+
+        for (let i = 0; i < lines.length; i++) {
+          if (yourReviewPattern.test(lines[i])) {
+            yourReviewIdx = i;
+            break;
+          }
+        }
+
+        if (yourReviewIdx !== -1) {
+          for (let j = 1; j <= 3; j++) {
+            if (yourReviewIdx + j < lines.length) {
+              const line = lines[yourReviewIdx + j];
+              const isSystemLine = skipPatterns.some(p => p.test(line));
+              if (!isSystemLine && line.length > 2 && /[a-zA-Z]/.test(line) && line.length < 35) {
+                reviewerName = line;
+                break;
+              }
+            }
+          }
+        }
+
+        if (reviewerName === 'Unknown User' || reviewerName === 'Unknown') {
+          for (const line of lines) {
+            const isSystemLine = skipPatterns.some(p => p.test(line));
+            if (!isSystemLine && line.length > 2 && /[a-zA-Z]/.test(line) && line.length < 35) {
+              reviewerName = line;
+              break;
+            }
+          }
+        }
+        extractedName = reviewerName;
+      }
+
+      let details = {};
+      try { details = submission.details_json ? JSON.parse(submission.details_json) : {}; } catch {}
+      if (imgBuffer && extractedName && extractedName.toLowerCase() !== 'unknown user') {
+        try {
+          const avatarResult = await extractAndStoreReviewerAvatar({
+            imageBuffer: imgBuffer,
+            reviewerName: extractedName,
+            r2,
+            userId: submission.user_id,
+            appName: submission.app_name || 'Avatars'
+          });
+          if (avatarResult.avatarUrl) details.gmailLogoUrl = avatarResult.avatarUrl;
+          if (avatarResult.avatarHash) details.avatarHash = avatarResult.avatarHash;
+          if (avatarResult.avatarCrop) details.avatarCrop = avatarResult.avatarCrop;
+        } catch (avatarErr) {
+          console.warn('[Admin-OCR] Reviewer avatar capture skipped:', avatarErr.message || avatarErr);
+        }
+      }
+
+      await updateTaskSubmission(d1, req.params.submissionId, {
+        ocrStatus: ocrResult.status,
+        ocrExtractedText: ocrResult.text.slice(0, 4000),
+        ocrConfidence: ocrResult.confidence,
+        ocrExtractedName: extractedName,
+        detailsJson: details
+      });
+
+      res.json({ ok: true, ocr: { ...ocrResult, name: extractedName, avatarHash: details.avatarHash || '', gmailLogoUrl: details.gmailLogoUrl || '' } });
+    } catch (error) {
+      console.error('OCR processing failed:', error);
+      res.status(500).json({ ok: false, error: 'OCR_FAILED' });
+    }
+  });
+
+function extractPackageId(value) {
+  const raw = String(value ?? '').trim();
+  if (!raw) return '';
+  if (raw.startsWith('http://') || raw.startsWith('https://')) {
+    try {
+      const url = new URL(raw);
+      const packageId = url.searchParams.get('id');
+      return packageId ? packageId.trim() : '';
+    } catch {
+      return '';
+    }
+  }
+  return raw;
+}
+
+async function fetchPlayStoreReviewsForDate(packageId, targetDateMs) {
+  const targetDateStr = new Date(targetDateMs + 330 * 60 * 1000).toISOString().slice(0, 10);
+  let continuationToken;
+  let keepGoing = true;
+  let pageCount = 0;
+  const allReviews = [];
+
+  console.log(`[Scraper] Fetching reviews for package ${packageId}, target IST date ${targetDateStr}`);
+  while (keepGoing && pageCount < 15) {
+    try {
+      const response = await gplay.reviews({
+        appId: packageId,
+        sort: gplay.sort.NEWEST,
+        paginate: true,
+        nextPaginationToken: continuationToken,
+        lang: 'en',
+        country: 'in',
+        num: 150
+      });
+
+      if (!response.data || response.data.length === 0) {
+        break;
+      }
+
+      allReviews.push(...response.data);
+      continuationToken = response.nextPaginationToken;
+      pageCount++;
+
+      const oldestReview = response.data[response.data.length - 1];
+      const oldestDateStr = new Date(oldestReview.date + 330 * 60 * 1000).toISOString().slice(0, 10);
+      if (oldestDateStr < targetDateStr) {
+        keepGoing = false;
+      }
+
+      if (!continuationToken) {
+        keepGoing = false;
+      }
+    } catch (err) {
+      console.error(`[Scraper] gplay.reviews page ${pageCount} error:`, err.message);
+      break;
+    }
+  }
+
+  const filtered = allReviews.filter(review => {
+    const reviewDateStr = new Date(review.date + 330 * 60 * 1000).toISOString().slice(0, 10);
+    return reviewDateStr === targetDateStr;
+  });
+  console.log(`[Scraper] Done. Total fetched ${allReviews.length}, target date matches: ${filtered.length}`);
+  return filtered;
+}
+
+  // ── Scraper Endpoints ────────────────────────────────────────────────────
+  app.post('/api/admin/scraper/check-review', requireHttpAuth, async (req, res) => {
+    if (!req.auth.isAdmin) return res.status(403).json({ ok: false, error: 'ADMIN_REQUIRED' });
+    try {
+      const { submissionId, taskLink, assignedComment, appName } = req.body;
+      if (!submissionId) return res.status(400).json({ ok: false, error: 'SUBMISSION_ID_REQUIRED' });
+
+      // Retrieve submission from D1
+      const sub = await d1.first('SELECT * FROM task_submissions WHERE id = ? LIMIT 1', [submissionId]);
+      if (!sub) return res.status(404).json({ ok: false, error: 'SUBMISSION_NOT_FOUND' });
+
+      // Fetch task details from Firestore to verify compile date/time constraints
+      const db = admin.firestore();
+      const taskDoc = await db.doc(`artifacts/digital-wallet-prod/public/data/tasks/${sub.task_id}`).get();
+      if (taskDoc.exists) {
+        const taskData = taskDoc.data();
+        const submittedAt = sub.submitted_at;
+        const subDate = new Date(submittedAt);
+
+        let releaseTime = 0;
+        const paymentMode = taskData.paymentMode || (Number(taskData.paymentDelayDays || 0) > 0 ? 'days' : 'instant');
+        if (paymentMode === 'instant') {
+          const nextDay = new Date(subDate.getFullYear(), subDate.getMonth(), subDate.getDate() + 1, 0, 0, 0);
+          releaseTime = nextDay.getTime();
+        } else {
+          const delayDays = Number(taskData.paymentDelayDays || taskData.listDays || taskData.list_days || 7);
+          const listTimeStr = taskData.listTime || "20:00";
+          const [hours, minutes] = listTimeStr.split(':').map(Number);
+          const releaseDate = new Date(subDate.getFullYear(), subDate.getMonth(), subDate.getDate() + delayDays, hours, minutes, 0);
+          releaseTime = releaseDate.getTime();
+        }
+
+        if (nowMs() < releaseTime) {
+          const formattedRelease = new Date(releaseTime).toLocaleString('en-IN', {
+            day: '2-digit',
+            month: 'short',
+            year: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit',
+            hour12: true
+          });
+          return res.json({
+            ok: true,
+            result: {
+              checked: true,
+              isPlayStore: String(sub.task_link || taskLink || '').includes('play.google.com'),
+              found: false,
+              message: `Verification release time not reached. Submission will verify after ${formattedRelease}.`,
+              checkedAt: nowMs()
+            }
+          });
+        }
+      }
+
+      const appNameLower = String(sub.app_name || appName || '').trim().toLowerCase();
+      const liveList = await d1.first(
+        'SELECT * FROM live_lists WHERE LOWER(app_name) = ? ORDER BY date DESC LIMIT 1',
+        [appNameLower]
+      );
+
+      const userFullName = String(sub.user_name || '').trim().toLowerCase();
+      const ocrReviewerName = String(sub.ocr_extracted_name || '').trim().toLowerCase();
+      const isExactNameMatch = userFullName && ocrReviewerName && (userFullName === ocrReviewerName) && (ocrReviewerName !== 'unknown user');
+
+      let isLive = false;
+      let matchSource = '';
+
+      if (isExactNameMatch) {
+        console.warn(`[Scraper-Check] Exact name match security warning for user ${sub.user_name} on submission ${submissionId}`);
+        const scraperResult = {
+          checked: true,
+          isPlayStore: String(sub.task_link || taskLink || '').includes('play.google.com'),
+          found: false,
+          message: 'Security bypass: Reviewer name matches platform name exactly. Admin manual review required.',
+          checkedAt: nowMs()
+        };
+
+        await updateTaskSubmission(d1, submissionId, {
+          scraperStatus: 'name_matched_manual',
+          scraperResultJson: scraperResult
+        });
+
+        // Sync to Firestore
+        const db = admin.firestore();
+        const firestoreSubRef = db.doc(`artifacts/digital-wallet-prod/public/data/task_submissions/${submissionId}`);
+        await firestoreSubRef.update({
+          scraperStatus: 'name_matched_manual'
+        }).catch(e => console.error(`[Scraper-Check] Firestore sync failed for ${submissionId}:`, e));
+
+        return res.json({ ok: true, result: scraperResult });
+      }
+
+      // Check live list (name only)
+      if (liveList && sub.ocr_extracted_name && sub.ocr_extracted_name.toLowerCase() !== 'unknown user') {
+        const lines = liveList.content.split(/\r?\n/).map(l => l.trim().toLowerCase()).filter(Boolean);
+        const nameClean = sub.ocr_extracted_name.trim().toLowerCase();
+        isLive = lines.some(line => {
+          const lineNameOnly = line.replace(/[a-f0-9]{32,64}/g, '').trim();
+          return line.includes(nameClean) || nameClean.includes(lineNameOnly);
+        });
+        if (isLive) matchSource = 'live_list_name';
+      }
+
+      const isPlayStore = String(sub.task_link || taskLink || '').includes('play.google.com');
+
+      // Scraper fallback check
+      if (!isLive && isPlayStore) {
+        const packageId = extractPackageId(sub.task_link || taskLink);
+        if (packageId && sub.ocr_extracted_name && sub.ocr_extracted_name.toLowerCase() !== 'unknown user') {
+          try {
+            const playReviews = await fetchPlayStoreReviewsForDate(packageId, sub.submitted_at);
+            const nameClean = sub.ocr_extracted_name.trim().toLowerCase();
+            const foundReview = playReviews.find(r => {
+              const rName = String(r.userName || '').trim().toLowerCase();
+              return rName.includes(nameClean) || nameClean.includes(rName);
+            });
+            if (foundReview) {
+              isLive = true;
+              matchSource = 'play_store_live_scraper';
+            }
+          } catch (scrapeErr) {
+            console.error('Play Store scraper check failed:', scrapeErr);
+          }
+        }
+      }
+
+      if (isLive) {
+        // Automatically confirm and approve submission
+        const scraperResult = {
+          checked: true,
+          isPlayStore,
+          found: true,
+          source: matchSource,
+          reviewerName: sub.ocr_extracted_name || '',
+          message: 'Review verified: Reviewer found on Play Store / List!',
+          checkedAt: nowMs()
+        };
+
+        await updateTaskSubmission(d1, submissionId, {
+          scraperStatus: 'live_confirmed',
+          manualStatus: 'approved',
+          verifiedAt: nowMs(),
+          scraperResultJson: scraperResult
+        });
+
+        // Sync to Firestore
+        const firestoreSubRef = db.doc(`artifacts/digital-wallet-prod/public/data/task_submissions/${submissionId}`);
+        await firestoreSubRef.update({
+          scraperStatus: 'live_confirmed',
+          manualStatus: 'approved',
+          status: 'approved',
+          verifiedAt: admin.firestore.FieldValue.serverTimestamp()
+        }).catch(e => console.error(`[Scraper-Check] Firestore sync failed for ${submissionId}:`, e));
+
+        return res.json({ ok: true, result: scraperResult });
+      } else {
+        // Not found
+        const scraperResult = {
+          checked: true,
+          isPlayStore,
+          found: false,
+          message: isPlayStore
+            ? 'Not found on Play Store or list. Review might not be live yet or deleted.'
+            : 'Non-Play-Store link or reviewer name not found — manual verification required.',
+          checkedAt: nowMs()
+        };
+
+        const newStatus = isPlayStore ? 'not_live' : 'not_applicable';
+        await updateTaskSubmission(d1, submissionId, {
+          scraperStatus: newStatus,
+          scraperResultJson: scraperResult
+        });
+
+        // Sync to Firestore
+        const firestoreSubRef = db.doc(`artifacts/digital-wallet-prod/public/data/task_submissions/${submissionId}`);
+        await firestoreSubRef.update({
+          scraperStatus: newStatus
+        }).catch(e => console.error(`[Scraper-Check] Firestore sync failed for ${submissionId}:`, e));
+
+        return res.json({ ok: true, result: scraperResult });
+      }
+    } catch (error) {
+      console.error('Scraper check failed:', error);
+      res.status(500).json({ ok: false, error: 'SCRAPER_CHECK_FAILED' });
+    }
+  });
+
+  app.post('/api/admin/scraper/confirm-live', requireHttpAuth, async (req, res) => {
+    if (!req.auth.isAdmin) return res.status(403).json({ ok: false, error: 'ADMIN_REQUIRED' });
+    try {
+      const { submissionId } = req.body;
+      if (!submissionId) return res.status(400).json({ ok: false, error: 'SUBMISSION_ID_REQUIRED' });
+      await updateTaskSubmission(d1, submissionId, {
+        scraperStatus: 'live_confirmed',
+        verifiedAt: nowMs()
+      });
+      res.json({ ok: true });
+    } catch (error) {
+      console.error('Scraper confirm failed:', error);
+      res.status(500).json({ ok: false, error: 'CONFIRM_FAILED' });
+    }
+  });
+
+  app.post('/api/admin/scraper/fetch-reviews', requireHttpAuth, async (req, res) => {
+    if (!req.auth.isAdmin) return res.status(403).json({ ok: false, error: 'ADMIN_REQUIRED' });
+    try {
+      const { url, packageId: packageIdInput, taskId, selectedDate } = req.body;
+      const packageId = extractPackageId(url || packageIdInput || '');
+      if (!packageId) return res.status(400).json({ ok: false, error: 'PACKAGE_ID_REQUIRED' });
+
+      console.log(`[Manual Scraper] Fetching reviews for package: ${packageId}`);
+      const reviews = await gplay.reviews({
+        appId: packageId,
+        sort: gplay.sort.NEWEST,
+        lang: 'en',
+        country: 'in',
+        num: 150
+      });
+
+      const list = Array.isArray(reviews) ? reviews : (reviews.data || []);
+
+      // If taskId is provided, generate and upload Excel to Google Drive!
+      if (taskId) {
+        try {
+          const db = admin.firestore();
+          const taskDoc = await db.doc(`artifacts/digital-wallet-prod/public/data/tasks/${taskId}`).get();
+          if (taskDoc.exists) {
+            const taskData = taskDoc.data();
+            const appName = taskData.appName || taskData.title || 'App';
+            const safeAppName = String(appName).replace(/[<>:"/\\|?*]+/g, '_').trim().slice(0, 100) || 'Unknown App';
+            
+            const dateStr = selectedDate || new Date().toISOString().slice(0, 10);
+            
+            // Fetch submissions from D1
+            const taskSubs = await d1.all(
+              `SELECT * FROM task_submissions WHERE task_id = ?`,
+              [taskId]
+            );
+
+            const getSubmissionLocalDateStr = (submittedAt) => {
+              if (!submittedAt) return '';
+              const d = new Date(Number(submittedAt));
+              return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+            };
+
+            const dateSubs = taskSubs.filter(s => getSubmissionLocalDateStr(s.submitted_at) === dateStr);
+
+            const taskSubsMap = new Map();
+            dateSubs.forEach(s => {
+              const ocr = String(s.ocr_extracted_name || '').trim().toLowerCase();
+              const usr = String(s.user_name || '').trim().toLowerCase();
+              if (ocr && ocr !== 'unknown user') taskSubsMap.set(ocr, s);
+              if (usr) taskSubsMap.set(usr, s);
+            });
+
+            const getMatchedSub = (review) => {
+              const rName = String(review.userName || review.user || '').trim().toLowerCase();
+              if (!rName) return null;
+              for (const [key, sub] of taskSubsMap.entries()) {
+                if (key.includes(rName) || rName.includes(key)) {
+                  return sub;
+                }
+              }
+              return null;
+            };
+
+            const headers = ['Reviewer Name', 'Rating (Stars)', 'Review Comment', 'Status', 'User Mobile', 'Review Date', 'Helpful Count'];
+            
+            const rows = list.map(r => {
+              const matched = getMatchedSub(r);
+              const reviewDate = r.date || r.time ? new Date(r.date || r.time).toLocaleDateString('en-GB') : '';
+              return [
+                r.userName || r.user || 'User',
+                Math.round(Number(r.score || r.rating || 5)),
+                r.text || r.content || '',
+                matched ? 'Matched' : 'Not Matched',
+                matched ? (matched.user_mobile || '') : '',
+                reviewDate,
+                r.thumbsUpCount || 0
+              ];
+            });
+
+            let xml = `<?xml version="1.0"?><Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet" xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet"><Worksheet ss:Name="Sheet1"><Table>`;
+            
+            xml += '<Row>';
+            headers.forEach(h => {
+              xml += `<Cell><Data ss:Type="String">${h.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')}</Data></Cell>`;
+            });
+            xml += '</Row>';
+            
+            rows.forEach(row => {
+              xml += '<Row>';
+              row.forEach(val => {
+                const cleanVal = String(val === null || val === undefined ? '' : val)
+                  .replace(/&/g, '&amp;')
+                  .replace(/</g, '&lt;')
+                  .replace(/>/g, '&gt;');
+                xml += `<Cell><Data ss:Type="String">${cleanVal}</Data></Cell>`;
+              });
+              xml += '</Row>';
+            });
+            
+            xml += '</Table></Worksheet></Workbook>';
+
+            // Upload Excel file to Google Drive
+            const drive = getGoogleDriveClient();
+            if (drive) {
+              const rootFolderId = process.env.GOOGLE_DRIVE_FOLDER_ID || 'root';
+              
+              // 1. Create or Find Date Folder (DD-MM-YYYY)
+              const [y, m, dVal] = dateStr.split('-');
+              const folderDateStr = `${dVal}-${m}-${y}`;
+              const dateFolderId = await findOrCreateDriveFolder(drive, rootFolderId, folderDateStr);
+
+              // 2. Create or Find App Name Folder
+              const appFolderId = await findOrCreateDriveFolder(drive, dateFolderId, safeAppName);
+
+              // 3. Determine Filename based on release constraints
+              let excelFilename = '';
+              const submittedAt = dateSubs.length > 0 ? dateSubs[0].submitted_at : Date.now();
+              const subDate = new Date(submittedAt);
+
+              let releaseTime = 0;
+              const paymentMode = taskData.paymentMode || (Number(taskData.paymentDelayDays || 0) > 0 ? 'days' : 'instant');
+              const delayDays = Number(taskData.paymentDelayDays || taskData.listDays || taskData.list_days || 7);
+              
+              if (paymentMode === 'instant') {
+                const nextDay = new Date(subDate.getFullYear(), subDate.getMonth(), subDate.getDate() + 1, 0, 0, 0);
+                releaseTime = nextDay.getTime();
+              } else {
+                const listTimeStr = taskData.listTime || "20:00";
+                const [hours, minutes] = listTimeStr.split(':').map(Number);
+                const releaseDate = new Date(subDate.getFullYear(), subDate.getMonth(), subDate.getDate() + delayDays, hours, minutes, 0);
+                releaseTime = releaseDate.getTime();
+              }
+
+              const dObj = new Date();
+              const dDay = String(dObj.getDate()).padStart(2, '0');
+              const dMonth = String(dObj.getMonth() + 1).padStart(2, '0');
+              const dYear = dObj.getFullYear();
+              const dDateStr = `${dDay}_${dMonth}_${dYear}`;
+
+              if (Date.now() < releaseTime) {
+                // Testing / early fetch: [AppName]_[Date]_[DayNo].xlsx
+                const dayLabel = paymentMode === 'instant' ? 'Instant' : `Day${delayDays}`;
+                excelFilename = `${appName}_${dDateStr}_${dayLabel}.xlsx`;
+              } else {
+                // On/after release: [AppName]_[Date].xlsx
+                excelFilename = `${appName}_${dDateStr}.xlsx`;
+              }
+
+              // 4. Upload file to App Name Folder
+              const response = await drive.files.create({
+                requestBody: {
+                  name: excelFilename,
+                  parents: [appFolderId]
+                },
+                media: {
+                  mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                  body: Readable.from([xml])
+                },
+                fields: 'id, name, webViewLink'
+              });
+
+              // Make the file publicly viewable
+              await drive.permissions.create({
+                fileId: response.data.id,
+                requestBody: { role: 'reader', type: 'anyone' }
+              });
+
+              console.log(`[Manual Scraper] Uploaded Excel file ${excelFilename} to Drive: ${response.data.webViewLink}`);
+            }
+          }
+        } catch (driveErr) {
+          console.error('[Manual Scraper] Google Drive Excel upload failed:', driveErr);
+        }
+      }
+
+      res.json({ ok: true, reviews: list });
+    } catch (error) {
+      console.error('Manual reviews fetch failed:', error);
+      res.status(500).json({ ok: false, error: error.message || 'FETCH_REVIEWS_FAILED' });
+    }
+  });
+
+  app.post('/api/admin/auto-payout/run', requireHttpAuth, async (req, res) => {
+    if (!req.auth.isAdmin) return res.status(403).json({ ok: false, error: 'ADMIN_REQUIRED' });
+    try {
+      const paidCount = await processAutoPayouts(d1);
+      res.json({ ok: true, paidCount });
+    } catch (error) {
+      console.error('Manual auto-payout trigger failed:', error);
+      res.status(500).json({ ok: false, error: 'AUTO_PAYOUT_FAILED' });
+    }
+  });
+
+  app.get('/api/admin/auto-payout/pending', requireHttpAuth, async (req, res) => {
+    if (!req.auth.isAdmin) return res.status(403).json({ ok: false, error: 'ADMIN_REQUIRED' });
+    const pending = await d1.all(
+      `SELECT *, (submitted_at + (payout_delay_days * 86400000)) as payout_due_at
+       FROM task_submissions
+       WHERE manual_status = 'approved' AND payout_status = 'pending'
+       ORDER BY submitted_at ASC LIMIT 200`
+    );
+    res.json({ ok: true, pending });
+  });
+
+  // ── Audit Endpoints ──────────────────────────────────────────────────────
+  app.get('/api/admin/audit/summary', requireHttpAuth, async (req, res) => {
+    if (!req.auth.isAdmin) return res.status(403).json({ ok: false, error: 'ADMIN_REQUIRED' });
+    try {
+      const summary = await getSyncAuditSummary(d1);
+      const d1UserCount = await d1.first('SELECT COUNT(*) as count FROM users');
+      const d1TransactionCount = await d1.first('SELECT COUNT(*) as count FROM transactions');
+      const d1FundRequestCount = await d1.first('SELECT COUNT(*) as count FROM fund_requests');
+      const d1SubmissionCount = await d1.first('SELECT COUNT(*) as count FROM task_submissions');
+      const d1ReservationCount = await d1.first('SELECT COUNT(*) as count FROM task_comment_reservations WHERE status = \'reserved\' AND expires_at > ' + nowMs());
+      res.json({
+        ok: true,
+        sync: summary,
+        d1Counts: {
+          users: d1UserCount?.count || 0,
+          transactions: d1TransactionCount?.count || 0,
+          fundRequests: d1FundRequestCount?.count || 0,
+          taskSubmissions: d1SubmissionCount?.count || 0,
+          activeReservations: d1ReservationCount?.count || 0
+        }
+      });
+    } catch (error) {
+      console.error('Audit summary failed:', error);
+      res.status(500).json({ ok: false, error: 'AUDIT_SUMMARY_FAILED' });
+    }
+  });
+
+  app.get('/api/admin/audit/failed-syncs', requireHttpAuth, async (req, res) => {
+    if (!req.auth.isAdmin) return res.status(403).json({ ok: false, error: 'ADMIN_REQUIRED' });
+    const logs = await listSyncAuditLogs(d1, {
+      entityType: req.query.entityType || null,
+      status: req.query.status || 'failed',
+      limit: Math.min(Number(req.query.limit || 200), 500)
+    });
+    res.json({ ok: true, logs });
+  });
+
+  app.post('/api/admin/audit/resolve/:logId', requireHttpAuth, async (req, res) => {
+    if (!req.auth.isAdmin) return res.status(403).json({ ok: false, error: 'ADMIN_REQUIRED' });
+    await resolveSyncAuditLog(d1, Number(req.params.logId));
+    res.json({ ok: true });
+  });
+
+  // Frontend sync failure reporting (any authenticated user can report their own sync failures)
+  app.post('/api/admin/audit/log-sync-failure', requireHttpAuth, async (req, res) => {
+    try {
+      const { entityType, entityId, source, target, errorMessage } = req.body || {};
+      if (!entityType) return res.status(400).json({ ok: false, error: 'MISSING_ENTITY_TYPE' });
+      await logSyncAudit(d1, {
+        entityType: String(entityType).slice(0, 50),
+        entityId: String(entityId || req.auth.userId || 'unknown').slice(0, 100),
+        source: String(source || 'firebase').slice(0, 20),
+        target: String(target || 'd1').slice(0, 20),
+        status: 'failed',
+        errorMessage: String(errorMessage || '').slice(0, 2000)
+      });
+      res.json({ ok: true });
+    } catch (error) {
+      console.error('Sync failure log failed:', error);
+      res.status(500).json({ ok: false, error: 'LOG_FAILED' });
+    }
+  });
+
+  // Play Store Scraper API
+  app.post('/api/admin/scrape-playstore', requireHttpAuth, async (req, res) => {
+    if (!req.auth.isAdmin) return res.status(403).json({ ok: false, error: 'ADMIN_REQUIRED' });
+    try {
+      const { url } = req.body;
+      if (!url) return res.status(400).json({ ok: false, error: 'URL_REQUIRED' });
+      if (!url.includes('play.google.com')) return res.status(400).json({ ok: false, error: 'NOT_A_PLAY_STORE_URL' });
+
+      let html = '';
+      
+      // Step 1: Direct Fetch
+      try {
+        const response = await fetch(url, {
+          headers: {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115.0.0.0 Safari/537.36'
+          }
+        });
+        if (response.ok) {
+          html = await response.text();
+        } else {
+          console.warn(`Direct Play Store fetch failed with status ${response.status}`);
+        }
+      } catch (err) {
+        console.warn(`Direct Play Store fetch failed with error: ${err.message}`);
+      }
+
+      // Step 2: Codetabs Proxy
+      if (!html) {
+        try {
+          const proxyUrl = 'https://api.codetabs.com/v1/proxy?quest=' + encodeURIComponent(url);
+          const response = await fetch(proxyUrl);
+          if (response.ok) {
+            html = await response.text();
+          } else {
+            console.warn(`Codetabs proxy failed with status ${response.status}`);
+          }
+        } catch (err) {
+          console.warn(`Codetabs proxy failed with error: ${err.message}`);
+        }
+      }
+
+      // Step 3: AllOrigins Proxy
+      if (!html) {
+        try {
+          const proxyUrl = 'https://api.allorigins.win/get?url=' + encodeURIComponent(url);
+          const response = await fetch(proxyUrl);
+          if (response.ok) {
+            const json = await response.json();
+            html = json.contents || '';
+          } else {
+            console.warn(`AllOrigins proxy failed with status ${response.status}`);
+          }
+        } catch (err) {
+          console.warn(`AllOrigins proxy failed with error: ${err.message}`);
+        }
+      }
+
+      if (!html) {
+        throw new Error('Failed to retrieve Play Store HTML content');
+      }
+      
+      let title = '';
+      const ogTitleMatch = html.match(/<meta[^>]*property=["']og:title["'][^>]*content=["']([^"']+)["']/i) ||
+                           html.match(/<meta[^>]*content=["']([^"']+)["'][^>]*property=["']og:title["']/i);
+      if (ogTitleMatch) {
+        title = ogTitleMatch[1];
+      } else {
+        const titleTagMatch = html.match(/<title[^>]*>([^<]+)<\/title>/i);
+        if (titleTagMatch) title = titleTagMatch[1];
+      }
+      title = title.replace(/\s*-\s*Apps on Google Play/gi, '').trim();
+
+      let logoUrl = '';
+      const ogImageMatch = html.match(/<meta[^>]*property=["']og:image["'][^>]*content=["']([^"']+)["']/i) ||
+                           html.match(/<meta[^>]*content=["']([^"']+)["']/i) ||
+                           html.match(/<meta[^>]*content=["']([^"']+)["'][^>]*property=["']og:image["']/i);
+      if (ogImageMatch) {
+        logoUrl = ogImageMatch[1];
+      }
+
+      res.json({ ok: true, name: title, logoUrl });
+    } catch (error) {
+      console.error('Play Store scraping failed:', error);
+      res.status(500).json({ ok: false, error: 'SCRAPE_FAILED', message: error.message });
+    }
+  });
+
+  // User submissions history
+  app.get('/api/task-submissions', requireHttpAuth, async (req, res) => {
+    try {
+      const db = admin.firestore();
+      const submissions = await listTaskSubmissions(d1, {
+        userId: req.auth.sub,
+        limit: Math.min(Number(req.query.limit || 100), 300)
+      });
+
+      const missingTaskIds = [...new Set(submissions.map(s => s.task_id).filter(id => id && taskLogoCache[id] === undefined))];
+      if (missingTaskIds.length > 0) {
+        await Promise.all(missingTaskIds.map(async (taskId) => {
+          try {
+            const taskDoc = await db.doc(`artifacts/digital-wallet-prod/public/data/tasks/${taskId}`).get();
+            if (taskDoc.exists) {
+              const taskData = taskDoc.data();
+              taskLogoCache[taskId] = taskData.imageUrl || taskData.logoUrl || taskData.iconUrl || '';
+            } else {
+              taskLogoCache[taskId] = '';
+            }
+          } catch (err) {
+            console.warn(`[User-Submissions] Failed to load task logo for ${taskId}:`, err.message);
+            taskLogoCache[taskId] = '';
+          }
+        }));
+      }
+
+      for (const s of submissions) {
+        s.app_logo_url = s.task_id ? (taskLogoCache[s.task_id] || '') : '';
+      }
+
+      res.json({ ok: true, submissions });
+    } catch (error) {
+      console.error('List user submissions failed:', error);
+      res.status(500).json({ ok: false, error: 'LOAD_SUBMISSIONS_FAILED' });
+    }
+  });
+
+  // Admin: Purge ALL old task submissions & reservations from D1
+  app.delete('/api/admin/purge-task-data', requireHttpAuth, async (req, res) => {
+    try {
+      const uid = req.auth.sub;
+      const email = req.auth.email || '';
+      const isOwner = uid === ADMIN_UID || email === 'reviewsworld01@gmail.com' || email === 'reviewsworld51@gmail.com';
+      if (!isOwner) {
+        return res.status(403).json({ ok: false, error: 'OWNER_ONLY' });
+      }
+
+      // Delete all task_submissions from D1
+      const subResult = await d1.query('DELETE FROM task_submissions');
+      const subsDeleted = subResult?.changes || 0;
+
+      // Delete all task_comment_reservations from D1
+      const resResult = await d1.query('DELETE FROM task_comment_reservations');
+      const reservationsDeleted = resResult?.changes || 0;
+
+      console.log(`[PURGE] Owner ${email} purged D1 task data: ${subsDeleted} submissions, ${reservationsDeleted} reservations`);
+      res.json({ ok: true, subsDeleted, reservationsDeleted });
+    } catch (error) {
+      console.error('Purge task data failed:', error);
+      res.status(500).json({ ok: false, error: 'PURGE_FAILED' });
+    }
+  });
+
+  // Live Lists management API (List Finder integration)
+  app.get('/api/lists', async (req, res) => {
+    try {
+      const appName = String(req.query.appName || '').trim().toLowerCase();
+      const date = String(req.query.date || '').trim();
+      let sql = 'SELECT * FROM live_lists';
+      const params = [];
+      const conditions = [];
+      if (appName) {
+        conditions.push('LOWER(app_name) LIKE ?');
+        params.push(`%${appName}%`);
+      }
+      if (date) {
+        conditions.push('date = ?');
+        params.push(date);
+      }
+      if (conditions.length) {
+        sql += ' WHERE ' + conditions.join(' AND ');
+      }
+      sql += ' ORDER BY created_at DESC LIMIT 500';
+      const lists = await d1.all(sql, params);
+      
+      const formatted = lists.map(item => {
+        const lines = item.content.split(/\r?\n/).filter(Boolean);
+        return {
+          id: item.id,
+          appName: item.app_name,
+          date: item.date,
+          preview: lines.slice(0, 3).join('\n'),
+          lineCount: lines.length,
+          content: item.content,
+          createdAt: new Date(item.created_at).toISOString()
+        };
+      });
+      res.json({ ok: true, lists: formatted });
+    } catch (error) {
+      console.error('Fetch live lists failed:', error);
+      res.status(500).json({ ok: false, error: 'FETCH_LISTS_FAILED' });
+    }
+  });
+
+  app.get('/api/lists/:id', async (req, res) => {
+    try {
+      const item = await d1.first('SELECT * FROM live_lists WHERE id = ? LIMIT 1', [req.params.id]);
+      if (!item) return res.status(404).json({ ok: false, error: 'LIST_NOT_FOUND' });
+      const lines = item.content.split(/\r?\n/).filter(Boolean);
+      res.json({
+        ok: true,
+        list: {
+          id: item.id,
+          appName: item.app_name,
+          date: item.date,
+          content: item.content,
+          lineCount: lines.length,
+          createdAt: new Date(item.created_at).toISOString()
+        }
+      });
+    } catch (error) {
+      console.error('Fetch live list failed:', error);
+      res.status(500).json({ ok: false, error: 'FETCH_LIST_FAILED' });
+    }
+  });
+
+  app.post('/api/lists', requireHttpAuth, async (req, res) => {
+    if (!req.auth.isAdmin) return res.status(403).json({ ok: false, error: 'ADMIN_REQUIRED' });
+    try {
+      const { appName, date, content } = req.body;
+      if (!appName || !date || !content) {
+        return res.status(400).json({ ok: false, error: 'MISSING_FIELDS' });
+      }
+      const id = `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+      const now = Date.now();
+      await d1.query(
+        `INSERT INTO live_lists (id, app_name, date, content, created_at) VALUES (?, ?, ?, ?, ?)`,
+        [id, appName, date, content, now]
+      );
+      res.status(201).json({ ok: true, list: { id, appName, date, content, createdAt: new Date(now).toISOString() } });
+    } catch (error) {
+      console.error('Save live list failed:', error);
+      res.status(500).json({ ok: false, error: 'SAVE_LIST_FAILED' });
+    }
+  });
+
+  app.delete('/api/lists/:id', requireHttpAuth, async (req, res) => {
+    if (!req.auth.isAdmin) return res.status(403).json({ ok: false, error: 'ADMIN_REQUIRED' });
+    try {
+      await d1.query('DELETE FROM live_lists WHERE id = ?', [req.params.id]);
+      res.json({ ok: true });
+    } catch (error) {
+      console.error('Delete live list failed:', error);
+      res.status(500).json({ ok: false, error: 'DELETE_LIST_FAILED' });
+    }
+  });
+
+  // [DUPLICATE ROUTES DISABLED] Duplicate /api/partner-investments* block already defined at L2936 (uses correct Firestore project 'digital-wallet-prod').
+  // This second duplicate block below incorrectly hardcoded projectId "rw-wallet-june-26", causing data split and broken balance ledger consistency.
+  // Preserved definition is the FIRST block (L2936+). Second block below would additionally cause "headers already sent" HTTP 500 race.
+  if (process.env.NODE_ENV === 'development') {
+    console.warn('[registerRoutes] Skipped 4 duplicate /api/partner-investments* routes (second block at end-of-function); using primary block L2936+ with appId/digital-wallet-prod.');
+  }
+}
+
+function requireHttpAuth(req, res, next) {
+  try {
+    const token = String(req.headers.authorization || '').replace(/^Bearer\s+/i, '');
+    if (!token) return res.status(401).json({ ok: false, error: 'AUTH_REQUIRED' });
+    req.auth = verifyAppToken(token);
+    next();
+  } catch {
+    res.status(401).json({ ok: false, error: 'INVALID_TOKEN' });
+  }
+}
+
+function registerSocketHandlers(io, { d1 }) {
+  const adminRooms = new Map();
+  const userRooms = new Map();
+  const adminSockets = new Set();
+  const recentlyHandledClientMessages = new Map();
+  const recentlyHandledMessageSignatures = new Map();
+
+  const addAdminRoomPresence = (roomId, socketId) => {
+    const sockets = adminRooms.get(roomId) || new Set();
+    sockets.add(socketId);
+    adminRooms.set(roomId, sockets);
+  };
+
+  const removeAdminRoomPresence = (roomId, socketId) => {
+    const sockets = adminRooms.get(roomId);
+    if (!sockets) return;
+    sockets.delete(socketId);
+    if (sockets.size === 0) adminRooms.delete(roomId);
+  };
+
+  const addUserRoomPresence = (roomId, socketId) => {
+    const sockets = userRooms.get(roomId) || new Set();
+    sockets.add(socketId);
+    userRooms.set(roomId, sockets);
+  };
+
+  const removeUserRoomPresence = (roomId, socketId) => {
+    const sockets = userRooms.get(roomId);
+    if (!sockets) return;
+    sockets.delete(socketId);
+    if (sockets.size === 0) userRooms.delete(roomId);
+  };
+
+  const wasClientMessageRecentlyHandled = (clientMessageId) => {
+    if (!clientMessageId) return false;
+    const now = nowMs();
+    for (const [key, seenAt] of recentlyHandledClientMessages.entries()) {
+      if (now - seenAt > 30000) recentlyHandledClientMessages.delete(key);
+    }
+    if (recentlyHandledClientMessages.has(clientMessageId)) return true;
+    recentlyHandledClientMessages.set(clientMessageId, now);
+    return false;
+  };
+
+  const wasMessageSignatureRecentlyHandled = ({ roomId, senderId, message }) => {
+    const now = nowMs();
+    for (const [key, seenAt] of recentlyHandledMessageSignatures.entries()) {
+      if (now - seenAt > 2500) recentlyHandledMessageSignatures.delete(key);
+    }
+    const normalizedText = String(message || '').replace(/\s+/g, ' ').trim().toLowerCase();
+    const key = `${roomId}|${senderId}|${normalizedText}`;
+    if (recentlyHandledMessageSignatures.has(key)) return true;
+    recentlyHandledMessageSignatures.set(key, now);
+    return false;
+  };
+
+  io.use((socket, next) => {
+    try {
+      const token = socket.handshake.auth?.token || socket.handshake.headers.authorization?.replace(/^Bearer\s+/i, '');
+      if (!token) throw new Error('AUTH_REQUIRED');
+      socket.user = verifyAppToken(token);
+      next();
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  io.on('connection', (socket) => {
+    socket.adminJoinedRooms = new Set();
+    socket.userJoinedRooms = new Set();
+    if (socket.user.isAdmin) adminSockets.add(socket.id);
+
+    socket.on('join_room', async ({ roomId, limit = 50, markRead = true }, ack) => {
+      try {
+        if (!roomId) throw new Error('ROOM_REQUIRED');
+        socket.join(roomId);
+        if (markRead) {
+          let readAt = null;
+          if (socket.user.isAdmin) {
+            addAdminRoomPresence(roomId, socket.id);
+            socket.adminJoinedRooms.add(roomId);
+            readAt = await markRoomReadByAdmin(d1, roomId);
+            cleanupExpiredReadChats(d1).catch((error) => console.error('Chat cleanup failed:', error));
+            io.to(roomId).emit('chat_read', { roomId, readerRole: 'admin', readAt });
+          } else {
+            addUserRoomPresence(roomId, socket.id);
+            socket.userJoinedRooms.add(roomId);
+            readAt = await markRoomReadByUser(d1, roomId);
+            io.to(roomId).emit('chat_read', { roomId, readerRole: 'user', readAt });
+          }
+        }
+        const history = await recentChatHistory(d1, roomId, limit);
+        socket.emit('chat_history', { roomId, history });
+        if (ack) ack({ ok: true });
+      } catch (error) {
+        if (ack) ack({ ok: false, error: error.message });
+      }
+    });
+
+    socket.on('leave_room', ({ roomId }, ack) => {
+      if (roomId) {
+        socket.leave(roomId);
+        removeAdminRoomPresence(roomId, socket.id);
+        removeUserRoomPresence(roomId, socket.id);
+        socket.adminJoinedRooms.delete(roomId);
+        socket.userJoinedRooms.delete(roomId);
+      }
+      if (ack) ack({ ok: true });
+    });
+
+    socket.on('send_message', async ({ roomId, message, userMeta = {}, clientMessageId = null }, ack) => {
+      try {
+        if (!roomId || !String(message || '').trim()) throw new Error('ROOM_AND_MESSAGE_REQUIRED');
+        const cleanClientMessageId = clientMessageId ? String(clientMessageId).slice(0, 120) : null;
+        if (wasClientMessageRecentlyHandled(cleanClientMessageId)) {
+          if (ack) ack({ ok: true, duplicate: true });
+          return;
+        }
+        if (wasMessageSignatureRecentlyHandled({ roomId, senderId: socket.user.sub, message })) {
+          if (ack) ack({ ok: true, duplicate: true });
+          return;
+        }
+
+        const timestamp = nowMs();
+        const readByAdminAt = (!socket.user.isAdmin && adminRooms.has(roomId)) ? timestamp : null;
+        const readByUserAt = (socket.user.isAdmin && userRooms.has(roomId)) ? timestamp : null;
+        const chatMessage = {
+          roomId,
+          senderId: socket.user.sub,
+          message: String(message).slice(0, 4000),
+          timestamp,
+          readByAdminAt,
+          readByUserAt,
+          clientMessageId: cleanClientMessageId
+        };
+
+        const inserted = await saveChatMessage(d1, chatMessage);
+        if (!inserted) {
+          if (ack) ack({ ok: true, duplicate: true });
+          return;
+        }
+        io.to(roomId).emit('new_message', chatMessage);
+        if (!socket.user.isAdmin) {
+          adminSockets.forEach((socketId) => {
+            io.to(socketId).emit('new_message', chatMessage);
+          });
+
+          // Send direct outside push notification to admin (WhatsApp style)
+          if (!adminRooms.has(roomId)) {
+            (async () => {
+              try {
+                const senderUser = await d1.first('SELECT name, parent_admin FROM users WHERE id = ? LIMIT 1', [socket.user.sub]);
+                const parentAdmin = senderUser?.parent_admin || ADMIN_UID;
+                const senderName = senderUser?.name || userMeta.userName || 'User';
+                
+                const customData = {
+                  type: 'chat',
+                  roomId: chatMessage.roomId,
+                  userId: socket.user.sub,
+                  userName: senderName
+                };
+
+                const pushTitle = `💬 New Message from ${senderName}`;
+                const pushBody = chatMessage.message.slice(0, 150);
+
+                sendOneSignalPush(d1, parentAdmin, pushTitle, pushBody, customData).catch(e => console.error('[ChatPush] Admin push error:', e));
+
+                if (parentAdmin !== ADMIN_UID) {
+                  sendOneSignalPush(d1, ADMIN_UID, pushTitle, pushBody, customData).catch(e => console.error('[ChatPush] Owner push error:', e));
+                }
+              } catch (err) {
+                console.error('Support chat admin push failed:', err);
+              }
+            })();
+          }
+        } else {
+          // Send direct outside push notification to recipient (WhatsApp style)
+          (async () => {
+            try {
+              const parts = roomId.replace(/^support_/, '').split('_');
+              const roomUserId = parts[0];
+              const roomAdminId = parts[1] || ADMIN_UID;
+              let recipientUserId = roomUserId;
+              if (socket.user.sub === roomUserId) {
+                recipientUserId = roomAdminId;
+              }
+              const senderUser = await d1.first('SELECT name FROM users WHERE id = ? LIMIT 1', [socket.user.sub]);
+              const senderName = senderUser?.name || 'Support Admin';
+              const customData = {
+                type: 'chat',
+                roomId: chatMessage.roomId,
+                userId: socket.user.sub,
+                userName: senderName
+              };
+
+              const pushTitle = `💬 Message from ${senderName}`;
+              const pushBody = chatMessage.message.slice(0, 150);
+
+              if (recipientUserId && recipientUserId !== socket.user.sub) {
+                sendOneSignalPush(d1, recipientUserId, pushTitle, pushBody, customData).catch(e => console.error('[ChatPush] User push error:', e));
+              }
+              if (roomAdminId !== ADMIN_UID && recipientUserId !== ADMIN_UID && socket.user.sub !== ADMIN_UID) {
+                sendOneSignalPush(d1, ADMIN_UID, pushTitle, pushBody, customData).catch(e => console.error('[ChatPush] Owner fallback push error:', e));
+              }
+            } catch (err) {
+              console.error('Support chat user push failed:', err);
+            }
+          })();
+        }
+        upsertChatRoom(d1, {
+            roomId,
+            userId: userMeta.userId || roomId.replace(/^support_/, ''),
+            userName: String(userMeta.userName || '').slice(0, 120),
+            userEmail: normalizeEmail(userMeta.userEmail || ''),
+            userMobile: String(userMeta.userMobile || '').slice(0, 30),
+            lastMessage: chatMessage.message,
+            lastSenderId: chatMessage.senderId,
+            updatedAt: timestamp
+        }).catch((error) => console.error('Async chat room persist failed:', error));
+
+        if (ack) ack({ ok: true, message: chatMessage });
+      } catch (error) {
+        if (ack) ack({ ok: false, error: error.message });
+      }
+    });
+
+    socket.on('delete_message', async ({ roomId, messageId }, ack) => {
+      try {
+        if (!roomId || !messageId) throw new Error('ROOM_AND_MESSAGE_REQUIRED');
+
+        if (!socket.user.isAdmin) {
+          const msgRow = await d1.first(`SELECT sender_id FROM chats WHERE id = ? LIMIT 1`, [messageId]);
+          if (!msgRow) throw new Error('MESSAGE_NOT_FOUND');
+          if (msgRow.sender_id !== socket.user.sub) {
+            throw new Error('UNAUTHORIZED');
+          }
+        }
+
+        await d1.query(`DELETE FROM chats WHERE id = ?`, [messageId]);
+
+        io.to(roomId).emit('message_deleted', { roomId, messageId });
+
+        const lastMsg = await d1.first(`SELECT message, sender_id, timestamp FROM chats WHERE room_id = ? ORDER BY timestamp DESC LIMIT 1`, [roomId]);
+        if (lastMsg) {
+          await upsertChatRoom(d1, {
+            roomId,
+            userId: roomId.replace(/^support_/, ''),
+            lastMessage: lastMsg.message,
+            lastSenderId: lastMsg.sender_id,
+            updatedAt: lastMsg.timestamp
+          }).catch(() => {});
+        } else {
+          await d1.query(`UPDATE chat_rooms SET last_message = '', last_sender_id = '', updated_at = ? WHERE id = ?`, [nowMs(), roomId]).catch(() => {});
+        }
+
+        if (ack) ack({ ok: true });
+      } catch (error) {
+        if (ack) ack({ ok: false, error: error.message });
+      }
+    });
+
+    socket.on('disconnect', () => {
+      adminSockets.delete(socket.id);
+      socket.adminJoinedRooms.forEach((roomId) => removeAdminRoomPresence(roomId, socket.id));
+      socket.userJoinedRooms.forEach((roomId) => removeUserRoomPresence(roomId, socket.id));
+      socket.adminJoinedRooms.clear();
+      socket.userJoinedRooms.clear();
+    });
+  });
+}
+
+async function createCloudflareWalletService() {
+  assertEnv();
+  initFirebaseAdmin();
+
+  const d1 = new D1Client();
+  const r2 = createR2Client();
+
+  try {
+    await initSchema(d1);
+  } catch (error) {
+    console.warn('Cloudflare D1 schema initialization failed (expected if local D1 is not configured):', error.message);
+  }
+  cleanupExpiredReadChats(d1).catch((error) => console.warn('Initial chat cleanup skipped:', error.message));
+  cleanupExpiredNotifications(d1).catch((error) => console.warn('Initial notification cleanup skipped:', error.message));
+  cleanupExpiredReservations(d1).catch((error) => console.warn('Initial reservation cleanup skipped:', error.message));
+  const cleanupTimer = setInterval(() => {
+    cleanupExpiredReadChats(d1).catch((error) => console.error('Scheduled chat cleanup failed:', error));
+    cleanupExpiredNotifications(d1).catch((error) => console.error('Scheduled notification cleanup failed:', error));
+    processAutoPayouts(d1).catch((error) => console.error('Scheduled auto-payout failed:', error));
+    processPeriodicLiveChecksAndPayouts(d1).catch((error) => console.error('Scheduled periodic live checks payout failed:', error));
+  }, 60 * 60 * 1000);
+  cleanupTimer.unref?.();
+
+  // Schedule auto-payout at 8 PM IST daily
+  const scheduleAutoPayoutAt8PM = () => {
+    const now = new Date();
+    const ist = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Kolkata' }));
+    const target = new Date(ist);
+    target.setHours(20, 0, 0, 0);
+    if (target <= ist) target.setDate(target.getDate() + 1);
+    const delay = target.getTime() - ist.getTime();
+    setTimeout(() => {
+      processAutoPayouts(d1).catch(e => console.error('Scheduled auto-payout failed:', e));
+      processPeriodicLiveChecksAndPayouts(d1).catch(e => console.error('Scheduled periodic live checks failed:', e));
+      setTimeout(() => {
+        sendDailySummaryToAdmins(d1).catch(e => console.error('Daily summary failed:', e));
+      }, 60000);
+      setInterval(() => {
+        processAutoPayouts(d1).catch(e => console.error('Daily auto-payout failed:', e));
+        processPeriodicLiveChecksAndPayouts(d1).catch(e => console.error('Daily periodic live checks failed:', e));
+        setTimeout(() => {
+          sendDailySummaryToAdmins(d1).catch(e => console.error('Daily summary failed:', e));
+        }, 60000);
+      }, 24 * 60 * 60 * 1000).unref?.();
+    }, delay).unref?.();
+  };
+  scheduleAutoPayoutAt8PM();
+
+  processDailyLists(d1).catch((error) => console.warn('Initial daily list compilation skipped:', error.message));
+  const dailyListTimer = setInterval(() => {
+    processDailyLists(d1).catch((error) => console.error('Scheduled daily list compilation failed:', error));
+  }, 15 * 60 * 1000);
+  dailyListTimer.unref?.();
+
+  return {
+    d1,
+    r2,
+    registerRoutes: (app) => registerRoutes(app, { d1, r2 }),
+    registerSocketHandlers: (io) => registerSocketHandlers(io, { d1 }),
+    saveTransaction: (transaction) => saveTransaction(d1, transaction),
+    getTransactionHistory: (userId, options) => getTransactionHistory(d1, userId, options),
+    saveFundRequest: (request) => saveFundRequest(d1, request),
+    listFundRequests: (options) => listFundRequests(d1, options),
+    saveLoanRequest: (request) => saveLoanRequest(d1, request),
+    listLoanRequests: (options) => listLoanRequests(d1, options),
+    listChatRooms: (options) => listChatRooms(d1, options),
+    putInvoice: (userId, invoiceId, data) =>
+      putR2Object(r2, `invoices/${userId}/${invoiceId}.json`, JSON.stringify(data, null, 2)),
+    getInvoice: (userId, invoiceId) =>
+      getR2Object(r2, `invoices/${userId}/${invoiceId}.json`),
+    reserveTaskComment: (opts) => reserveTaskComment(d1, opts),
+    getTaskReservation: (taskId, userId) => getTaskReservation(d1, taskId, userId),
+    markReservationSubmitted: (reservationId) => markReservationSubmitted(d1, reservationId),
+    saveTaskSubmission: (opts) => saveTaskSubmission(d1, opts),
+    listTaskSubmissions: (opts) => listTaskSubmissions(d1, opts),
+    updateTaskSubmission: (submissionId, updates) => updateTaskSubmission(d1, submissionId, updates),
+    logSyncAudit: (opts) => logSyncAudit(d1, opts),
+    listSyncAuditLogs: (opts) => listSyncAuditLogs(d1, opts),
+    resolveSyncAuditLog: (logId) => resolveSyncAuditLog(d1, logId),
+    getSyncAuditSummary: () => getSyncAuditSummary(d1),
+    processAutoPayouts: () => processAutoPayouts(d1),
+    processPeriodicLiveChecksAndPayouts: () => processPeriodicLiveChecksAndPayouts(d1),
+    sendNotification: (userId, title, message) => sendNotification(d1, userId, title, message),
+    sendOneSignalPush,
+    sendDailySummaryToAdmins: () => sendDailySummaryToAdmins(d1)
+  };
+}
+
+module.exports = {
+  createCloudflareWalletService,
+  D1Client,
+  initSchema,
+  registerRoutes,
+  registerSocketHandlers,
+  saveTransaction,
+  getTransactionHistory,
+  saveFundRequest,
+  listFundRequests,
+  saveLoanRequest,
+  listLoanRequests,
+  updateLoanRequestStatus,
+  listChatRooms,
+  reserveTaskComment,
+  getTaskReservation,
+  markReservationSubmitted,
+  saveTaskSubmission,
+  listTaskSubmissions,
+  updateTaskSubmission,
+  logSyncAudit,
+  listSyncAuditLogs,
+  resolveSyncAuditLog,
+  getSyncAuditSummary,
+  processAutoPayouts,
+  processPeriodicLiveChecksAndPayouts,
+  sendNotification,
+  sendOneSignalPush,
+  sendDailySummaryToAdmins
+};

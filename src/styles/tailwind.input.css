@@ -1,0 +1,210 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* User Profile Card Styles */
+.profile-card {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    gap: 18px;
+    padding: 18px;
+    border-radius: 24px;
+    background-color: #1e3a8a;
+    background-image:
+        linear-gradient(rgba(0, 0, 0, 0.15), rgba(0, 0, 0, 0.15)),
+        url('/assets/images/profile_card_bg.png'),
+        linear-gradient(135deg,#1e3a8a 0%,#2563eb 30%,#7c3aed 60%,#db2777 100%);
+    background-size: cover;
+    background-position: center;
+    background-repeat: no-repeat;
+    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.25);
+    overflow: hidden;
+    position: relative;
+}
+
+/* Left */
+.profile-left {
+    flex-shrink: 0;
+    position: relative;
+    z-index: 2;
+}
+
+.avatar-wrap {
+    position: relative;
+    width: 92px;
+    height: 92px;
+}
+
+.avatar {
+    width: 92px;
+    height: 92px;
+    border-radius: 50%;
+    border: 4px solid rgba(255, 255, 255, 0.85);
+    object-fit: cover;
+}
+
+.camera-btn {
+    position: absolute;
+    right: 0px;
+    bottom: 0px;
+    width: 28px;
+    height: 28px;
+    border: 2px solid #ffffff;
+    border-radius: 50% !important;
+    background: #8b5cf6;
+    color: #fff;
+    display: grid !important;
+    place-items: center !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    box-shadow: 0 3px 8px rgba(0, 0, 0, 0.4);
+    cursor: pointer;
+    z-index: 10;
+    pointer-events: auto;
+}
+
+.camera-btn svg,
+.camera-btn .camera-icon,
+.camera-btn i {
+    width: 14px !important;
+    height: 14px !important;
+    max-width: 14px !important;
+    max-height: 14px !important;
+    color: #ffffff !important;
+    margin: auto !important;
+    display: block !important;
+}
+
+/* Right */
+.profile-right {
+    flex: 1;
+    min-width: 0;
+    z-index: 2;
+}
+
+.name-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.name-row h2 {
+    margin: 0;
+    color: #fff;
+    font-size: 24px;
+    font-weight: 700;
+}
+
+.verified {
+    color: #35b8ff;
+    font-size: 20px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    line-height: 1;
+}
+
+.verified svg,
+.verified i {
+    width: 20px !important;
+    height: 20px !important;
+    max-width: 20px !important;
+    max-height: 20px !important;
+    color: #35b8ff !important;
+    flex-shrink: 0 !important;
+    display: inline-block !important;
+}
+
+.info {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-top: 12px;
+    color: #f5f5f5;
+    font-size: 16px;
+    word-break: break-word;
+}
+
+.info span.email-auto-shrink {
+    word-break: break-all;
+    max-width: 100%;
+}
+
+.info svg,
+.info i {
+    width: 18px !important;
+    height: 18px !important;
+    max-width: 18px !important;
+    max-height: 18px !important;
+    color: #d7c3ff !important;
+    flex-shrink: 0 !important;
+    display: inline-block !important;
+}
+
+.joined {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 16px;
+    padding: 8px 16px;
+    background: rgba(255, 255, 255, 0.12);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    border-radius: 999px;
+    color: #fff;
+    font-size: 14px;
+    backdrop-filter: blur(10px);
+}
+
+.joined svg,
+.joined i {
+    width: 16px !important;
+    height: 16px !important;
+    max-width: 16px !important;
+    max-height: 16px !important;
+    color: #ffffff !important;
+    flex-shrink: 0 !important;
+    display: inline-block !important;
+}
+
+/* Mobile */
+@media (max-width: 480px) {
+    .profile-card {
+        gap: 14px;
+        padding: 16px;
+    }
+    .avatar-wrap {
+        width: 74px;
+        height: 74px;
+    }
+    .avatar {
+        width: 74px;
+        height: 74px;
+    }
+    .camera-btn {
+        width: 26px;
+        height: 26px;
+        right: 0px;
+        bottom: 0px;
+        border: 2px solid #ffffff;
+    }
+    .camera-btn svg,
+    .camera-btn .camera-icon,
+    .camera-btn i {
+        width: 13px !important;
+        height: 13px !important;
+        max-width: 13px !important;
+        max-height: 13px !important;
+    }
+    .name-row h2 {
+        font-size: 20px;
+    }
+    .info {
+        font-size: 14px;
+    }
+    .joined {
+        font-size: 13px;
+        padding: 7px 13px;
+    }
+}

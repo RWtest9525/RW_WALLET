@@ -1,0 +1,24 @@
+{
+  "name": "rw-wallet",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 127.0.0.1",
+    "preview": "vite preview --host 127.0.0.1",
+    "backend": "npm --prefix backend start",
+    "build": "npm run build:css && vite build",
+    "lint": "vite build",
+    "build:css": "tailwindcss -c ./tailwind.config.cjs -i ./src/styles/tailwind.input.css -o ./src/styles/tailwind.generated.css --minify",
+    "purge:tasks": "node scripts/delete-all-tasks-data.cjs",
+    "audit:duplicate-loans": "node scripts/audit-fix-duplicate-loans.cjs",
+    "fix:duplicate-loans": "node scripts/audit-fix-duplicate-loans.cjs --apply"
+  },
+  "devDependencies": {
+    "@babel/parser": "^8.0.0",
+    "autoprefixer": "^10.4.20",
+    "postcss": "^8.4.49",
+    "tailwindcss": "^3.4.17",
+    "vite": "^5.4.11"
+  }
+}

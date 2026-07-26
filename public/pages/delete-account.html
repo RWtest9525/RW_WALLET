@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Delete Account & Data - Reviews World</title>
+  <meta name="description" content="Request account and data deletion for Reviews World companion app.">
+  <link rel="canonical" href="https://rw-wallet.vercel.app/delete-account.html">
+  <style>
+    body {
+      margin: 0;
+      background: #f3f4f6;
+      color: #111827;
+      font-family: 'Inter', Arial, sans-serif;
+      line-height: 1.6;
+    }
+    main {
+      max-width: 580px;
+      margin: 0 auto;
+      padding: 40px 16px;
+    }
+    section {
+      background: #fff;
+      border: 1px solid #e5e7eb;
+      border-radius: 18px;
+      padding: 32px;
+      box-shadow: 0 14px 35px rgba(15, 23, 42, .08);
+    }
+    h1 {
+      font-size: 24px;
+      color: #1f2937;
+      margin-top: 0;
+      margin-bottom: 8px;
+    }
+    p.desc {
+      color: #4b5563;
+      margin-bottom: 24px;
+      font-size: 14px;
+    }
+    .form-group {
+      margin-bottom: 20px;
+    }
+    label {
+      display: block;
+      font-weight: 600;
+      font-size: 14px;
+      color: #374151;
+      margin-bottom: 6px;
+    }
+    input[type="email"],
+    input[type="tel"],
+    textarea {
+      width: 100%;
+      padding: 12px;
+      border: 1px solid #d1d5db;
+      border-radius: 8px;
+      font-size: 14px;
+      box-sizing: border-box;
+      background-color: #f9fafb;
+      transition: border-color 0.2s;
+    }
+    input:focus, textarea:focus {
+      outline: none;
+      border-color: #2563eb;
+      background-color: #fff;
+    }
+    .checkbox-group {
+      display: flex;
+      align-items: flex-start;
+      margin-top: 24px;
+      margin-bottom: 24px;
+    }
+    .checkbox-group input {
+      margin-top: 4px;
+      margin-right: 12px;
+    }
+    .checkbox-group label {
+      font-weight: normal;
+      font-size: 13px;
+      color: #4b5563;
+      line-height: 1.5;
+    }
+    button {
+      width: 100%;
+      background: #dc2626;
+      color: #fff;
+      border: none;
+      padding: 14px;
+      font-size: 16px;
+      font-weight: 600;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: background-color 0.2s;
+    }
+    button:hover {
+      background: #b91c1c;
+    }
+    button:disabled {
+      background: #f3f4f6;
+      color: #9ca3af;
+      cursor: not-allowed;
+    }
+    .links {
+      margin-top: 24px;
+      text-align: center;
+      font-size: 14px;
+    }
+    a {
+      color: #2563eb;
+      text-decoration: none;
+      font-weight: 500;
+    }
+    a:hover {
+      text-decoration: underline;
+    }
+    .alert {
+      padding: 12px 16px;
+      border-radius: 8px;
+      font-size: 14px;
+      margin-bottom: 20px;
+      display: none;
+    }
+    .alert-success {
+      background-color: #ecfdf5;
+      color: #065f46;
+      border: 1px solid #a7f3d0;
+    }
+    .alert-error {
+      background-color: #fef2f2;
+      color: #991b1b;
+      border: 1px solid #fca5a5;
+    }
+  </style>
+  <!-- Firebase SDK -->
+  <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
+</head>
+<body>
+  <main>
+    <section>
+      <h1>Request Account Deletion</h1>
+      <p class="desc">Please fill out this form to request the permanent deletion of your Reviews World account and all associated personal data.</p>
+      
+      <div id="alert-msg" class="alert"></div>
+
+      <form id="deletion-form">
+        <div class="form-group">
+          <label for="email">Registered Email Address</label>
+          <input type="email" id="email" required placeholder="your.email@example.com">
+        </div>
+
+        <div class="form-group">
+          <label for="phone">Registered Mobile Number</label>
+          <input type="tel" id="phone" required placeholder="e.g. +91 99999 99999">
+        </div>
+
+        <div class="form-group">
+          <label for="reason">Reason for deletion (Optional)</label>
+          <textarea id="reason" rows="3" placeholder="Please let us know how we can improve..."></textarea>
+        </div>
+
+        <div class="checkbox-group">
+          <input type="checkbox" id="confirm" required>
+          <label for="confirm">
+            I understand that this action is permanent. All my profile points, task history, and account data will be permanently deleted and cannot be recovered.
+          </label>
+        </div>
+
+        <button type="submit" id="submit-btn">Submit Deletion Request</button>
+      </form>
+
+      <div class="links">
+        <p>If you encounter any issues, please email support directly at <a href="mailto:reviewsworld01@gmail.com?subject=Reviews World Account Deletion Request">reviewsworld01@gmail.com</a>.</p>
+        <p><a href="/">Back to Reviews World</a></p>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    // Initialize Firebase
+    const firebaseConfig = {
+      apiKey: "AIzaSyBzF1agrBFFh4cC2DkmZKePf4-gjE05OQo",
+      authDomain: "review-world-1312e.firebaseapp.com",
+      projectId: "review-world-1312e",
+      storageBucket: "review-world-1312e.firebasestorage.app",
+      messagingSenderId: "372772434173",
+      appId: "1:372772434173:web:bfeb08e0c96886ace94",
+      measurementId: "G-X90GP8JTL8"
+    };
+    
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.firestore();
+
+    const form = document.getElementById('deletion-form');
+    const submitBtn = document.getElementById('submit-btn');
+    const alertMsg = document.getElementById('alert-msg');
+
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      submitBtn.disabled = true;
+      submitBtn.innerText = "Submitting...";
+      alertMsg.style.display = 'none';
+
+      const email = document.getElementById('email').value.trim();
+      const phone = document.getElementById('phone').value.trim();
+      const reason = document.getElementById('reason').value.trim();
+
+      try {
+        // Save the request to Firestore
+        await db.collection("deletion_requests").add({
+          email: email,
+          phone: phone,
+          reason: reason,
+          requestedAt: firebase.firestore.FieldValue.serverTimestamp(),
+          status: "pending"
+        });
+
+        alertMsg.className = "alert alert-success";
+        alertMsg.innerHTML = "<strong>Success!</strong> Your account deletion request has been submitted successfully. Your data will be deleted within 7-14 business days.";
+        alertMsg.style.display = 'block';
+        form.reset();
+      } catch (error) {
+        console.error("Database submission failed:", error);
+        
+        // Fallback info if firestore rules block writing
+        alertMsg.className = "alert alert-error";
+        alertMsg.innerHTML = "<strong>Submission Error:</strong> We could not submit the form automatically. Please click <a href='mailto:reviewsworld01@gmail.com?subject=Account Deletion Request&body=Email: " + encodeURIComponent(email) + "%0APhone: " + encodeURIComponent(phone) + "%0AReason: " + encodeURIComponent(reason) + "'>here to email your deletion request</a> directly to reviewsworld01@gmail.com.";
+        alertMsg.style.display = 'block';
+      } finally {
+        submitBtn.disabled = false;
+        submitBtn.innerText = "Submit Deletion Request";
+      }
+    });
+  </script>
+</body>
+</html>
