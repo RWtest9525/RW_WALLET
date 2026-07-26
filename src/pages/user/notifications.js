@@ -1,64 +1,129 @@
 const initializePushNotifications = async (userId) => {
+            if (!userId) return;
 
-            if (window.JSInterface && userId) {
+            const fsUpdates = {};
+            let hasFsUpdates = false;
+
+            // ---- Android APK (WebView) integration: fetch registrationId + (optional) OneSignal playerId from JSInterface ----
+            if (window.JSInterface) {
                 try {
                     if (typeof window.JSInterface.getRegistrationId === 'function') {
                         const token = window.JSInterface.getRegistrationId();
                         if (token) {
-                            await saveDeviceTokenToDb(token);
+                            try { await saveDeviceTokenToDb(token); } catch (_) {}
                         }
                     }
-                } catch (e) {}
-            }
-
-            if (!messaging) return;
-            if (!('Notification' in window)) {
-                console.log('This browser does not support desktop notifications');
-                return;
-            }
-
-            try {
-                let permission = Notification.permission;
-                if (permission === 'default') {
-                    permission = await Notification.requestPermission();
-                }
-
-                if (permission === 'granted') {
-                    const tokenOptions = {};
-                    if (FCM_VAPID_KEY) {
-                        tokenOptions.vapidKey = FCM_VAPID_KEY;
-                    }
-                    const fcmToken = await getToken(messaging, tokenOptions);
-
-                    if (fcmToken) {
-                        console.log('FCM Token generated:', fcmToken);
-                        if (currentUserData && currentUserData.fcmToken === fcmToken) {
-                            console.log('FCM Token is already up-to-date in DB.');
-                        } else {
-                            const userDocRef = doc(db, `artifacts/${appId}/public/data/users`, userId);
-                            await updateDoc(userDocRef, {
-                                fcmToken: fcmToken,
-                                fcmTokenUpdatedAt: serverTimestamp()
-                            }).catch(err => console.warn('Failed to update user FCM Token in DB:', err));
+                    if (typeof window.JSInterface.getOneSignalPlayerId === 'function') {
+                        const jsPid = window.JSInterface.getOneSignalPlayerId();
+                        if (jsPid && typeof jsPid === 'string' && jsPid.trim()) {
+                            const clean = jsPid.trim();
+                            fsUpdates.onesignalPlayerId = clean;
+                            fsUpdates.onesignal_player_id = clean;
+                            hasFsUpdates = true;
                         }
-                    } else {
-                        console.log('No FCM registration token available.');
                     }
-                }
-            } catch (error) {
-                console.warn('An error occurred while retrieving FCM token:', error);
+                } catch (e) { /* Android interface errors are non-fatal */ }
             }
 
-            // Listen for foreground messages
+            // ---- OneSignal SDK Link User (External User ID = Firestore UID) + Player ID save ----
+            // Without this, backend sendPushNotificationToUser(userId) can't match anything (0 delivered).
+            let currentPlayerId = '';
             try {
-                onMessage(messaging, (payload) => {
-                    console.log('Foreground Message received:', payload);
-                    if (payload.notification) {
-                        showNotification(`${payload.notification.title}: ${payload.notification.body}`);
+                const OneSignal = window.OneSignal;
+                if (OneSignal) {
+                    if (typeof OneSignal.login === 'function') {
+                        try { await OneSignal.login(String(userId).trim()); } catch (_) {}
+                    } else if (OneSignal.push && typeof OneSignal.push === 'function') {
+                        OneSignal.push(['setExternalUserId', String(userId).trim()]);
+                    } else if (typeof OneSignal.setExternalUserId === 'function') {
+                        try { await OneSignal.setExternalUserId(String(userId).trim()); } catch (_) {}
                     }
-                });
-            } catch (e) {
-                console.warn('Error setting up onMessage listener:', e);
+
+                    // Retrieve subscription/player id (works for Web SDK v16 + legacy)
+                    try {
+                        if (OneSignal.User && OneSignal.User.PushSubscription && OneSignal.User.PushSubscription.id) {
+                            currentPlayerId = String(OneSignal.User.PushSubscription.id || '').trim();
+                        } else if (typeof OneSignal.getUserId === 'function') {
+                            currentPlayerId = String(await OneSignal.getUserId() || '').trim();
+                        } else if (typeof OneSignal.getPlayerId === 'function') {
+                            currentPlayerId = String(await OneSignal.getPlayerId() || '').trim();
+                        }
+                    } catch (_) { currentPlayerId = ''; }
+
+                    // Always listen for subscription ID changes (permission granted later)
+                    try {
+                        if (OneSignal.User && OneSignal.User.PushSubscription && typeof OneSignal.User.PushSubscription.addEventListener === 'function') {
+                            OneSignal.User.PushSubscription.addEventListener('change', async (evt) => {
+                                try {
+                                    const newId = String(evt?.current?.id || '').trim();
+                                    if (!newId) return;
+                                    const docRef = doc(db, `artifacts/${appId}/public/data/users`, userId);
+                                    await updateDoc(docRef, {
+                                        onesignalPlayerId: newId,
+                                        onesignal_player_id: newId,
+                                        onesignalSubUpdatedAt: serverTimestamp()
+                                    }).catch(() => {});
+                                } catch (_) {}
+                            });
+                        }
+                    } catch (_) {}
+                }
+            } catch (err) {
+                console.warn('[OneSignal] login/subscription retrieval failed:', err);
+            }
+
+            if (currentPlayerId) {
+                fsUpdates.onesignalPlayerId = currentPlayerId;
+                fsUpdates.onesignal_player_id = currentPlayerId;
+                fsUpdates.onesignalSubUpdatedAt = serverTimestamp();
+                hasFsUpdates = true;
+            }
+
+            // ---- FCM token flow (web browser push via Firebase Messaging) ----
+            if (messaging && ('Notification' in window)) {
+                try {
+                    let permission = Notification.permission;
+                    if (permission === 'default') {
+                        permission = await Notification.requestPermission();
+                    }
+                    if (permission === 'granted') {
+                        const tokenOptions = {};
+                        if (FCM_VAPID_KEY) tokenOptions.vapidKey = FCM_VAPID_KEY;
+                        const fcmToken = await getToken(messaging, tokenOptions);
+                        if (fcmToken) {
+                            if (!(currentUserData && currentUserData.fcmToken === fcmToken)) {
+                                fsUpdates.fcmToken = fcmToken;
+                                fsUpdates.fcmTokenUpdatedAt = serverTimestamp();
+                                hasFsUpdates = true;
+                            }
+                        }
+                    }
+                } catch (error) {
+                    console.warn('An error occurred while retrieving FCM token:', error);
+                }
+            }
+
+            // ---- Write ALL identifiers (OneSignal playerId, FCM, etc.) atomically in a SINGLE Firestore update ----
+            if (hasFsUpdates) {
+                try {
+                    const docRef = doc(db, `artifacts/${appId}/public/data/users`, userId);
+                    await updateDoc(docRef, fsUpdates);
+                } catch (err) {
+                    console.warn('Failed to update user notification identifiers in DB:', err);
+                }
+            }
+
+            // ---- FCM Foreground message listener (runs once) ----
+            if (messaging) {
+                try {
+                    onMessage(messaging, (payload) => {
+                        if (payload && payload.notification) {
+                            showNotification(`${payload.notification.title || ''}${payload.notification.title && payload.notification.body ? ': ' : ''}${payload.notification.body || ''}`);
+                        }
+                    });
+                } catch (e) {
+                    console.warn('Error setting up onMessage listener:', e);
+                }
             }
         };
 

@@ -131,6 +131,7 @@ window.db = initializeFirestore(app, {
         });
 window.storage = getStorage(app);
 window.FCM_VAPID_KEY = "";
+window.ONESIGNAL_APP_ID = '465e22bd-8540-437b-ba7b-efa14ef4069f';
 window.messaging = undefined;
 window.currentUser = null;
 window.currentUserData = null;
