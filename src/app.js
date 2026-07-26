@@ -47,42 +47,7 @@ const hydrateInstantShell = () => {
         user.approvalStatus === 'rejected' || user.signupApprovalStatus === 'rejected' || user.accountStatus === 'rejected';
     if (lastUser) {
         let isUserAdmin = false;
-        // =========================
-        // INSTANT MAINTENANCE GATE 🔴 (runs BEFORE any dashboard reveal to prevent 1-2s dashboard usage)
-        // =========================
-        const APP_CONFIG_CACHE_KEY_INSTANT = 'rw_wallet_app_config_cache_v2';
-        let instantMaintenanceActive = false;
-        let instantMaintenanceEndsAt = 0;
-        let instantMaintenanceTitle = '';
-        let instantMaintenanceMessage = '';
-        try {
-            const cachedCfg = JSON.parse(localStorage.getItem(APP_CONFIG_CACHE_KEY_INSTANT) || sessionStorage.getItem(APP_CONFIG_CACHE_KEY_INSTANT + '_ss') || 'null');
-            if (cachedCfg && typeof cachedCfg === 'object') {
-                const enabled = !!(cachedCfg.maintenanceEnabled || cachedCfg.maintenance_enabled);
-                if (enabled) {
-                    const endMillis = Number(
-                        cachedCfg.maintenanceEndsAtMillis ||
-                        cachedCfg.maintenance_ends_at_millis ||
-                        cachedCfg.maintenanceEndsAt ||
-                        cachedCfg.maintenance_ends_at ||
-                        cachedCfg.maintenanceEndAt ||
-                        0
-                    );
-                    if (!endMillis || endMillis > Date.now()) {
-                        instantMaintenanceActive = true;
-                        instantMaintenanceEndsAt = endMillis || 0;
-                        instantMaintenanceTitle = String(cachedCfg.maintenanceTitle || cachedCfg.maintenance_title || 'Under Maintenance');
-                        instantMaintenanceMessage = String(
-                            cachedCfg.maintenanceMessage ||
-                            cachedCfg.maintenance_message ||
-                            'Server maintenance is in progress. Your wallet will resume automatically after it finishes.'
-                        );
-                    }
-                }
-            }
-        } catch (_) {}
-
-        isUserAdmin = false;
+        // Determine if user is admin for hydration decisions
         try {
             const cachedUser = JSON.parse(localStorage.getItem(`rw_wallet_user_cache_${effectiveUser}`) || sessionStorage.getItem(`rw_wallet_user_cache_ss_${effectiveUser}`) || 'null');
             const cachedRole = (localStorage.getItem('user_role') || sessionStorage.getItem('user_role_ss') || '').toLowerCase();
@@ -92,86 +57,6 @@ const hydrateInstantShell = () => {
                 isUserAdmin = true;
             }
         } catch (_) {}
-
-        if (instantMaintenanceActive && !isUserAdmin) {
-            // ⛔ NEVER show dashboard when maintenance is active
-            document.body.classList.add('overflow-hidden');
-            document.getElementById('auth-screen')?.classList.add('hidden');
-            document.getElementById('main-content')?.classList.remove('hidden');
-            document.getElementById('dashboard-content')?.classList.add('hidden');
-            document.getElementById('bottom-nav')?.classList.add('hidden');
-            const pageContainer = document.getElementById('page-container');
-            if (pageContainer) {
-                pageContainer.classList.add('hidden');
-                pageContainer.innerHTML = '';
-            }
-            const escapeHtmlInstant = (value = '') => String(value)
-                .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-                .replace(/"/g, '&quot;').replace(/'/g, '&#039;');
-
-            let overlay = document.getElementById('app-maintenance-overlay');
-            if (!overlay) {
-                overlay = document.createElement('div');
-                overlay.id = 'app-maintenance-overlay';
-                document.body.appendChild(overlay);
-            }
-            const endsInText = (() => {
-                if (!instantMaintenanceEndsAt) return 'Estimated time: Soon';
-                const totalSeconds = Math.max(0, Math.floor((instantMaintenanceEndsAt - Date.now()) / 1000));
-                const hours = Math.floor(totalSeconds / 3600);
-                const minutes = Math.floor((totalSeconds % 3600) / 60);
-                const seconds = totalSeconds % 60;
-                const parts = [];
-                if (hours) parts.push(`${hours}h`);
-                if (minutes) parts.push(`${minutes}m`);
-                parts.push(`${seconds}s`);
-                return `Ends in ${parts.join(' ')}`;
-            })();
-            overlay.setAttribute('class', 'fixed inset-0 z-[999999] flex items-center justify-center p-4 bg-slate-950/95 backdrop-blur-xl');
-            overlay.style.cssText = 'position:fixed;inset:0;z-index:9999999;display:flex;align-items:center;justify-content:center;padding:16px;background-color:rgba(2,6,23,0.97);backdrop-filter:blur(12px);';
-            overlay.innerHTML = `
-                <div class="w-full max-w-md rounded-3xl border border-slate-700/60 bg-slate-900 shadow-2xl overflow-hidden">
-                    <div class="bg-gradient-to-br from-amber-500 via-orange-500 to-rose-600 p-6 text-white text-center">
-                        <div class="mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-full bg-white/15 border border-white/20 backdrop-blur">
-                            <svg class="h-7 w-7" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.2"><circle cx="12" cy="12" r="10"/><path stroke-linecap="round" d="M12 8v4m0 4h.01"/></svg>
-                        </div>
-                        <h2 class="text-2xl font-black tracking-tight">${escapeHtmlInstant(instantMaintenanceTitle)}</h2>
-                        <p class="mt-2 text-sm text-white/85">${escapeHtmlInstant(instantMaintenanceMessage)}</p>
-                    </div>
-                    <div class="p-5 space-y-4 text-center">
-                        <div class="rounded-2xl bg-amber-500/10 border border-amber-500/20 p-3.5 text-amber-300">
-                            <p class="text-[11px] font-black uppercase tracking-wider text-amber-400/80">Status</p>
-                            <p id="instant-maintenance-countdown" class="mt-1 text-sm font-bold">${endsInText}</p>
-                        </div>
-                        <button type="button" class="w-full rounded-2xl bg-gradient-to-r from-slate-700 to-slate-800 hover:from-slate-600 hover:to-slate-700 text-white px-4 py-3 text-sm font-black border border-slate-600/70 shadow-xs active:scale-[0.98] transition" onclick="try{window.location.reload()}catch(e){}">
-                            Refresh After Maintenance
-                        </button>
-                        <p class="text-[11px] font-semibold text-slate-500">For help, contact Admin.</p>
-                    </div>
-                </div>`;
-            try { clearInterval(window.__instantMaintenanceTimer); } catch (_) {}
-            window.__instantMaintenanceTimer = setInterval(() => {
-                const el = document.getElementById('instant-maintenance-countdown');
-                if (!el) return;
-                if (!instantMaintenanceEndsAt) return;
-                const totalSeconds = Math.max(0, Math.floor((instantMaintenanceEndsAt - Date.now()) / 1000));
-                const hours = Math.floor(totalSeconds / 3600);
-                const minutes = Math.floor((totalSeconds % 3600) / 60);
-                const seconds = totalSeconds % 60;
-                const parts = [];
-                if (hours) parts.push(`${hours}h`);
-                if (minutes) parts.push(`${minutes}m`);
-                parts.push(`${seconds}s`);
-                el.textContent = `Ends in ${parts.join(' ')}`;
-                if (instantMaintenanceEndsAt && instantMaintenanceEndsAt <= Date.now()) {
-                    try { clearInterval(window.__instantMaintenanceTimer); } catch (_) {}
-                    try { window.location.reload(); } catch (_) {}
-                }
-            }, 1000);
-
-            // ⛔ STOP further hydration — DON'T show dashboard, DON'T show navigation
-            return;
-        }
 
         document.getElementById('main-content').classList.remove('hidden');
         document.getElementById('auth-screen').classList.add('hidden');
