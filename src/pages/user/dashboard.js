@@ -531,16 +531,22 @@ const showPage = (content, options = {}) => {
                 window.activeTaskReservation = null;
             }
             lastManualPageOpenAt = Date.now();
-            document.getElementById('dashboard-content').classList.add('hidden');
             const pageContainer = document.getElementById('page-container');
-            const returnSection = options.returnTo || currentMainSection;
+            const dashboardContent = document.getElementById('dashboard-content');
+            // ---- ATOMIC PAINT ORDER: Hide everything that's visible FIRST (so NO intermediate frame with stale content) ----
+            pageContainer.classList.add('hidden');
+            dashboardContent.classList.add('hidden');
+            // ---- Write new content WHILE hidden: browser will NOT paint stale HTML ----
             pageContainer.innerHTML = content;
-            pageContainer.classList.remove('hidden');
+            const returnSection = options.returnTo || currentMainSection;
             pageContainer.style.paddingBottom = options.fullHeight ? '0' : (options.keepBottomNav ? '6.5rem' : '1.5rem');
             pageContainer.style.overflowY = options.fullHeight ? 'hidden' : 'auto';
             pageContainer.style.scrollPaddingBottom = '7rem';
+            pageContainer.scrollTop = 0;
             setMainChrome(!!options.keepBottomNav);
             document.getElementById('app-footer')?.classList.add('app-footer-hidden');
+            // ---- Only NOW make new content visible (fresh HTML, one paint only) ----
+            pageContainer.classList.remove('hidden');
             const backButton = pageContainer.querySelector('.page-back-btn');
             if (backButton) {
                 backButton.onclick = options.onBack || (() => {
@@ -3054,14 +3060,21 @@ const showHomeMainPage = () => {
             }
             activeTaskReservation = null;
             window.activeTaskReservation = null;
+            // ---- ATOMIC PAINT ORDER: Clear page-container WHILE still visible under dashboard,
+            // then hide page-container, THEN reveal dashboard-content in ONE paint. ----
+            const pageContainer = document.getElementById('page-container');
+            pageContainer.innerHTML = '';
+            pageContainer.style.overflowY = 'auto';
+            pageContainer.style.scrollPaddingBottom = '';
+            pageContainer.style.paddingBottom = '';
+            pageContainer.classList.add('hidden');
             document.getElementById('dashboard-content').classList.remove('hidden');
-            document.getElementById('page-container').classList.add('hidden');
-            document.getElementById('page-container').innerHTML = '';
             setMainChrome(true);
             document.getElementById('app-footer')?.classList.add('app-footer-hidden');
             currentMainSection = 'home';
             switchTab('user-panel');
             setBottomNavActive('bottom-home-btn');
+            updateDollarBalanceDisplay(currentUserData?.balance || 0);
         };
 
 let realReferralsCache = [];
@@ -3733,167 +3746,121 @@ window.showReferralDetailPage = async (referralId = 'ref-1') => {
 };
 
 const showReferEarnPage = () => {
-    if (!ensureUserSessionReady()) return;
-    if (activeChatUnsubscribe) {
-        activeChatUnsubscribe();
-        activeChatUnsubscribe = null;
-    }
-    const userUid = String(currentUser?.uid || '').trim();
-    const REFERRAL_PAGE_CACHE_LS = `rw_refer_page_cache_v1_${userUid}`;
-    const REFERRAL_PAGE_CACHE_SS = `rw_refer_page_cache_ss_v1_${userUid}`;
-    const IMG_READY_LS = 'rw_critical_images_loaded_v1';
-    const IMG_READY_SS = 'rw_critical_images_loaded_ss_v1';
-    let imagesReady = false;
-    try {
-        imagesReady = localStorage.getItem(IMG_READY_LS) === '1' || sessionStorage.getItem(IMG_READY_SS) === '1';
-    } catch (_) {}
-
-    const pageContainer = document.getElementById('page-container');
-    if (currentMainSection === 'refer' && pageContainer && !pageContainer.classList.contains('hidden')) {
-        setBottomNavActive('bottom-refer-btn');
-        return;
-    }
-
-    const reward = getReferralRewardAmount();
-    const rewardText = formatCurrency(reward).replace('.00', '');
-    const referralCode = getProfileReferralCode();
-    const referralLink = getProfileReferralLink(referralCode);
-
-    ['/assets/images/referral_banner.png', '/assets/images/referral_howitworks_cards.png'].forEach(src => {
-        try {
-            const img = new Image();
-            img.decoding = 'sync';
-            img.fetchPriority = 'high';
-            img.src = src;
-        } catch (_) {}
-    });
-
-    const bannerSkeletonBg = 'linear-gradient(135deg,#064e3b 0%,#065f46 25%,#047857 50%,#10b981 75%,#a7f3d0 100%)';
-    const howItWorksSkeletonBg = 'linear-gradient(135deg,#f8fafc 0%,#f1f5f9 35%,#e2e8f0 70%,#cbd5e1 100%)';
-    const bannerShellDisplay = imagesReady ? 'block' : 'none';
-    const howItWorksShellDisplay = imagesReady ? 'block' : 'none';
-
-    const buildContent = () => `
-        ${getPageHeader('Refer & Earn', { showBack: false })}
-        <div class="max-w-md mx-auto space-y-3 text-left px-0.5 pt-1 pb-24">
-            
-            <!-- Refer & Earn Top Banner Image (Anti-Flicker: gradient skeleton + opacity reveal) -->
-            <div class="relative overflow-hidden rounded-2xl shadow-md border border-emerald-900/40 bg-slate-900 min-h-[140px]"
-                 style="background-image:${bannerSkeletonBg};background-size:cover;background-position:center;will-change:transform;">
-                <img src="/assets/images/referral_banner.png" alt="Refer & Earn - Invite Friends, Earn Together"
-                     loading="eager" fetchpriority="high" decoding="sync"
-                     style="opacity:0;transition:opacity 160ms ease-out;display:${bannerShellDisplay};will-change:opacity;"
-                     onload="try{this.style.opacity='1';this.style.display='block';}catch(e){}"
-                     onerror="try{this.style.opacity='1';this.style.display='block';}catch(e){}"
-                     class="w-full h-auto object-cover rounded-2xl block">
-            </div>
-
-            <!-- Refer & Earn Middle Premium Stats & How It Works Image Card (Anti-Flicker) -->
-            <div class="relative overflow-hidden rounded-2xl shadow-xs border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 min-h-[180px]"
-                 style="background-image:${howItWorksSkeletonBg};background-size:cover;background-position:center;will-change:transform;">
-                <img src="/assets/images/referral_howitworks_cards.png" alt="Referral Rewards & How It Works"
-                     loading="eager" fetchpriority="high" decoding="sync"
-                     style="opacity:0;transition:opacity 160ms ease-out;display:${howItWorksShellDisplay};will-change:opacity;"
-                     onload="try{this.style.opacity='1';this.style.display='block';}catch(e){}"
-                     onerror="try{this.style.opacity='1';this.style.display='block';}catch(e){}"
-                     class="w-full h-auto object-cover rounded-2xl block">
-            </div>
-
-            <!-- Referral Code & Actions Box (Redesigned Light Premium Style) -->
-            <div class="bg-emerald-50/70 dark:bg-emerald-950/30 border border-emerald-200/80 dark:border-emerald-800/80 p-3 rounded-2xl shadow-xs space-y-2.5">
-                <!-- Top Row: Referral Code with Copy Symbol + Track Button -->
-                <div class="flex items-center justify-between gap-2">
-                    <div class="min-w-0 text-left flex-1">
-                        <p class="text-[9px] font-black uppercase text-emerald-700 dark:text-emerald-400 tracking-wider">YOUR REFERRAL CODE</p>
-                        <div class="flex items-center gap-1.5 mt-0.5">
-                            <h3 class="text-xs sm:text-sm font-mono font-black text-emerald-950 dark:text-emerald-100 tracking-wider select-all break-all leading-tight">${escapeHtml(referralCode)}</h3>
-                            <button type="button" id="main-copy-code-btn" title="Copy Referral Code" class="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-emerald-100 dark:bg-emerald-900/60 text-emerald-800 dark:text-emerald-200 hover:bg-emerald-200 border border-emerald-300/60 dark:border-emerald-700/60 transition active:scale-90 shadow-xs">
-                                <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
-                                    <path stroke-linecap="round" stroke-linejoin="round" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
-                                </svg>
-                            </button>
-                        </div>
-                    </div>
-                    <button type="button" id="open-track-referrals-btn" onclick="window.showTrackReferralsPage()" class="shrink-0 flex items-center gap-1 rounded-xl bg-white dark:bg-slate-800 border border-emerald-400/80 dark:border-emerald-600 px-2.5 py-1.5 text-[11px] font-extrabold text-emerald-700 dark:text-emerald-300 hover:bg-emerald-50 transition active:scale-95 shadow-xs">
-                        <span>Track Referrals</span>
-                        <span class="text-xs font-black">›</span>
-                    </button>
-                </div>
-
-                <!-- Bottom Row: Referral Link Bar with Share Link Button shifted here -->
-                <div class="flex items-center justify-between gap-2 pt-2 border-t border-emerald-200/60 dark:border-emerald-800/60">
-                    <div class="min-w-0 flex-1 text-left">
-                        <p class="text-[9px] font-black uppercase text-slate-400 dark:text-slate-400 tracking-wider">REFERRAL LINK</p>
-                        <p class="text-[11px] font-mono font-semibold text-emerald-800 dark:text-emerald-300 select-all break-all leading-tight">${escapeHtml(referralLink)}</p>
-                    </div>
-                    <button type="button" id="main-share-link-btn" title="Share Link" class="shrink-0 flex items-center gap-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white px-3 py-1.5 text-xs font-black shadow-xs transition active:scale-95">
-                        <svg class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z"/></svg>
-                        <span>Share Link</span>
-                    </button>
-                </div>
-            </div>
-
-            <!-- Bottom Auto Rewards Banner (Perfect Circle Checkmark) -->
-            <div class="rounded-xl bg-emerald-50/80 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800/60 p-2.5 flex items-center gap-2.5 text-[10px] font-bold text-emerald-800 dark:text-emerald-200 shadow-xs">
-                <div class="shrink-0 flex items-center justify-center bg-emerald-500 text-white shadow-xs" style="width: 22px; height: 22px; min-width: 22px; min-height: 22px; max-width: 22px; max-height: 22px; border-radius: 50% !important;">
-                    <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="3.5">
-                        <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
-                    </svg>
-                </div>
-                <span>Rewards will be added automatically after your friend's first withdrawal.</span>
-            </div>
-        </div>
-        ${getPageFooter()}
-    `;
-
-    let usedCached = false;
-    try {
-        const cachedHTML = localStorage.getItem(REFERRAL_PAGE_CACHE_LS) || sessionStorage.getItem(REFERRAL_PAGE_CACHE_SS);
-        if (cachedHTML && typeof cachedHTML === 'string' && cachedHTML.length > 200) {
-            showPage(cachedHTML, { keepBottomNav: true, returnTo: currentUser?.uid === ADMIN_UID ? 'admin' : 'home' });
-            currentMainSection = 'refer';
-            setBottomNavActive('bottom-refer-btn');
-            usedCached = true;
-
-            const cachedCopy = document.getElementById('main-copy-code-btn');
-            if (cachedCopy) {
-                cachedCopy.addEventListener('click', () => {
-                    if (navigator.clipboard && navigator.clipboard.writeText) {
-                        navigator.clipboard.writeText(referralCode).then(() => showNotification('Referral code copied to clipboard!'));
-                    } else {
-                        showNotification(`Referral Code: ${referralCode}`);
-                    }
-                });
-            }
-            const cachedShare = document.getElementById('main-share-link-btn');
-            if (cachedShare) {
-                cachedShare.addEventListener('click', () => window.showShareReferralModal(referralCode));
-            }
-            const cachedTrack = document.getElementById('open-track-referrals-btn');
-            if (cachedTrack) {
-                cachedTrack.addEventListener('click', () => window.showTrackReferralsPage());
-            }
-
-            requestAnimationFrame(() => {
-                try {
-                    document.querySelectorAll('#page-container img[src*="referral_"]').forEach(el => {
-                        el.style.opacity = '1';
-                        el.style.display = 'block';
-                    });
-                } catch (_) {}
-            });
+        if (!ensureUserSessionReady()) return;
+        if (activeChatUnsubscribe) {
+            activeChatUnsubscribe();
+            activeChatUnsubscribe = null;
         }
-    } catch (_) {}
+        const READY_LS = 'rw_refer_img_ready_v1';
+        const READY_SS = 'rw_refer_img_ready_ss_v1';
+        let imagesReady = false;
+        try { imagesReady = localStorage.getItem(READY_LS) === '1' || sessionStorage.getItem(READY_SS) === '1'; } catch (_) {}
 
-    const content = buildContent();
+        // NEVER re-render if already visible: prevents full repaint blink
+        const pageContainer = document.getElementById('page-container');
+        if (currentMainSection === 'refer' && pageContainer && !pageContainer.classList.contains('hidden')) {
+            setBottomNavActive('bottom-refer-btn');
+            return;
+        }
 
-    if (!usedCached) {
+        const reward = getReferralRewardAmount();
+        const referralCode = getProfileReferralCode();
+        const referralLink = getProfileReferralLink(referralCode);
+
+        // Blocking image preload + mark ready flag in dual-cache
+        ['/assets/images/referral_banner.png', '/assets/images/referral_howitworks_cards.png'].forEach(src => {
+            try {
+                const img = new Image();
+                img.decoding = 'sync';
+                img.fetchPriority = 'high';
+                const mark = () => {
+                    try { localStorage.setItem(READY_LS, '1'); sessionStorage.setItem(READY_SS, '1'); } catch (_) {}
+                };
+                img.onload = img.onerror = mark;
+                img.src = src;
+            } catch (_) {}
+        });
+
+        const bannerSkeleton = 'linear-gradient(135deg,#064e3b 0%,#065f46 25%,#047857 50%,#10b981 75%,#a7f3d0 100%)';
+        const howItWorksSkeleton = 'linear-gradient(135deg,#f8fafc 0%,#f1f5f9 35%,#e2e8f0 70%,#cbd5e1 100%)';
+        const imgStyle = `opacity:1;display:block;will-change:opacity;transition:opacity ${imagesReady ? '80ms linear' : '200ms ease-out'};`;
+
+        const content = `
+            ${getPageHeader('Refer & Earn', { showBack: false })}
+            <div class="max-w-md mx-auto space-y-3 text-left px-0.5 pt-1 pb-24">
+
+                <!-- Top Banner: skeleton gradient ALWAYS underneath image (no display:none, no opacity:0 start) -->
+                <div class="relative overflow-hidden rounded-2xl shadow-md border border-emerald-900/40 bg-slate-900 min-h-[140px]"
+                     style="background-image:${bannerSkeleton};background-size:cover;background-position:center;will-change:transform;">
+                    <img src="/assets/images/referral_banner.png" alt="Refer & Earn - Invite Friends, Earn Together"
+                         loading="eager" fetchpriority="high" decoding="sync"
+                         style="${imgStyle}"
+                         onload="try{this.style.opacity='1';}catch(e){}"
+                         onerror="try{this.style.opacity='1';}catch(e){}"
+                         class="w-full h-auto object-cover rounded-2xl block">
+                </div>
+
+                <!-- Middle How It Works card -->
+                <div class="relative overflow-hidden rounded-2xl shadow-xs border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 min-h-[180px]"
+                     style="background-image:${howItWorksSkeleton};background-size:cover;background-position:center;will-change:transform;">
+                    <img src="/assets/images/referral_howitworks_cards.png" alt="Referral Rewards & How It Works"
+                         loading="eager" fetchpriority="high" decoding="sync"
+                         style="${imgStyle}"
+                         onload="try{this.style.opacity='1';}catch(e){}"
+                         onerror="try{this.style.opacity='1';}catch(e){}"
+                         class="w-full h-auto object-cover rounded-2xl block">
+                </div>
+
+                <!-- Referral Code & Actions Box -->
+                <div class="bg-emerald-50/70 dark:bg-emerald-950/30 border border-emerald-200/80 dark:border-emerald-800/80 p-3 rounded-2xl shadow-xs space-y-2.5">
+                    <div class="flex items-center justify-between gap-2">
+                        <div class="min-w-0 text-left flex-1">
+                            <p class="text-[9px] font-black uppercase text-emerald-700 dark:text-emerald-400 tracking-wider">YOUR REFERRAL CODE</p>
+                            <div class="flex items-center gap-1.5 mt-0.5">
+                                <h3 class="text-xs sm:text-sm font-mono font-black text-emerald-950 dark:text-emerald-100 tracking-wider select-all break-all leading-tight">${escapeHtml(referralCode)}</h3>
+                                <button type="button" id="main-copy-code-btn" title="Copy Referral Code" class="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-emerald-100 dark:bg-emerald-900/60 text-emerald-800 dark:text-emerald-200 hover:bg-emerald-200 border border-emerald-300/60 dark:border-emerald-700/60 transition active:scale-90 shadow-xs">
+                                    <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
+                                        <path stroke-linecap="round" stroke-linejoin="round" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                                    </svg>
+                                </button>
+                            </div>
+                        </div>
+                        <button type="button" id="open-track-referrals-btn" onclick="window.showTrackReferralsPage()" class="shrink-0 flex items-center gap-1 rounded-xl bg-white dark:bg-slate-800 border border-emerald-400/80 dark:border-emerald-600 px-2.5 py-1.5 text-[11px] font-extrabold text-emerald-700 dark:text-emerald-300 hover:bg-emerald-50 transition active:scale-95 shadow-xs">
+                            <span>Track Referrals</span>
+                            <span class="text-xs font-black">›</span>
+                        </button>
+                    </div>
+
+                    <div class="flex items-center justify-between gap-2 pt-2 border-t border-emerald-200/60 dark:border-emerald-800/60">
+                        <div class="min-w-0 flex-1 text-left">
+                            <p class="text-[9px] font-black uppercase text-slate-400 dark:text-slate-400 tracking-wider">REFERRAL LINK</p>
+                            <p class="text-[11px] font-mono font-semibold text-emerald-800 dark:text-emerald-300 select-all break-all leading-tight">${escapeHtml(referralLink)}</p>
+                        </div>
+                        <button type="button" id="main-share-link-btn" title="Share Link" class="shrink-0 flex items-center gap-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white px-3 py-1.5 text-xs font-black shadow-xs transition active:scale-95">
+                            <svg class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z"/></svg>
+                            <span>Share Link</span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Bottom Auto Rewards Banner -->
+                <div class="rounded-xl bg-emerald-50/80 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800/60 p-2.5 flex items-center gap-2.5 text-[10px] font-bold text-emerald-800 dark:text-emerald-200 shadow-xs">
+                    <div class="shrink-0 flex items-center justify-center bg-emerald-500 text-white shadow-xs" style="width: 22px; height: 22px; min-width: 22px; min-height: 22px; max-width: 22px; max-height: 22px; border-radius: 50% !important;">
+                        <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="3.5">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
+                        </svg>
+                    </div>
+                    <span>Rewards will be added automatically after your friend's first withdrawal.</span>
+                </div>
+            </div>
+            ${getPageFooter()}
+        `;
+
+        // NO HTML CACHING: stale cached HTML between page swaps was the #1 cause of blink/flash.
         showPage(content, { keepBottomNav: true, returnTo: currentUser?.uid === ADMIN_UID ? 'admin' : 'home' });
         currentMainSection = 'refer';
         setBottomNavActive('bottom-refer-btn');
-    }
 
-    const attachHandlers = () => {
         document.getElementById('main-copy-code-btn')?.addEventListener('click', () => {
             if (navigator.clipboard && navigator.clipboard.writeText) {
                 navigator.clipboard.writeText(referralCode).then(() => showNotification('Referral code copied to clipboard!'));
@@ -3901,40 +3868,9 @@ const showReferEarnPage = () => {
                 showNotification(`Referral Code: ${referralCode}`);
             }
         });
-        document.getElementById('main-share-link-btn')?.addEventListener('click', () => {
-            window.showShareReferralModal(referralCode);
-        });
-        document.getElementById('open-track-referrals-btn')?.addEventListener('click', () => {
-            window.showTrackReferralsPage();
-        });
+        document.getElementById('main-share-link-btn')?.addEventListener('click', () => window.showShareReferralModal(referralCode));
+        document.getElementById('open-track-referrals-btn')?.addEventListener('click', () => window.showTrackReferralsPage());
     };
-    attachHandlers();
-
-    const persistCacheSoon = () => {
-        setTimeout(() => {
-            try {
-                const pc = document.getElementById('page-container');
-                if (pc && currentMainSection === 'refer') {
-                    const rendered = pc.innerHTML;
-                    if (rendered && rendered.length > 200) {
-                        try { localStorage.setItem(REFERRAL_PAGE_CACHE_LS, rendered); } catch (_) {}
-                        try { sessionStorage.setItem(REFERRAL_PAGE_CACHE_SS, rendered); } catch (_) {}
-                    }
-                }
-            } catch (_) {}
-        }, 450);
-    };
-    if (usedCached) {
-        setTimeout(() => {
-            try {
-                localStorage.setItem(REFERRAL_PAGE_CACHE_LS, content);
-                sessionStorage.setItem(REFERRAL_PAGE_CACHE_SS, content);
-            } catch (_) {}
-        }, 0);
-    } else {
-        persistCacheSoon();
-    }
-};
 
 
 
