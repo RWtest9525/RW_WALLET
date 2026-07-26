@@ -6486,12 +6486,10 @@ function registerSocketHandlers(io, { d1 }) {
                 const pushTitle = `💬 New Message from ${senderName}`;
                 const pushBody = chatMessage.message.slice(0, 150);
 
-                sendOneSignalPush(d1, parentAdmin, pushTitle, pushBody, customData).catch(e => console.error('[ChatPush] Local admin push error:', e));
-                oneSignalService.sendPushNotificationToUser({ userId: parentAdmin, title: pushTitle, message: pushBody, data: customData }, d1).catch(e => console.error('[ChatPush] Service admin push error:', e));
+                sendOneSignalPush(d1, parentAdmin, pushTitle, pushBody, customData).catch(e => console.error('[ChatPush] Admin push error:', e));
 
                 if (parentAdmin !== ADMIN_UID) {
-                  sendOneSignalPush(d1, ADMIN_UID, pushTitle, pushBody, customData).catch(e => console.error('[ChatPush] Local owner push error:', e));
-                  oneSignalService.sendPushNotificationToUser({ userId: ADMIN_UID, title: pushTitle, message: pushBody, data: customData }, d1).catch(e => console.error('[ChatPush] Service owner push error:', e));
+                  sendOneSignalPush(d1, ADMIN_UID, pushTitle, pushBody, customData).catch(e => console.error('[ChatPush] Owner push error:', e));
                 }
               } catch (err) {
                 console.error('Support chat admin push failed:', err);
@@ -6522,12 +6520,10 @@ function registerSocketHandlers(io, { d1 }) {
               const pushBody = chatMessage.message.slice(0, 150);
 
               if (recipientUserId && recipientUserId !== socket.user.sub) {
-                sendOneSignalPush(d1, recipientUserId, pushTitle, pushBody, customData).catch(e => console.error('[ChatPush] Local user push error:', e));
-                oneSignalService.sendPushNotificationToUser({ userId: recipientUserId, title: pushTitle, message: pushBody, data: customData }, d1).catch(e => console.error('[ChatPush] Service user push error:', e));
+                sendOneSignalPush(d1, recipientUserId, pushTitle, pushBody, customData).catch(e => console.error('[ChatPush] User push error:', e));
               }
               if (roomAdminId !== ADMIN_UID && recipientUserId !== ADMIN_UID && socket.user.sub !== ADMIN_UID) {
-                sendOneSignalPush(d1, ADMIN_UID, pushTitle, pushBody, customData).catch(e => console.error('[ChatPush] Local owner fallback push error:', e));
-                oneSignalService.sendPushNotificationToUser({ userId: ADMIN_UID, title: pushTitle, message: pushBody, data: customData }, d1).catch(e => console.error('[ChatPush] Service owner fallback push error:', e));
+                sendOneSignalPush(d1, ADMIN_UID, pushTitle, pushBody, customData).catch(e => console.error('[ChatPush] Owner fallback push error:', e));
               }
             } catch (err) {
               console.error('Support chat user push failed:', err);
