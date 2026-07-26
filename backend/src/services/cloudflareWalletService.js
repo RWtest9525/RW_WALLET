@@ -11,6 +11,7 @@ const { Readable } = require('stream');
 const gplayRaw = require('google-play-scraper');
 const gplay = gplayRaw.default || gplayRaw;
 const ocrService = require('./ocrService');
+const oneSignalService = require('./oneSignalService');
 
 const REQUIRED_ENV = [
   'APP_JWT_SECRET',
@@ -730,6 +731,57 @@ async function saveFundRequest(d1, { requestId, userId, type = 'withdrawal', amo
        details_json = excluded.details_json`,
     [requestId, userId, type, Number(amount || 0), status, requestedAt, processedAt, JSON.stringify(details || {})]
   );
+
+  // Trigger #6 (Withdrawal) + Trigger #10 (Recharge): Alert Admin on new request
+  if (status === 'pending' && userId) {
+    (async () => {
+      try {
+        const reqType = String(type || 'withdrawal').toLowerCase();
+        const isRecharge = reqType.includes('recharge') || reqType.includes('deposit') || reqType.includes('add_fund');
+        const amountVal = Number(amount || 0);
+        const userRow = await d1.first(`SELECT name, email, mobile FROM users WHERE id = ? OR firebase_uid = ? LIMIT 1`, [userId, userId]).catch(() => null);
+        const userName = userRow?.name || userRow?.email || 'User';
+        const pushData = {
+          type: isRecharge ? 'recharge_request' : 'withdrawal_request',
+          requestId,
+          userId,
+          userName,
+          amount: amountVal
+        };
+        if (isRecharge) {
+          // Trigger #10: Wallet Recharge Request -> Alert Admin
+          await oneSignalService.sendPushNotificationToRole({
+            role: 'admin',
+            title: '💳 Naya Recharge Request',
+            message: `₹${amountVal} ka recharge request ${userName} ne submit kiya hai. Abhi process karein.`,
+            data: pushData
+          }, d1);
+          await oneSignalService.sendPushNotificationToUser({
+            userId: ADMIN_UID,
+            title: '💳 Recharge Request Aaya Hai',
+            message: `New recharge: ${userName} ne ₹${amountVal} ka add fund request diya hai.`,
+            data: pushData
+          }, d1);
+        } else {
+          // Trigger #6: Withdrawal Request -> Alert Admin
+          await oneSignalService.sendPushNotificationToRole({
+            role: 'admin',
+            title: '🏦 Naya Withdrawal Request',
+            message: `₹${amountVal} ka withdrawal ${userName} ne request kiya hai. Abhi approve karein.`,
+            data: pushData
+          }, d1);
+          await oneSignalService.sendPushNotificationToUser({
+            userId: ADMIN_UID,
+            title: '🏦 Withdrawal Request Aaya',
+            message: `New withdrawal: ${userName} ne ₹${amountVal} payout ke liye request di hai.`,
+            data: pushData
+          }, d1);
+        }
+      } catch (pe) {
+        console.warn('[Push] New fund-request admin alert failed:', pe.message);
+      }
+    })();
+  }
 }
 
 async function listFundRequests(d1, { status = 'pending', type = null, userId = null, parentAdmin = null, limit = 200 } = {}) {
@@ -776,7 +828,7 @@ async function listFundRequests(d1, { status = 'pending', type = null, userId = 
 
 async function updateFundRequestStatus(d1, { requestId, status, processedAt = nowMs(), details = {} }) {
   const existing = await d1.first(
-    `SELECT details_json FROM fund_requests WHERE request_id = ? LIMIT 1`,
+    `SELECT user_id, type, amount, status as prev_status, details_json FROM fund_requests WHERE request_id = ? LIMIT 1`,
     [requestId]
   );
   let currentDetails = {};
@@ -792,6 +844,64 @@ async function updateFundRequestStatus(d1, { requestId, status, processedAt = no
      WHERE request_id = ?`,
     [status, processedAt, JSON.stringify({ ...currentDetails, ...(details || {}) }), requestId]
   );
+
+  // Trigger #6 (Withdrawal) + Trigger #10 (Recharge): Alert User on Approval/Rejection
+  if (existing && existing.user_id && status !== existing.prev_status && (status === 'approved' || status === 'rejected' || status === 'completed' || status === 'failed')) {
+    (async () => {
+      try {
+        const userId = existing.user_id;
+        const reqType = String(existing.type || 'withdrawal').toLowerCase();
+        const isRecharge = reqType.includes('recharge') || reqType.includes('deposit') || reqType.includes('add_fund');
+        const amountVal = Number(existing.amount || 0);
+        const mergedDetails = { ...currentDetails, ...(details || {}) };
+        const reason = mergedDetails.reason || mergedDetails.rejectionReason || mergedDetails.remark || '';
+        const isApproved = status === 'approved' || status === 'completed';
+        const pushData = {
+          type: isRecharge ? (isApproved ? 'recharge_approved' : 'recharge_rejected') : (isApproved ? 'withdrawal_approved' : 'withdrawal_rejected'),
+          requestId,
+          amount: amountVal,
+          reason
+        };
+        if (isRecharge) {
+          // Trigger #10: Recharge completion -> Alert User
+          if (isApproved) {
+            await oneSignalService.sendPushNotificationToUser({
+              userId,
+              title: '✅ Recharge Complete Ho Gaya',
+              message: `₹${amountVal} aapke wallet mein successfully add ho gaye hain! Enjoy earning.`,
+              data: pushData
+            }, d1);
+          } else {
+            await oneSignalService.sendPushNotificationToUser({
+              userId,
+              title: '❌ Recharge Reject Ho Gaya',
+              message: `₹${amountVal} ka recharge request reject ho gaya.${reason ? ' Reason: ' + reason : ''}`,
+              data: pushData
+            }, d1);
+          }
+        } else {
+          // Trigger #6: Withdrawal Approval/Rejection -> Alert User
+          if (isApproved) {
+            await oneSignalService.sendPushNotificationToUser({
+              userId,
+              title: '✅ Withdrawal Approve Ho Gaya',
+              message: `₹${amountVal} ka payout aapke account mein bhej diya gaya hai. 24-48 ghanton mein reflect ho jayega.${reason ? ' Note: ' + reason : ''}`,
+              data: pushData
+            }, d1);
+          } else {
+            await oneSignalService.sendPushNotificationToUser({
+              userId,
+              title: '❌ Withdrawal Reject Ho Gaya',
+              message: `₹${amountVal} ka withdrawal request reject ho gaya.${reason ? ' Reason: ' + reason : ' Koi problem ho to admin se contact karein.'}`,
+              data: pushData
+            }, d1);
+          }
+        }
+      } catch (pe) {
+        console.warn('[Push] Fund-request status user alert failed:', pe.message);
+      }
+    })();
+  }
 }
 
 async function saveLoanRequest(d1, { requestId, userId, status = 'pending', requestedAt = nowMs(), processedAt = null, details = {} }) {
@@ -1703,8 +1813,9 @@ async function saveTaskSubmission(d1, { id, taskId, userId, reservationId, assig
 
     if (existing && existing.id) {
       console.log(`[D1-Submit] Duplicate submission detected for user ${userId} task ${taskId}. Aborting submission.`);
-      const err = new Error('Aapne yeh task pehle hi submit kar diya hai.');
+      const err = new Error('Task already submitted');
       err.isDuplicateSubmission = true;
+      err.code = 'DUPLICATE_TASK_SUBMISSION';
       throw err;
     }
   }
@@ -1716,9 +1827,9 @@ async function saveTaskSubmission(d1, { id, taskId, userId, reservationId, assig
        screenshot_url = excluded.screenshot_url, screenshot_key = excluded.screenshot_key,
        screenshot_view_url = excluded.screenshot_view_url, screenshot_drive_path = excluded.screenshot_drive_path,
        details_json = excluded.details_json`,
-    [submissionId, taskId, userId, reservationId || null, cleanComment, screenshotUrl || '', screenshotKey || '', screenshotViewUrl || '', screenshotDrivePath || '', Number(reward || 0), taskLink || '', appName || '', userName || '', userEmail || '', payoutDelayDays, submittedAt, JSON.stringify(details || {})]
+    [id, taskId, userId, reservationId || null, cleanComment, screenshotUrl || '', screenshotKey || '', screenshotViewUrl || '', screenshotDrivePath || '', Number(reward || 0), taskLink || '', appName || '', userName || '', userEmail || '', payoutDelayDays, submittedAt, JSON.stringify(details || {})]
   );
-  return submissionId;
+  return id;
 }
 
 async function listTaskSubmissions(d1, { taskId = null, userId = null, manualStatus = null, ocrStatus = null, payoutStatus = null, limit = 200, parentAdmin = null } = {}) {
@@ -1805,19 +1916,21 @@ async function processOcrAndGmailProfile(d1, r2, submissionId) {
     const pyRes = await ocrService.verifyAppReviewWithPython(imgBuffer, submission.assigned_comment || '');
     const text = pyRes.extracted_text || '';
     const confidence = pyRes.score ? pyRes.score / 100 : 0.85;
+    const ocrData = pyRes && pyRes.lines && Array.isArray(pyRes.lines)
+      ? pyRes
+      : { text, confidence, lines: text.split(/\r?\n/).map(l => ({ text: l })) };
 
     let gmailName = '';
     let gmailLogoUrl = '';
     let nameLine = null;
 
-    if (data.lines && data.lines.length > 0) {
-      // Look for assigned comment
+    if (ocrData.lines && ocrData.lines.length > 0) {
       const assignedComment = submission.assigned_comment || '';
       const cleanedComment = assignedComment.toLowerCase().replace(/[^a-z0-9]/g, '');
       let foundIndex = -1;
 
-      for (let j = 0; j < data.lines.length; j++) {
-        const cleanedLine = data.lines[j].text.toLowerCase().replace(/[^a-z0-9]/g, '');
+      for (let j = 0; j < ocrData.lines.length; j++) {
+        const cleanedLine = String(ocrData.lines[j].text || '').toLowerCase().replace(/[^a-z0-9]/g, '');
         if (cleanedLine && (cleanedLine.includes(cleanedComment) || cleanedComment.includes(cleanedLine) || (cleanedComment.length > 5 && cleanedLine.length > 5 && cleanedLine.indexOf(cleanedComment.slice(0, 10)) !== -1))) {
           foundIndex = j;
           break;
@@ -1825,26 +1938,24 @@ async function processOcrAndGmailProfile(d1, r2, submissionId) {
       }
 
       if (foundIndex !== -1) {
-        // Look for reviewer name 1-3 lines above comment line
         for (let k = foundIndex - 1; k >= Math.max(0, foundIndex - 3); k--) {
-          const txt = data.lines[k].text.trim();
-          const isRatingOrDate = /^[0-9★☆\s]+$/.test(txt) || txt.toLowerCase().includes('ago') || txt.toLowerCase().includes('edited') || /\d/.test(txt) && (txt.includes('/') || txt.includes('-'));
+          const txt = String(ocrData.lines[k].text || '').trim();
+          const isRatingOrDate = /^[0-9★☆\s]+$/.test(txt) || txt.toLowerCase().includes('ago') || txt.toLowerCase().includes('edited') || (/\d/.test(txt) && (txt.includes('/') || txt.includes('-')));
           if (txt && !isRatingOrDate && txt.length > 2 && txt.length < 50) {
-            nameLine = data.lines[k];
+            nameLine = ocrData.lines[k];
             break;
           }
         }
-        if (!nameLine && foundIndex >= 2) nameLine = data.lines[foundIndex - 2];
-        if (!nameLine && foundIndex >= 1) nameLine = data.lines[foundIndex - 1];
+        if (!nameLine && foundIndex >= 2) nameLine = ocrData.lines[foundIndex - 2];
+        if (!nameLine && foundIndex >= 1) nameLine = ocrData.lines[foundIndex - 1];
       }
 
-      // Fallback: search first 10 lines
       if (!nameLine) {
-        for (let j = 0; j < Math.min(data.lines.length, 10); j++) {
-          const txt = data.lines[j].text.trim();
+        for (let j = 0; j < Math.min(ocrData.lines.length, 10); j++) {
+          const txt = String(ocrData.lines[j].text || '').trim();
           const isRatingOrDate = /^[0-9★☆\s]+$/.test(txt) || txt.toLowerCase().includes('ago') || txt.toLowerCase().includes('edited') || txt.length < 3 || txt.length > 40;
           if (txt && !isRatingOrDate) {
-            nameLine = data.lines[j];
+            nameLine = ocrData.lines[j];
             break;
           }
         }
@@ -2004,6 +2115,53 @@ async function processAutoPayouts(d1) {
         errorMessage: error.message
       }).catch(() => {});
     }
+  }
+
+  // Trigger #8: Bulker Task Batch Processed -> Send custom summary alert per user
+  if (paidCount > 0) {
+    (async () => {
+      try {
+        const processed = eligible.filter(s => Number(s.reward || 0) > 0);
+        const perUser = new Map();
+        for (const s of processed) {
+          const uid = s.user_id;
+          if (!perUser.has(uid)) {
+            perUser.set(uid, { approved: 0, rejected: 0, total: 0, amount: 0, subs: [] });
+          }
+          const stats = perUser.get(uid);
+          const isRejected = s.manual_status === 'rejected' || s.ocr_status === 'failed';
+          if (isRejected) stats.rejected++; else stats.approved++;
+          stats.total++;
+          if (!isRejected) stats.amount += Number(s.reward || 0);
+          stats.subs.push(s.id);
+        }
+        for (const [uid, stats] of perUser.entries()) {
+          try {
+            const X = stats.approved;
+            const Y = stats.rejected;
+            const Z = stats.amount;
+            const dataPayload = {
+              type: 'bulker_batch_summary',
+              userId: uid,
+              approvedCount: X,
+              rejectedCount: Y,
+              totalPaid: Z,
+              submissionIds: stats.subs
+            };
+            await oneSignalService.sendPushNotificationToUser({
+              userId: uid,
+              title: '📊 Batch Task Summary',
+              message: `Aapke ${X} tasks Approve hue, ${Y} Reject hue. ₹${Z} Wallet me Add ho gaye!`,
+              data: dataPayload
+            }, d1);
+          } catch (perr) {
+            console.warn('[Push] Bulker summary per user failed:', uid, perr.message);
+          }
+        }
+      } catch (be) {
+        console.warn('[Push] Bulker batch summary build failed:', be.message);
+      }
+    })();
   }
 
   if (paidCount) console.log(`Auto-payout: processed ${paidCount} task rewards`);
@@ -2976,61 +3134,15 @@ function registerRoutes(app, { d1, r2 }) {
     }
   });
 
-  app.get('/api/auth/verify-referral', async (req, res) => {
-    try {
-      const code = String(req.query.code || '').trim().toUpperCase();
-      if (!code) return res.status(400).json({ ok: false, error: 'CODE_REQUIRED' });
-
-      if (code === 'RWADMIN182488' || code === 'RWADMIN01' || code === 'RWADMIN02') {
-        return res.json({
-          ok: true,
-          exists: true,
-          referrer: { id: ADMIN_UID, role: 'owner', name: 'Reviews World' }
-        });
-      }
-
-      let user = null;
-      if (d1 && typeof d1.all === 'function') {
-        try {
-          const rows = await d1.all(
-            `SELECT id, role, parent_admin, name, email FROM users WHERE UPPER(referral_code) = ? LIMIT 1`,
-            [code]
-          );
-          user = rows?.[0];
-        } catch (e) {}
-      }
-
-      if (!user && admin.apps && admin.apps.length > 0) {
-        try {
-          const snap = await admin.firestore().collection(`artifacts/${appId}/public/data/users`)
-            .where('referralCode', '==', code)
-            .limit(1)
-            .get();
-          if (!snap.empty) {
-            const doc = snap.docs[0];
-            user = { id: doc.id, ...doc.data() };
-          }
-        } catch (e) {}
-      }
-
-      if (!user) {
-        return res.json({ ok: true, exists: false });
-      }
-
-      return res.json({
-        ok: true,
-        exists: true,
-        referrer: {
-          id: user.id || user.uid,
-          role: user.role || 'user',
-          name: user.name || '',
-          parentAdmin: user.parentAdmin || user.parent_admin || ADMIN_UID
-        }
-      });
-    } catch (err) {
-      return res.status(500).json({ ok: false, error: err.message });
-    }
-  });
+  // [DUPLICATE ROUTE DISABLED] Duplicate GET /api/auth/verify-referral already defined at L2706 above with full features (debug mode, suffix fallbacks).
+  // Keeping this second registration would cause "headers already sent" conflicts and route shadowing.
+  // Disabled block follows:
+  //   app.get('/api/auth/verify-referral', async (req, res) => {
+  //     try { ... } catch (err) { ... }
+  //   });
+  if (process.env.NODE_ENV === 'development') {
+    console.warn('[registerRoutes] Skipped duplicate GET /api/auth/verify-referral route at offset after L3135; using primary definition at L2706.');
+  }
 
   app.post('/api/session/firebase', async (req, res) => {
     try {
@@ -3038,7 +3150,37 @@ function registerRoutes(app, { d1, r2 }) {
       if (!idToken) return res.status(400).json({ ok: false, error: 'FIREBASE_ID_TOKEN_REQUIRED' });
 
       const decoded = await admin.auth().verifyIdToken(idToken);
+      const beforeExists = await d1.first('SELECT id FROM users WHERE firebase_uid = ? OR email = ? LIMIT 1', [decoded.uid, normalizeEmail(decoded.email || `${decoded.uid}@firebase.local`)]).catch(() => null);
       const user = await upsertFirebaseUser(d1, decoded, req.body.profile || {});
+      const isNewUser = !beforeExists || (user.created_at && Date.now() - Number(user.created_at) < 120000);
+
+      // Trigger #4: New Signup / Password Reset Request -> Alert Admin for pending approval
+      if (isNewUser && user.role !== 'owner' && user.id !== ADMIN_UID) {
+        (async () => {
+          try {
+            const pushData = {
+              type: 'signup_pending',
+              userId: user.id,
+              userName: user.name || user.email || 'New User',
+              userEmail: user.email || ''
+            };
+            await oneSignalService.sendPushNotificationToRole({
+              role: 'admin',
+              title: '🆕 Naya Signup Request',
+              message: `${user.name || user.email || 'Naya User'} ne account banaya hai. Abhi approval karein.`,
+              data: pushData
+            }, d1);
+            await oneSignalService.sendPushNotificationToUser({
+              userId: ADMIN_UID,
+              title: '🆕 Naya Signup Pending',
+              message: `New signup: ${user.name || user.email || 'User'}. Admin panel mein approve karein.`,
+              data: pushData
+            }, d1);
+          } catch (pe) {
+            console.warn('[Push] Signup admin alert failed:', pe.message);
+          }
+        })();
+      }
 
       return res.json({
         ok: true,
@@ -3063,6 +3205,142 @@ function registerRoutes(app, { d1, r2 }) {
     } catch (err) {
       console.error('[ChatPush] Error:', err);
       return res.status(500).json({ ok: false, error: err.message });
+    }
+  });
+
+  // Trigger #1: New Task Created -> Send alert to all active Users & Bulkers
+  app.post('/api/admin/tasks/notify-new', requireHttpAuth, async (req, res) => {
+    try {
+      if (!req.auth.isAdmin) return res.status(403).json({ ok: false, error: 'ADMIN_REQUIRED' });
+      const { taskTitle = '', taskId = '', reward = 0, targetAudience = 'all' } = req.body || {};
+      const rewardText = reward ? ` (₹${reward})` : '';
+      const titleText = '🎉 Naya Task Aaya Hai!';
+      const messageText = taskTitle
+        ? `"${taskTitle}"${rewardText} - Abhi complete karein aur paise kamaayein.`
+        : 'Naya Task Aaya Hai! Abhi complete karein.';
+      const pushData = { type: 'new_task', taskId, taskTitle, reward };
+
+      const audience = targetAudience === 'bulkers' ? 'bulker' : (targetAudience === 'users' ? 'users' : 'all');
+      const roleResult = await oneSignalService.sendPushNotificationToRole({
+        role: audience,
+        title: titleText,
+        message: messageText,
+        data: pushData
+      }, d1);
+
+      const broadcastResult = await oneSignalService.sendPushNotificationToAll({
+        title: titleText,
+        message: messageText,
+        data: pushData
+      });
+
+      return res.json({ ok: true, roleResult, broadcastResult });
+    } catch (err) {
+      console.error('[NewTaskNotify] Error:', err);
+      return res.status(500).json({ ok: false, error: err.message || 'NOTIFY_FAILED' });
+    }
+  });
+
+  // Trigger #3: Successful Referral -> Alert Referrer: "Referral Bonus Credit Ho Gaya!"
+  app.post('/api/referral/notify-bonus', requireHttpAuth, async (req, res) => {
+    try {
+      const { referrerUserId, referralUserName = '', bonusAmount = 0 } = req.body || {};
+      if (!referrerUserId) return res.status(400).json({ ok: false, error: 'REFERRER_ID_REQUIRED' });
+      const bonusVal = Number(bonusAmount || 0);
+      const titleHinglish = '🎁 Referral Bonus Credit Ho Gaya!';
+      const messageHinglish = referralUserName
+        ? `${referralUserName} ne aapka referral use kiya! ₹${bonusVal} bonus add ho gaya.`
+        : `Aapka referral bonus ₹${bonusVal} wallet mein credit ho gaya!`;
+      const pushData = { type: 'referral_bonus', referrerUserId, referralUserName, bonusAmount: bonusVal };
+      await sendNotification(d1, referrerUserId, titleHinglish, messageHinglish, pushData);
+      (async () => {
+        try {
+          await oneSignalService.sendPushNotificationToUser({
+            userId: referrerUserId,
+            title: titleHinglish,
+            message: messageHinglish,
+            data: pushData
+          }, d1);
+        } catch (_) {}
+      })();
+      return res.json({ ok: true, pushed: true });
+    } catch (err) {
+      console.error('[ReferralBonusNotify] Error:', err);
+      return res.status(500).json({ ok: false, error: err.message || 'NOTIFY_FAILED' });
+    }
+  });
+
+  // Trigger #4 (part 2): Password Reset Request -> Alert Admin for pending approval
+  app.post('/api/admin/notify-password-reset', async (req, res) => {
+    try {
+      const { userEmail = '', userId = '', userName = '' } = req.body || {};
+      if (!userEmail && !userId) return res.status(400).json({ ok: false, error: 'IDENTIFIER_REQUIRED' });
+      const pushData = { type: 'password_reset_request', userEmail, userId, userName };
+      const message = `${userName || userEmail || 'User'} ne password reset ka request diya hai. Abhi action lein.`;
+      await oneSignalService.sendPushNotificationToRole({
+        role: 'admin',
+        title: '🔐 Password Reset Request',
+        message,
+        data: pushData
+      }, d1);
+      await oneSignalService.sendPushNotificationToUser({
+        userId: ADMIN_UID,
+        title: '🔐 Password Reset Request',
+        message,
+        data: pushData
+      }, d1);
+      return res.json({ ok: true, pushed: true });
+    } catch (err) {
+      console.error('[PasswordResetAdminNotify] Error:', err);
+      return res.status(500).json({ ok: false, error: err.message || 'NOTIFY_FAILED' });
+    }
+  });
+
+  // Trigger #5: Account / Request Approval -> Alert User when Admin approves their signup/password reset
+  app.post('/api/admin/approve-user', requireHttpAuth, async (req, res) => {
+    try {
+      if (!req.auth.isAdmin) return res.status(403).json({ ok: false, error: 'ADMIN_REQUIRED' });
+      const { userId, signup = true, passwordReset = false, reason = '' } = req.body || {};
+      if (!userId) return res.status(400).json({ ok: false, error: 'USER_ID_REQUIRED' });
+
+      const db = admin.firestore();
+      const appId = process.env.FIREBASE_APP_ID || 'digital-wallet-prod';
+      const userRef = db.doc(`artifacts/${appId}/public/data/users/${userId}`);
+      await userRef.set({
+        signupApprovalStatus: 'approved',
+        accountStatus: 'active',
+        status: 'active',
+        isDisabled: false,
+        approvalRejectionReason: admin.firestore.FieldValue.delete()
+      }, { merge: true }).catch(() => {});
+      await d1.query(`UPDATE users SET status = 'active' WHERE id = ? OR firebase_uid = ?`, [userId, userId]).catch(() => {});
+
+      const titleHinglish = signup ? '✅ Account Approve Ho Gaya!' : '🔐 Password Reset Approve Ho Gaya';
+      const messageHinglish = signup
+        ? 'Ab aap apna wallet fully use kar sakte hain. Tasks complete karein aur paise kamaayein!'
+        : `Aapka password reset request approve ho gaya.${reason ? ' Note: ' + reason : ' Ab login karein.'}`;
+      const pushData = {
+        type: signup ? 'signup_approved' : 'password_reset_approved',
+        userId,
+        signup,
+        passwordReset,
+        reason
+      };
+      await sendNotification(d1, userId, titleHinglish, messageHinglish, pushData);
+      (async () => {
+        try {
+          await oneSignalService.sendPushNotificationToUser({
+            userId,
+            title: titleHinglish,
+            message: messageHinglish,
+            data: pushData
+          }, d1);
+        } catch (_) {}
+      })();
+      return res.json({ ok: true, approved: true });
+    } catch (err) {
+      console.error('[ApproveUser] Error:', err);
+      return res.status(500).json({ ok: false, error: err.message || 'APPROVE_FAILED' });
     }
   });
 
@@ -3288,6 +3566,21 @@ function registerRoutes(app, { d1, r2 }) {
         isDisabled: true
       });
       await d1.query('UPDATE users SET status = ? WHERE id = ?', ['suspended', targetUid]);
+
+      // Trigger #11: Account Status Changed -> Alert User instantly (Blocked)
+      (async () => {
+        try {
+          await oneSignalService.sendPushNotificationToUser({
+            userId: targetUid,
+            title: '🚫 Account Block Ho Gaya',
+            message: 'Aapka account admin dwara temporarily suspend kar diya gaya hai. Details ke liye admin se contact karein.',
+            data: { type: 'account_suspended', status: 'suspended' }
+          }, d1);
+        } catch (pe) {
+          console.warn('[Push] Suspend alert failed:', pe.message);
+        }
+      })();
+
       return res.json({ ok: true });
     } catch (err) {
       return res.status(500).json({ ok: false, error: err.message });
@@ -3309,6 +3602,21 @@ function registerRoutes(app, { d1, r2 }) {
         isDisabled: false
       });
       await d1.query('UPDATE users SET status = ? WHERE id = ?', ['active', targetUid]);
+
+      // Trigger #11: Account Status Changed -> Alert User instantly (Unblocked)
+      (async () => {
+        try {
+          await oneSignalService.sendPushNotificationToUser({
+            userId: targetUid,
+            title: '✅ Account Unblock Ho Gaya',
+            message: 'Aapka account dobara active kar diya gaya hai. Ab aap wallet use kar sakte hain.',
+            data: { type: 'account_unsuspended', status: 'active' }
+          }, d1);
+        } catch (pe) {
+          console.warn('[Push] Unsuspend alert failed:', pe.message);
+        }
+      })();
+
       return res.json({ ok: true });
     } catch (err) {
       return res.status(500).json({ ok: false, error: err.message });
@@ -3511,43 +3819,68 @@ async function verifyTransactionWithFirestore(userId, transaction) {
   });
 
   app.post('/api/transactions/transfer', requireHttpAuth, async (req, res) => {
-    const sender = req.body.sender || {};
-    const recipient = req.body.recipient || {};
-    if (req.auth.sub !== sender.userId) {
-      return res.status(403).json({ ok: false, error: 'FORBIDDEN' });
-    }
-    if (!recipient.userId) {
-      return res.status(400).json({ ok: false, error: 'RECIPIENT_REQUIRED' });
-    }
+    try {
+      const sender = req.body.sender || {};
+      const recipient = req.body.recipient || {};
+      if (req.auth.sub !== sender.userId) {
+        return res.status(403).json({ ok: false, error: 'FORBIDDEN' });
+      }
+      if (!recipient.userId) {
+        return res.status(400).json({ ok: false, error: 'RECIPIENT_REQUIRED' });
+      }
 
-    // Server-side balance validation for transfers
-    const senderAmount = Number(sender.amount || 0);
-    const recipientAmount = Number(recipient.amount || 0);
-    if (senderAmount >= 0) {
-      return res.status(400).json({ ok: false, error: 'SENDER_AMOUNT_MUST_BE_NEGATIVE' });
-    }
-    if (recipientAmount <= 0) {
-      return res.status(400).json({ ok: false, error: 'RECIPIENT_AMOUNT_MUST_BE_POSITIVE' });
-    }
-    if (Math.abs(senderAmount) !== Math.abs(recipientAmount)) {
-      return res.status(400).json({ ok: false, error: 'TRANSFER_AMOUNTS_MISMATCH' });
-    }
+      const senderAmount = Number(sender.amount || 0);
+      const recipientAmount = Number(recipient.amount || 0);
+      if (senderAmount >= 0) {
+        return res.status(400).json({ ok: false, error: 'SENDER_AMOUNT_MUST_BE_NEGATIVE' });
+      }
+      if (recipientAmount <= 0) {
+        return res.status(400).json({ ok: false, error: 'RECIPIENT_AMOUNT_MUST_BE_POSITIVE' });
+      }
+      if (Math.abs(senderAmount) !== Math.abs(recipientAmount)) {
+        return res.status(400).json({ ok: false, error: 'TRANSFER_AMOUNTS_MISMATCH' });
+      }
 
-    // Verify sender transaction with Firestore
-    const isSenderVerified = await verifyTransactionWithFirestore(sender.userId, sender);
-    if (!isSenderVerified) {
-      return res.status(400).json({ ok: false, error: 'UNVERIFIED_SENDER_TRANSACTION_PAYLOAD' });
-    }
+      const isSenderVerified = await verifyTransactionWithFirestore(sender.userId, sender);
+      if (!isSenderVerified) {
+        return res.status(400).json({ ok: false, error: 'UNVERIFIED_SENDER_TRANSACTION_PAYLOAD' });
+      }
+      const isRecipientVerified = await verifyTransactionWithFirestore(recipient.userId, recipient);
+      if (!isRecipientVerified) {
+        return res.status(400).json({ ok: false, error: 'UNVERIFIED_RECIPIENT_TRANSACTION_PAYLOAD' });
+      }
 
-    // Verify recipient transaction with Firestore
-    const isRecipientVerified = await verifyTransactionWithFirestore(recipient.userId, recipient);
-    if (!isRecipientVerified) {
-      return res.status(400).json({ ok: false, error: 'UNVERIFIED_RECIPIENT_TRANSACTION_PAYLOAD' });
-    }
+      await saveTransaction(d1, sender);
+      await saveTransaction(d1, recipient);
 
-    await saveTransaction(d1, sender);
-    await saveTransaction(d1, recipient);
-    res.json({ ok: true });
+      // Trigger #9: Wallet Transfer & Receipt -> Alert both Sender and Receiver
+      (async () => {
+        try {
+          const transferAmount = Math.abs(senderAmount);
+          const senderName = sender.userName || req.auth.name || req.auth.email || 'Sender';
+          const recipientName = recipient.userName || 'User';
+          await oneSignalService.sendPushNotificationToUser({
+            userId: sender.userId,
+            title: '💸 Transfer Ho Gaya',
+            message: `₹${transferAmount} aapke wallet se ${recipientName} ko bhej diya gaya hai.`,
+            data: { type: 'wallet_transfer_sent', amount: transferAmount, recipient: recipient.userId }
+          }, d1);
+          await oneSignalService.sendPushNotificationToUser({
+            userId: recipient.userId,
+            title: '💰 Payment Receive Hua',
+            message: `₹${transferAmount} ${senderName} ke wallet se aapke account mein add ho gaye hain!`,
+            data: { type: 'wallet_transfer_received', amount: transferAmount, sender: sender.userId }
+          }, d1);
+        } catch (pe) {
+          console.warn('[Push] Wallet transfer alerts failed:', pe.message);
+        }
+      })();
+
+      res.json({ ok: true });
+    } catch (err) {
+      console.error('Wallet transfer failed:', err);
+      res.status(500).json({ ok: false, error: err.message || 'TRANSFER_FAILED' });
+    }
   });
 
   app.get('/api/fund-requests', requireHttpAuth, async (req, res) => {
@@ -3577,34 +3910,49 @@ async function verifyTransactionWithFirestore(userId, transaction) {
   });
 
   app.post('/api/fund-requests', requireHttpAuth, async (req, res) => {
-    if (req.auth.sub !== req.body.userId && !req.auth.isAdmin) {
-      return res.status(403).json({ ok: false, error: 'FORBIDDEN' });
+    try {
+      if (req.auth.sub !== req.body.userId && !req.auth.isAdmin) {
+        return res.status(403).json({ ok: false, error: 'FORBIDDEN' });
+      }
+      await saveFundRequest(d1, req.body);
+      res.json({ ok: true });
+    } catch (err) {
+      console.error('Fund request submit failed:', err);
+      res.status(500).json({ ok: false, error: err.code === 'SQLITE_CONSTRAINT' || (err.message && err.message.includes('constraint')) ? 'DUPLICATE_REQUEST' : (err.message || 'SUBMIT_FAILED') });
     }
-    await saveFundRequest(d1, req.body);
-    res.json({ ok: true });
   });
 
   app.post('/api/fund-requests/import', requireHttpAuth, async (req, res) => {
-    if (!req.auth.isAdmin) {
-      return res.status(403).json({ ok: false, error: 'ADMIN_REQUIRED' });
+    try {
+      if (!req.auth.isAdmin) {
+        return res.status(403).json({ ok: false, error: 'ADMIN_REQUIRED' });
+      }
+      const requests = Array.isArray(req.body.requests) ? req.body.requests.slice(0, 500) : [];
+      for (const request of requests) {
+        await saveFundRequest(d1, request);
+      }
+      res.json({ ok: true, imported: requests.length });
+    } catch (err) {
+      console.error('Fund request import failed:', err);
+      res.status(500).json({ ok: false, error: err.message || 'IMPORT_FAILED' });
     }
-    const requests = Array.isArray(req.body.requests) ? req.body.requests.slice(0, 500) : [];
-    for (const request of requests) {
-      await saveFundRequest(d1, request);
-    }
-    res.json({ ok: true, imported: requests.length });
   });
 
   app.patch('/api/fund-requests/:requestId', requireHttpAuth, async (req, res) => {
-    if (!req.auth.isAdmin) {
-      return res.status(403).json({ ok: false, error: 'ADMIN_REQUIRED' });
+    try {
+      if (!req.auth.isAdmin) {
+        return res.status(403).json({ ok: false, error: 'ADMIN_REQUIRED' });
+      }
+      await updateFundRequestStatus(d1, {
+        requestId: req.params.requestId,
+        status: req.body.status,
+        details: req.body.details || {}
+      });
+      res.json({ ok: true });
+    } catch (err) {
+      console.error('Fund request update failed:', err);
+      res.status(500).json({ ok: false, error: err.message || 'UPDATE_FAILED' });
     }
-    await updateFundRequestStatus(d1, {
-      requestId: req.params.requestId,
-      status: req.body.status,
-      details: req.body.details || {}
-    });
-    res.json({ ok: true });
   });
 
   app.get('/api/loan-requests', requireHttpAuth, async (req, res) => {
@@ -3626,34 +3974,50 @@ async function verifyTransactionWithFirestore(userId, transaction) {
   });
 
   app.post('/api/loan-requests', requireHttpAuth, async (req, res) => {
-    if (req.auth.sub !== req.body.userId && !req.auth.isAdmin) {
-      return res.status(403).json({ ok: false, error: 'FORBIDDEN' });
+    try {
+      if (req.auth.sub !== req.body.userId && !req.auth.isAdmin) {
+        return res.status(403).json({ ok: false, error: 'FORBIDDEN' });
+      }
+      await saveLoanRequest(d1, req.body);
+      res.json({ ok: true });
+    } catch (err) {
+      console.error('Loan request save failed:', err);
+      res.status(err?.code === 'SQLITE_CONSTRAINT' || (err?.message && err.message.includes('constraint')) ? 409 : 500)
+        .json({ ok: false, error: err?.code === 'SQLITE_CONSTRAINT' ? 'DUPLICATE_LOAN_REQUEST' : (err?.message || 'LOAN_REQUEST_FAILED') });
     }
-    await saveLoanRequest(d1, req.body);
-    res.json({ ok: true });
   });
 
   app.post('/api/loan-requests/import', requireHttpAuth, async (req, res) => {
-    if (!req.auth.isAdmin) {
-      return res.status(403).json({ ok: false, error: 'ADMIN_REQUIRED' });
+    try {
+      if (!req.auth.isAdmin) {
+        return res.status(403).json({ ok: false, error: 'ADMIN_REQUIRED' });
+      }
+      const requests = Array.isArray(req.body.requests) ? req.body.requests.slice(0, 800) : [];
+      for (const request of requests) {
+        await saveLoanRequest(d1, request);
+      }
+      res.json({ ok: true, imported: requests.length });
+    } catch (err) {
+      console.error('Loan request import failed:', err);
+      res.status(500).json({ ok: false, error: err?.message || 'LOAN_IMPORT_FAILED' });
     }
-    const requests = Array.isArray(req.body.requests) ? req.body.requests.slice(0, 800) : [];
-    for (const request of requests) {
-      await saveLoanRequest(d1, request);
-    }
-    res.json({ ok: true, imported: requests.length });
   });
 
   app.patch('/api/loan-requests/:requestId', requireHttpAuth, async (req, res) => {
-    if (!req.auth.isAdmin) {
-      return res.status(403).json({ ok: false, error: 'ADMIN_REQUIRED' });
+    try {
+      if (!req.auth.isAdmin) {
+        return res.status(403).json({ ok: false, error: 'ADMIN_REQUIRED' });
+      }
+      await updateLoanRequestStatus(d1, {
+        requestId: req.params.requestId,
+        status: req.body.status,
+        details: req.body.details || {}
+      });
+      res.json({ ok: true });
+    } catch (err) {
+      console.error('Loan request status update failed:', err);
+      res.status(500).json({ ok: false, error: err?.message || 'LOAN_STATUS_UPDATE_FAILED' });
     }
-    await updateLoanRequestStatus(d1, {
-      requestId: req.params.requestId,
-      status: req.body.status,
-      details: req.body.details || {}
-    });
-    res.json({ ok: true });
   });
 
   app.post('/api/uploads/loan-document', requireHttpAuth, async (req, res) => {
@@ -4033,7 +4397,9 @@ ${memoriesContext}`
       });
       res.json({ ok: true, reservation });
     } catch (error) {
-      if (error.message === 'TASK_ALREADY_SUBMITTED') return res.status(409).json({ ok: false, error: error.message });
+      if (error.message === 'TASK_ALREADY_SUBMITTED' || error.code === 'DUPLICATE_TASK_SUBMISSION' || String(error.message || '').toLowerCase().includes('already submitted')) {
+        return res.status(409).json({ ok: false, error: 'Task already submitted' });
+      }
       if (error.message === 'NO_COMMENTS_AVAILABLE') return res.status(410).json({ ok: false, error: error.message });
       console.error('Task reservation failed:', error);
       res.status(500).json({ ok: false, error: 'RESERVATION_FAILED' });
@@ -4916,8 +5282,8 @@ ${memoriesContext}`
       console.log(`[OCR-Submit] Save completed for ${submissionId}`);
       res.json({ ok: true, submissionId });
     } catch (error) {
-      if (error && (error.isDuplicateSubmission || error.message === 'Aapne yeh task pehle hi submit kar diya hai.')) {
-        return res.status(400).json({ success: false, message: "Aapne yeh task pehle hi submit kar diya hai.", ok: false, error: "DUPLICATE_SUBMISSION" });
+      if (error && (error.isDuplicateSubmission || error.code === 'DUPLICATE_TASK_SUBMISSION' || String(error?.message || '').toLowerCase().includes('already submitted'))) {
+        return res.status(409).json({ success: false, ok: false, error: 'Task already submitted', message: 'Task already submitted' });
       }
       console.error('[OCR-Submit] Task submission save failed:', error);
       res.status(500).json({ ok: false, error: 'SUBMISSION_FAILED' });
@@ -4999,14 +5365,52 @@ ${memoriesContext}`
         }
       }
 
-      // Handle task manual status changes
+      // Trigger #7: Single User Task Status Update -> Send instant alert to User with review reason
       if (updates.manualStatus && updates.manualStatus !== sub.manual_status) {
+        const reviewReason = (updates.details && (updates.details.reviewReason || updates.details.reason || updates.details.remark))
+          || (updates.reviewReason || updates.reason || '')
+          || '';
+        const rewardVal = Number(sub.reward || 0);
+        const appName = sub.app_name || sub.task_title || 'Task';
+        const pushDataBase = {
+          type: 'task_status_update',
+          submissionId: subId,
+          taskId: sub.task_id,
+          appName,
+          reward: rewardVal,
+          reviewReason
+        };
         if (updates.manualStatus === 'approved') {
-          await sendNotification(d1, sub.user_id, 'Task Approved', `Your task "${sub.app_name || 'Task'}" of ₹${sub.reward || 0} has been approved.`);
+          const titleHinglish = '✅ Task Approve Ho Gaya';
+          const messageHinglish = `Aapka "${appName}" task of ₹${rewardVal} admin ne approve kar diya hai!${reviewReason ? ' Note: ' + reviewReason : ' Wallet mein jaldi hi credit ho jayega.'}`;
+          await sendNotification(d1, sub.user_id, titleHinglish, messageHinglish, { ...pushDataBase, status: 'approved' });
+          (async () => {
+            try {
+              await oneSignalService.sendPushNotificationToUser({
+                userId: sub.user_id,
+                title: titleHinglish,
+                message: messageHinglish,
+                data: { ...pushDataBase, status: 'approved' }
+              }, d1);
+            } catch (_) {}
+          })();
         } else if (updates.manualStatus === 'rejected') {
           const isAppReview = sub.task_link && (sub.task_link.includes('play.google.com') || sub.task_link.includes('details?id='));
-          const reason = isAppReview ? "Your review has not come live on Play Store." : "Your task is not approved.";
-          await sendNotification(d1, sub.user_id, 'Task Rejected', `Your task "${sub.app_name || 'Task'}" of ₹${sub.reward || 0} has been rejected. Reason: ${reason}`);
+          const defaultReason = isAppReview ? 'Aapka review Play Store par live nahi aaya hai.' : 'Aapka task approve nahi hua hai.';
+          const finalReason = reviewReason || defaultReason;
+          const titleHinglish = '❌ Task Reject Ho Gaya';
+          const messageHinglish = `Aapka "${appName}" task of ₹${rewardVal} reject ho gaya hai. Reason: ${finalReason}`;
+          await sendNotification(d1, sub.user_id, titleHinglish, messageHinglish, { ...pushDataBase, status: 'rejected' });
+          (async () => {
+            try {
+              await oneSignalService.sendPushNotificationToUser({
+                userId: sub.user_id,
+                title: titleHinglish,
+                message: messageHinglish,
+                data: { ...pushDataBase, status: 'rejected' }
+              }, d1);
+            } catch (_) {}
+          })();
         }
       }
 
@@ -5965,201 +6369,12 @@ async function fetchPlayStoreReviewsForDate(packageId, targetDateMs) {
     }
   });
 
-  // Partner Investments APIs
-  app.get('/api/partner-investments', requireHttpAuth, async (req, res) => {
-    if (!req.auth.isAdmin) return res.status(403).json({ ok: false, error: 'ADMIN_REQUIRED' });
-    try {
-      const db = admin.firestore();
-      const snap = await db.collection('artifacts/rw-wallet-june-26/public/data/partner_investments')
-        .orderBy('createdAt', 'desc')
-        .get();
-      const investments = snap.docs.map(doc => {
-        const data = doc.data();
-        return {
-          id: doc.id,
-          ...data,
-          startDate: data.startDate ? data.startDate.toDate().toISOString() : null,
-          endDate: data.endDate ? data.endDate.toDate().toISOString() : null,
-          nextPayoutAt: data.nextPayoutAt ? data.nextPayoutAt.toDate().toISOString() : null,
-          createdAt: data.createdAt ? data.createdAt.toDate().toISOString() : null
-        };
-      });
-      res.json(investments);
-    } catch (error) {
-      console.error('Fetch all partner investments failed:', error);
-      res.status(500).json({ ok: false, error: 'FETCH_INVESTMENTS_FAILED', message: error.message });
-    }
-  });
-
-  app.get('/api/partner-investments/user/:userId', requireHttpAuth, async (req, res) => {
-    const { userId } = req.params;
-    if (req.auth.sub !== userId && !req.auth.isAdmin) {
-      return res.status(403).json({ ok: false, error: 'UNAUTHORIZED' });
-    }
-    try {
-      const db = admin.firestore();
-      const snap = await db.collection('artifacts/rw-wallet-june-26/public/data/partner_investments')
-        .where('userId', '==', userId)
-        .get();
-      const investments = snap.docs.map(doc => {
-        const data = doc.data();
-        return {
-          id: doc.id,
-          ...data,
-          startDate: data.startDate ? data.startDate.toDate().toISOString() : null,
-          endDate: data.endDate ? data.endDate.toDate().toISOString() : null,
-          nextPayoutAt: data.nextPayoutAt ? data.nextPayoutAt.toDate().toISOString() : null,
-          createdAt: data.createdAt ? data.createdAt.toDate().toISOString() : null
-        };
-      });
-      res.json(investments);
-    } catch (error) {
-      console.error('Fetch user partner investments failed:', error);
-      res.status(500).json({ ok: false, error: 'FETCH_USER_INVESTMENTS_FAILED', message: error.message });
-    }
-  });
-
-  app.post('/api/partner-investments', requireHttpAuth, async (req, res) => {
-    const userId = req.auth.sub;
-    const { amount, months, monthlyInterest, totalInterest, startDate, endDate } = req.body;
-    if (!amount || amount <= 0 || !months || months <= 0) {
-      return res.status(400).json({ ok: false, error: 'INVALID_PARAMETERS' });
-    }
-    const PARTNER_MIN_INVESTMENT = 100;
-    if (amount < PARTNER_MIN_INVESTMENT) {
-      return res.status(400).json({ ok: false, error: 'MINIMUM_INVESTMENT_REQUIRED' });
-    }
-
-    try {
-      const db = admin.firestore();
-      const userRef = db.doc(`artifacts/rw-wallet-june-26/public/data/users/${userId}`);
-      const investmentRef = db.collection('artifacts/rw-wallet-june-26/public/data/partner_investments').doc();
-      const invoiceId = `INV-${investmentRef.id.slice(0, 8).toUpperCase()}`;
-
-      let result = await db.runTransaction(async (tx) => {
-        const userDoc = await tx.get(userRef);
-        if (!userDoc.exists) throw new Error('User account not found.');
-        const userData = userDoc.data();
-        const balance = userData.balance || 0;
-
-        // Spendable balance check
-        const locked = userData.loanLockedAmount || 0;
-        const pro = userData.isProProfile ? (userData.proLockAmount || 0) : 0;
-        const spendable = balance - locked - pro;
-
-        if (spendable < amount) {
-          throw new Error('Insufficient wallet balance.');
-        }
-
-        // 1. Deduct user balance
-        tx.update(userRef, { balance: balance - amount });
-
-        // 2. Create investment document
-        tx.set(investmentRef, {
-          userId,
-          userName: userData.name || 'User',
-          userEmail: userData.email || '',
-          userMobile: userData.mobile || '',
-          amount,
-          months,
-          interestRate: 0.01,
-          monthlyInterest,
-          totalInterest,
-          paidInterest: 0,
-          monthsPaid: 0,
-          startDate: admin.firestore.Timestamp.fromDate(new Date(startDate)),
-          endDate: admin.firestore.Timestamp.fromDate(new Date(endDate)),
-          nextPayoutAt: admin.firestore.Timestamp.fromDate(new Date(new Date(startDate).getTime() + 30 * 24 * 60 * 60 * 1000)),
-          status: 'active',
-          invoiceId,
-          createdAt: admin.firestore.FieldValue.serverTimestamp()
-        });
-
-        // 3. Log transaction
-        const txRef = userRef.collection('transactions').doc();
-        tx.set(txRef, {
-          type: 'debit',
-          amount,
-          comment: 'Partner Investment Started',
-          timestamp: admin.firestore.FieldValue.serverTimestamp(),
-          transactionId: investmentRef.id,
-          status: 'completed',
-          recipientName: 'Reviews World Partner Plan',
-          recipientMobile: ''
-        });
-
-        return { investmentId: investmentRef.id, invoiceId };
-      });
-
-      res.json({ ok: true, ...result });
-    } catch (error) {
-      console.error('Create partner investment transaction failed:', error);
-      res.status(500).json({ ok: false, error: 'TRANSACTION_FAILED', message: error.message });
-    }
-  });
-
-  app.post('/api/partner-investments/:investmentId/interest', requireHttpAuth, async (req, res) => {
-    const { investmentId } = req.params;
-    try {
-      const db = admin.firestore();
-      const investmentRef = db.doc(`artifacts/rw-wallet-june-26/public/data/partner_investments/${investmentId}`);
-
-      await db.runTransaction(async (tx) => {
-        const invDoc = await tx.get(investmentRef);
-        if (!invDoc.exists) throw new Error('Investment not found.');
-        const inv = invDoc.data();
-        if (inv.status !== 'active') throw new Error('Investment is not active.');
-        
-        // Authorization check: User can process their own, or admin
-        if (req.auth.sub !== inv.userId && !req.auth.isAdmin) {
-          throw new Error('Unauthorized');
-        }
-
-        const nextPayout = inv.nextPayoutAt ? inv.nextPayoutAt.toDate() : null;
-        if (!nextPayout || nextPayout > new Date()) throw new Error('30 days are not completed yet.');
-
-        const userRef = db.doc(`artifacts/rw-wallet-june-26/public/data/users/${inv.userId}`);
-        const userDoc = await tx.get(userRef);
-        if (!userDoc.exists) throw new Error('User not found.');
-
-        const monthsPaid = inv.monthsPaid || 0;
-        const nextMonthsPaid = monthsPaid + 1;
-        const monthlyInterest = inv.monthlyInterest || Number(((inv.amount || 0) * 0.01).toFixed(2));
-        const isFinal = nextMonthsPaid >= (inv.months || 1);
-        const creditAmount = isFinal ? Number((monthlyInterest + (inv.amount || 0)).toFixed(2)) : monthlyInterest;
-
-        tx.update(userRef, { balance: (userDoc.data().balance || 0) + creditAmount });
-        
-        const nextPayoutAtDate = new Date(nextPayout.getTime() + 30 * 24 * 60 * 60 * 1000);
-        tx.update(investmentRef, {
-          paidInterest: Number(((inv.paidInterest || 0) + monthlyInterest).toFixed(2)),
-          monthsPaid: nextMonthsPaid,
-          nextPayoutAt: isFinal ? admin.firestore.FieldValue.delete() : admin.firestore.Timestamp.fromDate(nextPayoutAtDate),
-          status: isFinal ? 'completed' : 'active',
-          completedAt: isFinal ? admin.firestore.FieldValue.serverTimestamp() : (inv.completedAt || null)
-        });
-
-        const txRef = userRef.collection('transactions').doc();
-        tx.set(txRef, {
-          type: 'credit',
-          amount: creditAmount,
-          comment: isFinal ? 'Partner Investment Maturity' : 'Partner Investment Interest',
-          timestamp: admin.firestore.FieldValue.serverTimestamp(),
-          transactionId: `PARTNER-${investmentId}-${nextMonthsPaid}`,
-          status: 'completed',
-          isAdminTransaction: true,
-          senderName: 'Reviews World',
-          recipientName: inv.userName || 'User',
-          recipientMobile: inv.userMobile || ''
-        });
-      });
-
-      res.json({ ok: true });
-    } catch (error) {
-      console.error('Process partner interest failed:', error);
-      res.status(500).json({ ok: false, error: 'INTEREST_PROCESS_FAILED', message: error.message });
-    }
-  });
+  // [DUPLICATE ROUTES DISABLED] Duplicate /api/partner-investments* block already defined at L2936 (uses correct Firestore project 'digital-wallet-prod').
+  // This second duplicate block below incorrectly hardcoded projectId "rw-wallet-june-26", causing data split and broken balance ledger consistency.
+  // Preserved definition is the FIRST block (L2936+). Second block below would additionally cause "headers already sent" HTTP 500 race.
+  if (process.env.NODE_ENV === 'development') {
+    console.warn('[registerRoutes] Skipped 4 duplicate /api/partner-investments* routes (second block at end-of-function); using primary block L2936+ with appId/digital-wallet-prod.');
+  }
 }
 
 function requireHttpAuth(req, res, next) {

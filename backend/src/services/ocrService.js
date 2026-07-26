@@ -118,7 +118,7 @@ function substituteOcrConfusions(text) {
  * Performs Multi-level Fuzzy & Relaxed match verification targeting the FIRST 4 WORDS of expected comment inside OCR text.
  * Threshold defaults to 0.60 (60% similarity).
  */
-function verifyFuzzyCommentMatch(ocrText, expectedComment, threshold = 0.60) {
+function verifyFuzzyCommentMatch(ocrText, expectedComment, threshold = 0.65) {
   if (!expectedComment || !String(expectedComment).trim()) {
     return { isMatched: true, similarityScore: 1.0, matchedComment: '' };
   }

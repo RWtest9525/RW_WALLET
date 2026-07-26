@@ -61,14 +61,14 @@ async function verifyReviewScreenshot(req, res) {
 
     // 3. Extract Reviewer Name & Perform Multi-Level Fuzzy Match Verification
     const extractedUserName = ocrService.extractReviewerName(ocrText);
-    const fuzzyComment = ocrService.verifyFuzzyCommentMatch(ocrText, expectedComment, 0.60);
-    const fuzzyName = ocrService.verifyFuzzyReviewerMatch(ocrText, extractedUserName, reviewerName, 0.60);
+    const fuzzyComment = ocrService.verifyFuzzyCommentMatch(ocrText, expectedComment, 0.68);
+    const fuzzyName = ocrService.verifyFuzzyReviewerMatch(ocrText, extractedUserName, reviewerName, 0.68);
 
     const isMatched = fuzzyComment.isMatched && fuzzyName.isMatched;
 
     let similarityScore = Math.min(fuzzyComment.similarityScore, fuzzyName.similarityScore);
-    if (isMatched && similarityScore < 0.60) {
-      similarityScore = 0.60;
+    if (isMatched && similarityScore < 0.68) {
+      similarityScore = 0.68;
     }
     similarityScore = Number(similarityScore.toFixed(2));
 
@@ -179,7 +179,7 @@ async function verifyBulkReviewScreenshots(req, res, d1Store = null) {
       if (cleanOcr) seenComments.add(cleanOcr.slice(0, 50));
 
       // Match verification check
-      const fuzzyMatch = ocrService.verifyFuzzyCommentMatch(ocrText, expectedComment, 0.60);
+      const fuzzyMatch = ocrService.verifyFuzzyCommentMatch(ocrText, expectedComment, 0.68);
       if (fuzzyMatch.isMatched || expectedComment.length === 0) {
         processed++;
       } else {

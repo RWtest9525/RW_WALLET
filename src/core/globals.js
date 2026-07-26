@@ -90,6 +90,24 @@ window.handleLogout = async () => {
         localStorage.removeItem('last_active_section');
         localStorage.removeItem('last_active_task_id');
         localStorage.removeItem('last_active_task_data');
+        localStorage.removeItem('lastLoggedInUser');
+        localStorage.removeItem('impersonated_sub_admin_uid');
+        localStorage.removeItem('impersonated_sub_admin_email');
+        localStorage.removeItem('impersonated_sub_admin_token');
+        localStorage.removeItem('impersonated_sub_admin_data');
+        localStorage.removeItem('original_owner_uid');
+        localStorage.removeItem('original_owner_email');
+        localStorage.removeItem('original_owner_token');
+        localStorage.removeItem('original_owner_data');
+        try {
+            const keys = Object.keys(localStorage);
+            for (const k of keys) {
+                if (k.startsWith('rw_wallet_user_cache_') || k.startsWith('rw_wallet_history_cache_')) {
+                    try { localStorage.removeItem(k); } catch (_) {}
+                }
+            }
+        } catch (_) {}
+        try { sessionStorage.clear(); } catch (_) {}
     } catch (e) {}
     if (typeof auth !== 'undefined' && auth) {
         await signOut(auth).catch(() => {});
@@ -137,7 +155,7 @@ window.unifiedHistoryCache = [];
 window.lastManualPageOpenAt = 0;
 window.locallyProcessedFundRequestIds = new Set();
 window.locallyProcessedFundRequestSignatures = new Set();
-window.TASK_COMMENT_RESERVATION_MS = 10 * 60 * 1000;
+window.TASK_COMMENT_RESERVATION_MS = 15 * 60 * 1000;
 window.NORMAL_USER_DAILY_TASK_LIMIT = 4;
 window.TRANSACTION_PAGE_SIZE = 10;
 window.transactionListState = { filter: 'all', visibleCount: TRANSACTION_PAGE_SIZE, items: [] };

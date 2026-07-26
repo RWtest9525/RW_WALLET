@@ -52,8 +52,8 @@ const hydrateInstantShell = () => {
         // Check if the user is an admin/sub-admin/owner based on UID or cached user details
         let isUserAdmin = false;
         try {
-            const cachedUser = JSON.parse(localStorage.getItem(`rw_wallet_user_cache_${effectiveUser}`) || 'null');
-            const cachedRole = (localStorage.getItem('user_role') || '').toLowerCase();
+            const cachedUser = JSON.parse(localStorage.getItem(`rw_wallet_user_cache_${effectiveUser}`) || sessionStorage.getItem(`rw_wallet_user_cache_ss_${effectiveUser}`) || 'null');
+            const cachedRole = (localStorage.getItem('user_role') || sessionStorage.getItem('user_role_ss') || '').toLowerCase();
             const isRoleAdmin = cachedRole === 'admin' || cachedRole === 'subadmin' || cachedRole === 'owner' || (window.checkIsUserAdmin ? window.checkIsUserAdmin(currentUser, currentUserData) : false);
             if (effectiveUser === ADMIN_UID || isImpersonating || isRoleAdmin || (cachedUser && (cachedUser.role === 'admin' || cachedUser.role === 'subadmin' || cachedUser.role === 'owner' || cachedUser.isAdmin))) {
                 isUserAdmin = true;
@@ -116,7 +116,7 @@ const hydrateInstantShell = () => {
             document.querySelectorAll('.tab-button').forEach(btn => btn.setAttribute('aria-selected', btn.dataset.tab === 'user-panel'));
         }
         try {
-            const cachedUser = JSON.parse(localStorage.getItem(`rw_wallet_user_cache_${effectiveUser}`) || 'null');
+            const cachedUser = JSON.parse(localStorage.getItem(`rw_wallet_user_cache_${effectiveUser}`) || sessionStorage.getItem(`rw_wallet_user_cache_ss_${effectiveUser}`) || 'null');
             if (cachedUser) {
                 if (cachedUser.isFlagged || cachedUser.isDisabled) {
                     document.getElementById('dashboard-content')?.classList.add('hidden');

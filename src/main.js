@@ -274,12 +274,18 @@ onAuthStateChanged(auth, async (user) => {
                 };
 
                 localStorage.setItem('lastLoggedInUser', isImpersonating ? localStorage.getItem('impersonated_sub_admin_uid') : user.uid);
+                try {
+                    sessionStorage.setItem('lastLoggedInUser', isImpersonating ? localStorage.getItem('impersonated_sub_admin_uid') : user.uid);
+                } catch (_) {}
 
                 if (currentUser.uid !== ADMIN_UID && localSignupApprovalInProgress) return;
 
                 const isAdmin = checkIsUserAdmin(currentUser, currentUserData);
                 const role = (currentUserData?.role || (isAdmin ? 'admin' : 'user'));
                 localStorage.setItem('user_role', role);
+                try {
+                    sessionStorage.setItem('user_role_ss', role);
+                } catch (_) {}
 
                 // INSTANT UNBLOCK: Show app UI immediately so user sees 0ms latency without any white screen delay
                 hideLoading();
@@ -327,6 +333,10 @@ onAuthStateChanged(auth, async (user) => {
                     currentUserData = { uid: currentUser.uid, id: currentUser.uid, email: currentUser.email, ...userData };
                     window.currentUserData = currentUserData;
                     writeJsonCache(getUserCacheKey(currentUser.uid), sanitizeUserForCache(currentUserData, currentUser.uid));
+                    try {
+                        sessionStorage.setItem(`rw_wallet_user_cache_ss_${currentUser.uid}`, JSON.stringify(sanitizeUserForCache(currentUserData, currentUser.uid)));
+                        sessionStorage.setItem('user_role_ss', String(currentUserData?.role || (checkIsUserAdmin(currentUser, currentUserData) ? 'admin' : 'user')));
+                    } catch (_) {}
 
                     // Re-evaluate admin status and update layout/navigation
                     const updatedIsAdmin = checkIsUserAdmin(currentUser, currentUserData);
