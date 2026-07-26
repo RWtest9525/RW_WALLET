@@ -38,10 +38,12 @@ async function postOneSignalApi(payload, apiKey) {
     'https://onesignal.com/api/v1/notifications'
   ];
   let lastResult = null;
+  let lastError = null;
 
   for (const endpoint of endpoints) {
     for (const authHeader of headersList) {
       try {
+        const cleanHeaderForLog = authHeader ? authHeader.slice(0, 20) + '...' : '(empty)';
         const response = await fetch(endpoint, {
           method: 'POST',
           headers: {
@@ -52,13 +54,19 @@ async function postOneSignalApi(payload, apiKey) {
         });
         const result = await response.json().catch(() => ({}));
         if (response.ok && !result.errors) {
+          console.log(`[OneSignal-Service] API OK (${endpoint.slice(-28)} auth=${cleanHeaderForLog}): id=${result?.id || 'n/a'}, recipients=${result?.recipients ?? 'n/a'}, targets=${JSON.stringify(payload?.include_aliases?.external_id || payload?.include_external_user_ids || payload?.included_segments || payload?.include_player_ids?.slice?.(0, 2) || []).slice(0, 200)}`);
           return result;
         }
+        console.warn(`[OneSignal-Service] API FAIL status=${response.status} (${endpoint.slice(-28)} auth=${cleanHeaderForLog}): response=${JSON.stringify(result).slice(0, 400)}`);
         lastResult = result;
       } catch (err) {
-        console.error('[OneSignal] Fetch request error:', err);
+        lastError = err;
+        console.error('[OneSignal-Service] Fetch request error:', err?.message || err);
       }
     }
+  }
+  if (lastError) {
+    console.error('[OneSignal-Service] All endpoint/auth combinations FAILED. Last result:', JSON.stringify(lastResult || {}).slice(0, 500));
   }
   return lastResult;
 }
@@ -174,7 +182,10 @@ async function sendOneSignalToTargets(targets, title, message, data, d1) {
 
   try {
     const externalIds = d1 ? await resolveUserOneSignalIds(d1, targets) : (Array.isArray(targets) ? targets : [targets]);
-    if (!externalIds.length) return { ok: false, skipped: true, reason: 'NO_RESOLVED_TARGETS' };
+    if (!externalIds.length) {
+      console.warn(`[OneSignal-Service] No resolved targets for title="${cleanTitle}" targets=${JSON.stringify(targets).slice(0, 200)} - skipping.`);
+      return { ok: false, skipped: true, reason: 'NO_RESOLVED_TARGETS' };
+    }
 
     const playerIds = [];
     try {
@@ -190,7 +201,9 @@ async function sendOneSignalToTargets(targets, title, message, data, d1) {
                 playerIds.push(pid.trim());
               }
             }
-          } catch {}
+          } catch (e) {
+            console.warn(`[OneSignal-Service] Player ID lookup failed for ${extId}:`, e?.message || e);
+          }
         }
       }
     } catch (e) {
@@ -198,6 +211,7 @@ async function sendOneSignalToTargets(targets, title, message, data, d1) {
     }
 
     if (playerIds.length > 0) {
+      console.log(`[OneSignal-Service] Found ${playerIds.length} direct player IDs from Firestore`);
       const payloadSubIds = {
         app_id: appId,
         include_subscription_ids: playerIds,
@@ -223,6 +237,8 @@ async function sendOneSignalToTargets(targets, title, message, data, d1) {
       postOneSignalApi(payloadPlayerIds, apiKey).then(r => {
         console.log('[OneSignal] Direct Player ID (legacy) Push:', r);
       }).catch(() => {});
+    } else {
+      console.warn(`[OneSignal-Service] No player IDs from Firestore for externalIds=${JSON.stringify(externalIds).slice(0, 300)}. Relying only on alias-based delivery.`);
     }
 
     const payloadV11 = {

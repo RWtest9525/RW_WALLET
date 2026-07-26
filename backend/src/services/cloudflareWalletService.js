@@ -1133,6 +1133,11 @@ async function resolveUserOneSignalIds(d1, target) {
     if (!t) continue;
     const str = String(t).trim();
     if (!str || str === 'all' || str === 'broadcast') continue;
+
+    // ALWAYS add the raw target string FIRST, because:
+    //  - Firestore user doc KEY = Firebase UID (e.g. "mOs5Fmp4RoRzeBDH4pZLMOpQx7Q2")
+    //  - Frontend calls OneSignal.login(userId) with the SAME Firebase UID
+    //  - So include_aliases.external_id MUST include this raw string for delivery.
     resolved.add(str);
 
     if (d1 && typeof d1.all === 'function') {
@@ -1171,10 +1176,12 @@ async function postOneSignalApi(payload, apiKey) {
   const headersList = getOneSignalAuthHeaders(apiKey);
   const endpoints = ['https://api.onesignal.com/notifications', 'https://onesignal.com/api/v1/notifications'];
   let lastResult = null;
+  let lastError = null;
 
   for (const endpoint of endpoints) {
     for (const authHeader of headersList) {
       try {
+        const cleanHeaderForLog = authHeader ? authHeader.slice(0, 20) + '...' : '(empty)';
         const response = await fetch(endpoint, {
           method: 'POST',
           headers: {
@@ -1185,13 +1192,19 @@ async function postOneSignalApi(payload, apiKey) {
         });
         const result = await response.json().catch(() => ({}));
         if (response.ok && !result.errors) {
+          console.log(`[OneSignal] API OK (${endpoint.slice(-28)} auth=${cleanHeaderForLog}): id=${result?.id || 'n/a'}, recipients=${result?.recipients ?? 'n/a'}, external_ids=${JSON.stringify(payload?.include_aliases?.external_id || payload?.include_external_user_ids || payload?.included_segments || payload?.include_player_ids?.slice?.(0, 2) || [])}`);
           return result;
         }
+        console.warn(`[OneSignal] API FAIL status=${response.status} (${endpoint.slice(-28)} auth=${cleanHeaderForLog}): response=${JSON.stringify(result).slice(0, 400)}`);
         lastResult = result;
       } catch (err) {
-        console.error('[OneSignal] Fetch request error:', err);
+        lastError = err;
+        console.error('[OneSignal] Fetch request error:', err?.message || err);
       }
     }
+  }
+  if (lastError) {
+    console.error('[OneSignal] All endpoint/auth combinations FAILED. Last result:', JSON.stringify(lastResult || {}).slice(0, 500));
   }
   return lastResult;
 }
@@ -1213,7 +1226,8 @@ async function sendOneSignalPush(d1OrTarget, targetOrTitle, titleOrMessage, mess
     extraData = messageOnly;
   }
 
-  const appId = process.env.ONESIGNAL_APP_ID || '465e22bd-8540-437b-ba7b-efa14ef4069f';
+  const osAppId = process.env.ONESIGNAL_APP_ID || '465e22bd-8540-437b-ba7b-efa14ef4069f';
+  const fsAppId = process.env.FIREBASE_APP_ID || 'digital-wallet-prod';
   const defaultKey = ['os_v2_app_', 'izpcfpmfibbxxot356qu55agt722zfi4ddmueaebrcgmldg7h4gbhekweg4oya7iw2mc6doh55mzi67krhmhphd4jryt36px5y4bnxa'].join('');
   const apiKey = (process.env.ONESIGNAL_REST_API_KEY && process.env.ONESIGNAL_REST_API_KEY !== 'your_onesignal_rest_api_key')
     ? process.env.ONESIGNAL_REST_API_KEY
@@ -1226,7 +1240,7 @@ async function sendOneSignalPush(d1OrTarget, targetOrTitle, titleOrMessage, mess
   try {
     if (target === 'all' || target === 'broadcast') {
       const payloadBroadcast = {
-        app_id: appId,
+        app_id: osAppId,
         included_segments: ['Subscribed Users', 'All'],
         headings: { en: cleanTitle },
         contents: { en: cleanMsg }
@@ -1240,14 +1254,17 @@ async function sendOneSignalPush(d1OrTarget, targetOrTitle, titleOrMessage, mess
     }
 
     const externalIds = await resolveUserOneSignalIds(d1, target);
-    if (!externalIds.length) return;
+    if (!externalIds.length) {
+      console.warn(`[OneSignal] Skipping push: no resolved external IDs for target=${JSON.stringify(target).slice(0, 200)} title="${cleanTitle}"`);
+      return;
+    }
 
     // Resolve direct OneSignal player IDs from Firestore user profiles
     const playerIds = [];
     try {
       if (admin.apps && admin.apps.length > 0) {
         for (const extId of externalIds) {
-          const userDoc = await admin.firestore().doc(`artifacts/${appId}/public/data/users/${extId}`).get();
+          const userDoc = await admin.firestore().doc(`artifacts/${fsAppId}/public/data/users/${extId}`).get();
           if (userDoc.exists) {
             const uData = userDoc.data() || {};
             const pid = uData.onesignalPlayerId || uData.onesignal_player_id || null;
@@ -1264,7 +1281,7 @@ async function sendOneSignalPush(d1OrTarget, targetOrTitle, titleOrMessage, mess
     if (playerIds.length > 0) {
       // 1. Target via subscription IDs (v11 API)
       const payloadSubIds = {
-        app_id: appId,
+        app_id: osAppId,
         include_subscription_ids: playerIds,
         headings: { en: cleanTitle },
         contents: { en: cleanMsg },
@@ -1280,7 +1297,7 @@ async function sendOneSignalPush(d1OrTarget, targetOrTitle, titleOrMessage, mess
 
       // 2. Target via legacy player IDs API
       const payloadPlayerIds = {
-        app_id: appId,
+        app_id: osAppId,
         include_player_ids: playerIds,
         headings: { en: cleanTitle },
         contents: { en: cleanMsg },
@@ -1293,10 +1310,12 @@ async function sendOneSignalPush(d1OrTarget, targetOrTitle, titleOrMessage, mess
       postOneSignalApi(payloadPlayerIds, apiKey).then(r => {
         console.log(`[OneSignal] Direct Player ID (legacy) Push sent successfully:`, r);
       }).catch(() => {});
+    } else {
+      console.warn(`[OneSignal] No player IDs resolved from Firestore for externalIds=${JSON.stringify(externalIds).slice(0, 300)}. Falling back to alias-only delivery.`);
     }
 
     const payloadV11 = {
-      app_id: appId,
+      app_id: osAppId,
       include_aliases: { external_id: externalIds },
       target_channel: 'push',
       headings: { en: cleanTitle },
@@ -1314,7 +1333,7 @@ async function sendOneSignalPush(d1OrTarget, targetOrTitle, titleOrMessage, mess
     }
 
     const payloadLegacy = {
-      app_id: appId,
+      app_id: osAppId,
       include_external_user_ids: externalIds,
       channel_for_external_user_ids: 'push',
       headings: { en: cleanTitle },
@@ -1337,7 +1356,7 @@ async function sendOneSignalPush(d1OrTarget, targetOrTitle, titleOrMessage, mess
     });
     if (filters.length > 0) {
       const payloadFilters = {
-        app_id: appId,
+        app_id: osAppId,
         filters: filters,
         headings: { en: cleanTitle },
         contents: { en: cleanMsg },
@@ -1357,7 +1376,23 @@ async function sendOneSignalPush(d1OrTarget, targetOrTitle, titleOrMessage, mess
   }
 }
 
-async function sendFcmPushToUser(userId, title, message, extraData = null) {
+async function sendFcmPushToUser(d1OrUserId, userIdOrTitle, titleOrMessage, extraDataOrNull, maybeExtraData) {
+  let d1 = null;
+  let userId = d1OrUserId;
+  let title = userIdOrTitle;
+  let message = titleOrMessage;
+  let extraData = extraDataOrNull;
+
+  if (d1OrUserId && typeof d1OrUserId.query === 'function') {
+    d1 = d1OrUserId;
+    userId = userIdOrTitle;
+    title = titleOrMessage;
+    message = extraDataOrNull;
+    extraData = maybeExtraData;
+  }
+
+  const fsAppId = process.env.FIREBASE_APP_ID || 'digital-wallet-prod';
+
   try {
     let fcmToken = null;
     const cleanUserId = String(userId || '').trim();
@@ -1366,20 +1401,24 @@ async function sendFcmPushToUser(userId, title, message, extraData = null) {
     // Check Firestore user doc for FCM token
     try {
       if (admin.apps && admin.apps.length > 0) {
-        const userDoc = await admin.firestore().doc(`artifacts/${appId}/public/data/users/${cleanUserId}`).get();
+        const userDoc = await admin.firestore().doc(`artifacts/${fsAppId}/public/data/users/${cleanUserId}`).get();
         if (userDoc.exists) {
           const uData = userDoc.data() || {};
           fcmToken = uData.fcmToken || uData.fcm_token || null;
         }
       }
-    } catch (e) {}
+    } catch (e) {
+      console.warn(`[FCM Push] Firestore lookup failed for ${cleanUserId}:`, e?.message || e);
+    }
 
     // Check D1 DB if FCM token not in Firestore
     if (!fcmToken && d1 && typeof d1.all === 'function') {
       try {
         const rows = await d1.all(`SELECT fcm_token FROM users WHERE id = ? OR firebase_uid = ? LIMIT 1`, [cleanUserId, cleanUserId]);
         fcmToken = rows?.[0]?.fcm_token || null;
-      } catch (e) {}
+      } catch (e) {
+        console.warn(`[FCM Push] D1 lookup failed for ${cleanUserId}:`, e?.message || e);
+      }
     }
 
     if (fcmToken && admin.apps && admin.apps.length > 0) {
@@ -1394,18 +1433,35 @@ async function sendFcmPushToUser(userId, title, message, extraData = null) {
       const res = await admin.messaging().send(payload);
       console.log(`[FCM Push] Sent to ${cleanUserId}:`, res);
       return res;
+    } else {
+      console.warn(`[FCM Push] Skipped for ${cleanUserId}: no FCM token resolved${fcmToken ? '' : ' (token missing)'}`);
     }
   } catch (err) {
-    console.warn(`[FCM Push] Notification to ${userId} skipped:`, err?.message || err);
+    console.warn(`[FCM Push] Notification to ${userId} failed:`, err?.message || err);
   }
 }
 
 async function sendNotification(d1, userId, title, message, customData = null) {
   // Send FCM Push via Firebase Admin SDK
-  sendFcmPushToUser(userId, title, message, customData).catch(() => {});
+  sendFcmPushToUser(d1, userId, title, message, customData).catch((e) => console.warn('[sendNotification] FCM error:', e?.message || e));
 
-  // Send OneSignal Push
-  sendOneSignalPush(d1, userId, title, message, customData).catch(() => {});
+  // Send OneSignal Push via local function (with fixes)
+  sendOneSignalPush(d1, userId, title, message, customData).catch((e) => console.warn('[sendNotification] Local OneSignal error:', e?.message || e));
+
+  // BELT + SUSPENDERS: Also send via imported oneSignalService which has correct Firestore paths
+  (async () => {
+    try {
+      const res = await oneSignalService.sendPushNotificationToUser({
+        userId,
+        title,
+        message,
+        data: customData
+      }, d1);
+      console.log(`[sendNotification] oneSignalService result for ${userId}:`, JSON.stringify(res || {}).slice(0, 300));
+    } catch (e) {
+      console.warn('[sendNotification] Imported oneSignalService error:', e?.message || e);
+    }
+  })();
 }
 
 async function putR2Object(r2, key, body, contentType = 'application/json') {
@@ -6550,9 +6606,15 @@ function registerSocketHandlers(io, { d1 }) {
                   userName: senderName
                 };
 
-                await sendOneSignalPush(d1, parentAdmin, `💬 New Message from ${senderName}`, chatMessage.message.slice(0, 150), customData);
+                const pushTitle = `💬 New Message from ${senderName}`;
+                const pushBody = chatMessage.message.slice(0, 150);
+
+                sendOneSignalPush(d1, parentAdmin, pushTitle, pushBody, customData).catch(e => console.error('[ChatPush] Local admin push error:', e));
+                oneSignalService.sendPushNotificationToUser({ userId: parentAdmin, title: pushTitle, message: pushBody, data: customData }, d1).catch(e => console.error('[ChatPush] Service admin push error:', e));
+
                 if (parentAdmin !== ADMIN_UID) {
-                  await sendOneSignalPush(d1, ADMIN_UID, `💬 New Message from ${senderName}`, chatMessage.message.slice(0, 150), customData);
+                  sendOneSignalPush(d1, ADMIN_UID, pushTitle, pushBody, customData).catch(e => console.error('[ChatPush] Local owner push error:', e));
+                  oneSignalService.sendPushNotificationToUser({ userId: ADMIN_UID, title: pushTitle, message: pushBody, data: customData }, d1).catch(e => console.error('[ChatPush] Service owner push error:', e));
                 }
               } catch (err) {
                 console.error('Support chat admin push failed:', err);
@@ -6578,11 +6640,17 @@ function registerSocketHandlers(io, { d1 }) {
                 userId: socket.user.sub,
                 userName: senderName
               };
+
+              const pushTitle = `💬 Message from ${senderName}`;
+              const pushBody = chatMessage.message.slice(0, 150);
+
               if (recipientUserId && recipientUserId !== socket.user.sub) {
-                await sendOneSignalPush(d1, recipientUserId, `💬 Message from ${senderName}`, chatMessage.message.slice(0, 150), customData);
+                sendOneSignalPush(d1, recipientUserId, pushTitle, pushBody, customData).catch(e => console.error('[ChatPush] Local user push error:', e));
+                oneSignalService.sendPushNotificationToUser({ userId: recipientUserId, title: pushTitle, message: pushBody, data: customData }, d1).catch(e => console.error('[ChatPush] Service user push error:', e));
               }
               if (roomAdminId !== ADMIN_UID && recipientUserId !== ADMIN_UID && socket.user.sub !== ADMIN_UID) {
-                await sendOneSignalPush(d1, ADMIN_UID, `💬 Message from ${senderName}`, chatMessage.message.slice(0, 150), customData);
+                sendOneSignalPush(d1, ADMIN_UID, pushTitle, pushBody, customData).catch(e => console.error('[ChatPush] Local owner fallback push error:', e));
+                oneSignalService.sendPushNotificationToUser({ userId: ADMIN_UID, title: pushTitle, message: pushBody, data: customData }, d1).catch(e => console.error('[ChatPush] Service owner fallback push error:', e));
               }
             } catch (err) {
               console.error('Support chat user push failed:', err);
