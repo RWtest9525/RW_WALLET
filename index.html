@@ -29,6 +29,131 @@
             background-color: #0f172a !important;
         }
     </style>
+    <!-- ======================================================================
+         OneSignal Web SDK v16 Bootstrap - OFFICIAL DEFERRED PATTERN
+         IMPORTANT: This block runs BEFORE app.js / main.js so window.OneSignal
+         and window.OneSignalDeferred are populated when auth state fires.
+         App ID value matches backend oneSignalService.js DEFAULT_APP_ID_FALLBACK.
+         ====================================================================== -->
+    <script>
+        console.log('[OneSignal] Installing window.OneSignalDeferred bootstrap (HEAD)');
+        window.OneSignalDeferred = window.OneSignalDeferred || [];
+        window.__rwOneSignalAppId = '465e22bd-8540-437b-ba7b-efa14ef4069f';
+
+        // ---- 1. OneSignal SDK script injector (async, so never blocks) ----
+        (function injectOneSignalSdk() {
+            var s = document.createElement('script');
+            s.src = 'https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.page.js';
+            s.defer = true;
+            s.async = true;
+            s.onerror = function () {
+                console.warn('[OneSignal] SDK script failed to load. Push will not work on this environment.');
+            };
+            document.head.appendChild(s);
+        })();
+
+        // ---- 2. Init FIRST, as soon as SDK is ready (no Firebase dependency) ----
+        window.OneSignalDeferred.push(function initOneSignal(OneSignal) {
+            try {
+                console.log('[OneSignal] SDK loaded. Running OneSignal.init()...');
+                OneSignal.init({
+                    appId: window.__rwOneSignalAppId,
+                    serviceWorkerParam: { scope: '/' },
+                    serviceWorkerPath: 'OneSignalSDKWorker.js',
+                    allowLocalhostAsSecureOrigin: true,
+                    notifyButton: { enable: false },
+                    persistNotification: false,
+                    welcomeNotification: { disable: true }
+                }).then(function () {
+                    console.log('[OneSignal] ✅ Initialized (appId=' + window.__rwOneSignalAppId.slice(0, 8) + '...)');
+                    try {
+                        window.dispatchEvent(new CustomEvent('onesignal:initialized', { detail: { appId: window.__rwOneSignalAppId } }));
+                    } catch (_) { /* CustomEvent polyfill on old WebViews */ }
+                }).catch(function (err) {
+                    console.error('[OneSignal] ❌ init() failed:', err && err.message ? err.message : err);
+                });
+            } catch (err) {
+                console.error('[OneSignal] ❌ init() threw synchronously:', err && err.message ? err.message : err);
+            }
+        });
+
+        // ---- 3. Track last resolved user UID so auth state can re-run correctly ----
+        window.__rwLastOneSignalUid = '';
+
+        // ---- 4. Helper: safely call OneSignal.{login,logout} via OneSignalDeferred
+        // (works regardless of whether SDK has finished loading yet)
+        window.__rwOneSignalLogin = function (uid) {
+            try {
+                uid = String(uid || '').trim();
+                if (!uid) {
+                    console.warn('[OneSignal] __rwOneSignalLogin called with empty uid, skipping.');
+                    return Promise.resolve();
+                }
+                if (window.__rwLastOneSignalUid === uid) {
+                    console.log('[OneSignal] Already logged in as ' + uid.slice(0, 8) + '... (skipping duplicate login)');
+                    return Promise.resolve();
+                }
+                console.log('[OneSignal] Queuing OneSignal.login(' + uid.slice(0, 8) + '...) via OneSignalDeferred');
+                var p = new Promise(function (resolve, reject) {
+                    window.OneSignalDeferred.push(function doLogin(OneSignal) {
+                        try {
+                            console.log('[OneSignal] Executing OneSignal.login(' + uid.slice(0, 8) + '...)');
+                            if (typeof OneSignal.login !== 'function') {
+                                console.warn('[OneSignal] OneSignal.login not a function; attempting setExternalUserId fallback.');
+                                if (typeof OneSignal.setExternalUserId === 'function') {
+                                    resolve(OneSignal.setExternalUserId(uid));
+                                } else {
+                                    reject(new Error('No OneSignal.login or setExternalUserId available'));
+                                }
+                                return;
+                            }
+                            resolve(OneSignal.login(uid).then(function () {
+                                window.__rwLastOneSignalUid = uid;
+                                console.log('[OneSignal] ✅ Logged in as ' + uid.slice(0, 8) + '... (external_id alias set)');
+                                try {
+                                    window.dispatchEvent(new CustomEvent('onesignal:logged-in', { detail: { uid: uid } }));
+                                } catch (_) {}
+                            }));
+                        } catch (e) {
+                            reject(e);
+                        }
+                    });
+                });
+                p.catch(function (e) {
+                    console.error('[OneSignal] ❌ login failed:', e && e.message ? e.message : e);
+                });
+                return p;
+            } catch (err) {
+                console.error('[OneSignal] __rwOneSignalLogin caught:', err && err.message ? err.message : err);
+                return Promise.reject(err);
+            }
+        };
+
+        window.__rwOneSignalLogout = function () {
+            try {
+                console.log('[OneSignal] Queuing OneSignal.logout() via OneSignalDeferred');
+                window.__rwLastOneSignalUid = '';
+                window.OneSignalDeferred.push(function doLogout(OneSignal) {
+                    try {
+                        console.log('[OneSignal] Executing OneSignal.logout()');
+                        if (typeof OneSignal.logout === 'function') {
+                            OneSignal.logout()
+                                .then(function () { console.log('[OneSignal] ✅ Logged out'); })
+                                .catch(function (e) { console.warn('[OneSignal] logout error:', e); });
+                        } else if (typeof OneSignal.removeExternalUserId === 'function') {
+                            OneSignal.removeExternalUserId()
+                                .then(function () { console.log('[OneSignal] ✅ External user id removed (fallback logout)'); })
+                                .catch(function (e) { console.warn('[OneSignal] removeExternalUserId error:', e); });
+                        }
+                    } catch (e) {
+                        console.error('[OneSignal] logout threw:', e);
+                    }
+                });
+            } catch (e) {
+                console.error('[OneSignal] __rwOneSignalLogout caught:', e);
+            }
+        };
+    </script>
 </head>
 
 <body class="bg-gray-100 dark:bg-gray-900 text-gray-800 dark:text-gray-200 font-sans">
@@ -37,28 +162,6 @@
     <script type="module" src="/src/shell.js"></script>
     <script type="module" src="/src/app.js"></script>
     <script type="module" src="/src/main.js"></script>
-    <script>
-        // OneSignal Web SDK v16 bootstrap — MUST load as early as possible for reliable push registration
-        // Uses the same App ID fallback value as backend/src/services/oneSignalService.js (DEFAULT_APP_ID_FALLBACK)
-        window.OneSignal = window.OneSignal || [];
-        OneSignal.push(function () {
-            OneSignal.init({
-                appId: '465e22bd-8540-437b-ba7b-efa14ef4069f',
-                allowLocalhostAsSecureOrigin: true,
-                notifyButton: { enable: false },
-                persistNotification: false,
-                welcomeNotification: { disable: true },
-                serviceWorkerParam: { scope: '/onesignal/OneSignalSDKWorker.js' }
-            });
-        });
-        (function () {
-            var s = document.createElement('script');
-            s.src = 'https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.page.js';
-            s.defer = true;
-            s.async = true;
-            document.head.appendChild(s);
-        })();
-    </script>
 </body>
 
 </html>

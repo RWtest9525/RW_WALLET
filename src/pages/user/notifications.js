@@ -25,51 +25,76 @@ const initializePushNotifications = async (userId) => {
                 } catch (e) { /* Android interface errors are non-fatal */ }
             }
 
-            // ---- OneSignal SDK Link User (External User ID = Firestore UID) + Player ID save ----
-            // Without this, backend sendPushNotificationToUser(userId) can't match anything (0 delivered).
+            // ---- OneSignal Link User + Player/Subscription ID save ----
+            // Uses the safe helpers installed in index.html (window.OneSignalDeferred)
+            // so this works even if the SDK is still loading.
             let currentPlayerId = '';
+
             try {
-                const OneSignal = window.OneSignal;
-                if (OneSignal) {
-                    if (typeof OneSignal.login === 'function') {
-                        try { await OneSignal.login(String(userId).trim()); } catch (_) {}
-                    } else if (OneSignal.push && typeof OneSignal.push === 'function') {
-                        OneSignal.push(['setExternalUserId', String(userId).trim()]);
-                    } else if (typeof OneSignal.setExternalUserId === 'function') {
-                        try { await OneSignal.setExternalUserId(String(userId).trim()); } catch (_) {}
-                    }
+                window.__rwOneSignalLogin && window.__rwOneSignalLogin(String(userId).trim());
 
-                    // Retrieve subscription/player id (works for Web SDK v16 + legacy)
-                    try {
-                        if (OneSignal.User && OneSignal.User.PushSubscription && OneSignal.User.PushSubscription.id) {
-                            currentPlayerId = String(OneSignal.User.PushSubscription.id || '').trim();
-                        } else if (typeof OneSignal.getUserId === 'function') {
-                            currentPlayerId = String(await OneSignal.getUserId() || '').trim();
-                        } else if (typeof OneSignal.getPlayerId === 'function') {
-                            currentPlayerId = String(await OneSignal.getPlayerId() || '').trim();
-                        }
-                    } catch (_) { currentPlayerId = ''; }
-
-                    // Always listen for subscription ID changes (permission granted later)
-                    try {
-                        if (OneSignal.User && OneSignal.User.PushSubscription && typeof OneSignal.User.PushSubscription.addEventListener === 'function') {
-                            OneSignal.User.PushSubscription.addEventListener('change', async (evt) => {
+                if (window.OneSignalDeferred) {
+                    window.OneSignalDeferred.push(function afterOneSignalInit(OneSignal) {
+                        try {
+                            // Resolve subscription/player ID and save to Firestore
+                            (async function resolveAndSaveSubId() {
                                 try {
-                                    const newId = String(evt?.current?.id || '').trim();
-                                    if (!newId) return;
-                                    const docRef = doc(db, `artifacts/${appId}/public/data/users`, userId);
-                                    await updateDoc(docRef, {
-                                        onesignalPlayerId: newId,
-                                        onesignal_player_id: newId,
-                                        onesignalSubUpdatedAt: serverTimestamp()
-                                    }).catch(() => {});
-                                } catch (_) {}
-                            });
+                                    let subId = '';
+                                    try {
+                                        if (OneSignal && OneSignal.User && OneSignal.User.PushSubscription && OneSignal.User.PushSubscription.id) {
+                                            subId = String(OneSignal.User.PushSubscription.id || '').trim();
+                                        } else if (typeof OneSignal.getUserId === 'function') {
+                                            subId = String(await OneSignal.getUserId() || '').trim();
+                                        } else if (typeof OneSignal.getPlayerId === 'function') {
+                                            subId = String(await OneSignal.getPlayerId() || '').trim();
+                                        }
+                                    } catch (_) { subId = ''; }
+
+                                    if (subId) {
+                                        try {
+                                            const docRef = doc(db, `artifacts/${appId}/public/data/users`, userId);
+                                            await updateDoc(docRef, {
+                                                onesignalPlayerId: subId,
+                                                onesignal_player_id: subId,
+                                                subscriptionId: subId,
+                                                onesignalSubUpdatedAt: serverTimestamp()
+                                            }).catch(() => {});
+                                            console.log('[notifications.js] ✅ Resolved OneSignal subscriptionId=', subId.slice(0, 12) + '... and saved to Firestore');
+                                        } catch (_) {}
+                                    }
+                                } catch (e) {
+                                    console.warn('[notifications.js] resolve subscription ID failed:', e);
+                                }
+                            })();
+
+                            // Listen for subscription changes (e.g. permission granted after first load)
+                            try {
+                                if (OneSignal && OneSignal.User && OneSignal.User.PushSubscription && typeof OneSignal.User.PushSubscription.addEventListener === 'function') {
+                                    OneSignal.User.PushSubscription.addEventListener('change', async (evt) => {
+                                        try {
+                                            const newId = String(evt?.current?.id || '').trim();
+                                            if (!newId) return;
+                                            const docRef = doc(db, `artifacts/${appId}/public/data/users`, userId);
+                                            await updateDoc(docRef, {
+                                                onesignalPlayerId: newId,
+                                                onesignal_player_id: newId,
+                                                subscriptionId: newId,
+                                                onesignalSubUpdatedAt: serverTimestamp()
+                                            }).catch(() => {});
+                                            console.log('[notifications.js] ✅ OneSignal subscription changed, saved ID=', newId.slice(0, 12) + '...');
+                                        } catch (_) {}
+                                    });
+                                }
+                            } catch (e) {
+                                console.warn('[notifications.js] addEventListener for subscription change failed:', e);
+                            }
+                        } catch (e) {
+                            console.warn('[notifications.js] OneSignal deferred callback failed:', e);
                         }
-                    } catch (_) {}
+                    });
                 }
             } catch (err) {
-                console.warn('[OneSignal] login/subscription retrieval failed:', err);
+                console.warn('[OneSignal] deferred push setup failed (non-fatal):', err);
             }
 
             if (currentPlayerId) {

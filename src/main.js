@@ -119,6 +119,28 @@ window.closeSlideMenu = closeSlideMenu;
 
 onAuthStateChanged(auth, async (user) => {
             console.log("Auth state changed, user:", user ? user.uid : 'null');
+
+            // ================================================================
+            // OneSignal login/logout sync — executes IMMEDIATELY on auth change
+            // Uses the safe window.__rwOneSignalLogin / __rwOneSignalLogout
+            // helpers that queue calls via window.OneSignalDeferred even if
+            // the OneSignal SDK hasn't finished loading yet.
+            // ================================================================
+            try {
+                if (user && user.uid) {
+                    const uid = String(user.uid).trim();
+                    if (uid) {
+                        console.log('[main.js] Fire auth → OneSignal login queued:', uid.slice(0, 8) + '...');
+                        window.__rwOneSignalLogin && window.__rwOneSignalLogin(uid);
+                    }
+                } else {
+                    console.log('[main.js] No user → OneSignal logout queued');
+                    window.__rwOneSignalLogout && window.__rwOneSignalLogout();
+                }
+            } catch (osErr) {
+                console.warn('[main.js] OneSignal login/logout sync error (non-fatal):', osErr);
+            }
+
             localStorage.setItem('last_active_section', 'home');
             const pageContainerAtAuth = document.getElementById('page-container');
             const mainContentAtAuth = document.getElementById('main-content');
