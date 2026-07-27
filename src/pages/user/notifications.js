@@ -24,6 +24,37 @@ window.saveDeviceTokenToDb = saveDeviceTokenToDb;
 const initializePushNotifications = async (userId) => {
             if (!userId) return;
 
+            // ---- CapacitorJS Native Push Notifications (Android APK) ----
+            if (window.Capacitor && typeof window.Capacitor.isNativePlatform === 'function' && window.Capacitor.isNativePlatform()) {
+                try {
+                    const PushNotifications = window.Capacitor.Plugins?.PushNotifications;
+                    if (PushNotifications) {
+                        let perm = await PushNotifications.checkPermissions();
+                        if (perm.receive !== 'granted') {
+                            perm = await PushNotifications.requestPermissions();
+                        }
+                        if (perm.receive === 'granted') {
+                            await PushNotifications.register();
+                        }
+                        PushNotifications.addListener('registration', async (token) => {
+                            console.log('[Capacitor] Native FCM Token received:', token.value);
+                            if (token && token.value) {
+                                await saveDeviceTokenToDb(token.value);
+                            }
+                        });
+                        PushNotifications.addListener('pushNotificationActionPerformed', (notification) => {
+                            const data = notification.notification?.data || {};
+                            const roomId = data.roomId || data.room_id || '';
+                            if (roomId && typeof window.openSupportChatRoom === 'function') {
+                                window.openSupportChatRoom(roomId);
+                            }
+                        });
+                    }
+                } catch (capErr) {
+                    console.warn('[Capacitor] Native push initialization warning:', capErr);
+                }
+            }
+
             const fsUpdates = {};
             let hasFsUpdates = false;
 
