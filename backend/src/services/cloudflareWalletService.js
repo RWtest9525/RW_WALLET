@@ -1326,16 +1326,18 @@ async function sendFcmPushToUser(d1OrUserId, userIdOrTitle, titleOrMessage, extr
     const cleanUserId = String(userId || '').trim();
     if (!cleanUserId) return;
 
-    // Check Firestore user doc for FCM token
-        const isFcmTokenValid = (t) => {
-          if (!t || typeof t !== 'string') return false;
-          const str = t.trim();
-          // Exclude OneSignal UUID format (36 chars with hyphens)
-          if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str)) return false;
-          // Valid FCM tokens are usually >50 chars
-          return str.length > 30;
-        };
+    const isFcmTokenValid = (t) => {
+      if (!t || typeof t !== 'string') return false;
+      const str = t.trim();
+      // Exclude OneSignal UUID format (36 chars with hyphens)
+      if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str)) return false;
+      // Valid FCM tokens are usually >50 chars
+      return str.length > 30;
+    };
 
+    // Check Firestore user doc for FCM token
+    try {
+      if (admin.apps && admin.apps.length > 0) {
         let userDoc = await admin.firestore().doc(`artifacts/${fsAppId}/public/data/users/${cleanUserId}`).get();
         if (userDoc.exists) {
           const uData = userDoc.data() || {};
