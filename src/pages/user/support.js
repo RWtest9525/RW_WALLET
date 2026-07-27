@@ -1,6 +1,6 @@
 // File: src/pages/support.js
 
-const getSupportSocket = async ({ timeoutMs = 2500 } = {}) => {
+const getSupportSocket = async ({ timeoutMs = 8000 } = {}) => {
             await loadSocketIoClient(timeoutMs);
             const token = await getBackendAuthToken();
             if (supportSocket?.connected) return supportSocket;
@@ -573,12 +573,18 @@ const renderSupportMessages = (messages, viewerRole) => {
                 };
                 if (!socket?.connected) {
                     try {
-                        attachSupportRealtime(await getSupportSocket({ timeoutMs: 2500 }));
+                        attachSupportRealtime(await getSupportSocket({ timeoutMs: 10000 }));
+                        socket = window.activeSupportSocket || supportSocket || socket;
                     } catch (error) {
-                        unlockSend();
-                        input.value = text;
-                        showNotification('Chat is still connecting. Please try again.', true);
-                        return;
+                        try {
+                            attachSupportRealtime(await getSupportSocket({ timeoutMs: 8000 }));
+                            socket = window.activeSupportSocket || supportSocket || socket;
+                        } catch (err2) {
+                            unlockSend();
+                            input.value = text;
+                            showNotification('Connecting to chat server... Please tap Send again.', false);
+                            return;
+                        }
                     }
                 }
                 socket.emit('send_message', {
@@ -1043,7 +1049,7 @@ const openSupportChatPage = async (chatUserId, viewerRole = 'user', chatMeta = {
                     }
                 });
             };
-            const startSupportRealtime = (timeoutMs = 1800) => {
+            const startSupportRealtime = (timeoutMs = 6000) => {
                 getSupportSocket({ timeoutMs })
                     .then(attachSupportRealtime)
                     .catch((error) => logBackgroundSkip('Support chat realtime is not ready', error));
@@ -1097,12 +1103,18 @@ const openSupportChatPage = async (chatUserId, viewerRole = 'user', chatMeta = {
                 };
                 if (!socket?.connected) {
                     try {
-                        attachSupportRealtime(await getSupportSocket({ timeoutMs: 2500 }));
+                        attachSupportRealtime(await getSupportSocket({ timeoutMs: 10000 }));
+                        socket = window.activeSupportSocket || supportSocket || socket;
                     } catch (error) {
-                        unlockSend();
-                        input.value = text;
-                        showNotification('Chat is still connecting. Please try again.', true);
-                        return;
+                        try {
+                            attachSupportRealtime(await getSupportSocket({ timeoutMs: 8000 }));
+                            socket = window.activeSupportSocket || supportSocket || socket;
+                        } catch (err2) {
+                            unlockSend();
+                            input.value = text;
+                            showNotification('Connecting to chat server... Please tap Send again.', false);
+                            return;
+                        }
                     }
                 }
                 socket.emit('send_message', {
