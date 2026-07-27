@@ -571,6 +571,24 @@ const renderSupportMessages = (messages, viewerRole) => {
                         ? (currentUserData?.mobile || '') 
                         : (chatMeta.userMobile || '')
                 };
+                const clientMsgId = `${activeSupportRoomId}-${myUid || 'user'}-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+                const optimisticMsg = {
+                    id: `temp-${Date.now()}`,
+                    roomId: activeSupportRoomId,
+                    senderId: myUid || 'admin',
+                    senderRole: viewerRole,
+                    text: text,
+                    createdAt: Date.now(),
+                    clientMessageId: clientMsgId
+                };
+
+                // Optimistically render message instantly in UI & update cache
+                activeSupportMessages = mergeSupportMessages(activeSupportMessages, [optimisticMsg]);
+                writeSupportChatCache(activeSupportRoomId, activeSupportMessages);
+                renderSupportMessages(activeSupportMessages, viewerRole);
+                const chatMsgContainerAdmin = document.getElementById('support-chat-messages');
+                if (chatMsgContainerAdmin) chatMsgContainerAdmin.scrollTop = chatMsgContainerAdmin.scrollHeight;
+
                 if (!socket?.connected) {
                     try {
                         attachSupportRealtime(await getSupportSocket({ timeoutMs: 10000 }));
@@ -580,25 +598,25 @@ const renderSupportMessages = (messages, viewerRole) => {
                             attachSupportRealtime(await getSupportSocket({ timeoutMs: 8000 }));
                             socket = window.activeSupportSocket || supportSocket || socket;
                         } catch (err2) {
-                            unlockSend();
-                            input.value = text;
-                            showNotification('Connecting to chat server... Please tap Send again.', false);
-                            return;
+                            logBackgroundSkip('Socket connect for admin send message skipped', err2);
                         }
                     }
                 }
-                socket.emit('send_message', {
-                    roomId: activeSupportRoomId,
-                    message: text,
-                    userMeta,
-                    clientMessageId: `${activeSupportRoomId}-${myUid || 'user'}-${Date.now()}-${Math.random().toString(36).slice(2)}`
-                }, (response) => {
+                if (socket?.connected) {
+                    socket.emit('send_message', {
+                        roomId: activeSupportRoomId,
+                        message: text,
+                        userMeta,
+                        clientMessageId: clientMsgId
+                    }, (response) => {
+                        unlockSend();
+                        if (!response?.ok) {
+                            console.error('Send support message failed:', response?.error);
+                        }
+                    });
+                } else {
                     unlockSend();
-                    if (!response?.ok) {
-                        console.error('Send support message failed:', response?.error);
-                        showNotification('Message not sent. Please try again.', true);
-                    }
-                });
+                }
                 setTimeout(unlockSend, 4000);
                 const updatedChat = {
                     userId: chatUserId,
@@ -1029,20 +1047,20 @@ const openSupportChatPage = async (chatUserId, viewerRole = 'user', chatMeta = {
             const attachSupportRealtime = (nextSocket) => {
                 if (!nextSocket || activeSupportRoomId !== roomIdAtOpen || !document.getElementById('support-chat-messages')) return;
                 window.activeSupportSocket = nextSocket;
-                if (socket && socket !== nextSocket && realtimeAttached) {
-                    socket.off('chat_history', handleHistory);
-                    socket.off('new_message', handleNewMessage);
-                    socket.off('chat_read', handleReadReceipt);
-                    socket.off('message_deleted', handleMessageDeleted);
+                if (socket) {
+                    try {
+                        socket.off('chat_history', handleHistory);
+                        socket.off('new_message', handleNewMessage);
+                        socket.off('chat_read', handleReadReceipt);
+                        socket.off('message_deleted', handleMessageDeleted);
+                    } catch (_) {}
                 }
                 socket = nextSocket;
-                if (!realtimeAttached) {
-                    socket.on('chat_history', handleHistory);
-                    socket.on('new_message', handleNewMessage);
-                    socket.on('chat_read', handleReadReceipt);
-                    socket.on('message_deleted', handleMessageDeleted);
-                    realtimeAttached = true;
-                }
+                socket.on('chat_history', handleHistory);
+                socket.on('new_message', handleNewMessage);
+                socket.on('chat_read', handleReadReceipt);
+                socket.on('message_deleted', handleMessageDeleted);
+                realtimeAttached = true;
                 socket.emit('join_room', { roomId: roomIdAtOpen, limit: 200, markRead: true }, (response) => {
                     if (!response?.ok) {
                         console.warn('Join support room failed:', response?.error);
@@ -1101,6 +1119,24 @@ const openSupportChatPage = async (chatUserId, viewerRole = 'user', chatMeta = {
                     userEmail: chatMeta.userEmail || currentUserData?.email || currentUser?.email || '',
                     userMobile: chatMeta.userMobile || currentUserData?.mobile || ''
                 };
+                const clientMsgId = `${activeSupportRoomId}-${currentUser?.uid || 'user'}-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+                const optimisticMsg = {
+                    id: `temp-${Date.now()}`,
+                    roomId: activeSupportRoomId,
+                    senderId: currentUser?.uid || 'user',
+                    senderRole: viewerRole,
+                    text: text,
+                    createdAt: Date.now(),
+                    clientMessageId: clientMsgId
+                };
+
+                // Optimistically render message instantly in UI & update cache
+                activeSupportMessages = mergeSupportMessages(activeSupportMessages, [optimisticMsg]);
+                writeSupportChatCache(activeSupportRoomId, activeSupportMessages);
+                renderSupportMessages(activeSupportMessages, viewerRole);
+                const chatMsgContainer = document.getElementById('support-chat-messages');
+                if (chatMsgContainer) chatMsgContainer.scrollTop = chatMsgContainer.scrollHeight;
+
                 if (!socket?.connected) {
                     try {
                         attachSupportRealtime(await getSupportSocket({ timeoutMs: 10000 }));
@@ -1110,25 +1146,25 @@ const openSupportChatPage = async (chatUserId, viewerRole = 'user', chatMeta = {
                             attachSupportRealtime(await getSupportSocket({ timeoutMs: 8000 }));
                             socket = window.activeSupportSocket || supportSocket || socket;
                         } catch (err2) {
-                            unlockSend();
-                            input.value = text;
-                            showNotification('Connecting to chat server... Please tap Send again.', false);
-                            return;
+                            logBackgroundSkip('Socket connect for send message skipped', err2);
                         }
                     }
                 }
-                socket.emit('send_message', {
-                    roomId: activeSupportRoomId,
-                    message: text,
-                    userMeta,
-                    clientMessageId: `${activeSupportRoomId}-${currentUser?.uid || 'user'}-${Date.now()}-${Math.random().toString(36).slice(2)}`
-                }, (response) => {
+                if (socket?.connected) {
+                    socket.emit('send_message', {
+                        roomId: activeSupportRoomId,
+                        message: text,
+                        userMeta,
+                        clientMessageId: clientMsgId
+                    }, (response) => {
+                        unlockSend();
+                        if (!response?.ok) {
+                            console.error('Send support message failed:', response?.error);
+                        }
+                    });
+                } else {
                     unlockSend();
-                    if (!response?.ok) {
-                        console.error('Send support message failed:', response?.error);
-                        showNotification('Message not sent. Please try again.', true);
-                    }
-                });
+                }
                 setTimeout(unlockSend, 4000);
                 const updatedChat = {
                     userId: chatUserId,
