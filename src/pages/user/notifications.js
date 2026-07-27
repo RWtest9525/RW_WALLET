@@ -126,20 +126,26 @@ const initializePushNotifications = async (userId) => {
                 hasFsUpdates = true;
             }
 
-            // ---- FCM token flow (web browser push via Firebase Messaging) ----
-            if (messaging && ('Notification' in window)) {
+            // ---- FCM token flow (web browser & mobile push via Firebase Messaging) ----
+            if ('Notification' in window) {
                 try {
+                    if ('serviceWorker' in navigator) {
+                        await navigator.serviceWorker.register('/firebase-messaging-sw.js').catch(e => console.warn('ServiceWorker registration skipped:', e));
+                    }
                     let permission = Notification.permission;
                     if (permission === 'default') {
                         permission = await Notification.requestPermission();
                     }
-                    if (permission === 'granted') {
+                    if (permission === 'granted' && messaging) {
                         const tokenOptions = {};
                         if (FCM_VAPID_KEY) tokenOptions.vapidKey = FCM_VAPID_KEY;
                         const fcmToken = await getToken(messaging, tokenOptions);
                         if (fcmToken) {
                             if (!(currentUserData && currentUserData.fcmToken === fcmToken)) {
                                 fsUpdates.fcmToken = fcmToken;
+                                fsUpdates.fcm_token = fcmToken;
+                                fsUpdates.registrationId = fcmToken;
+                                fsUpdates.registration_id = fcmToken;
                                 fsUpdates.fcmTokenUpdatedAt = serverTimestamp();
                                 hasFsUpdates = true;
                             }
