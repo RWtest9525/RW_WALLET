@@ -6560,10 +6560,10 @@ function registerSocketHandlers(io, { d1 }) {
               const pushBody = chatMessage.message.slice(0, 150);
 
               if (recipientUserId && recipientUserId !== socket.user.sub) {
-                sendOneSignalPush(d1, recipientUserId, pushTitle, pushBody, customData).catch(e => console.error('[ChatPush] User push error:', e));
+                sendNotification(d1, recipientUserId, pushTitle, pushBody, customData).catch(e => console.error('[ChatPush] User push error:', e));
               }
               if (roomAdminId !== ADMIN_UID && recipientUserId !== ADMIN_UID && socket.user.sub !== ADMIN_UID) {
-                sendOneSignalPush(d1, ADMIN_UID, pushTitle, pushBody, customData).catch(e => console.error('[ChatPush] Owner fallback push error:', e));
+                sendNotification(d1, ADMIN_UID, pushTitle, pushBody, customData).catch(e => console.error('[ChatPush] Owner fallback push error:', e));
               }
             } catch (err) {
               console.error('Support chat user push failed:', err);
