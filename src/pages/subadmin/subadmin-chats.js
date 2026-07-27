@@ -147,22 +147,27 @@ const populateFallbackAdminChatsFromUsers = () => {
         });
     }
 
-    const fallbackChats = userList.map(u => {
+    const fallbackChats = [];
+    userList.forEach(u => {
         const uId = String(u.id || u.uid || '');
         const roomId = !isOwner ? `support_${uId}_${subAdminUid}` : `support_${uId}`;
         const cachedMsgs = readSupportChatCache(roomId);
-        const lastMsgObj = cachedMsgs.length ? cachedMsgs[cachedMsgs.length - 1] : null;
-        return {
-            id: uId,
-            userId: uId,
-            roomId,
-            userName: isOwner && (u.role === 'admin' || u.role === 'subadmin') ? (u.name || u.email || 'Sub-Admin') : (u.name || u.email || 'User'),
-            userEmail: u.email || '',
-            userMobile: u.mobile || u.phoneNumber || '',
-            lastMessage: lastMsgObj ? lastMsgObj.text : '',
-            lastSenderId: lastMsgObj ? lastMsgObj.senderId : uId,
-            updatedAt: lastMsgObj ? (timestampToMillis(lastMsgObj.createdAt) || Date.now()) : Date.now()
-        };
+        if (cachedMsgs && cachedMsgs.length > 0) {
+            const lastMsgObj = cachedMsgs[cachedMsgs.length - 1];
+            if (lastMsgObj && lastMsgObj.text && String(lastMsgObj.text).trim()) {
+                fallbackChats.push({
+                    id: uId,
+                    userId: uId,
+                    roomId,
+                    userName: isOwner && (u.role === 'admin' || u.role === 'subadmin') ? (u.name || u.email || 'Sub-Admin') : (u.name || u.email || 'User'),
+                    userEmail: u.email || '',
+                    userMobile: u.mobile || u.phoneNumber || '',
+                    lastMessage: lastMsgObj.text,
+                    lastSenderId: lastMsgObj.senderId || uId,
+                    updatedAt: timestampToMillis(lastMsgObj.createdAt) || Date.now()
+                });
+            }
+        }
     });
 
     if (fallbackChats.length > 0) {
@@ -170,7 +175,9 @@ const populateFallbackAdminChatsFromUsers = () => {
         [...allSupportChatsCache, ...fallbackChats].forEach(c => {
             const key = String(c.userId || c.id || '').trim();
             if (!key) return;
-            if (!mergedMap.has(key)) mergedMap.set(key, c);
+            if (c.lastMessage && String(c.lastMessage).trim()) {
+                if (!mergedMap.has(key)) mergedMap.set(key, c);
+            }
         });
         allSupportChatsCache = Array.from(mergedMap.values()).sort((a, b) => timestampToMillis(b.updatedAt) - timestampToMillis(a.updatedAt));
         refreshAdminChatUnreadCount();
@@ -191,21 +198,23 @@ const loadAdminChatsFromBackend = async ({ silent = false, retry = true, subscri
                 if (!response.ok || !data.ok) {
                     throw new Error(data.error || 'Admin chat load failed');
                 }
-                let chatList = (data.chats || []).map(chat => {
-                    const rawCleanId = (chat.room_id || '').replace(/^support_/, '');
-                    const cleanUserId = chat.user_id && !chat.user_id.includes('_') ? chat.user_id : (rawCleanId.split('_')[0] || rawCleanId);
-                    return {
-                        id: cleanUserId,
-                        userId: cleanUserId,
-                        roomId: chat.room_id || getSupportRoomId(cleanUserId),
-                        userName: chat.user_name || 'User',
-                        userEmail: chat.user_email || '',
-                        userMobile: chat.user_mobile || '',
-                        lastMessage: chat.last_message || '',
-                        lastSenderId: chat.last_sender_id || '',
-                        updatedAt: chat.updated_at || Date.now()
-                    };
-                });
+                let chatList = (data.chats || [])
+                    .filter(chat => chat.last_message && String(chat.last_message).trim().length > 0)
+                    .map(chat => {
+                        const rawCleanId = (chat.room_id || '').replace(/^support_/, '');
+                        const cleanUserId = chat.user_id && !chat.user_id.includes('_') ? chat.user_id : (rawCleanId.split('_')[0] || rawCleanId);
+                        return {
+                            id: cleanUserId,
+                            userId: cleanUserId,
+                            roomId: chat.room_id || getSupportRoomId(cleanUserId),
+                            userName: chat.user_name || 'User',
+                            userEmail: chat.user_email || '',
+                            userMobile: chat.user_mobile || '',
+                            lastMessage: chat.last_message || '',
+                            lastSenderId: chat.last_sender_id || '',
+                            updatedAt: chat.updated_at || Date.now()
+                        };
+                    });
                 const isOwner = checkIsOwner(currentUser, currentUserData);
                 const subAdminUid = currentUser?.uid || (typeof getCurrentUserId === 'function' ? getCurrentUserId() : '');
                 if (!isOwner) {
@@ -302,14 +311,15 @@ const renderAdminChatsList = () => {
             const isOwner = checkIsOwner(currentUser, currentUserData);
             const subAdminUid = currentUser?.uid || (typeof getCurrentUserId === 'function' ? getCurrentUserId() : '');
             
-            let chatsToRender = searchTerm
-                ? allSupportChatsCache.filter(chat => [
+            let chatsToRender = allSupportChatsCache.filter(chat => chat.lastMessage && String(chat.lastMessage).trim().length > 0);
+            if (searchTerm) {
+                chatsToRender = chatsToRender.filter(chat => [
                     chat.userName,
                     chat.userEmail,
                     chat.userMobile,
                     chat.lastMessage
-                ].some(value => String(value || '').toLowerCase().includes(searchTerm)))
-                : allSupportChatsCache;
+                ].some(value => String(value || '').toLowerCase().includes(searchTerm)));
+            }
 
             if (!isOwner) {
                 chatsToRender = chatsToRender.filter(chat => {
