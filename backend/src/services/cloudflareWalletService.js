@@ -1243,6 +1243,7 @@ async function sendOneSignalPush(d1OrTarget, targetOrTitle, titleOrMessage, mess
     const externalIds = await resolveUserOneSignalIds(d1, target);
     if (!externalIds.length) return;
 
+    // Send targeted high-priority push ONLY to specified user identifiers (external_id & player_id)
     const reqV11 = postOneSignalApi({
       app_id: appId,
       include_aliases: { external_id: externalIds },
@@ -1265,9 +1266,19 @@ async function sendOneSignalPush(d1OrTarget, targetOrTitle, titleOrMessage, mess
       ttl: 259200
     }, apiKey);
 
-    const [resV11, resLegacy] = await Promise.all([reqV11, reqLegacy]);
-    console.log(`[OneSignal] Targeted push sent to ${JSON.stringify(externalIds)}. v11 res:`, resV11, 'legacy res:', resLegacy);
-    return resV11 || resLegacy;
+    const reqPlayerIds = postOneSignalApi({
+      app_id: appId,
+      include_player_ids: externalIds,
+      headings: { en: cleanTitle },
+      contents: { en: cleanMsg },
+      data: extraData,
+      priority: 10,
+      ttl: 259200
+    }, apiKey);
+
+    const [resV11, resLegacy, resPlayers] = await Promise.all([reqV11, reqLegacy, reqPlayerIds]);
+    console.log(`[OneSignal] Targeted push sent to ${JSON.stringify(externalIds)}. v11 res:`, resV11, 'legacy res:', resLegacy, 'playerIds res:', resPlayers);
+    return resV11 || resLegacy || resPlayers;
   } catch (err) {
     console.error('[OneSignal] Push failed:', err);
   }
