@@ -706,14 +706,14 @@ const writeSupportReaction = (roomId, messageId, emoji, userUid) => {
 
 const getSupportMessageDedupeKey = (message) => {
     const normalized = normalizeBackendMessage(message);
+    if (normalized.clientMessageId) {
+        return `client:${normalized.clientMessageId}`;
+    }
     if (normalized.id && !String(normalized.id).startsWith('temp-')) {
         return `id:${normalized.id}`;
     }
     if (normalized._id) {
         return `id:${normalized._id}`;
-    }
-    if (normalized.clientMessageId) {
-        return `client:${normalized.clientMessageId}`;
     }
     const text = String(normalized.text || '').replace(/\s+/g, ' ').trim().toLowerCase();
     const timestamp = timestampToMillis(normalized.createdAt) || Date.now();
