@@ -226,17 +226,10 @@ const loadAdminChatsFromBackend = async ({ silent = false, retry = true, subscri
                         return chat.roomId === `support_${cUserId}_${subAdminUid}`;
                     });
                 } else {
-                    // Owner ONLY sees users directly under Owner or Sub-Admins themselves
+                    // Owner sees ALL chats from all users in the system
                     chatList = chatList.filter(chat => {
                         const cUserId = chat.userId || chat.id;
-                        if (!cUserId || cUserId === ADMIN_UID) return false;
-                        const u = allUsersCache.find(user => String(user.id || user.uid) === String(cUserId));
-                        if (u) {
-                            if (u.role === 'admin' || u.role === 'subadmin' || u.role === 'owner') return true;
-                            const pAdmin = String(u.parentAdmin || u.parent_admin || '').trim();
-                            return !pAdmin || pAdmin === ADMIN_UID || pAdmin === 'null' || pAdmin === 'undefined';
-                        }
-                        return !chat.roomId || chat.roomId === `support_${cUserId}`;
+                        return cUserId && cUserId !== ADMIN_UID;
                     });
                 }
 
@@ -330,16 +323,10 @@ const renderAdminChatsList = () => {
                     return chat.roomId === `support_${cUserId}_${subAdminUid}`;
                 });
             } else {
+                // Owner sees ALL chats from all users in the system
                 chatsToRender = chatsToRender.filter(chat => {
                     const cUserId = chat.userId || chat.id;
-                    if (!cUserId || cUserId === ADMIN_UID) return false;
-                    const u = allUsersCache.find(user => String(user.id || user.uid) === String(cUserId));
-                    if (u) {
-                        if (u.role === 'admin' || u.role === 'subadmin' || u.role === 'owner') return true;
-                        const pAdmin = String(u.parentAdmin || u.parent_admin || '').trim();
-                        return !pAdmin || pAdmin === ADMIN_UID || pAdmin === 'null' || pAdmin === 'undefined';
-                    }
-                    return !chat.roomId || chat.roomId === `support_${cUserId}`;
+                    return cUserId && cUserId !== ADMIN_UID;
                 });
             }
 
