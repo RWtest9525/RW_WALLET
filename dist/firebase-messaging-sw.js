@@ -15,12 +15,42 @@ const messaging = firebase.messaging();
 messaging.onBackgroundMessage(function(payload) {
   console.log('[firebase-messaging-sw.js] Received background push:', payload);
   const title = (payload && payload.notification && payload.notification.title) || 'REVIEWS WORLD';
+  const data = (payload && payload.data) ? payload.data : {};
+  const roomId = data.roomId || data.room_id || '';
+  const clickUrl = data.url || (roomId ? `/#chat?room=${roomId}` : '/');
+
   const options = {
     body: (payload && payload.notification && payload.notification.body) || '',
     icon: '/assets/images/logo_512.png',
     badge: '/assets/images/notification_bell.png',
-    data: payload ? payload.data : {}
+    data: Object.assign({}, data, { url: clickUrl, roomId: roomId })
   };
 
   return self.registration.showNotification(title, options);
+});
+
+self.addEventListener('notificationclick', function(event) {
+  console.log('[firebase-messaging-sw.js] Notification clicked:', event);
+  event.notification.close();
+
+  const data = event.notification.data || {};
+  const roomId = data.roomId || data.room_id || '';
+  const targetUrl = data.url || (roomId ? `/#chat?room=${roomId}` : '/');
+
+  event.waitUntil(
+    clients.matchAll({ type: 'window', includeUncontrolled: true }).then(function(clientList) {
+      for (let i = 0; i < clientList.length; i++) {
+        let client = clientList[i];
+        if (client.url.includes(self.location.origin) && 'focus' in client) {
+          if (roomId && typeof client.postMessage === 'function') {
+            client.postMessage({ type: 'OPEN_CHAT_ROOM', roomId: roomId, data: data });
+          }
+          return client.focus();
+        }
+      }
+      if (clients.openWindow) {
+        return clients.openWindow(targetUrl);
+      }
+    })
+  );
 });

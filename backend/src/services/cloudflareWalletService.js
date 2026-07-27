@@ -1378,7 +1378,11 @@ async function sendFcmPushToUser(d1OrUserId, userIdOrTitle, titleOrMessage, extr
             title: String(title || 'REVIEWS WORLD').trim(),
             body: String(message || '').trim(),
             icon: '/assets/images/logo_512.png',
-            requireInteraction: true
+            requireInteraction: true,
+            click_action: (extraData && (extraData.roomId || extraData.room_id)) ? `/#chat?room=${extraData.roomId || extraData.room_id}` : '/'
+          },
+          fcm_options: {
+            link: (extraData && (extraData.roomId || extraData.room_id)) ? `/#chat?room=${extraData.roomId || extraData.room_id}` : '/'
           }
         },
         data: extraData ? Object.fromEntries(Object.entries(extraData).map(([k, v]) => [k, String(v)])) : {}

@@ -178,6 +178,20 @@ const initializePushNotifications = async (userId) => {
                     console.warn('Error setting up onMessage listener:', e);
                 }
             }
+
+            // ---- Service Worker Message Listener (Direct Chat Room Open on Notification Click) ----
+            if ('serviceWorker' in navigator) {
+                try {
+                    navigator.serviceWorker.addEventListener('message', (event) => {
+                        if (event.data && event.data.type === 'OPEN_CHAT_ROOM') {
+                            const targetRoomId = event.data.roomId;
+                            if (targetRoomId && typeof window.openSupportChatRoom === 'function') {
+                                window.openSupportChatRoom(targetRoomId);
+                            }
+                        }
+                    });
+                } catch (e) {}
+            }
         };
 
 const openAndroidNotificationSettings = (packageId = 'com.reviewsworld.app') => {
