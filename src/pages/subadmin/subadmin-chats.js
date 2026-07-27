@@ -198,23 +198,21 @@ const loadAdminChatsFromBackend = async ({ silent = false, retry = true, subscri
                 if (!response.ok || !data.ok) {
                     throw new Error(data.error || 'Admin chat load failed');
                 }
-                let chatList = (data.chats || [])
-                    .filter(chat => chat.last_message && String(chat.last_message).trim().length > 0)
-                    .map(chat => {
-                        const rawCleanId = (chat.room_id || '').replace(/^support_/, '');
-                        const cleanUserId = chat.user_id && !chat.user_id.includes('_') ? chat.user_id : (rawCleanId.split('_')[0] || rawCleanId);
-                        return {
-                            id: cleanUserId,
-                            userId: cleanUserId,
-                            roomId: chat.room_id || getSupportRoomId(cleanUserId),
-                            userName: chat.user_name || 'User',
-                            userEmail: chat.user_email || '',
-                            userMobile: chat.user_mobile || '',
-                            lastMessage: chat.last_message || '',
-                            lastSenderId: chat.last_sender_id || '',
-                            updatedAt: chat.updated_at || Date.now()
-                        };
-                    });
+                let chatList = (data.chats || []).map(chat => {
+                    const rawCleanId = (chat.room_id || '').replace(/^support_/, '');
+                    const cleanUserId = chat.user_id && !chat.user_id.includes('_') ? chat.user_id : (rawCleanId.split('_')[0] || rawCleanId);
+                    return {
+                        id: cleanUserId,
+                        userId: cleanUserId,
+                        roomId: chat.room_id || getSupportRoomId(cleanUserId),
+                        userName: chat.user_name || 'User',
+                        userEmail: chat.user_email || '',
+                        userMobile: chat.user_mobile || '',
+                        lastMessage: chat.last_message || 'Tap to view chat history',
+                        lastSenderId: chat.last_sender_id || '',
+                        updatedAt: chat.updated_at || Date.now()
+                    };
+                });
                 const isOwner = checkIsOwner(currentUser, currentUserData);
                 const subAdminUid = currentUser?.uid || (typeof getCurrentUserId === 'function' ? getCurrentUserId() : '');
                 if (!isOwner) {
@@ -311,7 +309,7 @@ const renderAdminChatsList = () => {
             const isOwner = checkIsOwner(currentUser, currentUserData);
             const subAdminUid = currentUser?.uid || (typeof getCurrentUserId === 'function' ? getCurrentUserId() : '');
             
-            let chatsToRender = allSupportChatsCache.filter(chat => chat.lastMessage && String(chat.lastMessage).trim().length > 0);
+            let chatsToRender = [...allSupportChatsCache];
             if (searchTerm) {
                 chatsToRender = chatsToRender.filter(chat => [
                     chat.userName,

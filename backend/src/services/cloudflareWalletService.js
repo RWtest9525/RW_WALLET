@@ -662,6 +662,35 @@ async function upsertChatRoom(d1, { roomId, userId, userName = '', userEmail = '
 }
 
 async function listChatRooms(d1, { limit = 100, parentAdmin = null } = {}) {
+  try {
+    const missingRooms = await d1.all(
+      `SELECT c.room_id, c.sender_id, c.message, c.timestamp, u.name as user_name, u.email as user_email, u.mobile as user_mobile
+       FROM chats c
+       LEFT JOIN chat_rooms cr ON c.room_id = cr.room_id
+       LEFT JOIN users u ON (replace(c.room_id, 'support_', '') = u.id OR replace(c.room_id, 'support_', '') = u.firebase_uid)
+       WHERE cr.room_id IS NULL
+       GROUP BY c.room_id
+       ORDER BY c.timestamp DESC
+       LIMIT 100`
+    );
+    for (const r of (missingRooms || [])) {
+      const rawCleanId = (r.room_id || '').replace(/^support_/, '');
+      const cleanUserId = (rawCleanId.split('_')[0] || rawCleanId);
+      await upsertChatRoom(d1, {
+        roomId: r.room_id,
+        userId: cleanUserId,
+        userName: r.user_name || '',
+        userEmail: r.user_email || '',
+        userMobile: r.user_mobile || '',
+        lastMessage: r.message || 'Chat history',
+        lastSenderId: r.sender_id || '',
+        updatedAt: r.timestamp || nowMs()
+      });
+    }
+  } catch (err) {
+    console.warn('Sync missing chat rooms failed:', err);
+  }
+
   if (parentAdmin) {
     return d1.all(
       `SELECT cr.room_id, cr.user_id, cr.user_name, cr.user_email, cr.user_mobile, cr.last_message, cr.last_sender_id, cr.updated_at
