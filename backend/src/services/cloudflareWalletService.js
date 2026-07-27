@@ -1869,7 +1869,7 @@ async function listTaskSubmissions(d1, { taskId = null, userId = null, manualSta
   const rows = await d1.all(
     `SELECT ts.*, u.mobile as user_mobile 
      FROM task_submissions ts
-     LEFT JOIN users u ON ts.user_id = u.uid
+     LEFT JOIN users u ON (ts.user_id = u.id OR ts.user_id = u.firebase_uid)
      ${conditions.length ? 'WHERE ' + conditions.join(' AND ') : ''}
      ${groupByClause}
      ORDER BY ts.submitted_at DESC
