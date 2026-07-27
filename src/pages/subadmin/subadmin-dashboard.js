@@ -131,8 +131,22 @@ const ensureAdminSessionReady = () => {
     return false;
 };
 
+const updateOwnerAdminPanelButtons = () => {
+    const isOwner = checkIsOwner(currentUser, currentUserData);
+    document.getElementById('admin-manage-admins-btn')?.classList.toggle('hidden', !isOwner);
+    document.getElementById('admin-loans-btn')?.classList.toggle('hidden', !isOwner);
+    document.getElementById('admin-investments-btn')?.classList.toggle('hidden', !isOwner);
+    document.getElementById('admin-train-ai-btn')?.classList.toggle('hidden', !isOwner);
+    
+    const labelEl = document.getElementById('admin-settlement-btn-label');
+    if (labelEl) {
+        labelEl.textContent = isOwner ? 'Settlements' : 'Settlement Panel';
+    }
+};
+
 const applyAdminBottomChrome = (isAdminView) => {
             const isUserAdmin = checkIsUserAdmin(currentUser, currentUserData);
+            updateOwnerAdminPanelButtons();
             document.getElementById('admin-tab-button')?.classList.toggle('hidden', !isUserAdmin);
             const bottomAdminButton = document.getElementById('bottom-admin-btn');
             if (bottomAdminButton) {
@@ -503,16 +517,7 @@ const showAdminMainPage = () => {
             setBottomNavActive('bottom-admin-btn');
             updateAdminLoanRequestBadge();
 
-            const isOwner = currentUser?.uid === ADMIN_UID || currentUser?.email === 'reviewsworld51@gmail.com' || currentUser?.email === 'reviewsworld01@gmail.com' || currentUserData?.role === 'owner';
-            document.getElementById('admin-manage-admins-btn')?.classList.toggle('hidden', !isOwner);
-            document.getElementById('admin-loans-btn')?.classList.toggle('hidden', !isOwner);
-            document.getElementById('admin-investments-btn')?.classList.toggle('hidden', !isOwner);
-            document.getElementById('admin-train-ai-btn')?.classList.toggle('hidden', !isOwner);
-            
-            const labelEl = document.getElementById('admin-settlement-btn-label');
-            if (labelEl) {
-                labelEl.textContent = isOwner ? 'Settlements' : 'Settlement Panel';
-            }
+            updateOwnerAdminPanelButtons();
         };
 
 const isAdminReviewTask = (task = {}) => getAdminTaskFamily(task) === 'review';
@@ -1601,3 +1606,4 @@ window.handleAdminAddFunds = handleAdminAddFunds;
 window.showManageAdminWalletModal = showManageAdminWalletModal;
 window.handleUpdateAdminWallet = handleUpdateAdminWallet;
 window.openAdminQuickAction = openAdminQuickAction;
+window.updateOwnerAdminPanelButtons = updateOwnerAdminPanelButtons;
