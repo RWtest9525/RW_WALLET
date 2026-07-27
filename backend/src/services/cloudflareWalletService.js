@@ -32,17 +32,35 @@ function initFirebaseAdmin() {
   if (admin.apps.length) return admin.app();
 
   if (process.env.FIREBASE_SERVICE_ACCOUNT_JSON) {
-    const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT_JSON);
-    if (serviceAccount.private_key) {
-      serviceAccount.private_key = serviceAccount.private_key.replace(/\\n/g, '\n');
+    try {
+      const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT_JSON);
+      if (serviceAccount.private_key) {
+        serviceAccount.private_key = serviceAccount.private_key.replace(/\\n/g, '\n');
+      }
+      return admin.initializeApp({
+        credential: admin.credential.cert(serviceAccount)
+      });
+    } catch (e) {
+      console.warn('Failed to parse FIREBASE_SERVICE_ACCOUNT_JSON from env, using embedded service account:', e);
     }
-    return admin.initializeApp({
-      credential: admin.credential.cert(serviceAccount)
-    });
   }
 
+  const embeddedServiceAccount = {
+    type: "service_account",
+    project_id: "review-world-1312e",
+    private_key_id: "61f8f5f6e5113875a7f8613be56a53f0d4986639",
+    private_key: "-----BEGIN PRIVATE KEY-----\nMIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQCV5VE1tSwaMnSO\nS/OzTuKpqzt1OfYxYcRjyY0TaklpwDt7Bi7BbYja7q4mqHt+HW6Ok+jlMVIjtMK2\nV/Fn9B5At0CXNdCFX13m0kgP7mYQst45q+K3EaCnGmfPwuGnSh9gm5/cdyT9AZ1r\nCuhn0ulpn+mT87vQm5jz50/oJLsSq2dPkneTkNdJAjHMnAPuK3UcKOJORW3XH1d8\nTeCdloKPNiz06C6rtqk3uTTGnyYn0M4avJ/+xAU6jTxMTOfjkEqsL10cW22CutKU\nxB7X1N9aQjRPuHELPkTfVmAabLjWha82xry+3ZFTkuW00KqC9BT8r6TLbJ1KRhXe\nvnl2wSI5AgMBAAECggEAHWnOMbfHW6yi6nlE7N6B48FR/YLOKIqCuwIFyNWGalXq\nVg20hwgzXqKPUc6lzO2BkEC95pty/satnpJLMJbaiOBssD9DF6jLCEwjD9078fLn\nYHG2Hy46VA/+Zupa1TTaS16+U8idXXg/p42QZS8h1jQm5X1iUWD29oVhTLBIdTUY\nQTPmP7WT7V05GXopwX5YiuJUnvS2r4a7cs+nCp3Kja9cwjd061zayVsOoyir7WKx\ndO2JpZtZ8o280cBWg4nVjTE9ONK5zAaX/QpO0ke2JJZXAugwpfGVOsmo+dHM6NGb\n6cDPnJ8RcfFt3gCGK84BZ3i2I2usk/5nsq8vzPaCwQKBgQDHDd9rYPw8Q5EWYuuY\nN3L/iKlqqBqE/uxkZl784UPJYMcAy+45dG0t65jsmz9/HzD3WnbEi2WupxaeMckU\nWi+MYIh0dwlervDcnxj9PplnHbu0yYksQ6b2W8aVgioVMjQS1K302AoyXBubZfTS\nt/SgE30KasEzZZny7V9F+YwZLQKBgQDAxzr7Pq/svUbvfBj8ZwMbz/UBndwgQo1Y\nqJ+fxNOdpBWflmEXep2vFyM6bfSSm7jxwIgikwpC3svpCuKTra5HMXqWltRa0Ooh\nNEn9Ru1tUlVgXYLit3ZHLk20tTBuFJ87fXlXR+q9dqb9jyZKXorwTZCcNNa7Ch4C\nRjJSYZw8vQKBgCSYn1ftl9I4lecovqnYn/LtHEC4sU98UtfOnm4duEnA2jWCSMUV\na7FCnHX7wPvNL0J6xlUyT7qBi73/5zkvr4g+gzfuXrGitjPJqF1+8dMse0MsvmR9\n96dZjjQUn0oQVdSUd3sJcS57ErRKVW2cVoRLsPSGVgjuCBTKoXaK/7/tAoGBAIiR\nm7s54a+5N3OZWqoU4CLn5A5NIxDHlRLmAo9RBQl8oMT557aWavcLUS2nj8f9Abxi\nRQ8ZU/+jjpl92J3+QKS27L2aBL6BmhwDyxbfFHyKA2nNVVf/2I78wpfudGzHtzaR\n4VBv5mBqmkqvCtVMvOkYSgYfeK/wrum1iRjLhb+RAoGAJlYWRGh3OR7OPIrVOkl8\njst6IrKasr5EqFX7Q4BQ7id3wVAae7JxKQfPs7MYZWCAvgXPG5Xxe69GyF9JaOlt\ncwy7vnRD61Z93KuomOIdxM95fi4C/VrAxKn5ElJWcWQSE8ATG7aqGslYZ9RXjGvq\nkKru1rUplZZ2j+5S6snoijo=\n-----END PRIVATE KEY-----\n",
+    client_email: "firebase-adminsdk-fbsvc@review-world-1312e.iam.gserviceaccount.com",
+    client_id: "111195157656269754044",
+    auth_uri: "https://accounts.google.com/o/oauth2/auth",
+    token_uri: "https://oauth2.googleapis.com/token",
+    auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
+    client_x509_cert_url": "https://www.googleapis.com/robot/v1/metadata/x509/firebase-adminsdk-fbsvc%40review-world-1312e.iam.gserviceaccount.com",
+    universe_domain": "googleapis.com"
+  };
+
   return admin.initializeApp({
-    credential: admin.credential.applicationDefault()
+    credential: admin.credential.cert(embeddedServiceAccount)
   });
 }
 
