@@ -2,6 +2,20 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Global Image & Asset Protection - Prevent Dragging, Text Selection, and Mobile Long-Press Callouts */
+img, picture, svg, canvas {
+    -webkit-user-drag: none !important;
+    -khtml-user-drag: none !important;
+    -moz-user-drag: none !important;
+    -o-user-drag: none !important;
+    user-drag: none !important;
+    user-select: none !important;
+    -webkit-user-select: none !important;
+    -moz-user-select: none !important;
+    -ms-user-select: none !important;
+    -webkit-touch-callout: none !important;
+}
+
 /* User Profile Card Styles */
 .profile-card {
     width: 100%;

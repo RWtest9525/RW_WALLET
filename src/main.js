@@ -33,6 +33,21 @@ import './core/firebase.js';
 // Setup Event listeners and routing at DOM load
 applyTheme(initialTheme);
 
+// Disable Right-Click Context Menu & Image Dragging Globally across all images, logos & banners
+document.addEventListener('contextmenu', (e) => {
+    if (e.target.tagName === 'IMG' || e.target.closest('picture') || e.target.closest('img') || e.target.tagName === 'CANVAS') {
+        e.preventDefault();
+        return false;
+    }
+}, false);
+
+document.addEventListener('dragstart', (e) => {
+    if (e.target.tagName === 'IMG' || e.target.closest('picture') || e.target.closest('img')) {
+        e.preventDefault();
+        return false;
+    }
+}, false);
+
 // Instant Asset Preloader for Referral and Profile Banners (Anti-Flicker Dual-Cache Ready)
 (() => {
     const criticalImages = [
