@@ -235,7 +235,22 @@ const initializePushNotifications = async (userId) => {
             }
         };
 
-const openAndroidNotificationSettings = (packageId = 'com.reviewsworld.app') => {
+const openAndroidNotificationSettings = async (packageId = 'com.reviewsworld.app') => {
+            if (window.Capacitor && typeof window.Capacitor.isNativePlatform === 'function' && window.Capacitor.isNativePlatform()) {
+                try {
+                    const PushNotifications = window.Capacitor.Plugins?.PushNotifications || window.Capacitor?.Plugins?.PushNotificationsPlugin;
+                    if (PushNotifications) {
+                        const res = await PushNotifications.requestPermissions();
+                        if (res.receive === 'granted') {
+                            await PushNotifications.register();
+                            showNotification('✅ Notifications Enabled Successfully!');
+                            return;
+                        }
+                    }
+                } catch (e) {
+                    console.warn('[Capacitor] Native permission request failed:', e);
+                }
+            }
             const targetPackage = packageId || 'com.reviewsworld.app';
             const intentUrl = `intent:#Intent;action=android.settings.APP_NOTIFICATION_SETTINGS;S.android.provider.extra.APP_PACKAGE=${encodeURIComponent(targetPackage)};end`;
             try {
