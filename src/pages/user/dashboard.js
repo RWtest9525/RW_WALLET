@@ -3841,10 +3841,9 @@ const showReferEarnPage = (force = false) => {
                 <!-- Top Banner -->
                 <div class="relative overflow-hidden rounded-2xl shadow-md border border-emerald-900/20 bg-emerald-900/10 dark:bg-emerald-950/30 aspect-[1024/498] w-full">
                     <picture>
-                        <source srcset="/assets/images/referral_banner.webp, ./assets/images/referral_banner.webp" type="image/webp">
+                        <source srcset="/assets/images/referral_banner.webp" type="image/webp">
                         <img src="/assets/images/referral_banner.png" alt="Refer & Earn - Invite Friends, Earn Together"
                              loading="eager" fetchpriority="high" decoding="sync"
-                             onerror="if(!this.dataset.fb){this.dataset.fb='1';this.src='./assets/images/referral_banner.png';}else if(this.dataset.fb==='1'){this.dataset.fb='2';this.src='assets/images/referral_banner.png';}"
                              class="w-full h-full object-cover rounded-2xl block border-0 shadow-none">
                     </picture>
                 </div>
@@ -3852,10 +3851,9 @@ const showReferEarnPage = (force = false) => {
                 <!-- Middle How It Works card -->
                 <div class="relative overflow-hidden rounded-2xl shadow-xs border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/50 aspect-[1024/484] w-full">
                     <picture>
-                        <source srcset="/assets/images/referral_howitworks_cards.webp, ./assets/images/referral_howitworks_cards.webp" type="image/webp">
+                        <source srcset="/assets/images/referral_howitworks_cards.webp" type="image/webp">
                         <img src="/assets/images/referral_howitworks_cards.png" alt="Referral Rewards & How It Works"
                              loading="eager" fetchpriority="high" decoding="sync"
-                             onerror="if(!this.dataset.fb){this.dataset.fb='1';this.src='./assets/images/referral_howitworks_cards.png';}else if(this.dataset.fb==='1'){this.dataset.fb='2';this.src='assets/images/referral_howitworks_cards.png';}"
                              class="w-full h-full object-cover rounded-2xl block border-0 shadow-none">
                     </picture>
                 </div>
