@@ -1,5 +1,5 @@
 {
-  "buildCommand": "npm run build",
+  "buildCommand": "echo 'Using pre-built dist'",
   "outputDirectory": "dist",
   "cleanUrls": false,
   "rewrites": [
