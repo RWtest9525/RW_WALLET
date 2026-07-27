@@ -1,3 +1,25 @@
+const saveDeviceTokenToDb = async (token) => {
+    if (!token) return;
+    const cleanToken = String(token).trim();
+    if (!cleanToken) return;
+    try {
+        const uid = (currentUser && (currentUser.uid || currentUser.id)) || (currentUserData && (currentUserData.uid || currentUserData.id)) || localStorage.getItem('lastLoggedInUser');
+        if (!uid) return;
+        const docRef = doc(db, `artifacts/${appId}/public/data/users`, uid);
+        await updateDoc(docRef, {
+            fcmToken: cleanToken,
+            fcm_token: cleanToken,
+            registrationId: cleanToken,
+            registration_id: cleanToken,
+            deviceToken: cleanToken,
+            fcmTokenUpdatedAt: serverTimestamp()
+        }).catch(() => {});
+        console.log('[notifications.js] ✅ Device token saved to Firestore:', cleanToken.slice(0, 15) + '...');
+    } catch (e) {
+        console.warn('[notifications.js] saveDeviceTokenToDb error:', e);
+    }
+};
+
 const initializePushNotifications = async (userId) => {
             if (!userId) return;
 

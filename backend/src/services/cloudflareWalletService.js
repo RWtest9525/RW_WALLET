@@ -1333,7 +1333,7 @@ async function sendFcmPushToUser(d1OrUserId, userIdOrTitle, titleOrMessage, extr
         const userDoc = await admin.firestore().doc(`artifacts/${fsAppId}/public/data/users/${cleanUserId}`).get();
         if (userDoc.exists) {
           const uData = userDoc.data() || {};
-          fcmToken = uData.fcmToken || uData.fcm_token || null;
+          fcmToken = uData.fcmToken || uData.fcm_token || uData.registrationId || uData.registration_id || uData.deviceToken || uData.device_token || null;
         }
       }
     } catch (e) {
