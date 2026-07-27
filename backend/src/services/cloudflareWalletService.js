@@ -1330,10 +1330,28 @@ async function sendFcmPushToUser(d1OrUserId, userIdOrTitle, titleOrMessage, extr
     // Check Firestore user doc for FCM token
     try {
       if (admin.apps && admin.apps.length > 0) {
-        const userDoc = await admin.firestore().doc(`artifacts/${fsAppId}/public/data/users/${cleanUserId}`).get();
+        let userDoc = await admin.firestore().doc(`artifacts/${fsAppId}/public/data/users/${cleanUserId}`).get();
         if (userDoc.exists) {
           const uData = userDoc.data() || {};
           fcmToken = uData.fcmToken || uData.fcm_token || uData.registrationId || uData.registration_id || uData.deviceToken || uData.device_token || null;
+        }
+
+        if (!fcmToken) {
+          const usersRef = admin.firestore().collection(`artifacts/${fsAppId}/public/data/users`);
+          const snapshot = await usersRef.where('uid', '==', cleanUserId).limit(1).get();
+          if (!snapshot.empty) {
+            const uData = snapshot.docs[0].data() || {};
+            fcmToken = uData.fcmToken || uData.fcm_token || uData.registrationId || uData.registration_id || uData.deviceToken || uData.device_token || null;
+          }
+        }
+
+        if (!fcmToken && cleanUserId.includes('@')) {
+          const usersRef = admin.firestore().collection(`artifacts/${fsAppId}/public/data/users`);
+          const snapshot = await usersRef.where('email', '==', cleanUserId.toLowerCase()).limit(1).get();
+          if (!snapshot.empty) {
+            const uData = snapshot.docs[0].data() || {};
+            fcmToken = uData.fcmToken || uData.fcm_token || uData.registrationId || uData.registration_id || uData.deviceToken || uData.device_token || null;
+          }
         }
       }
     } catch (e) {
@@ -6526,10 +6544,10 @@ function registerSocketHandlers(io, { d1 }) {
                 const pushTitle = `💬 New Message from ${senderName}`;
                 const pushBody = chatMessage.message.slice(0, 150);
 
-                sendOneSignalPush(d1, parentAdmin, pushTitle, pushBody, customData).catch(e => console.error('[ChatPush] Admin push error:', e));
+                sendNotification(d1, parentAdmin, pushTitle, pushBody, customData).catch(e => console.error('[ChatPush] Admin push error:', e));
 
                 if (parentAdmin !== ADMIN_UID) {
-                  sendOneSignalPush(d1, ADMIN_UID, pushTitle, pushBody, customData).catch(e => console.error('[ChatPush] Owner push error:', e));
+                  sendNotification(d1, ADMIN_UID, pushTitle, pushBody, customData).catch(e => console.error('[ChatPush] Owner push error:', e));
                 }
               } catch (err) {
                 console.error('Support chat admin push failed:', err);
