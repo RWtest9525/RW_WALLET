@@ -1327,12 +1327,21 @@ async function sendFcmPushToUser(d1OrUserId, userIdOrTitle, titleOrMessage, extr
     if (!cleanUserId) return;
 
     // Check Firestore user doc for FCM token
-    try {
-      if (admin.apps && admin.apps.length > 0) {
+        const isFcmTokenValid = (t) => {
+          if (!t || typeof t !== 'string') return false;
+          const str = t.trim();
+          // Exclude OneSignal UUID format (36 chars with hyphens)
+          if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str)) return false;
+          // Valid FCM tokens are usually >50 chars
+          return str.length > 30;
+        };
+
         let userDoc = await admin.firestore().doc(`artifacts/${fsAppId}/public/data/users/${cleanUserId}`).get();
         if (userDoc.exists) {
           const uData = userDoc.data() || {};
-          fcmToken = uData.fcmToken || uData.fcm_token || uData.registrationId || uData.registration_id || uData.deviceToken || uData.device_token || null;
+          const candidates = [uData.fcmToken, uData.fcm_token, uData.registrationId, uData.registration_id, uData.deviceToken, uData.device_token];
+          fcmToken = candidates.find(isFcmTokenValid) || null;
+          console.log(`[FCM Push] Firestore doc for ${cleanUserId} -> fcmToken candidate resolved:`, fcmToken ? `${fcmToken.slice(0, 30)}... (len: ${fcmToken.length})` : 'NONE (no valid FCM token)');
         }
 
         if (!fcmToken) {
@@ -1340,7 +1349,8 @@ async function sendFcmPushToUser(d1OrUserId, userIdOrTitle, titleOrMessage, extr
           const snapshot = await usersRef.where('uid', '==', cleanUserId).limit(1).get();
           if (!snapshot.empty) {
             const uData = snapshot.docs[0].data() || {};
-            fcmToken = uData.fcmToken || uData.fcm_token || uData.registrationId || uData.registration_id || uData.deviceToken || uData.device_token || null;
+            const candidates = [uData.fcmToken, uData.fcm_token, uData.registrationId, uData.registration_id, uData.deviceToken, uData.device_token];
+            fcmToken = candidates.find(isFcmTokenValid) || null;
           }
         }
 
@@ -1349,7 +1359,8 @@ async function sendFcmPushToUser(d1OrUserId, userIdOrTitle, titleOrMessage, extr
           const snapshot = await usersRef.where('email', '==', cleanUserId.toLowerCase()).limit(1).get();
           if (!snapshot.empty) {
             const uData = snapshot.docs[0].data() || {};
-            fcmToken = uData.fcmToken || uData.fcm_token || uData.registrationId || uData.registration_id || uData.deviceToken || uData.device_token || null;
+            const candidates = [uData.fcmToken, uData.fcm_token, uData.registrationId, uData.registration_id, uData.deviceToken, uData.device_token];
+            fcmToken = candidates.find(isFcmTokenValid) || null;
           }
         }
       }
@@ -1361,7 +1372,10 @@ async function sendFcmPushToUser(d1OrUserId, userIdOrTitle, titleOrMessage, extr
     if (!fcmToken && d1 && typeof d1.all === 'function') {
       try {
         const rows = await d1.all(`SELECT fcm_token FROM users WHERE id = ? OR firebase_uid = ? LIMIT 1`, [cleanUserId, cleanUserId]);
-        fcmToken = rows?.[0]?.fcm_token || null;
+        const cand = rows?.[0]?.fcm_token;
+        if (cand && cand.length > 30 && !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(cand)) {
+          fcmToken = cand;
+        }
       } catch (e) {
         console.warn(`[FCM Push] D1 lookup failed for ${cleanUserId}:`, e?.message || e);
       }
