@@ -14,11 +14,12 @@ const saveDeviceTokenToDb = async (token) => {
             deviceToken: cleanToken,
             fcmTokenUpdatedAt: serverTimestamp()
         }).catch(() => {});
-        console.log('[notifications.js] ✅ Device token saved to Firestore:', cleanToken.slice(0, 15) + '...');
+        console.log('[notifications.js] ✅ Fresh Device token saved to Firestore:', cleanToken.slice(0, 15) + '...');
     } catch (e) {
         console.warn('[notifications.js] saveDeviceTokenToDb error:', e);
     }
 };
+window.saveDeviceTokenToDb = saveDeviceTokenToDb;
 
 const initializePushNotifications = async (userId) => {
             if (!userId) return;
@@ -141,14 +142,14 @@ const initializePushNotifications = async (userId) => {
                         if (FCM_VAPID_KEY) tokenOptions.vapidKey = FCM_VAPID_KEY;
                         const fcmToken = await getToken(messaging, tokenOptions);
                         if (fcmToken) {
-                            if (!(currentUserData && currentUserData.fcmToken === fcmToken)) {
-                                fsUpdates.fcmToken = fcmToken;
-                                fsUpdates.fcm_token = fcmToken;
-                                fsUpdates.registrationId = fcmToken;
-                                fsUpdates.registration_id = fcmToken;
-                                fsUpdates.fcmTokenUpdatedAt = serverTimestamp();
-                                hasFsUpdates = true;
-                            }
+                            fsUpdates.fcmToken = fcmToken;
+                            fsUpdates.fcm_token = fcmToken;
+                            fsUpdates.registrationId = fcmToken;
+                            fsUpdates.registration_id = fcmToken;
+                            fsUpdates.deviceToken = fcmToken;
+                            fsUpdates.fcmTokenUpdatedAt = serverTimestamp();
+                            hasFsUpdates = true;
+                            await saveDeviceTokenToDb(fcmToken).catch(() => {});
                         }
                     }
                 } catch (error) {
