@@ -1135,11 +1135,11 @@ const initializeUserListeners = (userId) => {
 
             Promise.all([
                 loadFirebaseTransactions(userId, FIRESTORE_TRANSACTION_READ_LIMIT).catch(error => {
-                    console.warn('Firebase transaction history preload skipped:', error);
+                    logBackgroundSkip('Firebase transaction history preload skipped', error);
                     return [];
                 }),
                 fetchCloudTransactionHistory(userId, FIRESTORE_TRANSACTION_READ_LIMIT).catch(error => {
-                    console.warn('Cloud transaction history preload skipped:', error);
+                    logBackgroundSkip('Cloud transaction history preload skipped', error);
                     return [];
                 })
             ])

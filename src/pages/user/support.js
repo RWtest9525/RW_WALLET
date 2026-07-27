@@ -985,7 +985,7 @@ const openSupportChatPage = async (chatUserId, viewerRole = 'user', chatMeta = {
                     if (!isAdminView) markSupportChatSeen(activeSupportRoomId, activeSupportMessages);
                     if (isAdminView) markAdminSupportChatSeen(activeSupportRoomId, activeSupportMessages);
                 })
-                .catch((error) => console.warn('Fast chat history fetch failed:', error));
+                .catch((error) => logBackgroundSkip('Fast chat history fetch failed', error));
             const handleHistory = ({ roomId, history = [] }) => {
                 if (roomId !== activeSupportRoomId) return;
                 if (!history.length && activeSupportMessages.length) return;
@@ -1046,7 +1046,7 @@ const openSupportChatPage = async (chatUserId, viewerRole = 'user', chatMeta = {
             const startSupportRealtime = (timeoutMs = 1800) => {
                 getSupportSocket({ timeoutMs })
                     .then(attachSupportRealtime)
-                    .catch((error) => console.warn('Support chat realtime is not ready:', error?.message || error));
+                    .catch((error) => logBackgroundSkip('Support chat realtime is not ready', error));
             };
             startSupportRealtime();
             activeChatUnsubscribe = () => {
