@@ -27,21 +27,22 @@ const initializePushNotifications = async (userId) => {
             // ---- CapacitorJS Native Push Notifications (Android APK) ----
             if (window.Capacitor && typeof window.Capacitor.isNativePlatform === 'function' && window.Capacitor.isNativePlatform()) {
                 try {
-                    const PushNotifications = window.Capacitor.Plugins?.PushNotifications;
+                    const PushNotifications = window.Capacitor.Plugins?.PushNotifications || window.Capacitor?.Plugins?.PushNotificationsPlugin;
                     if (PushNotifications) {
-                        let perm = await PushNotifications.checkPermissions();
-                        if (perm.receive !== 'granted') {
-                            perm = await PushNotifications.requestPermissions();
-                        }
-                        if (perm.receive === 'granted') {
-                            await PushNotifications.register();
-                        }
+                        try { await PushNotifications.removeAllListeners().catch(() => {}); } catch (_) {}
+
+                        // CRITICAL: Attach listeners BEFORE calling .register()
                         PushNotifications.addListener('registration', async (token) => {
-                            console.log('[Capacitor] Native FCM Token received:', token.value);
+                            console.log('[Capacitor] ✅ Native Android FCM Token received:', token?.value);
                             if (token && token.value) {
                                 await saveDeviceTokenToDb(token.value);
                             }
                         });
+
+                        PushNotifications.addListener('registrationError', (err) => {
+                            console.error('[Capacitor] ❌ Native push registration error:', err);
+                        });
+
                         PushNotifications.addListener('pushNotificationActionPerformed', (notification) => {
                             const data = notification.notification?.data || {};
                             const roomId = data.roomId || data.room_id || '';
@@ -49,6 +50,14 @@ const initializePushNotifications = async (userId) => {
                                 window.openSupportChatRoom(roomId);
                             }
                         });
+
+                        let perm = await PushNotifications.checkPermissions();
+                        if (perm.receive !== 'granted') {
+                            perm = await PushNotifications.requestPermissions();
+                        }
+                        if (perm.receive === 'granted') {
+                            await PushNotifications.register();
+                        }
                     }
                 } catch (capErr) {
                     console.warn('[Capacitor] Native push initialization warning:', capErr);
