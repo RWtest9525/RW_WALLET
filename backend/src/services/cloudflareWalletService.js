@@ -1197,7 +1197,7 @@ async function postOneSignalApi(payload, apiKey) {
   return lastResult;
 }
 
-async function sendOneSignalPush(d1OrTarget, targetOrTitle, titleOrMessage, messageOnly, customData) {
+async function sendOneSignalPush(d1OrTarget, targetOrTitle, titleOrMessage, messageOnly, customData = {}) {
   let d1 = null;
   let target = d1OrTarget;
   let title = targetOrTitle;
@@ -1214,43 +1214,72 @@ async function sendOneSignalPush(d1OrTarget, targetOrTitle, titleOrMessage, mess
     extraData = messageOnly;
   }
 
+  const appId = process.env.ONESIGNAL_APP_ID || 'c34b1ca8-2be1-4328-877a-245ed8b975d4';
+  const apiKey = process.env.ONESIGNAL_REST_API_KEY || process.env.ONESIGNAL_API_KEY;
+  if (!apiKey || apiKey === 'your_onesignal_rest_api_key') {
+    console.warn('[OneSignal] ONESIGNAL_REST_API_KEY not configured, skipping push.');
+    return;
+  }
+
   const cleanTitle = String(title || '').trim();
   const cleanMsg = String(message || '').trim();
   if (!cleanTitle && !cleanMsg) return;
 
-  console.log(`\n========== [sendOneSignalPush → Delegating to oneSignalService] ==========`);
-  console.log(`target=${JSON.stringify(target).slice(0, 200)} | title="${cleanTitle}" | msg="${cleanMsg.slice(0, 100)}"`);
-
   try {
     if (target === 'all' || target === 'broadcast') {
-      const r = await oneSignalService.sendPushNotificationToAll({ title: cleanTitle, message: cleanMsg, data: extraData });
-      console.log(`[sendOneSignalPush] Broadcast result:`, JSON.stringify(r).slice(0, 300));
-      return r;
+      const result = await postOneSignalApi({
+        app_id: appId,
+        included_segments: ['Subscribed Users', 'All'],
+        headings: { en: cleanTitle },
+        contents: { en: cleanMsg },
+        data: extraData,
+        priority: 10,
+        ttl: 259200
+      }, apiKey);
+      console.log('[OneSignal] Broadcast push result:', result);
+      return result;
     }
 
-    const targetsArr = Array.isArray(target) ? target : [target];
-    if (targetsArr.length === 0) return;
+    const externalIds = await resolveUserOneSignalIds(d1, target);
+    if (!externalIds.length) return;
 
-    // Broadcast to each target via service (service handles playerId + externalId internally)
-    const results = [];
-    for (const tgt of targetsArr) {
-      try {
-        const r = await oneSignalService.sendPushNotificationToUser({
-          userId: tgt,
-          title: cleanTitle,
-          message: cleanMsg,
-          data: extraData
-        }, d1);
-        results.push(r);
-      } catch (e) {
-        console.error(`[sendOneSignalPush] Error pushing to ${JSON.stringify(tgt).slice(0, 100)}:`, e?.message || e);
-      }
-    }
-    const okCount = results.filter(r => r && r.ok).length;
-    console.log(`[sendOneSignalPush] Targeted results: ${okCount}/${results.length} successful.`);
-    return { ok: okCount > 0, results };
+    const reqV11 = postOneSignalApi({
+      app_id: appId,
+      include_aliases: { external_id: externalIds },
+      target_channel: 'push',
+      headings: { en: cleanTitle },
+      contents: { en: cleanMsg },
+      data: extraData,
+      priority: 10,
+      ttl: 259200
+    }, apiKey);
+
+    const reqLegacy = postOneSignalApi({
+      app_id: appId,
+      include_external_user_ids: externalIds,
+      channel_for_external_user_ids: 'push',
+      headings: { en: cleanTitle },
+      contents: { en: cleanMsg },
+      data: extraData,
+      priority: 10,
+      ttl: 259200
+    }, apiKey);
+
+    const reqSubscribed = postOneSignalApi({
+      app_id: appId,
+      included_segments: ['Subscribed Users', 'All'],
+      headings: { en: cleanTitle },
+      contents: { en: cleanMsg },
+      data: extraData,
+      priority: 10,
+      ttl: 259200
+    }, apiKey);
+
+    const [resV11, resLegacy, resSub] = await Promise.all([reqV11, reqLegacy, reqSubscribed]);
+    console.log(`[OneSignal] Push sent to ${JSON.stringify(externalIds)}. v11 res:`, resV11, 'legacy res:', resLegacy, 'subscribed res:', resSub);
+    return resV11 || resLegacy || resSub;
   } catch (err) {
-    console.error('[sendOneSignalPush] Fatal error:', err);
+    console.error('[OneSignal] Push failed:', err);
   }
 }
 
