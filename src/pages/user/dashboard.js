@@ -3844,6 +3844,7 @@ const showReferEarnPage = (force = false) => {
                         <source srcset="/assets/images/referral_banner.webp" type="image/webp">
                         <img src="/assets/images/referral_banner.png" alt="Refer & Earn - Invite Friends, Earn Together"
                              loading="eager" fetchpriority="high" decoding="sync"
+                             onerror="if(!this.dataset.fb){this.dataset.fb='1';this.src='/assets/images/referral_banner.png';}"
                              class="w-full h-full object-cover rounded-2xl block border-0 shadow-none">
                     </picture>
                 </div>
@@ -3854,6 +3855,7 @@ const showReferEarnPage = (force = false) => {
                         <source srcset="/assets/images/referral_howitworks_cards.webp" type="image/webp">
                         <img src="/assets/images/referral_howitworks_cards.png" alt="Referral Rewards & How It Works"
                              loading="eager" fetchpriority="high" decoding="sync"
+                             onerror="if(!this.dataset.fb){this.dataset.fb='1';this.src='/assets/images/referral_howitworks_cards.png';}"
                              class="w-full h-full object-cover rounded-2xl block border-0 shadow-none">
                     </picture>
                 </div>
