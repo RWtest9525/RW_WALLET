@@ -1,7 +1,0 @@
-<?xml version='1.0' encoding='utf-8'?>
-<resources>
-    <string name="app_name">Reviews World</string>
-    <string name="title_activity_main">Reviews World</string>
-    <string name="package_name">com.reviewsworld.app</string>
-    <string name="custom_url_scheme">com.reviewsworld.app</string>
-</resources>
