@@ -125,14 +125,68 @@ const getOwnerProfile = () => {
     };
 };
 
+const populateFallbackAdminChatsFromUsers = () => {
+    if (!allUsersCache || !allUsersCache.length) return;
+    const isOwner = checkIsOwner(currentUser, currentUserData);
+    const subAdminUid = currentUser?.uid || (typeof getCurrentUserId === 'function' ? getCurrentUserId() : '');
+    
+    let userList = allUsersCache;
+    if (!isOwner) {
+        userList = allUsersCache.filter(u => {
+            const uid = String(u.id || u.uid || '');
+            if (!uid || uid === subAdminUid || uid === ADMIN_UID) return false;
+            return String(u.parentAdmin || u.parent_admin || '') === String(subAdminUid);
+        });
+    } else {
+        userList = allUsersCache.filter(u => {
+            const uid = String(u.id || u.uid || '');
+            if (!uid || uid === ADMIN_UID) return false;
+            if (u.role === 'admin' || u.role === 'subadmin' || u.role === 'owner') return true;
+            const pAdmin = String(u.parentAdmin || u.parent_admin || '').trim();
+            return !pAdmin || pAdmin === ADMIN_UID || pAdmin === 'null' || pAdmin === 'undefined';
+        });
+    }
+
+    const fallbackChats = userList.map(u => {
+        const uId = String(u.id || u.uid || '');
+        const roomId = !isOwner ? `support_${uId}_${subAdminUid}` : `support_${uId}`;
+        const cachedMsgs = readSupportChatCache(roomId);
+        const lastMsgObj = cachedMsgs.length ? cachedMsgs[cachedMsgs.length - 1] : null;
+        return {
+            id: uId,
+            userId: uId,
+            roomId,
+            userName: isOwner && (u.role === 'admin' || u.role === 'subadmin') ? (u.name || u.email || 'Sub-Admin') : (u.name || u.email || 'User'),
+            userEmail: u.email || '',
+            userMobile: u.mobile || u.phoneNumber || '',
+            lastMessage: lastMsgObj ? lastMsgObj.text : '',
+            lastSenderId: lastMsgObj ? lastMsgObj.senderId : uId,
+            updatedAt: lastMsgObj ? (timestampToMillis(lastMsgObj.createdAt) || Date.now()) : Date.now()
+        };
+    });
+
+    if (fallbackChats.length > 0) {
+        const mergedMap = new Map();
+        [...allSupportChatsCache, ...fallbackChats].forEach(c => {
+            const key = String(c.userId || c.id || '').trim();
+            if (!key) return;
+            if (!mergedMap.has(key)) mergedMap.set(key, c);
+        });
+        allSupportChatsCache = Array.from(mergedMap.values()).sort((a, b) => timestampToMillis(b.updatedAt) - timestampToMillis(a.updatedAt));
+        refreshAdminChatUnreadCount();
+        renderAdminChatsList();
+    }
+};
+
 const loadAdminChatsFromBackend = async ({ silent = false, retry = true, subscribeRealtime = true } = {}) => {
             if (!hasAdminSessionReadyOrCached()) return;
             await ensureAdminChatUsersLoaded();
+            populateFallbackAdminChatsFromUsers();
             try {
                 const token = await getBackendAuthToken();
                 const response = await fetchWithTimeout(`${BACKEND_BASE_URL}/api/admin/chats?limit=200`, {
                     headers: { Authorization: `Bearer ${token}` }
-                }, 8000);
+                }, 15000);
                 const data = await response.json().catch(() => ({}));
                 if (!response.ok || !data.ok) {
                     throw new Error(data.error || 'Admin chat load failed');
@@ -193,21 +247,22 @@ const loadAdminChatsFromBackend = async ({ silent = false, retry = true, subscri
                 });
                 chatList = Array.from(uniqueChatsMap.values()).sort((a, b) => timestampToMillis(b.updatedAt) - timestampToMillis(a.updatedAt));
 
-                allSupportChatsCache = chatList;
+                if (chatList.length > 0) {
+                    allSupportChatsCache = chatList;
+                } else {
+                    populateFallbackAdminChatsFromUsers();
+                }
                 refreshAdminChatUnreadCount();
                 renderAdminChatsList();
                 preloadAdminChatRooms(allSupportChatsCache);
                 if (subscribeRealtime) {
-                    subscribeAdminChatRooms(allSupportChatsCache).catch(error => console.warn('Admin chat socket subscribe skipped:', error));
+                    subscribeAdminChatRooms(allSupportChatsCache).catch(error => logBackgroundSkip('Admin chat socket subscribe skipped', error));
                 }
             } catch (error) {
-                const log = silent ? console.warn : console.error;
-                log('Cloudflare admin chat list failed:', error);
+                logBackgroundSkip('Admin chat list background fetch skipped', error);
+                populateFallbackAdminChatsFromUsers();
                 if (retry) {
-                    setTimeout(() => loadAdminChatsFromBackend({ silent, retry: false, subscribeRealtime }).catch(() => {}), 2500);
-                }
-                if (!silent && document.getElementById('admin-chats-list')) {
-                    showNotification('Could not load chat list from backend. Retrying once...', true);
+                    setTimeout(() => loadAdminChatsFromBackend({ silent: true, retry: false, subscribeRealtime }).catch(() => {}), 3000);
                 }
             }
         };
