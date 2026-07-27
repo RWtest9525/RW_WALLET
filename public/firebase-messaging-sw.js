@@ -12,21 +12,41 @@ firebase.initializeApp({
 
 const messaging = firebase.messaging();
 
-messaging.onBackgroundMessage(function(payload) {
-  console.log('[firebase-messaging-sw.js] Received background push:', payload);
-  const title = (payload && payload.notification && payload.notification.title) || 'REVIEWS WORLD';
+function showPushNotification(payload) {
+  console.log('[firebase-messaging-sw.js] Processing push payload:', payload);
   const data = (payload && payload.data) ? payload.data : {};
+  const notification = (payload && payload.notification) ? payload.notification : {};
+
+  const title = notification.title || data.title || 'REVIEWS WORLD';
+  const body = notification.body || data.body || data.message || '';
   const roomId = data.roomId || data.room_id || '';
   const clickUrl = data.url || (roomId ? `/#chat?room=${roomId}` : '/');
 
   const options = {
-    body: (payload && payload.notification && payload.notification.body) || '',
+    body: body,
     icon: '/assets/images/logo_512.png',
     badge: '/assets/images/notification_bell.png',
-    data: Object.assign({}, data, { url: clickUrl, roomId: roomId })
+    vibrate: [200, 100, 200],
+    data: Object.assign({}, data, { url: clickUrl, roomId: roomId }),
+    tag: roomId || 'rw-chat-push'
   };
 
   return self.registration.showNotification(title, options);
+}
+
+messaging.onBackgroundMessage(function(payload) {
+  return showPushNotification(payload);
+});
+
+self.addEventListener('push', function(event) {
+  if (!event.data) return;
+  try {
+    const payload = event.data.json();
+    console.log('[firebase-messaging-sw.js] Push event caught:', payload);
+    event.waitUntil(showPushNotification(payload));
+  } catch (e) {
+    console.warn('[firebase-messaging-sw.js] Non-JSON push event:', event.data.text());
+  }
 });
 
 self.addEventListener('notificationclick', function(event) {

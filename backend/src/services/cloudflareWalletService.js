@@ -3217,17 +3217,168 @@ function registerRoutes(app, { d1, r2 }) {
   });
 
   app.post('/api/chat/send-push', requireHttpAuth, async (req, res) => {
+    const { roomId, senderId, senderName, messageText, targetUserId, title, message, customData } = req.body || {};
+    const fsAppId = process.env.FIREBASE_APP_ID || 'digital-wallet-prod';
+
+    console.log(`\n==================== [API CHAT PUSH TRIGGER START] ====================`);
+    console.log(`[Push API] Received payload:`, JSON.stringify({ roomId, senderId, senderName, messageText, targetUserId, title, message }));
+
     try {
-      const { targetUserId, title, message, customData } = req.body;
-      if (!targetUserId || !message) {
-        return res.status(400).json({ ok: false, error: 'MISSING_TARGET_OR_MESSAGE' });
+      let recipientUserId = targetUserId || null;
+
+      // --- STEP 1: Room ID Splitting & Recipient Detection ---
+      if (!recipientUserId && roomId) {
+        const parts = String(roomId).replace(/^support_/, '').split('_');
+        const roomUserId = parts[0];
+        const roomAdminId = parts[1] || ADMIN_UID;
+
+        if (senderId === roomUserId) {
+          recipientUserId = roomAdminId;
+        } else {
+          recipientUserId = roomUserId;
+        }
       }
-      const pushPayload = customData || { type: 'chat' };
-      await sendNotification(d1, targetUserId, title || 'New Chat Message', message, pushPayload);
-      return res.json({ ok: true, message: 'Push notification queued.' });
+
+      console.log(`[Push API] Step 1 -> Extracted recipientUserId: "${recipientUserId}" (senderId: "${senderId}", roomId: "${roomId}")`);
+
+      if (!recipientUserId) {
+        console.error(`[Push API] ERROR: Unable to derive recipientUserId from payload!`);
+        return res.status(400).json({ ok: false, error: 'INVALID_ROOM_ID_OR_TARGET_MISSING' });
+      }
+
+      const bodyText = String(messageText || message || '').trim();
+      const titleText = String(senderName ? `💬 Message from ${senderName}` : (title || 'New Chat Message')).trim();
+
+      if (!bodyText) {
+        console.error(`[Push API] ERROR: Message text is empty!`);
+        return res.status(400).json({ ok: false, error: 'MESSAGE_TEXT_REQUIRED' });
+      }
+
+      // --- STEP 2: Firestore Token Lookup ---
+      let receiverFcmToken = null;
+
+      if (admin.apps && admin.apps.length > 0) {
+        try {
+          const userDocPath = `artifacts/${fsAppId}/public/data/users/${recipientUserId}`;
+          console.log(`[Push API] Step 2 -> Querying Firestore path: ${userDocPath}`);
+          const userDoc = await admin.firestore().doc(userDocPath).get();
+
+          if (userDoc.exists) {
+            const uData = userDoc.data() || {};
+            receiverFcmToken = uData.fcmToken || uData.fcm_token || uData.registrationId || uData.registration_id || uData.deviceToken || uData.device_token || null;
+            console.log(`[Push API] Step 2 -> Firestore direct doc found. Token resolved:`, receiverFcmToken ? `${receiverFcmToken.slice(0, 20)}...` : 'NULL');
+          } else {
+            console.warn(`[Push API] Step 2 WARNING: Document at path ${userDocPath} DOES NOT EXIST!`);
+          }
+
+          if (!receiverFcmToken) {
+            console.log(`[Push API] Step 2 -> Attempting fallback query by 'uid' == "${recipientUserId}"`);
+            const usersRef = admin.firestore().collection(`artifacts/${fsAppId}/public/data/users`);
+            const snap = await usersRef.where('uid', '==', recipientUserId).limit(1).get();
+            if (!snap.empty) {
+              const uData = snap.docs[0].data() || {};
+              receiverFcmToken = uData.fcmToken || uData.fcm_token || uData.registrationId || uData.registration_id || uData.deviceToken || uData.device_token || null;
+              console.log(`[Push API] Step 2 -> Fallback by 'uid' query token resolved:`, receiverFcmToken ? `${receiverFcmToken.slice(0, 20)}...` : 'NULL');
+            }
+          }
+        } catch (fsErr) {
+          console.error(`[Push API] Step 2 ERROR: Firestore lookup crashed:`, fsErr.message || fsErr);
+        }
+      } else {
+        console.error(`[Push API] ERROR: Firebase Admin SDK is NOT initialized!`);
+      }
+
+      // --- STEP 3: Fallback D1 Lookup ---
+      if (!receiverFcmToken && d1 && typeof d1.all === 'function') {
+        try {
+          console.log(`[Push API] Step 3 -> Attempting D1 SQL lookup for FCM token for user "${recipientUserId}"`);
+          const rows = await d1.all(`SELECT fcm_token FROM users WHERE id = ? OR firebase_uid = ? LIMIT 1`, [recipientUserId, recipientUserId]);
+          receiverFcmToken = rows?.[0]?.fcm_token || null;
+          console.log(`[Push API] Step 3 -> D1 SQL lookup token resolved:`, receiverFcmToken ? `${receiverFcmToken.slice(0, 20)}...` : 'NULL');
+        } catch (d1Err) {
+          console.error(`[Push API] Step 3 ERROR: D1 lookup failed:`, d1Err.message || d1Err);
+        }
+      }
+
+      if (!receiverFcmToken) {
+        console.error(`[Push API] CRITICAL: NO FCM Token resolved for recipientUserId "${recipientUserId}". Push CANNOT be sent.`);
+        return res.status(404).json({
+          ok: false,
+          error: 'FCM_TOKEN_NOT_FOUND',
+          recipientUserId,
+          firestorePath: `artifacts/${fsAppId}/public/data/users/${recipientUserId}`
+        });
+      }
+
+      // --- STEP 4: Dual-Channel Payload (Data-Only + Notification Object) ---
+      const payloadData = Object.assign(
+        {
+          roomId: String(roomId || ''),
+          senderId: String(senderId || ''),
+          senderName: String(senderName || ''),
+          message: bodyText,
+          title: titleText,
+          body: bodyText,
+          url: roomId ? `/#chat?room=${roomId}` : '/',
+          type: 'chat',
+          click_action: 'FLUTTER_NOTIFICATION_CLICK'
+        },
+        customData ? Object.fromEntries(Object.entries(customData).map(([k, v]) => [k, String(v)])) : {}
+      );
+
+      const fcmPayload = {
+        token: receiverFcmToken,
+        notification: {
+          title: titleText,
+          body: bodyText
+        },
+        android: {
+          priority: 'high',
+          notification: {
+            title: titleText,
+            body: bodyText,
+            sound: 'default',
+            channelId: 'default',
+            priority: 'high',
+            defaultSound: true,
+            defaultVibrateTimings: true,
+            visibility: 'public'
+          }
+        },
+        webpush: {
+          headers: { Urgency: 'high' },
+          notification: {
+            title: titleText,
+            body: bodyText,
+            icon: '/assets/images/logo_512.png',
+            requireInteraction: true,
+            click_action: roomId ? `/#chat?room=${roomId}` : '/'
+          },
+          fcm_options: {
+            link: roomId ? `/#chat?room=${roomId}` : '/'
+          }
+        },
+        data: payloadData
+      };
+
+      console.log(`[Push API] Step 4 -> Dispatching admin.messaging().send() to token ${receiverFcmToken.slice(0, 20)}...`);
+
+      // SETTLED PROMISE: We MUST await the FCM response before returning HTTP 200
+      const fcmResponse = await admin.messaging().send(fcmPayload);
+      console.log(`[Push API] SUCCESS -> Google FCM Message ID:`, fcmResponse);
+      console.log(`==================== [API CHAT PUSH TRIGGER END] ====================\n`);
+
+      return res.json({
+        ok: true,
+        message: 'Push notification delivered successfully.',
+        fcmMessageId: fcmResponse,
+        recipientUserId
+      });
+
     } catch (err) {
-      console.error('[ChatPush] Error:', err);
-      return res.status(500).json({ ok: false, error: err.message });
+      console.error(`[Push API] FATAL EXCEPTION in /api/chat/send-push:`, err.message || err);
+      console.log(`==================== [API CHAT PUSH TRIGGER ERROR] ====================\n`);
+      return res.status(500).json({ ok: false, error: err.message || 'FCM_SEND_FAILED' });
     }
   });
 
