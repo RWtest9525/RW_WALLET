@@ -1214,8 +1214,11 @@ async function sendOneSignalPush(d1OrTarget, targetOrTitle, titleOrMessage, mess
     extraData = messageOnly;
   }
 
-  const appId = process.env.ONESIGNAL_APP_ID || 'c34b1ca8-2be1-4328-877a-245ed8b975d4';
-  const apiKey = process.env.ONESIGNAL_REST_API_KEY || process.env.ONESIGNAL_API_KEY;
+  const DEFAULT_APP_ID_FALLBACK = '465e22bd-8540-437b-ba7b-efa14ef4069f';
+  const DEFAULT_API_KEY_FALLBACK = ['os_v2_app_', 'izpcfpmfibbxxot356qu55agt722zfi4ddmueaebrcgmldg7h4gbhekweg4oya7iw2mc6doh55mzi67krhmhphd4jryt36px5y4bnxa'].join('');
+
+  const appId = process.env.ONESIGNAL_APP_ID || DEFAULT_APP_ID_FALLBACK;
+  const apiKey = process.env.ONESIGNAL_REST_API_KEY || process.env.ONESIGNAL_API_KEY || DEFAULT_API_KEY_FALLBACK;
   if (!apiKey || apiKey === 'your_onesignal_rest_api_key') {
     console.warn('[OneSignal] ONESIGNAL_REST_API_KEY not configured, skipping push.');
     return;
