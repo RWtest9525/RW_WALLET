@@ -339,7 +339,11 @@ const showUserTaskPage = () => {
 
     renderUI(window.lastTakenCommentsMap || {}, false);
 
-    fetchTaskCommentsRealtimeMap().then(map => {
+    const getCommentsMap = typeof fetchTaskCommentsRealtimeMap === 'function' 
+        ? fetchTaskCommentsRealtimeMap 
+        : (window.fetchTaskCommentsRealtimeMap || (async () => window.lastTakenCommentsMap || {}));
+
+    getCommentsMap().then(map => {
         window.lastTakenCommentsMap = map;
         renderUI(map, true);
     }).catch(err => {

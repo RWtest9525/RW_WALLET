@@ -1389,6 +1389,10 @@ const loadUserTaskHistory = async () => {
                     }
                 }
             } catch (err) {
+                if (typeof isExpectedBackgroundAbort === 'function' && isExpectedBackgroundAbort(err)) {
+                    userTaskHistoryLoading = false;
+                    return;
+                }
                 console.error('Failed to load user task history:', err);
                 // Keep the cached items on error instead of resetting to empty array!
                 if (!userTaskHistoryCache || userTaskHistoryCache.length === 0) {
@@ -3540,7 +3544,7 @@ const renderTrackReferralsUI = (filter = 'all', referrals = [], isLoading = fals
     const content = `
         <div id="track-referrals-page-marker"></div>
         <div class="sticky top-0 z-30 flex items-center justify-between border-b border-gray-200 dark:border-gray-800 bg-white/95 dark:bg-gray-900/95 px-4 py-3 backdrop-blur-md">
-            <button type="button" onclick="window.showReferEarnPage()" class="flex h-9 w-9 items-center justify-center rounded-xl bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-200 hover:bg-gray-200 transition active:scale-90" aria-label="Back">
+            <button type="button" onclick="window.showReferEarnPage(true)" class="flex h-9 w-9 items-center justify-center rounded-xl bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-200 hover:bg-gray-200 transition active:scale-90" aria-label="Back">
                 <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
                     <path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7" />
                 </svg>
@@ -3792,7 +3796,7 @@ window.showReferralDetailPage = async (referralId = 'ref-1') => {
     showPage(content, { keepBottomNav: false });
 };
 
-const showReferEarnPage = () => {
+const showReferEarnPage = (force = false) => {
         if (!ensureUserSessionReady()) return;
         if (activeChatUnsubscribe) {
             activeChatUnsubscribe();
@@ -3803,19 +3807,21 @@ const showReferEarnPage = () => {
         let imagesReady = false;
         try { imagesReady = localStorage.getItem(READY_LS) === '1' || sessionStorage.getItem(READY_SS) === '1'; } catch (_) {}
 
-        // NEVER re-render if already visible: prevents full repaint blink
+        // NEVER re-render if already visible on main refer page: prevents full repaint blink
         const pageContainer = document.getElementById('page-container');
-        if (currentMainSection === 'refer' && pageContainer && !pageContainer.classList.contains('hidden')) {
+        const isMainReferPage = pageContainer && pageContainer.querySelector('#open-track-referrals-btn');
+        if (!force && currentMainSection === 'refer' && pageContainer && !pageContainer.classList.contains('hidden') && isMainReferPage) {
             setBottomNavActive('bottom-refer-btn');
             return;
         }
+        currentMainSection = 'refer';
 
         const reward = getReferralRewardAmount();
         const referralCode = getProfileReferralCode();
         const referralLink = getProfileReferralLink(referralCode);
 
         // Blocking image preload + mark ready flag in dual-cache
-        ['/assets/images/referral_banner.png', '/assets/images/referral_howitworks_cards.png'].forEach(src => {
+        ['/assets/images/referral_banner.webp', '/assets/images/referral_howitworks_cards.webp', '/assets/images/referral_banner.png', '/assets/images/referral_howitworks_cards.png'].forEach(src => {
             try {
                 const img = new Image();
                 img.decoding = 'sync';
@@ -3828,34 +3834,28 @@ const showReferEarnPage = () => {
             } catch (_) {}
         });
 
-        const bannerSkeleton = 'linear-gradient(135deg,#064e3b 0%,#065f46 25%,#047857 50%,#10b981 75%,#a7f3d0 100%)';
-        const howItWorksSkeleton = 'linear-gradient(135deg,#f8fafc 0%,#f1f5f9 35%,#e2e8f0 70%,#cbd5e1 100%)';
-        const imgStyle = `opacity:1;display:block;will-change:opacity;transition:opacity ${imagesReady ? '80ms linear' : '200ms ease-out'};`;
-
         const content = `
             ${getPageHeader('Refer & Earn', { showBack: false })}
             <div class="max-w-md mx-auto space-y-3 text-left px-0.5 pt-1 pb-24">
 
-                <!-- Top Banner: skeleton gradient ALWAYS underneath image (no display:none, no opacity:0 start) -->
-                <div class="relative overflow-hidden rounded-2xl shadow-md border border-emerald-900/40 bg-slate-900 min-h-[140px]"
-                     style="background-image:${bannerSkeleton};background-size:cover;background-position:center;will-change:transform;">
-                    <img src="/assets/images/referral_banner.png" alt="Refer & Earn - Invite Friends, Earn Together"
-                         loading="eager" fetchpriority="high" decoding="sync"
-                         style="${imgStyle}"
-                         onload="try{this.style.opacity='1';}catch(e){}"
-                         onerror="try{this.style.opacity='1';}catch(e){}"
-                         class="w-full h-auto object-cover rounded-2xl block">
+                <!-- Top Banner -->
+                <div class="relative overflow-hidden rounded-2xl shadow-md border border-emerald-900/20 bg-emerald-900/10 dark:bg-emerald-950/30 aspect-[1024/498] w-full">
+                    <picture>
+                        <source srcset="/assets/images/referral_banner.webp" type="image/webp">
+                        <img src="/assets/images/referral_banner.png" alt="Refer & Earn - Invite Friends, Earn Together"
+                             loading="eager" fetchpriority="high" decoding="sync"
+                             class="w-full h-full object-cover rounded-2xl block border-0 shadow-none">
+                    </picture>
                 </div>
 
                 <!-- Middle How It Works card -->
-                <div class="relative overflow-hidden rounded-2xl shadow-xs border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 min-h-[180px]"
-                     style="background-image:${howItWorksSkeleton};background-size:cover;background-position:center;will-change:transform;">
-                    <img src="/assets/images/referral_howitworks_cards.png" alt="Referral Rewards & How It Works"
-                         loading="eager" fetchpriority="high" decoding="sync"
-                         style="${imgStyle}"
-                         onload="try{this.style.opacity='1';}catch(e){}"
-                         onerror="try{this.style.opacity='1';}catch(e){}"
-                         class="w-full h-auto object-cover rounded-2xl block">
+                <div class="relative overflow-hidden rounded-2xl shadow-xs border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/50 aspect-[1024/484] w-full">
+                    <picture>
+                        <source srcset="/assets/images/referral_howitworks_cards.webp" type="image/webp">
+                        <img src="/assets/images/referral_howitworks_cards.png" alt="Referral Rewards & How It Works"
+                             loading="eager" fetchpriority="high" decoding="sync"
+                             class="w-full h-full object-cover rounded-2xl block border-0 shadow-none">
+                    </picture>
                 </div>
 
                 <!-- Referral Code & Actions Box -->

@@ -1,6 +1,8 @@
 {
   "name": "Reviews World Wallet",
   "description": "RW Wallet is a private Reviews World wallet app for registered users to manage balances, requests, and account activity.",
-  "requestFramePermissions": [],
+  "requestFramePermissions": [
+    "microphone"
+  ],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

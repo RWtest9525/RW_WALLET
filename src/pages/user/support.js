@@ -760,12 +760,25 @@ const calculateSupportUnreadCount = (roomId, messages = readSupportChatCache(roo
 
 const updateSupportChatUnreadBadges = () => {
             const countText = supportChatUnreadCount > 99 ? '99+' : String(supportChatUnreadCount || '');
-            ['bottom-help-unread-badge', 'support-chat-unread-badge'].forEach(id => {
-                const badge = document.getElementById(id);
-                if (!badge) return;
-                badge.textContent = countText;
-                badge.classList.toggle('hidden', supportChatUnreadCount <= 0);
-            });
+            
+            const supportBadge = document.getElementById('support-chat-unread-badge');
+            const supportLabel = document.getElementById('support-chat-label-text');
+            if (supportBadge) {
+                if (supportChatUnreadCount > 0) {
+                    supportBadge.textContent = countText;
+                    supportBadge.classList.remove('hidden');
+                    if (supportLabel) supportLabel.classList.add('hidden');
+                } else {
+                    supportBadge.classList.add('hidden');
+                    if (supportLabel) supportLabel.classList.remove('hidden');
+                }
+            }
+
+            const bottomBadge = document.getElementById('bottom-help-unread-badge');
+            if (bottomBadge) {
+                bottomBadge.textContent = countText;
+                bottomBadge.classList.toggle('hidden', supportChatUnreadCount <= 0);
+            }
         };
 
 const markSupportChatSeen = (roomId, messages = readSupportChatCache(roomId)) => {
@@ -1170,13 +1183,10 @@ const closeRevyBotSession = () => {
             revyBotTimer = null;
             revyBotMessages = [];
             revyBotLastQuestion = '';
-            if (window.revyBotAdminView) {
+            if (window.revyBotAdminView && isCurrentAdmin) {
                 showAdminMainPage();
             } else {
-                hidePage();
-                currentMainSection = 'home';
-                switchTab('user-panel');
-                setBottomNavActive('bottom-home-btn');
+                showHelpSupportPage();
             }
         };
 
@@ -1405,7 +1415,8 @@ const addRevyBotMessage = (text, senderRole = 'bot', actions = '') => {
         };
 
 const openRevyBotChatPage = (isAdminView = false) => {
-            window.revyBotAdminView = isAdminView;
+            const isRealAdminView = isAdminView === true;
+            window.revyBotAdminView = isRealAdminView;
             if (activeChatUnsubscribe) {
                 activeChatUnsubscribe();
                 activeChatUnsubscribe = null;
@@ -1447,8 +1458,18 @@ const openRevyBotChatPage = (isAdminView = false) => {
                     </div>
                 </div>
                 ${getPageFooter()}`;
-            showPage(content, { fullHeight: true });
-            setBottomNavActive(window.revyBotAdminView ? 'bottom-admin-btn' : 'bottom-help-btn');
+            showPage(content, {
+                fullHeight: true,
+                returnTo: isRealAdminView ? 'admin' : 'help',
+                onBack: () => {
+                    if (window.revyBotAdminView && isCurrentAdmin) {
+                        showAdminMainPage();
+                    } else {
+                        showHelpSupportPage();
+                    }
+                }
+            });
+            setBottomNavActive(window.revyBotAdminView && isCurrentAdmin ? 'bottom-admin-btn' : 'bottom-help-btn');
             const revyKeyboardCleanup = installChatViewportLock({
                 shellId: 'revy-chat-shell',
                 composerId: 'revy-chat-composer',
@@ -1538,15 +1559,15 @@ const loadSubAdminChatCard = async (parentAdminId) => {
             const unreadCount = calculateSupportUnreadCount(roomId);
 
             container.innerHTML = `
-                <button id="sub-admin-chat-card" class="w-full flex items-center gap-4 p-4 bg-white dark:bg-gray-800 border border-gray-100 dark:border-gray-700 rounded-2xl shadow-md text-left hover:bg-gray-50 dark:hover:bg-gray-700/50 transition animate-fade-in">
-                    <img src="${subAdminLogo}" alt="${escapeHtml(subAdminName)}" class="h-14 w-14 shrink-0 rounded-full object-contain bg-blue-50 p-2">
+                <button id="sub-admin-chat-card" class="w-full flex items-center gap-3 sm:gap-4 p-3.5 sm:p-4 bg-white dark:bg-gray-800 border border-gray-100 dark:border-gray-700 rounded-2xl shadow-md text-left hover:bg-gray-50 dark:hover:bg-gray-700/50 transition animate-fade-in">
+                    <img src="${subAdminLogo}" alt="${escapeHtml(subAdminName)}" class="h-12 w-12 sm:h-14 sm:w-14 shrink-0 rounded-full object-contain bg-blue-50 p-2 border border-gray-200 dark:border-gray-700">
                     <div class="flex-1 min-w-0">
-                        <h3 class="font-bold text-gray-900 dark:text-white inline-flex items-center gap-1">${escapeHtml(subAdminName)} ${getVerifiedBadge()}</h3>
-                        <p class="text-sm text-gray-500 dark:text-gray-400 truncate">Chat with your team admin</p>
+                        <h3 class="font-bold text-gray-900 dark:text-white inline-flex items-center gap-1 text-sm sm:text-base">${escapeHtml(subAdminName)} ${getVerifiedBadge()}</h3>
+                        <p class="text-xs sm:text-sm text-gray-500 dark:text-gray-400 truncate">Chat with your team admin</p>
                     </div>
-                    <div class="flex items-center gap-2">
-                        <span id="sub-admin-chat-unread-badge" class="${unreadCount > 0 ? '' : 'hidden'} min-w-6 h-6 rounded-full bg-red-600 px-2 text-center text-xs font-black leading-6 text-white shadow">${unreadCount}</span>
-                        <span class="text-blue-600 dark:text-blue-300 font-bold">Chat</span>
+                    <div class="shrink-0 flex items-center justify-end min-w-[42px]">
+                        <span id="sub-admin-chat-unread-badge" class="${unreadCount > 0 ? '' : 'hidden'} min-w-7 h-7 rounded-full bg-rose-600 px-2 text-center text-xs font-black leading-7 text-white shadow-md animate-pulse">${unreadCount > 99 ? '99+' : unreadCount}</span>
+                        <span id="sub-admin-chat-label-text" class="${unreadCount > 0 ? 'hidden' : ''} text-blue-600 dark:text-blue-300 font-bold text-sm">Chat</span>
                     </div>
                 </button>
             `;
@@ -1564,6 +1585,31 @@ const loadSubAdminChatCard = async (parentAdminId) => {
         };
 
 const startAIVoiceCallModal = () => {
+    if (typeof showNotification === 'function') {
+        showNotification('Voice Call Support coming soon! 📞');
+    }
+    renderModal('Voice Call Support', `
+        <div class="text-center p-4 sm:p-5 space-y-4">
+            <div class="w-16 h-16 mx-auto rounded-full bg-gradient-to-tr from-emerald-500 to-teal-600 p-0.5 shadow-xl flex items-center justify-center">
+                <img src="${CHATBOT_ICON_URL}" alt="Revy AI" class="w-full h-full rounded-full object-cover">
+            </div>
+            <div>
+                <span class="inline-block px-3 py-1 rounded-full bg-amber-500/10 text-amber-600 dark:text-amber-400 text-xs font-black mb-2 border border-amber-500/20">
+                    ⚡ Coming Soon
+                </span>
+                <h3 class="text-lg font-black text-gray-900 dark:text-white">Voice Call Support</h3>
+                <p class="text-xs text-gray-600 dark:text-gray-300 mt-2 leading-relaxed max-w-xs mx-auto">
+                    Voice call support service is currently under enhancement. Please use <b>REVY - RW AI BOT</b> or <b>Admin Chat</b> for instant help!
+                </p>
+            </div>
+            <div class="pt-2">
+                <button onclick="window.closeModal()" class="w-full py-2.5 px-4 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-white font-bold text-sm rounded-xl shadow-md transition active:scale-95">
+                    Got It 👍
+                </button>
+            </div>
+        </div>
+    `);
+    return;
     let callTimerInterval = null;
     let callDurationSec = 0;
     let isMicMuted = false;
@@ -1571,11 +1617,23 @@ const startAIVoiceCallModal = () => {
     let selectedLang = 'Hindi';
     let recognitionInstance = null;
     let isSpeaking = false;
+    let lockedFemaleVoice = null;
 
     const formatTimer = (sec) => {
         const m = String(Math.floor(sec / 60)).padStart(2, '0');
         const s = String(sec % 60).padStart(2, '0');
         return `${m}:${s}`;
+    };
+
+    const updateTranscriptUI = (revyText, userText) => {
+        const revyEl = document.getElementById('ai-call-revy-transcript');
+        const userEl = document.getElementById('ai-call-user-transcript');
+        if (revyEl && revyText !== undefined) {
+            revyEl.textContent = revyText || '...';
+        }
+        if (userEl && userText !== undefined) {
+            userEl.textContent = userText || 'Listening to you...';
+        }
     };
 
     const setStatus = (statusText, state = 'connected') => {
@@ -1587,17 +1645,17 @@ const startAIVoiceCallModal = () => {
 
         if (waveContainer) {
             if (state === 'speaking') {
-                waveContainer.className = 'flex items-center justify-center gap-1.5 h-10 my-3 opacity-100 transition';
+                waveContainer.className = 'flex items-center justify-center gap-1.5 h-6 my-2 opacity-100 transition';
                 waveContainer.querySelectorAll('.wave-bar').forEach((bar, idx) => {
                     bar.style.animation = `bounce 0.8s ease-in-out infinite alternate ${idx * 0.15}s`;
                 });
             } else if (state === 'listening') {
-                waveContainer.className = 'flex items-center justify-center gap-1.5 h-10 my-3 opacity-80 transition';
+                waveContainer.className = 'flex items-center justify-center gap-1.5 h-6 my-2 opacity-90 transition';
                 waveContainer.querySelectorAll('.wave-bar').forEach((bar) => {
                     bar.style.animation = 'pulse 1.2s ease-in-out infinite';
                 });
             } else {
-                waveContainer.className = 'flex items-center justify-center gap-1.5 h-10 my-3 opacity-30 transition';
+                waveContainer.className = 'flex items-center justify-center gap-1.5 h-6 my-2 opacity-40 transition';
                 waveContainer.querySelectorAll('.wave-bar').forEach((bar) => {
                     bar.style.animation = 'none';
                 });
@@ -1606,9 +1664,9 @@ const startAIVoiceCallModal = () => {
 
         if (avatarRing) {
             if (state === 'speaking') {
-                avatarRing.className = 'absolute -inset-4 rounded-full bg-emerald-500/30 blur-md animate-ping';
+                avatarRing.className = 'absolute -inset-3 rounded-full bg-emerald-500/30 blur-md animate-ping';
             } else if (state === 'listening') {
-                avatarRing.className = 'absolute -inset-3 rounded-full bg-teal-400/30 blur-sm animate-pulse';
+                avatarRing.className = 'absolute -inset-2.5 rounded-full bg-teal-400/30 blur-sm animate-pulse';
             } else {
                 avatarRing.className = 'absolute -inset-2 rounded-full bg-emerald-500/10 blur-xs';
             }
@@ -1620,25 +1678,69 @@ const startAIVoiceCallModal = () => {
         const voices = window.speechSynthesis.getVoices();
         if (!voices || voices.length === 0) return null;
 
+        if (lockedFemaleVoice && voices.some(v => v.name === lockedFemaleVoice.name)) {
+            return lockedFemaleVoice;
+        }
+
         let langPrefix = 'hi';
         if (lang === 'English') langPrefix = 'en';
         if (lang === 'Bengali') langPrefix = 'bn';
 
-        const femaleKeywords = ['female', 'zira', 'swara', 'samantha', 'victoria', 'karen', 'google hi-in', 'google english', 'heera', 'serena'];
+        const preferredKeywords = [
+            'google hindi', 'google hi-in', 'swara', 'neerja', 'hi-in-x-hie-local',
+            'google uk english female', 'google us english', 'samantha', 'victoria', 'karen', 'zira', 'serena', 'veena',
+            'kalpana', 'aditi', 'aria', 'jenny'
+        ];
         const matchedLangVoices = voices.filter(v => v.lang && v.lang.toLowerCase().startsWith(langPrefix));
 
-        for (const kw of femaleKeywords) {
+        for (const kw of preferredKeywords) {
             const found = matchedLangVoices.find(v => v.name.toLowerCase().includes(kw));
-            if (found) return found;
+            if (found) {
+                lockedFemaleVoice = found;
+                return found;
+            }
         }
 
-        return matchedLangVoices[0] || voices.find(v => v.lang && v.lang.toLowerCase().startsWith('hi')) || voices[0];
+        for (const kw of preferredKeywords) {
+            const found = voices.find(v => v.name.toLowerCase().includes(kw));
+            if (found) {
+                lockedFemaleVoice = found;
+                return found;
+            }
+        }
+
+        lockedFemaleVoice = matchedLangVoices[0] || voices.find(v => v.lang && v.lang.toLowerCase().startsWith('hi')) || voices[0];
+        return lockedFemaleVoice;
+    };
+
+    if ('speechSynthesis' in window) {
+        window.speechSynthesis.onvoiceschanged = () => {
+            getFemaleVoice(selectedLang);
+        };
+    }
+
+    let speakSafetyTimeout = null;
+
+    const stopSpeechRecognition = () => {
+        if (recognitionInstance) {
+            try {
+                recognitionInstance.stop();
+            } catch (_) {}
+        }
     };
 
     const speakText = (text, lang = selectedLang) => {
         if (!('speechSynthesis' in window) || !isSpeakerOn) return;
-        window.speechSynthesis.cancel();
         
+        if (speakSafetyTimeout) {
+            clearTimeout(speakSafetyTimeout);
+            speakSafetyTimeout = null;
+        }
+
+        try {
+            window.speechSynthesis.cancel();
+        } catch (_) {}
+
         const utterance = new SpeechSynthesisUtterance(text);
         
         let voiceLang = 'hi-IN';
@@ -1647,105 +1749,184 @@ const startAIVoiceCallModal = () => {
         if (lang === 'Hinglish') voiceLang = 'hi-IN';
         
         utterance.lang = voiceLang;
-        utterance.rate = 0.96;
-        utterance.pitch = 1.25;
 
         const femaleVoice = getFemaleVoice(lang);
         if (femaleVoice) {
             utterance.voice = femaleVoice;
         }
+        
+        // Natural human pitch and rate
+        utterance.rate = 0.95;
+        utterance.pitch = 1.0;
 
         isSpeaking = true;
         setStatus('🗣️ Revy Speaking...', 'speaking');
+        updateTranscriptUI(text, undefined);
 
-        utterance.onend = () => {
+        const finishSpeaking = () => {
+            if (speakSafetyTimeout) {
+                clearTimeout(speakSafetyTimeout);
+                speakSafetyTimeout = null;
+            }
+            if (!isSpeaking) return;
             isSpeaking = false;
             setStatus(`🟢 Connected • ${formatTimer(callDurationSec)}`, 'connected');
-            if (!isMicMuted && recognitionInstance) {
-                try {
-                    setStatus('🎙️ Listening...', 'listening');
-                } catch (_) {}
+            if (!isMicMuted) {
+                setTimeout(() => {
+                    startSpeechRecognition();
+                }, 100);
             }
         };
 
-        utterance.onerror = () => {
-            isSpeaking = false;
-            setStatus(`🟢 Connected • ${formatTimer(callDurationSec)}`, 'connected');
-        };
+        utterance.onend = finishSpeaking;
+        utterance.onerror = finishSpeaking;
 
-        window.speechSynthesis.speak(utterance);
+        // Failsafe timeout to prevent speech synthesis hanging indefinitely
+        const estimatedDuration = Math.max(3500, (text || '').length * 110);
+        speakSafetyTimeout = setTimeout(() => {
+            console.warn('Speech synthesis safety timeout triggered.');
+            try { window.speechSynthesis.cancel(); } catch (_) {}
+            finishSpeaking();
+        }, estimatedDuration);
+
+        setTimeout(() => {
+            try {
+                window.speechSynthesis.speak(utterance);
+            } catch (err) {
+                console.warn('SpeechSynthesis speak failed:', err);
+                finishSpeaking();
+            }
+        }, 60);
     };
 
     const getAIKnowledgeResponse = (userQuery, lang) => {
         const query = (userQuery || '').toLowerCase();
         
+        // Language switching
         if (query.includes('english')) {
             selectedLang = 'English';
-            return "Sure! I am switching to English. Hello, I am Revy, your Reviews World support executive. How can I assist you with your account, task earnings, or withdrawals today?";
+            updateLangButtonsUI();
+            return "Sure! Switching to English. I am Revy, your support executive. How can I assist you with your account, review tasks, or withdrawals today?";
         }
         if (query.includes('hindi') || query.includes('हिंदी')) {
             selectedLang = 'Hindi';
+            updateLangButtonsUI();
             return "Bilkul! Hum Hindi mein baat karenge. Main Revy bol rahee hoon. Aap bataiye Reviews World app me aapko kya sahayata chahiye?";
         }
-        if (query.includes('bengali') || query.includes('বাংলা')) {
+        if (query.includes('bengali') || query.includes('বাংলা') || query.includes('bangla')) {
             selectedLang = 'Bengali';
+            updateLangButtonsUI();
             return "Shure! Amra Banglay kotha bolbo. Ami Revy. Reviews World app niye apnar ki sahajjo lagbe bolun?";
         }
 
-        if (query.includes('withdraw') || query.includes('paise') || query.includes('nikal') || query.includes('payout') || query.includes('upi') || query.includes('bank') || query.includes('paytm')) {
+        // Wallet Balance Query (Devanagari & Roman)
+        if (query.includes('balance') || query.includes('बैलेंस') || query.includes('वॉलेट') || query.includes('वलेट') || query.includes('shosh') ||
+            (query.includes('kitna') && (query.includes('paisa') || query.includes('paise') || query.includes('rupee') || query.includes('rupaye'))) ||
+            (query.includes('कितना') && (query.includes('पैसा') || query.includes('पैसे') || query.includes('रुपये')))) {
+            
+            const currentBal = Number(currentUser?.walletBalance || currentUser?.balance || 0).toLocaleString('en-IN');
             if (lang === 'English') {
-                return "You can request your withdrawals directly in the app via UPI, Bank Transfer, Paytm, or Wallet. Once submitted, our Admin team verifies and credits the payout safely to your account!";
+                return `Your current wallet balance is Rupees ${currentBal}. You can request a withdrawal anytime directly in the app.`;
             }
             if (lang === 'Bengali') {
-                return "Aapni Reviews World app theke UPI, Bank Transfer, ba Paytm-er madhyame Withdrawal request korte parben. Request pawar por humader Admin team verify kore taka apnar account-e credit kore debe.";
+                return `Apnar vartaman wallet balance holo Rupees ${currentBal}. Aapni je kono somoy withdrawal request korte parben.`;
             }
-            return "Aap Reviews World app me Direct UPI, Bank Transfer, Paytm ya Wallet se Withdrawal request laga saktee hain. Withdrawal request submit hone ke baad Admin team verify karke aapka payout approve kar degee aur aapke account me credit ho jayega!";
+            return `Aapka vartaman wallet balance ${currentBal} Rupaye hai. Aap isse jab chahe withdrawal request laga sakte hain.`;
         }
 
-        if (query.includes('fund') || query.includes('add') || query.includes('deposit') || query.includes('recharge') || query.includes('balance')) {
+        // Withdrawal Query (Devanagari & Roman)
+        if (query.includes('withdraw') || query.includes('विड्रॉ') || query.includes('विड्रॉल') || 
+            query.includes('nikal') || query.includes('nikalna') || query.includes('निकाल') || query.includes('निकालना') ||
+            query.includes('payout') || query.includes('पेआउट') || query.includes('upi') || query.includes('यूपीआई') ||
+            query.includes('bank') || query.includes('बैंक') || query.includes('paytm') || query.includes('पेटीएम') ||
+            query.includes('transfer') || query.includes('ट्रांसफर')) {
+            
             if (lang === 'English') {
-                return "Please note that users cannot manually deposit or add funds. All wallet balances and deposits are strictly credited by our Admin team directly.";
+                return "You can request your withdrawals directly in the app via UPI, Bank Transfer, or Paytm. Once submitted, our Admin team verifies and credits the payout safely to your account!";
             }
-            return "Main aapko bata doon ki users khud se fund add nahi kar saktee. Fund add aur wallet balance deposit strictly Admin dwaara hi aapke account me credit kiya jata hai.";
+            if (lang === 'Bengali') {
+                return "Aapni Reviews World app theke UPI, Bank Transfer, ba Paytm-er madhyame Withdrawal request korte parben. Request pawar por Admin team verify kore taka account-e credit kore debe.";
+            }
+            return "Aap Reviews World app me Direct UPI, Bank Transfer, ya Paytm se Withdrawal request laga saktee hain. Withdrawal submit hone ke baad Admin team verify karke aapka payout approve kar degee.";
         }
 
-        if (query.includes('task') || query.includes('earn') || query.includes('kamai') || query.includes('refer') || query.includes('reward') || query.includes('work')) {
+        // Recharge / Add Funds Query (Devanagari & Roman)
+        if (query.includes('recharge') || query.includes('रिचार्ज') || query.includes('deposit') || query.includes('डिपॉजिट') ||
+            query.includes('fund') || query.includes('फंड') || query.includes('add') || query.includes('ऐड') || query.includes('dalna') || query.includes('डालना')) {
+            
+            if (lang === 'English') {
+                return "Please note that users cannot manually deposit or add funds. All wallet deposits are strictly credited by our Admin team directly.";
+            }
+            return "Main aapko bata doon ki users khud se fund add nahi kar saktee. Wallet balance deposit strictly Admin dwaara hi aapke account me credit kiya jata hai.";
+        }
+
+        // Task / Earnings / Refer Query (Devanagari & Roman)
+        if (query.includes('task') || query.includes('टास्क') || query.includes('earn') || query.includes('kamai') || query.includes('kamaai') || query.includes('कमाई') ||
+            query.includes('kaam') || query.includes('काम') || query.includes('work') || query.includes('refer') || query.includes('रिफर') || query.includes('reward') || query.includes('रिवार्ड')) {
+            
             if (lang === 'English') {
                 return "You can earn money by completing daily review tasks, submitting screenshots, and sharing your referral link with friends to get instant referral rewards!";
             }
-            return "Aap Daily Review Tasks complete karke, screenshot submit karke aur apne Referral link se dosto ko invite karke instant referral bonus kama saktee hain!";
+            return "Aap Daily Review Tasks complete karke, screenshot submit karke aur apne Referral link se dosto ko invite karke daily acchi earnings kar saktee hain!";
         }
 
-        if (query.includes('hi') || query.includes('hello') || query.includes('namaste') || query.includes('kaise') || query.includes('kya kar')) {
+        // Greetings / Identity
+        if (query.includes('hi') || query.includes('hello') || query.includes('namaste') || query.includes('नमस्ते') || query.includes('हेलो') || query.includes('हाय') ||
+            query.includes('kaise') || query.includes('कैसा') || query.includes('कैसे') || query.includes('kon') || query.includes('कौन') || query.includes('revy') || query.includes('naam') || query.includes('नाम')) {
+            
             if (lang === 'English') {
-                return "Hello! I am Revy, your Revy AI Customer Support Representative. I am delighted to talk to you. How can I help you with Reviews World today?";
+                return "Hello! I am Revy, your Revy AI Voice Support Representative. I am delighted to talk to you. How can I help you with Reviews World today?";
             }
-            return "Namaste! Main Revy, Reviews World ki AI Support Executive bol rahee hoon. Main aapki kya sahayata kar saktee hoon?";
+            return "Namaste! Main Revy, Reviews World ki AI Support Executive bol rahee hoon. Aap wallet balance, withdrawal ya daily review tasks ke baare me pooch sakte hain.";
+        }
+
+        // Thank you / Bye
+        if (query.includes('thank') || query.includes('thanks') || query.includes('dhanyawad') || query.includes('धन्यवाद') || query.includes('shukriya') || query.includes('शुक्रिया') || query.includes('ok') || query.includes('okay') || query.includes('bye')) {
+            if (lang === 'English') {
+                return "You're most welcome! Have a wonderful day ahead with Reviews World!";
+            }
+            return "Aapka bahot bahot dhanyawad! Reviews World support me call karne ke liye aabhar. Aapka din shubh ho!";
         }
 
         if (lang === 'English') {
-            return "I am right here to help you! You can ask me about withdrawal processing, review tasks, referral bonuses, or admin approvals.";
+            return "I am right here to help you! You can ask me about your wallet balance, withdrawal process, daily review tasks, or referral bonuses.";
         }
-        return "Main Reviews World support se Revy bol rahee hoon. Aap withdrawal, daily review tasks, referral bonus ya account approval ke baare me kuch bhi pooch saktee hain!";
+        return "Aap mujhse apna wallet balance, withdrawal ka tarika, daily review tasks ya referral rewards ke baare me pooch sakte hain. Main aapki poori madad karungi.";
     };
 
     const processUserInput = (text) => {
-        if (!text || !text.trim() || isSpeaking) return;
+        if (!text || !text.trim()) return;
         
+        // Interrupt AI speaking if user asks a question
+        if (isSpeaking) {
+            try { window.speechSynthesis?.cancel(); } catch (_) {}
+            if (speakSafetyTimeout) {
+                clearTimeout(speakSafetyTimeout);
+                speakSafetyTimeout = null;
+            }
+            isSpeaking = false;
+        }
+
+        updateTranscriptUI(undefined, `"${text}"`);
         setStatus('🧠 Thinking...', 'listening');
 
         setTimeout(() => {
             const aiReply = getAIKnowledgeResponse(text, selectedLang);
             speakText(aiReply, selectedLang);
-        }, 500);
+        }, 150);
     };
 
     const startSpeechRecognition = () => {
+        if (isMicMuted) return;
         const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
         if (!SpeechRec) {
             console.warn('Speech recognition not supported on this browser.');
+            setStatus('⚠️ Speech recognition unsupported', 'connected');
             return;
         }
+
+        stopSpeechRecognition();
+
         try {
             recognitionInstance = new SpeechRec();
             recognitionInstance.continuous = true;
@@ -1756,7 +1937,7 @@ const startAIVoiceCallModal = () => {
             else recognitionInstance.lang = 'hi-IN';
 
             recognitionInstance.onresult = (event) => {
-                if (isMicMuted || isSpeaking) return;
+                if (isMicMuted) return;
                 const lastResultIndex = event.results.length - 1;
                 const transcript = event.results[lastResultIndex][0].transcript;
                 if (transcript && transcript.trim()) {
@@ -1765,16 +1946,25 @@ const startAIVoiceCallModal = () => {
             };
 
             recognitionInstance.onstart = () => {
-                if (!isSpeaking) setStatus('🎙️ Listening...', 'listening');
+                if (!isSpeaking) setStatus('🎙️ Listening... Speak now', 'listening');
             };
 
             recognitionInstance.onerror = (e) => {
                 console.warn('Speech recognition error:', e.error);
+                if (e.error === 'not-allowed') {
+                    setStatus('⚠️ Mic access denied. Grant permission', 'connected');
+                } else if (!isMicMuted) {
+                    setTimeout(() => {
+                        if (!isMicMuted) startSpeechRecognition();
+                    }, 1000);
+                }
             };
 
             recognitionInstance.onend = () => {
-                if (!isMicMuted && recognitionInstance) {
-                    try { recognitionInstance.start(); } catch (_) {}
+                if (!isMicMuted) {
+                    setTimeout(() => {
+                        if (!isMicMuted) startSpeechRecognition();
+                    }, 300);
                 }
             };
 
@@ -1784,124 +1974,173 @@ const startAIVoiceCallModal = () => {
         }
     };
 
-    renderModal('', `
-        <div class="space-y-5 text-center py-4 px-2 relative overflow-hidden select-none bg-gradient-to-b from-gray-950 via-slate-900 to-emerald-950 text-white rounded-3xl -m-6 p-6 shadow-2xl border border-emerald-500/20">
-            <div class="absolute -top-12 -right-12 w-36 h-36 bg-emerald-500/20 rounded-full blur-2xl pointer-events-none"></div>
-            <div class="absolute -bottom-12 -left-12 w-36 h-36 bg-teal-500/20 rounded-full blur-2xl pointer-events-none"></div>
+    const requestMicPermissionAndListen = () => {
+        startSpeechRecognition();
+    };
 
-            <div class="flex items-center justify-between px-2">
-                <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-[11px] font-extrabold text-emerald-400">
-                    <span class="w-2 h-2 rounded-full bg-emerald-400 animate-ping"></span>
+    const updateLangButtonsUI = () => {
+        const langs = [
+            { id: 'ai-lang-hi', name: 'Hindi' },
+            { id: 'ai-lang-en', name: 'English' },
+            { id: 'ai-lang-bn', name: 'Bengali' }
+        ];
+        langs.forEach(item => {
+            const btn = document.getElementById(item.id);
+            if (btn) {
+                if (selectedLang === item.name) {
+                    btn.className = 'px-3 py-1 text-xs font-black rounded-full bg-emerald-500 text-white shadow-md ring-2 ring-emerald-400/50 transition';
+                } else {
+                    btn.className = 'px-3 py-1 text-xs font-bold rounded-full bg-slate-800 text-slate-300 hover:bg-slate-700 hover:text-white border border-slate-700 transition';
+                }
+            }
+        });
+    };
+
+    const selectLanguage = (lang) => {
+        selectedLang = lang;
+        updateLangButtonsUI();
+        if (lang === 'Hindi') {
+            speakText("Namaste! Aapne Hindi chuna hai. Main Revy, Reviews World support Executive bol rahee hoon. Aapko kya sahayata chahiye?", 'Hindi');
+        } else if (lang === 'English') {
+            speakText("You selected English. I am Revy, your support executive. How can I help you today?", 'English');
+        } else if (lang === 'Bengali') {
+            speakText("Aapni Bengali chuna korchen. Ami Revy. Reviews World app niye apnar ki sahajjo lagbe?", 'Bengali');
+        }
+    };
+
+    renderModal('', `
+        <div class="text-center p-4 sm:p-5 relative overflow-hidden select-none bg-gradient-to-b from-slate-950 via-slate-900 to-emerald-950 text-white rounded-3xl shadow-2xl border border-emerald-500/30">
+            <div class="absolute -top-10 -right-10 w-32 h-32 bg-emerald-500/20 rounded-full blur-2xl pointer-events-none"></div>
+            <div class="absolute -bottom-10 -left-10 w-32 h-32 bg-teal-500/20 rounded-full blur-2xl pointer-events-none"></div>
+
+            <div class="flex items-center justify-between mb-2">
+                <span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-[10px] font-extrabold text-emerald-400">
+                    <span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
                     24/7 Voice AI
                 </span>
-                <span class="text-xs font-bold text-gray-400">REVIEWS WORLD</span>
+                <span class="text-[10px] font-extrabold text-gray-400 tracking-wider">REVIEWS WORLD</span>
+                <button id="ai-call-close-x-btn" class="w-7 h-7 rounded-full bg-gray-800/80 hover:bg-gray-700 text-gray-300 hover:text-white flex items-center justify-center text-xs font-bold transition">
+                    ✕
+                </button>
             </div>
 
-            <div class="relative w-32 h-32 mx-auto flex items-center justify-center my-3">
-                <div id="ai-avatar-call-wave" class="absolute -inset-3 rounded-full bg-emerald-500/20 blur-md animate-pulse"></div>
-                <div class="relative w-28 h-28 rounded-full bg-gradient-to-tr from-emerald-400 via-teal-500 to-emerald-600 p-1 shadow-2xl flex items-center justify-center ring-4 ring-emerald-500/30">
+            <div class="relative w-20 h-20 sm:w-22 sm:h-22 mx-auto flex items-center justify-center my-1">
+                <div id="ai-avatar-call-wave" class="absolute -inset-2 rounded-full bg-emerald-500/20 blur-md"></div>
+                <div class="relative w-20 h-20 rounded-full bg-gradient-to-tr from-emerald-400 via-teal-500 to-emerald-600 p-1 shadow-2xl flex items-center justify-center ring-4 ring-emerald-500/30">
                     <img src="${CHATBOT_ICON_URL}" alt="Revy AI Executive" class="w-full h-full rounded-full object-cover border-2 border-white/80 shadow-inner">
                 </div>
             </div>
 
-            <div>
-                <h3 class="text-xl font-black text-white flex items-center justify-center gap-1.5 tracking-tight">
-                    REVY - FEMALE AI SUPPORT ${getVerifiedBadge()}
+            <div class="mt-1">
+                <h3 class="text-base sm:text-lg font-black text-white flex items-center justify-center gap-1.5 tracking-tight">
+                    Voice Call Support ${getVerifiedBadge()}
                 </h3>
-                <p id="ai-call-status-badge" class="text-xs font-extrabold text-emerald-400 mt-1 animate-pulse">
+                <p id="ai-call-status-badge" class="text-[11px] font-extrabold text-emerald-400 mt-0.5">
                     🟢 Connected • 00:00
                 </p>
             </div>
 
-            <div id="ai-call-soundwave" class="flex items-center justify-center gap-1.5 h-10 my-3 opacity-80 transition">
-                <span class="wave-bar w-1.5 h-6 bg-gradient-to-t from-emerald-500 to-teal-300 rounded-full"></span>
-                <span class="wave-bar w-1.5 h-10 bg-gradient-to-t from-emerald-500 to-teal-300 rounded-full"></span>
-                <span class="wave-bar w-1.5 h-8 bg-gradient-to-t from-emerald-500 to-teal-300 rounded-full"></span>
-                <span class="wave-bar w-1.5 h-10 bg-gradient-to-t from-emerald-500 to-teal-300 rounded-full"></span>
-                <span class="wave-bar w-1.5 h-6 bg-gradient-to-t from-emerald-500 to-teal-300 rounded-full"></span>
+            <!-- Language Selection Pills -->
+            <div class="flex items-center justify-center gap-2 my-2.5">
+                <button id="ai-lang-hi" class="px-3 py-1 text-xs font-black rounded-full bg-emerald-500 text-white shadow-md ring-2 ring-emerald-400/50 transition">
+                    🇮🇳 Hindi
+                </button>
+                <button id="ai-lang-en" class="px-3 py-1 text-xs font-bold rounded-full bg-slate-800 text-slate-300 hover:bg-slate-700 hover:text-white border border-slate-700 transition">
+                    🇬🇧 English
+                </button>
+                <button id="ai-lang-bn" class="px-3 py-1 text-xs font-bold rounded-full bg-slate-800 text-slate-300 hover:bg-slate-700 hover:text-white border border-slate-700 transition">
+                    🇮🇳 Bengali
+                </button>
             </div>
 
-            <div class="flex items-center justify-center gap-1.5 flex-wrap px-2">
-                ${['Hindi', 'Hinglish', 'English', 'Bengali'].map(lang => `
-                    <button class="call-lang-chip px-3 py-1 rounded-full text-[11px] font-bold border transition ${lang === selectedLang ? 'bg-emerald-500 text-white border-emerald-400 shadow-lg shadow-emerald-500/30' : 'bg-gray-800/80 text-gray-300 border-gray-700/80 hover:bg-gray-700'}" data-lang="${lang}">
-                        ${lang === 'Hindi' ? '🇮🇳 Hindi' : lang === 'English' ? '🇬🇧 English' : lang === 'Bengali' ? '🇧🇩 Bengali' : '🇮🇳 Hinglish'}
-                    </button>
-                `).join('')}
+            <div id="ai-call-soundwave" class="flex items-center justify-center gap-1.5 h-6 my-1.5 opacity-80 transition">
+                <span class="wave-bar w-1 h-3.5 bg-gradient-to-t from-emerald-500 to-teal-300 rounded-full"></span>
+                <span class="wave-bar w-1 h-6 bg-gradient-to-t from-emerald-500 to-teal-300 rounded-full"></span>
+                <span class="wave-bar w-1 h-4 bg-gradient-to-t from-emerald-500 to-teal-300 rounded-full"></span>
+                <span class="wave-bar w-1 h-6 bg-gradient-to-t from-emerald-500 to-teal-300 rounded-full"></span>
+                <span class="wave-bar w-1 h-3.5 bg-gradient-to-t from-emerald-500 to-teal-300 rounded-full"></span>
             </div>
 
-            <div class="flex items-center justify-center gap-8 pt-4">
-                <button id="ai-call-mute-btn" class="flex flex-col items-center gap-1.5 text-[11px] font-extrabold text-gray-300 hover:text-white transition group">
-                    <div class="w-14 h-14 rounded-full bg-gray-800/90 hover:bg-gray-700 border border-gray-700 flex items-center justify-center text-xl shadow-lg transition transform group-active:scale-90">
+            <!-- Hidden transcript container for element selectors -->
+            <div class="hidden">
+                <span id="ai-call-revy-transcript"></span>
+                <span id="ai-call-user-transcript"></span>
+            </div>
+
+            <div class="flex items-center justify-center gap-5 sm:gap-7 pt-1">
+                <button id="ai-call-mute-btn" type="button" class="flex flex-col items-center gap-1 text-[11px] font-extrabold text-gray-300 hover:text-white transition group">
+                    <div class="w-12 h-12 rounded-full bg-gray-800/90 hover:bg-gray-700 border border-gray-700/80 flex items-center justify-center text-lg shadow-lg transition transform group-active:scale-90">
                         🎤
                     </div>
                     <span id="ai-call-mute-label">Mute</span>
                 </button>
 
-                <button id="ai-call-end-btn" class="flex flex-col items-center gap-1.5 text-[11px] font-extrabold text-rose-400 hover:text-rose-300 transition group">
-                    <div class="w-16 h-16 rounded-full bg-gradient-to-tr from-rose-600 to-red-500 hover:from-rose-500 hover:to-red-400 text-white flex items-center justify-center text-2xl shadow-xl shadow-rose-600/50 transition transform group-active:scale-90 border-2 border-rose-400/50">
+                <button id="ai-call-end-btn" type="button" class="flex flex-col items-center gap-1 text-[11px] font-extrabold text-rose-400 hover:text-rose-300 transition group">
+                    <div class="w-14 h-14 rounded-full bg-gradient-to-tr from-rose-600 via-red-600 to-rose-500 hover:from-rose-500 hover:to-red-500 text-white flex items-center justify-center text-xl shadow-xl shadow-rose-600/50 transition transform group-active:scale-95 border-2 border-rose-400/50 animate-pulse">
                         📞
                     </div>
                     <span>End Call</span>
                 </button>
 
-                <button id="ai-call-speaker-btn" class="flex flex-col items-center gap-1.5 text-[11px] font-extrabold text-emerald-400 hover:text-emerald-300 transition group">
-                    <div class="w-14 h-14 rounded-full bg-emerald-950/80 border border-emerald-500/50 text-emerald-400 flex items-center justify-center text-xl shadow-lg shadow-emerald-950/50 transition transform group-active:scale-90">
+                <button id="ai-call-speaker-btn" type="button" class="flex flex-col items-center gap-1 text-[11px] font-extrabold text-emerald-400 hover:text-emerald-300 transition group">
+                    <div class="w-12 h-12 rounded-full bg-emerald-950/80 border border-emerald-500/50 text-emerald-400 flex items-center justify-center text-lg shadow-lg shadow-emerald-950/50 transition transform group-active:scale-90">
                         🔊
                     </div>
                     <span id="ai-call-speaker-label">Speaker</span>
                 </button>
             </div>
         </div>
-    `, '', 'max-w-sm');
+    `, '', 'max-w-xs sm:max-w-sm');
 
     callTimerInterval = setInterval(() => {
         callDurationSec++;
+        
+        // Keep synthesis active on Chrome browsers
+        if (window.speechSynthesis && window.speechSynthesis.speaking) {
+            try { window.speechSynthesis.resume(); } catch (_) {}
+        }
+
         if (!isSpeaking) {
             const statusEl = document.getElementById('ai-call-status-badge');
-            if (statusEl && !statusEl.textContent.includes('Speaking') && !statusEl.textContent.includes('Thinking')) {
+            if (statusEl && !statusEl.textContent.includes('Speaking') && !statusEl.textContent.includes('Thinking') && !statusEl.textContent.includes('Listening')) {
                 statusEl.textContent = `🟢 Connected • ${formatTimer(callDurationSec)}`;
             }
         }
     }, 1000);
 
-    const welcomeMsg = "Namaste! Main Revy, Reviews World ki AI Support Executive bol rahee hoon. Aap bataiye, main aapki kya sahayata kar saktee hoon?";
-    setTimeout(() => speakText(welcomeMsg, selectedLang), 400);
+    // Language button listeners
+    document.getElementById('ai-lang-hi')?.addEventListener('click', () => selectLanguage('Hindi'));
+    document.getElementById('ai-lang-en')?.addEventListener('click', () => selectLanguage('English'));
+    document.getElementById('ai-lang-bn')?.addEventListener('click', () => selectLanguage('Bengali'));
 
-    document.querySelectorAll('.call-lang-chip').forEach(chip => {
-        chip.onclick = () => {
-            selectedLang = chip.dataset.lang;
-            document.querySelectorAll('.call-lang-chip').forEach(c => {
-                c.className = `call-lang-chip px-3 py-1 rounded-full text-[11px] font-bold border transition ${c.dataset.lang === selectedLang ? 'bg-emerald-500 text-white border-emerald-400 shadow-lg shadow-emerald-500/30' : 'bg-gray-800/80 text-gray-300 border-gray-700/80 hover:bg-gray-700'}`;
-            });
-            
-            if (recognitionInstance) {
-                try {
-                    recognitionInstance.stop();
-                    if (selectedLang === 'English') recognitionInstance.lang = 'en-IN';
-                    else if (selectedLang === 'Bengali') recognitionInstance.lang = 'bn-IN';
-                    else recognitionInstance.lang = 'hi-IN';
-                } catch (_) {}
-            }
-
-            let switchMsg = `Aapki bhasha ${selectedLang} select ho gayi hai. Main aapki kya help kar saktee hoon?`;
-            if (selectedLang === 'English') switchMsg = "Language set to English. I am ready to help you!";
-            if (selectedLang === 'Bengali') switchMsg = "Apnar bhasa Bengali select hoyechhe. Bolun ami ki sahajjo korte pari?";
-            
-            speakText(switchMsg, selectedLang);
+    // Close button
+    const closeXBtn = document.getElementById('ai-call-close-x-btn');
+    if (closeXBtn) {
+        closeXBtn.onclick = () => {
+            cleanupCall();
+            window.closeModal();
         };
-    });
+    }
 
+    // Mute button
     const muteBtn = document.getElementById('ai-call-mute-btn');
     if (muteBtn) {
         muteBtn.onclick = () => {
             isMicMuted = !isMicMuted;
             const label = document.getElementById('ai-call-mute-label');
             if (label) label.textContent = isMicMuted ? 'Muted' : 'Mute';
-            muteBtn.querySelector('div').className = `w-14 h-14 rounded-full ${isMicMuted ? 'bg-rose-900/80 text-rose-400 border border-rose-500/50' : 'bg-gray-800/90 text-gray-300 border border-gray-700'} flex items-center justify-center text-xl shadow-lg transition`;
+            muteBtn.querySelector('div').className = `w-12 h-12 rounded-full ${isMicMuted ? 'bg-rose-900/80 text-rose-400 border border-rose-500/50' : 'bg-gray-800/90 text-gray-300 border border-gray-700'} flex items-center justify-center text-lg shadow-lg transition`;
+            if (isMicMuted) {
+                stopSpeechRecognition();
+                setStatus('🔴 Mic Muted', 'connected');
+            } else {
+                startSpeechRecognition();
+            }
             showNotification(isMicMuted ? 'Microphone Muted' : 'Microphone Unmuted');
         };
     }
 
+    // Speaker button
     const speakerBtn = document.getElementById('ai-call-speaker-btn');
     if (speakerBtn) {
         speakerBtn.onclick = () => {
@@ -1909,17 +2148,21 @@ const startAIVoiceCallModal = () => {
             if (!isSpeakerOn) window.speechSynthesis?.cancel();
             const label = document.getElementById('ai-call-speaker-label');
             if (label) label.textContent = isSpeakerOn ? 'Speaker' : 'Muted';
-            speakerBtn.querySelector('div').className = `w-14 h-14 rounded-full ${isSpeakerOn ? 'bg-emerald-950/80 border border-emerald-500/50 text-emerald-400' : 'bg-gray-800/90 border border-gray-700 text-gray-500'} flex items-center justify-center text-xl shadow-lg transition`;
+            speakerBtn.querySelector('div').className = `w-12 h-12 rounded-full ${isSpeakerOn ? 'bg-emerald-950/80 border border-emerald-500/50 text-emerald-400' : 'bg-gray-800/90 border border-gray-700 text-gray-500'} flex items-center justify-center text-lg shadow-lg transition`;
             showNotification(isSpeakerOn ? 'Speaker On' : 'Speaker Off');
         };
     }
 
     const cleanupCall = () => {
-        clearInterval(callTimerInterval);
-        if (window.speechSynthesis) window.speechSynthesis.cancel();
-        if (recognitionInstance) {
-            try { recognitionInstance.stop(); } catch (e) {}
+        if (speakSafetyTimeout) {
+            clearTimeout(speakSafetyTimeout);
+            speakSafetyTimeout = null;
         }
+        clearInterval(callTimerInterval);
+        if (window.speechSynthesis) {
+            try { window.speechSynthesis.cancel(); } catch (_) {}
+        }
+        stopSpeechRecognition();
     };
 
     const endBtn = document.getElementById('ai-call-end-btn');
@@ -1931,7 +2174,12 @@ const startAIVoiceCallModal = () => {
         };
     }
 
-    startSpeechRecognition();
+    // Initial greeting in Hindi
+    const welcomeMsg = "Namaste! Reviews World voice support me aapka swagat hai. Aap Hindi, English ya Bengali me baat kar sakte hain. Bataiye aapko kya sahayata chahiye?";
+    speakText(welcomeMsg, 'Hindi');
+
+    // Trigger mic permission and start speech recognition
+    requestMicPermissionAndListen();
 };
 
 window.startAIVoiceCallModal = startAIVoiceCallModal;
@@ -1944,42 +2192,39 @@ const showHelpSupportPage = () => {
             const content = `
                 ${getPageHeader('Help', { showBack: false })}
                 <div class="max-w-lg mx-auto space-y-4">
-                    <button id="ai-voice-call-card" class="w-full flex items-center gap-4 p-4 bg-gradient-to-r from-emerald-500/10 via-teal-500/10 to-blue-500/10 dark:from-emerald-900/30 dark:via-teal-900/30 dark:to-blue-900/30 border-2 border-emerald-500/30 dark:border-emerald-500/40 rounded-2xl shadow-md text-left hover:shadow-lg transition transform active:scale-98 relative overflow-hidden group">
+                    <button id="ai-voice-call-card" class="w-full flex items-center justify-between gap-3 p-3.5 sm:p-4 bg-gradient-to-r from-emerald-500/10 via-teal-500/10 to-blue-500/10 dark:from-emerald-900/30 dark:via-teal-900/30 dark:to-blue-900/30 border-2 border-emerald-500/30 dark:border-emerald-500/40 rounded-2xl shadow-md text-left hover:shadow-lg transition transform active:scale-98 relative overflow-hidden group">
                         <div class="absolute -right-6 -bottom-6 w-24 h-24 bg-emerald-500/10 rounded-full blur-xl pointer-events-none"></div>
-                        <div class="relative flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-tr from-emerald-500 to-teal-600 text-white shadow-md shadow-emerald-500/20">
-                            <svg class="h-7 w-7 animate-pulse" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                                <path stroke-linecap="round" stroke-linejoin="round" d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z"/>
-                            </svg>
+                        <div class="relative flex h-12 w-12 sm:h-14 sm:w-14 shrink-0 items-center justify-center rounded-full bg-gradient-to-tr from-emerald-500 to-teal-600 text-white shadow-md shadow-emerald-500/20 p-0.5 border-2 border-emerald-400">
+                            <img src="${CHATBOT_ICON_URL}" alt="Voice Call Support" class="w-full h-full rounded-full object-cover">
                         </div>
                         <div class="flex-1 min-w-0">
-                            <div class="flex items-center gap-2">
-                                <h3 class="font-black text-gray-900 dark:text-white text-base">AI Voice Call Support</h3>
-                                <span class="px-2 py-0.5 text-[10px] font-extrabold uppercase rounded-full bg-emerald-500 text-white animate-bounce">24/7 LIVE</span>
-                            </div>
-                            <p class="text-xs font-semibold text-emerald-700 dark:text-emerald-300 truncate mt-0.5">Talk to Voice Assistant for instant app help</p>
+                            <h3 class="font-black text-gray-900 dark:text-white text-sm sm:text-base leading-tight">Voice Call Support</h3>
+                            <p class="text-[11px] sm:text-xs font-semibold text-emerald-700 dark:text-emerald-300 truncate mt-0.5">Talk to Voice Assistant</p>
                         </div>
-                        <span class="rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white px-3.5 py-2 text-xs font-black shadow-sm shrink-0 flex items-center gap-1">
+                        <span class="rounded-full bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-white px-3.5 py-2 text-xs font-black shadow-md shadow-emerald-500/20 shrink-0 flex items-center gap-1.5 whitespace-nowrap active:scale-95 transition-all">
                             Call 📞
                         </span>
                     </button>
 
-                    <button id="revy-ai-chat-card" class="w-full flex items-center gap-4 p-4 bg-white dark:bg-gray-800 border border-gray-100 dark:border-gray-700 rounded-2xl shadow-md text-left hover:bg-gray-50 dark:hover:bg-gray-700/50 transition">
-                        ${getRevyBotLogo('h-14 w-14 shrink-0')}
+                    <button id="revy-ai-chat-card" class="w-full flex items-center gap-3 sm:gap-4 p-3.5 sm:p-4 bg-white dark:bg-gray-800 border border-gray-100 dark:border-gray-700 rounded-2xl shadow-md text-left hover:bg-gray-50 dark:hover:bg-gray-700/50 transition">
+                        ${getRevyBotLogo('h-12 w-12 sm:h-14 sm:w-14 shrink-0')}
                         <div class="flex-1 min-w-0">
-                            <h3 class="font-bold text-gray-900 dark:text-white inline-flex items-center gap-1">REVY - RW AI BOT ${getVerifiedBadge()}</h3>
-                            <p class="text-sm text-emerald-600 dark:text-emerald-300 truncate">Instant help solution</p>
+                            <h3 class="font-bold text-gray-900 dark:text-white inline-flex items-center gap-1 text-sm sm:text-base">REVY - RW AI BOT ${getVerifiedBadge()}</h3>
+                            <p class="text-xs sm:text-sm text-emerald-600 dark:text-emerald-300 truncate">Instant help solution</p>
                         </div>
-                        <span class="text-blue-600 dark:text-blue-300 font-bold">Ask</span>
+                        <span class="text-blue-600 dark:text-blue-300 font-bold text-sm">Ask</span>
                     </button>
                     ${!hasSubAdmin ? `
-                    <button id="reviews-world-chat-card" class="w-full flex items-center gap-4 p-4 bg-white dark:bg-gray-800 border border-gray-100 dark:border-gray-700 rounded-2xl shadow-md text-left hover:bg-gray-50 dark:hover:bg-gray-700/50 transition">
-                        ${getSupportLogoFrame('h-14 w-14 shrink-0')}
+                    <button id="reviews-world-chat-card" class="w-full flex items-center gap-3 sm:gap-4 p-3.5 sm:p-4 bg-white dark:bg-gray-800 border border-gray-100 dark:border-gray-700 rounded-2xl shadow-md text-left hover:bg-gray-50 dark:hover:bg-gray-700/50 transition">
+                        ${getSupportLogoFrame('h-12 w-12 sm:h-14 sm:w-14 shrink-0')}
                         <div class="flex-1 min-w-0">
-                            <h3 class="font-bold text-gray-900 dark:text-white inline-flex items-center gap-1">REVIEWS WORLD ${getVerifiedBadge()}</h3>
-                            <p class="text-sm text-gray-500 dark:text-gray-400 truncate">Chat with admin support</p>
+                            <h3 class="font-bold text-gray-900 dark:text-white inline-flex items-center gap-1 text-sm sm:text-base">REVIEWS WORLD ${getVerifiedBadge()}</h3>
+                            <p class="text-xs sm:text-sm text-gray-500 dark:text-gray-400 truncate">Chat with admin support</p>
                         </div>
-                        <span id="support-chat-unread-badge" class="hidden min-w-6 h-6 rounded-full bg-red-600 px-2 text-center text-xs font-black leading-6 text-white shadow"></span>
-                        <span class="text-blue-600 dark:text-blue-300 font-bold">Chat</span>
+                        <div id="support-chat-action-container" class="shrink-0 flex items-center justify-end min-w-[42px]">
+                            <span id="support-chat-unread-badge" class="hidden min-w-7 h-7 rounded-full bg-rose-600 px-2 text-center text-xs font-black leading-7 text-white shadow-md animate-pulse"></span>
+                            <span id="support-chat-label-text" class="text-blue-600 dark:text-blue-300 font-bold text-sm">Chat</span>
+                        </div>
                     </button>
                     ` : ''}
                     <div id="sub-admin-chat-card-wrapper" class="hidden"></div>
@@ -1990,7 +2235,7 @@ const showHelpSupportPage = () => {
             setBottomNavActive('bottom-help-btn');
             updateSupportChatUnreadBadges();
             document.getElementById('ai-voice-call-card').onclick = startAIVoiceCallModal;
-            document.getElementById('revy-ai-chat-card').onclick = openRevyBotChatPage;
+            document.getElementById('revy-ai-chat-card').onclick = () => openRevyBotChatPage(false);
             if (!hasSubAdmin) {
                 document.getElementById('reviews-world-chat-card').onclick = () => openSupportChatPage(currentUser.uid, 'user', { adminId: ADMIN_UID });
             }

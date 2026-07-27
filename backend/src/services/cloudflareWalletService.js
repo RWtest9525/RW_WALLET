@@ -756,24 +756,12 @@ async function saveFundRequest(d1, { requestId, userId, type = 'withdrawal', amo
             message: `₹${amountVal} ka recharge request ${userName} ne submit kiya hai. Abhi process karein.`,
             data: pushData
           }, d1);
-          await oneSignalService.sendPushNotificationToUser({
-            userId: ADMIN_UID,
-            title: '💳 Recharge Request Aaya Hai',
-            message: `New recharge: ${userName} ne ₹${amountVal} ka add fund request diya hai.`,
-            data: pushData
-          }, d1);
         } else {
           // Trigger #6: Withdrawal Request -> Alert Admin
           await oneSignalService.sendPushNotificationToRole({
             role: 'admin',
             title: '🏦 Naya Withdrawal Request',
             message: `₹${amountVal} ka withdrawal ${userName} ne request kiya hai. Abhi approve karein.`,
-            data: pushData
-          }, d1);
-          await oneSignalService.sendPushNotificationToUser({
-            userId: ADMIN_UID,
-            title: '🏦 Withdrawal Request Aaya',
-            message: `New withdrawal: ${userName} ne ₹${amountVal} payout ke liye request di hai.`,
             data: pushData
           }, d1);
         }
@@ -3186,16 +3174,6 @@ function registerRoutes(app, { d1, r2 }) {
         : `Aapka referral bonus ₹${bonusVal} wallet mein credit ho gaya!`;
       const pushData = { type: 'referral_bonus', referrerUserId, referralUserName, bonusAmount: bonusVal };
       await sendNotification(d1, referrerUserId, titleHinglish, messageHinglish, pushData);
-      (async () => {
-        try {
-          await oneSignalService.sendPushNotificationToUser({
-            userId: referrerUserId,
-            title: titleHinglish,
-            message: messageHinglish,
-            data: pushData
-          }, d1);
-        } catch (_) {}
-      })();
       return res.json({ ok: true, pushed: true });
     } catch (err) {
       console.error('[ReferralBonusNotify] Error:', err);
@@ -3212,12 +3190,6 @@ function registerRoutes(app, { d1, r2 }) {
       const message = `${userName || userEmail || 'User'} ne password reset ka request diya hai. Abhi action lein.`;
       await oneSignalService.sendPushNotificationToRole({
         role: 'admin',
-        title: '🔐 Password Reset Request',
-        message,
-        data: pushData
-      }, d1);
-      await oneSignalService.sendPushNotificationToUser({
-        userId: ADMIN_UID,
         title: '🔐 Password Reset Request',
         message,
         data: pushData
@@ -3260,16 +3232,6 @@ function registerRoutes(app, { d1, r2 }) {
         reason
       };
       await sendNotification(d1, userId, titleHinglish, messageHinglish, pushData);
-      (async () => {
-        try {
-          await oneSignalService.sendPushNotificationToUser({
-            userId,
-            title: titleHinglish,
-            message: messageHinglish,
-            data: pushData
-          }, d1);
-        } catch (_) {}
-      })();
       return res.json({ ok: true, approved: true });
     } catch (err) {
       console.error('[ApproveUser] Error:', err);
@@ -5317,16 +5279,6 @@ ${memoriesContext}`
           const titleHinglish = '✅ Task Approve Ho Gaya';
           const messageHinglish = `Aapka "${appName}" task of ₹${rewardVal} admin ne approve kar diya hai!${reviewReason ? ' Note: ' + reviewReason : ' Wallet mein jaldi hi credit ho jayega.'}`;
           await sendNotification(d1, sub.user_id, titleHinglish, messageHinglish, { ...pushDataBase, status: 'approved' });
-          (async () => {
-            try {
-              await oneSignalService.sendPushNotificationToUser({
-                userId: sub.user_id,
-                title: titleHinglish,
-                message: messageHinglish,
-                data: { ...pushDataBase, status: 'approved' }
-              }, d1);
-            } catch (_) {}
-          })();
         } else if (updates.manualStatus === 'rejected') {
           const isAppReview = sub.task_link && (sub.task_link.includes('play.google.com') || sub.task_link.includes('details?id='));
           const defaultReason = isAppReview ? 'Aapka review Play Store par live nahi aaya hai.' : 'Aapka task approve nahi hua hai.';
@@ -5334,16 +5286,6 @@ ${memoriesContext}`
           const titleHinglish = '❌ Task Reject Ho Gaya';
           const messageHinglish = `Aapka "${appName}" task of ₹${rewardVal} reject ho gaya hai. Reason: ${finalReason}`;
           await sendNotification(d1, sub.user_id, titleHinglish, messageHinglish, { ...pushDataBase, status: 'rejected' });
-          (async () => {
-            try {
-              await oneSignalService.sendPushNotificationToUser({
-                userId: sub.user_id,
-                title: titleHinglish,
-                message: messageHinglish,
-                data: { ...pushDataBase, status: 'rejected' }
-              }, d1);
-            } catch (_) {}
-          })();
         }
       }
 

@@ -3,6 +3,8 @@
         '/assets/images/logo_192.png',
         '/assets/images/logo_512.png',
         '/assets/images/profile_card_bg.png',
+        '/assets/images/referral_banner.webp',
+        '/assets/images/referral_howitworks_cards.webp',
         '/assets/images/referral_banner.png',
         '/assets/images/referral_howitworks_cards.png',
         '/assets/images/notification_bell.png',
@@ -277,10 +279,10 @@ root.outerHTML = `
                                 <div class="mb-4 flex items-center justify-between gap-3">
                                     <h3 class="text-lg font-semibold">Actions</h3>
                                     <button id="wallet-history-action-btn"
-                                        class="inline-flex w-44 shrink-0 items-center justify-start gap-2 whitespace-nowrap rounded-2xl border border-blue-100 bg-blue-50 px-2.5 py-2 text-xs font-black text-blue-700 shadow-sm transition hover:bg-blue-100 dark:border-blue-800 dark:bg-blue-900/20 dark:text-blue-200 dark:hover:bg-blue-900/35">
-                                        <span class="flex h-7 w-7 items-center justify-center rounded-full border border-blue-100 bg-white p-1.5 shadow-sm dark:border-blue-800 dark:bg-gray-800">
-                                            <img src="https://cdn-icons-png.flaticon.com/512/3652/3652191.png" alt="History" class="h-full w-full rounded-full object-contain" loading="eager" fetchpriority="high" decoding="async">
-                                        </span>
+                                        class="inline-flex w-44 shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-2xl border border-blue-100 bg-blue-50 px-2.5 py-2.5 text-xs font-black text-blue-700 shadow-xs transition hover:bg-blue-100 dark:border-blue-800 dark:bg-blue-900/20 dark:text-blue-200 dark:hover:bg-blue-900/35">
+                                        <svg class="h-4 w-4 text-blue-600 dark:text-blue-400 shrink-0" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                                            <path stroke-linecap="round" stroke-linejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                        </svg>
                                         <span class="leading-none">Transaction History</span>
                                     </button>
                                 </div>

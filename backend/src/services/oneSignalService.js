@@ -33,11 +33,7 @@ function sanitizePayload(rawPayload) {
   const out = {};
   for (const [k, v] of Object.entries(rawPayload)) {
     if (/^is[A-Z]/.test(k) && /^(isAndroid|isChromeWeb|isAnyWeb|isIos|isHuawei|isAmazon|isWP|isFirefox|isSafari|isEdge|isEdgeWeb|isChrome|isAdm)$/i.test(k)) {
-      console.warn(`[OneSignal Sanitizer] ⚠️ Stripping deprecated platform flag "${k}" from payload (omission defaults all to true, correct for APK+Web delivery).`);
-      continue;
-    }
-    if (k === 'include_subscription_ids') {
-      out.include_player_ids = v;
+      console.warn(`[OneSignal Sanitizer] ⚠️ Stripping deprecated platform flag "${k}" from payload.`);
       continue;
     }
     out[k] = v;
@@ -143,73 +139,60 @@ async function sendPushToUser({ subscriptionIds, userIds, title, message, data, 
     return { ok: false, skipped: true, reason: 'NO_TARGETS' };
   }
 
-  const results = [];
-
-  if (cleanUserIds.length > 0) {
-    let chatPushProps = {};
-    if (data && (data.type === 'chat' || data.roomId)) {
-      const threadId = String(data.roomId || 'support_chat');
-      chatPushProps = {
-        android_group: `chat_room_${threadId}`,
-        thread_id: threadId,
-        priority: 10,
-        android_accent_color: '10B981',
-        buttons: [
-          { id: 'open_reply', text: '💬 Reply' },
-          { id: 'mark_read', text: '✓ Mark as Read' }
-        ],
-        web_buttons: [
-          { id: 'open_reply', text: '💬 Reply', icon: 'https://rw-wallet.vercel.app/logo_192.png' },
-          { id: 'mark_read', text: '✓ Mark Read' }
-        ]
-      };
-    }
-
-    const payloadExtIds = {
-      include_external_user_ids: cleanUserIds,
-      include_aliases: { external_id: cleanUserIds },
-      headings: { en: cleanTitle },
-      contents: { en: cleanMsg },
-      data: data || {},
-      url: url || '',
-      ...chatPushProps
+  let chatPushProps = {};
+  if (data && (data.type === 'chat' || data.roomId)) {
+    const threadId = String(data.roomId || 'support_chat');
+    chatPushProps = {
+      android_group: `chat_room_${threadId}`,
+      thread_id: threadId,
+      priority: 10,
+      android_accent_color: '10B981',
+      buttons: [
+        { id: 'open_reply', text: '💬 Reply' },
+        { id: 'mark_read', text: '✓ Mark as Read' }
+      ],
+      web_buttons: [
+        { id: 'open_reply', text: '💬 Reply', icon: 'https://rw-wallet.vercel.app/logo_192.png' },
+        { id: 'mark_read', text: '✓ Mark Read' }
+      ]
     };
-    console.log(`[OneSignal sendPushToUser] → calling via include_external_user_ids (${cleanUserIds.length} ids)`);
-    const r1 = await postNotificationApi(payloadExtIds);
-    results.push({ via: 'external_user_ids', ...r1 });
   }
 
-  if (cleanSubscriptionIds.length > 0) {
-    let chatPushProps = {};
-    if (data && (data.type === 'chat' || data.roomId)) {
-      const threadId = String(data.roomId || 'support_chat');
-      chatPushProps = {
-        android_group: `chat_room_${threadId}`,
-        thread_id: threadId,
-        priority: 10,
-        android_accent_color: '10B981',
-        buttons: [
-          { id: 'open_reply', text: '💬 Reply' },
-          { id: 'mark_read', text: '✓ Mark as Read' }
-        ],
-        web_buttons: [
-          { id: 'open_reply', text: '💬 Reply', icon: 'https://rw-wallet.vercel.app/logo_192.png' },
-          { id: 'mark_read', text: '✓ Mark Read' }
-        ]
-      };
-    }
+  const results = [];
+  let primaryDelivered = false;
 
-    const payloadPlayerIds = {
-      include_player_ids: cleanSubscriptionIds,
+  // 1. Primary Attempt: Send via external_id aliases
+  if (cleanUserIds.length > 0) {
+    const payloadExtIds = {
+      include_aliases: { external_id: cleanUserIds },
+      target_channel: 'push',
       headings: { en: cleanTitle },
       contents: { en: cleanMsg },
       data: data || {},
       url: url || '',
       ...chatPushProps
     };
-    console.log(`[OneSignal sendPushToUser] → calling via include_player_ids (${cleanSubscriptionIds.length} ids)`);
-    const r2 = await postNotificationApi(payloadPlayerIds);
-    results.push({ via: 'player_ids', ...r2 });
+    console.log(`[OneSignal sendPushToUser] → calling via include_aliases (${cleanUserIds.length} ids)`);
+    const r1 = await postNotificationApi(payloadExtIds);
+    results.push({ via: 'external_id_aliases', ...r1 });
+    if (r1?.ok && (r1?.data?.recipients > 0 || r1?.data?.id)) {
+      primaryDelivered = true;
+    }
+  }
+
+  // 2. Fallback: Only if external_id targeting did not deliver to any recipient AND we have subscriptionIds
+  if (!primaryDelivered && cleanSubscriptionIds.length > 0) {
+    console.log(`[OneSignal sendPushToUser] → fallback via include_subscription_ids (${cleanSubscriptionIds.length} ids)`);
+    const payloadSubIds = {
+      include_subscription_ids: cleanSubscriptionIds,
+      headings: { en: cleanTitle },
+      contents: { en: cleanMsg },
+      data: data || {},
+      url: url || '',
+      ...chatPushProps
+    };
+    const r2 = await postNotificationApi(payloadSubIds);
+    results.push({ via: 'subscription_ids', ...r2 });
   }
 
   const anyOk = results.some(r => r.ok);

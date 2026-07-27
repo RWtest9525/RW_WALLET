@@ -22,6 +22,7 @@ const refreshAdminFundRequestsFromCloud = async () => {
                 if (document.getElementById('admin-fund-requests-list-page')) renderAdminFundRequests(allFundRequestsCache);
                 if (document.getElementById('admin-recharge-requests-list-page')) renderAdminRechargeRequests(allRechargeRequestsCache);
             } catch (error) {
+                if (typeof isExpectedBackgroundAbort === 'function' && isExpectedBackgroundAbort(error)) return;
                 console.error('Cloudflare fund request load failed:', error);
                 try {
                     await importFirebaseFundRequestsForAdmin();

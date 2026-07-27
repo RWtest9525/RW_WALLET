@@ -39,6 +39,8 @@ applyTheme(initialTheme);
         '/assets/images/logo_192.png',
         '/assets/images/logo_512.png',
         '/assets/images/profile_card_bg.png',
+        '/assets/images/referral_banner.webp',
+        '/assets/images/referral_howitworks_cards.webp',
         '/assets/images/referral_banner.png',
         '/assets/images/referral_howitworks_cards.png',
         '/assets/images/notification_bell.png',

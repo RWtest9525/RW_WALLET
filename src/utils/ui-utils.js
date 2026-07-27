@@ -227,7 +227,7 @@ const fetchWithTimeout = async (url, options = {}, timeoutMs = 8000) => {
 
 const isExpectedBackgroundAbort = (error) => {
             const message = String(error?.message || error || '');
-            return error?.name === 'AbortError' || /aborted|signal is aborted/i.test(message);
+            return error?.name === 'AbortError' || /aborted|signal is aborted|failed to fetch|networkerror/i.test(message);
         };
 
 const logBackgroundSkip = (label, error) => {
@@ -847,15 +847,16 @@ const ensureUserSessionReady = () => {
 const renderModal = (title, content, actions, size = 'max-w-md', colorfulBorder = false) => {
             const borderClass = colorfulBorder ? 'colorful-border' : '';
             document.getElementById('modal-container').innerHTML = `
-                <div id="app-modal" class="fixed inset-0 z-[80] flex items-center justify-center p-4">
+                <div id="app-modal" class="fixed inset-0 z-[80] flex items-center justify-center p-3 sm:p-4">
                     <div class="fixed inset-0 modal-backdrop" onclick="window.closeModal()"></div>
-                    <div class="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl z-[90] w-full ${size} max-h-[88dvh] overflow-hidden border border-gray-100 dark:border-gray-700 p-0 transform transition-all scale-95 opacity-0 animate-modal-in ${borderClass}">
-                        <div class="flex justify-between items-center mb-4">
-                            <h3 class="text-lg font-semibold px-6 pt-6">${title}</h3>
-                            <button onclick="window.closeModal()" class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 text-2xl px-6 pt-6">&times;</button>
-                        </div>
-                        <div class="px-6 ${actions ? 'max-h-[62dvh]' : 'max-h-[70dvh] pb-6'} overflow-y-auto">${content}</div>
-                        ${actions ? `<div class="mt-6 flex justify-end space-x-3 border-t border-gray-100 dark:border-gray-700 px-6 py-4 bg-white dark:bg-gray-800">${actions}</div>` : ''}
+                    <div class="bg-white dark:bg-gray-800 rounded-3xl shadow-2xl z-[90] w-full ${size} max-h-[92dvh] overflow-hidden border border-gray-100 dark:border-gray-700 p-0 transform transition-all scale-95 opacity-0 animate-modal-in ${borderClass}">
+                        ${title ? `
+                        <div class="flex justify-between items-center mb-2 px-6 pt-5">
+                            <h3 class="text-lg font-semibold">${title}</h3>
+                            <button onclick="window.closeModal()" class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 text-2xl leading-none">&times;</button>
+                        </div>` : ''}
+                        <div class="${title ? 'px-6' : 'p-0'} ${actions ? 'max-h-[62dvh]' : 'max-h-[88dvh]'} overflow-y-auto">${content}</div>
+                        ${actions ? `<div class="mt-4 flex justify-end space-x-3 border-t border-gray-100 dark:border-gray-700 px-6 py-4 bg-white dark:bg-gray-800">${actions}</div>` : ''}
                     </div>
                 </div>
                 <style> 
@@ -1207,6 +1208,19 @@ const initializeUserListeners = (userId) => {
                     renderUnifiedHistory(5);
                 })
                 .catch((error) => {
+                    if (isExpectedBackgroundAbort(error)) {
+                        if (cachedHistoryItems.length) {
+                            renderUnifiedHistory(5);
+                        } else {
+                            loadFirebasePendingFundRequests(userId)
+                                .then((requests) => {
+                                    pendingRequests = requests;
+                                    renderUnifiedHistory(5);
+                                })
+                                .catch(() => {});
+                        }
+                        return;
+                    }
                     console.error("Cloud pending fund request load failed:", error);
                     if (cachedHistoryItems.length) {
                         renderUnifiedHistory(5);
@@ -1429,13 +1443,33 @@ const initializePublicHomeRealtime = () => {
 
 let availabilityPollerInterval = null;
 
+const fetchTaskCommentsRealtimeMap = async () => {
+    try {
+        if (!currentUser) return window.lastTakenCommentsMap || {};
+        const token = await getBackendAuthToken();
+        const resp = await fetchWithTimeout(`${BACKEND_BASE_URL}/api/tasks/availability`, {
+            headers: { Authorization: `Bearer ${token}` }
+        }, 8000);
+        const d = await resp.json();
+        if (d.ok && d.takenComments) {
+            window.userReservedTaskIds = Array.isArray(d.userReservedTaskIds) ? d.userReservedTaskIds : [];
+            window.lastTakenCommentsMap = d.takenComments;
+            return d.takenComments;
+        }
+    } catch (e) {
+        // Silently handle background timeout/abort
+    }
+    return window.lastTakenCommentsMap || {};
+};
+window.fetchTaskCommentsRealtimeMap = fetchTaskCommentsRealtimeMap;
+
 const refreshTaskAvailabilityRealtime = async () => {
     try {
         if (!currentUser) return;
         const token = await getBackendAuthToken();
         const resp = await fetchWithTimeout(`${BACKEND_BASE_URL}/api/tasks/availability`, {
             headers: { Authorization: `Bearer ${token}` }
-        }, 5000);
+        }, 8000);
         const d = await resp.json();
         if (d.ok && d.takenComments) {
             window.userReservedTaskIds = Array.isArray(d.userReservedTaskIds) ? d.userReservedTaskIds : [];
@@ -1455,7 +1489,10 @@ const refreshTaskAvailabilityRealtime = async () => {
             }
         }
     } catch (e) {
-        console.warn('Realtime availability poll skipped:', e);
+        if (e && (e.name === 'AbortError' || e.message?.includes('aborted'))) {
+            return;
+        }
+        console.debug('Realtime availability poll skipped:', e?.message || e);
     }
 };
 
@@ -3939,6 +3976,8 @@ const preloadLogoImages = () => {
                 '/assets/images/withdraw_paypal.png',
                 '/assets/images/withdraw_crypto.png',
                 '/assets/images/withdraw_methods_layout.jpg',
+                '/assets/images/referral_banner.webp',
+                '/assets/images/referral_howitworks_cards.webp',
                 '/assets/images/referral_banner.png',
                 '/assets/images/referral_howitworks_cards.png',
                 '/assets/images/notification_bell.png',

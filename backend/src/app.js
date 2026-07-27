@@ -33,14 +33,25 @@ async function createApp(io, { startedAt = new Date().toISOString() } = {}) {
 
   const projectRoot = path.join(__dirname, '..', '..');
   const publicDir = path.join(projectRoot, 'public');
-  app.use(express.static(projectRoot));
-  app.use(express.static(publicDir));
-  // Cache images for 1 year immutable for instant fetching
+
+  // Aggressive 1-year immutable caching middleware for static images and assets (0ms cache load)
   app.use('/assets/images', express.static(path.join(publicDir, 'assets', 'images'), {
     maxAge: '1y',
-    immutable: true
+    immutable: true,
+    setHeaders: (res) => {
+      res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+    }
   }));
-  app.use('/assets', express.static(path.join(publicDir, 'assets')));
+  app.use('/assets', express.static(path.join(publicDir, 'assets'), {
+    maxAge: '1y',
+    immutable: true,
+    setHeaders: (res) => {
+      res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+    }
+  }));
+
+  app.use(express.static(projectRoot));
+  app.use(express.static(publicDir));
   app.use('/pages', express.static(path.join(publicDir, 'pages')));
   app.use('/.well-known', express.static(path.join(publicDir, '.well-known')));
 
