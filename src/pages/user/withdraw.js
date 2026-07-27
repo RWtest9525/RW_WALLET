@@ -4,11 +4,11 @@ const loadUserPendingWithdrawalsMerged = async (userId) => {
     if (!userId) return [];
     const [cloudRequests, firebaseRequests] = await Promise.all([
         loadCloudFundRequests({ status: 'pending', type: 'withdrawal', userId, limit: 200, timeoutMs: 2500 }).catch(error => {
-            console.warn('User cloud pending withdrawals skipped:', error);
+            logBackgroundSkip('User cloud pending withdrawals skipped', error);
             return [];
         }),
         loadFirebasePendingFundRequests(userId).catch(error => {
-            console.warn('User Firebase pending withdrawals skipped:', error);
+            logBackgroundSkip('User Firebase pending withdrawals skipped', error);
             return [];
         })
     ]);

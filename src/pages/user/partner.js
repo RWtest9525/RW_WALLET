@@ -11,7 +11,7 @@ const fetchUserInvestmentsFromBackend = async (userId = currentUser?.uid) => {
                 if (!data.ok) throw new Error(data.message || 'Failed to load user investments');
                 return data.investments;
             } catch (err) {
-                console.warn('Backend user investments fetch failed:', err);
+                logBackgroundSkip('Backend user investments fetch failed', err);
                 return [];
             }
         };

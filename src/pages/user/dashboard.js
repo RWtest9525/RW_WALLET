@@ -285,15 +285,15 @@ const prefetchTransactionHistory = (userId = currentUser?.uid, { force = false }
             transactionHistoryPrefetch.promise = (async () => {
                 const [firebaseTransactions, cloudTransactions, pendingWithdrawals] = await Promise.all([
                     loadFirebaseTransactions(userId, FIRESTORE_TRANSACTION_READ_LIMIT).catch(error => {
-                        console.warn('Firebase transaction prefetch skipped:', error);
+                        logBackgroundSkip('Firebase transaction prefetch skipped', error);
                         return [];
                     }),
                     fetchCloudTransactionHistory(userId, FIRESTORE_TRANSACTION_READ_LIMIT).catch(error => {
-                        console.warn('Cloud transaction prefetch skipped:', error);
+                        logBackgroundSkip('Cloud transaction prefetch skipped', error);
                         return [];
                     }),
                     loadUserPendingWithdrawalsMerged(userId).catch(error => {
-                        console.warn('Pending withdrawal prefetch skipped:', error);
+                        logBackgroundSkip('Pending withdrawal prefetch skipped', error);
                         return [];
                     })
                 ]);

@@ -838,7 +838,7 @@ const preloadSupportChatForUser = async (userId = currentUser?.uid) => {
                     writeSupportChatCache(roomId, merged);
                     refreshSupportUnreadFromCache();
                 } catch (error) {
-                    console.warn('Support chat preload failed for room:', roomId, error);
+                    logBackgroundSkip(`Support chat preload failed for room: ${roomId}`, error);
                 }
             };
 
