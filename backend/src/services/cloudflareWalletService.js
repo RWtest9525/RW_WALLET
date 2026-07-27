@@ -1235,10 +1235,9 @@ async function sendOneSignalPush(d1OrTarget, targetOrTitle, titleOrMessage, mess
   const DEFAULT_APP_ID_FALLBACK = '465e22bd-8540-437b-ba7b-efa14ef4069f';
   const DEFAULT_API_KEY_FALLBACK = ['os_v2_app_', 'izpcfpmfibbxxot356qu55agt722zfi4ddmueaebrcgmldg7h4gbhekweg4oya7iw2mc6doh55mzi67krhmhphd4jryt36px5y4bnxa'].join('');
 
-  const appId = process.env.ONESIGNAL_APP_ID || DEFAULT_APP_ID_FALLBACK;
-  const apiKey = process.env.ONESIGNAL_REST_API_KEY || process.env.ONESIGNAL_API_KEY || DEFAULT_API_KEY_FALLBACK;
-  if (!apiKey || apiKey === 'your_onesignal_rest_api_key') {
-    console.warn('[OneSignal] ONESIGNAL_REST_API_KEY not configured, skipping push.');
+  const appId = process.env.ONESIGNAL_APP_ID;
+  const apiKey = process.env.ONESIGNAL_REST_API_KEY || process.env.ONESIGNAL_API_KEY;
+  if (!appId || !apiKey || apiKey === 'your_onesignal_rest_api_key') {
     return;
   }
 
@@ -1421,9 +1420,7 @@ async function sendNotification(d1, userId, title, message, customData = null) {
   const cleanMsg = String(message || '').trim();
   console.log(`\n========== [sendNotification START] userId=${JSON.stringify(userId).slice(0, 100)} | title="${cleanTitle}" | msg="${cleanMsg.slice(0, 120)}" ==========`);
 
-  sendFcmPushToUser(d1, userId, cleanTitle, cleanMsg, customData).catch((e) => console.warn('[sendNotification] FCM error:', e?.message || e));
-
-  sendOneSignalPush(d1, userId, cleanTitle, cleanMsg, customData).catch((e) => console.warn('[sendNotification] Delegated push error:', e?.message || e));
+  return sendFcmPushToUser(d1, userId, cleanTitle, cleanMsg, customData).catch((e) => console.warn('[sendNotification] FCM error:', e?.message || e));
 }
 
 async function putR2Object(r2, key, body, contentType = 'application/json') {
