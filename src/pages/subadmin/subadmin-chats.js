@@ -69,6 +69,22 @@ const subscribeAdminChatRooms = async (chats = allSupportChatsCache) => {
                     }
                 }
 
+                const isOwner = checkIsOwner(currentUser, currentUserData);
+                if (isOwner) {
+                    const parts = normalized.roomId.replace(/^support_/, '').split('_');
+                    if (parts.length > 1 && parts[1] !== ADMIN_UID) {
+                        return;
+                    }
+                    const cleanUid = parts[0];
+                    const u = allUsersCache.find(user => String(user.id || user.uid) === String(cleanUid));
+                    if (u && (u.role !== 'admin' && u.role !== 'subadmin' && u.role !== 'owner')) {
+                        const pAdmin = String(u.parentAdmin || u.parent_admin || '').trim();
+                        if (pAdmin && pAdmin !== ADMIN_UID && pAdmin !== 'null' && pAdmin !== 'undefined') {
+                            return;
+                        }
+                    }
+                }
+
                 const existingIndex = allSupportChatsCache.findIndex(chat => (chat.roomId || getSupportRoomId(chat.userId || chat.id)) === normalized.roomId);
                 const existing = existingIndex >= 0 ? allSupportChatsCache[existingIndex] : {};
                 const userProfile = allUsersCache.find(user => (user.id || user.uid) === userId) || {};
@@ -226,14 +242,24 @@ const loadAdminChatsFromBackend = async ({ silent = false, retry = true, subscri
                         return chat.roomId === `support_${cUserId}_${subAdminUid}`;
                     });
                 } else {
-                    // Owner ALWAYS sees all direct support chats (support_USERID) from any user, and Sub-Admin users themselves
+                    // Owner ONLY sees direct Owner chats (support_USERID) and Sub-Admins themselves.
+                    // EXCLUDE any user assigned to a Sub-Admin (parentAdmin != ADMIN_UID) and EXCLUDE sub-admin private rooms (support_USERID_SUBADMINID).
                     chatList = chatList.filter(chat => {
                         const cUserId = chat.userId || chat.id;
                         if (!cUserId || cUserId === ADMIN_UID) return false;
 
-                        // Exclude private sub-admin rooms with 3 parts (support_USERID_SUBADMINID)
-                        if (chat.roomId && chat.roomId.split('_').length > 2) {
+                        const parts = String(chat.roomId || '').replace(/^support_/, '').split('_');
+                        if (parts.length > 1 && parts[1] !== ADMIN_UID) {
                             return false;
+                        }
+
+                        const u = allUsersCache.find(user => String(user.id || user.uid) === String(cUserId));
+                        if (u) {
+                            if (u.role === 'admin' || u.role === 'subadmin' || u.role === 'owner') return true;
+                            const pAdmin = String(u.parentAdmin || u.parent_admin || '').trim();
+                            if (pAdmin && pAdmin !== ADMIN_UID && pAdmin !== 'null' && pAdmin !== 'undefined') {
+                                return false;
+                            }
                         }
 
                         return true;
@@ -330,14 +356,24 @@ const renderAdminChatsList = () => {
                     return chat.roomId === `support_${cUserId}_${subAdminUid}`;
                 });
             } else {
-                // Owner ALWAYS sees all direct support chats (support_USERID) from any user, and Sub-Admin users themselves
+                // Owner ONLY sees direct Owner chats (support_USERID) and Sub-Admins themselves.
+                // EXCLUDE any user assigned to a Sub-Admin (parentAdmin != ADMIN_UID) and EXCLUDE sub-admin private rooms (support_USERID_SUBADMINID).
                 chatsToRender = chatsToRender.filter(chat => {
                     const cUserId = chat.userId || chat.id;
                     if (!cUserId || cUserId === ADMIN_UID) return false;
 
-                    // Exclude private sub-admin rooms with 3 parts (support_USERID_SUBADMINID)
-                    if (chat.roomId && chat.roomId.split('_').length > 2) {
+                    const parts = String(chat.roomId || '').replace(/^support_/, '').split('_');
+                    if (parts.length > 1 && parts[1] !== ADMIN_UID) {
                         return false;
+                    }
+
+                    const u = allUsersCache.find(user => String(user.id || user.uid) === String(cUserId));
+                    if (u) {
+                        if (u.role === 'admin' || u.role === 'subadmin' || u.role === 'owner') return true;
+                        const pAdmin = String(u.parentAdmin || u.parent_admin || '').trim();
+                        if (pAdmin && pAdmin !== ADMIN_UID && pAdmin !== 'null' && pAdmin !== 'undefined') {
+                            return false;
+                        }
                     }
 
                     return true;
