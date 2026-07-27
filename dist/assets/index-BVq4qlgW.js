@@ -2473,15 +2473,15 @@ ${t}`,n=`
             </div>
         </div>
         ${me()}
-    `;ce(a,{keepBottomNav:!1})};const Cp=(e=!1)=>{var l,c,u;if(!ensureUserSessionReady())return;activeChatUnsubscribe&&(activeChatUnsubscribe(),activeChatUnsubscribe=null);const t="rw_refer_img_ready_v1",a="rw_refer_img_ready_ss_v1";let n=!1;try{n=localStorage.getItem(t)==="1"||sessionStorage.getItem(a)==="1"}catch{}const r=document.getElementById("page-container"),s=r&&r.querySelector("#open-track-referrals-btn");if(!e&&currentMainSection==="refer"&&r&&!r.classList.contains("hidden")&&s){ke("bottom-refer-btn");return}currentMainSection="refer",getReferralRewardAmount();const o=Ut(),d=Si(o);["/assets/images/referral_banner.webp","/assets/images/referral_howitworks_cards.webp","/assets/images/referral_banner.png","/assets/images/referral_howitworks_cards.png"].forEach(p=>{try{const m=new Image;m.decoding="sync",m.fetchPriority="high";const g=()=>{try{localStorage.setItem(t,"1"),sessionStorage.setItem(a,"1")}catch{}};m.onload=m.onerror=g,m.src=p}catch{}});const i=`
+    `;ce(a,{keepBottomNav:!1})};const Cp=(e=!1)=>{var l,c,u;if(!ensureUserSessionReady())return;activeChatUnsubscribe&&(activeChatUnsubscribe(),activeChatUnsubscribe=null);const t="rw_refer_img_ready_v1",a="rw_refer_img_ready_ss_v1";let n=!1;try{n=localStorage.getItem(t)==="1"||sessionStorage.getItem(a)==="1"}catch{}const r=document.getElementById("page-container"),s=r&&r.querySelector("#open-track-referrals-btn");if(!e&&currentMainSection==="refer"&&r&&!r.classList.contains("hidden")&&s){ke("bottom-refer-btn");return}currentMainSection="refer",getReferralRewardAmount();const o=Ut(),d=Si(o);["/assets/images/referral_banner.webp?v=2","/assets/images/referral_howitworks_cards.webp?v=2","/assets/images/referral_banner.png?v=2","/assets/images/referral_howitworks_cards.png?v=2"].forEach(p=>{try{const m=new Image;m.decoding="sync",m.fetchPriority="high";const g=()=>{try{localStorage.setItem(t,"1"),sessionStorage.setItem(a,"1")}catch{}};m.onload=m.onerror=g,m.src=p}catch{}});const i=`
             ${st("Refer & Earn",{showBack:!1})}
             <div class="max-w-md mx-auto space-y-3 text-left px-0.5 pt-1 pb-24">
 
                 <!-- Top Banner -->
                 <div class="relative overflow-hidden rounded-2xl shadow-md border border-emerald-900/20 bg-emerald-900/10 dark:bg-emerald-950/30 aspect-[1024/498] w-full">
                     <picture>
-                        <source srcset="/assets/images/referral_banner.webp" type="image/webp">
-                        <img src="/assets/images/referral_banner.png" alt="Refer & Earn - Invite Friends, Earn Together"
+                        <source srcset="/assets/images/referral_banner.webp?v=2" type="image/webp">
+                        <img src="/assets/images/referral_banner.png?v=2" alt="Refer & Earn - Invite Friends, Earn Together"
                              loading="eager" fetchpriority="high" decoding="sync"
                              class="w-full h-full object-cover rounded-2xl block border-0 shadow-none">
                     </picture>
@@ -2490,8 +2490,8 @@ ${t}`,n=`
                 <!-- Middle How It Works card -->
                 <div class="relative overflow-hidden rounded-2xl shadow-xs border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/50 aspect-[1024/484] w-full">
                     <picture>
-                        <source srcset="/assets/images/referral_howitworks_cards.webp" type="image/webp">
-                        <img src="/assets/images/referral_howitworks_cards.png" alt="Referral Rewards & How It Works"
+                        <source srcset="/assets/images/referral_howitworks_cards.webp?v=2" type="image/webp">
+                        <img src="/assets/images/referral_howitworks_cards.png?v=2" alt="Referral Rewards & How It Works"
                              loading="eager" fetchpriority="high" decoding="sync"
                              class="w-full h-full object-cover rounded-2xl block border-0 shadow-none">
                     </picture>
