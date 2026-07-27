@@ -33,21 +33,6 @@ import './core/firebase.js';
 // Setup Event listeners and routing at DOM load
 applyTheme(initialTheme);
 
-// Disable Right-Click Context Menu & Image Dragging Globally across all images, logos & banners
-document.addEventListener('contextmenu', (e) => {
-    if (e.target.tagName === 'IMG' || e.target.closest('picture') || e.target.closest('img') || e.target.tagName === 'CANVAS') {
-        e.preventDefault();
-        return false;
-    }
-}, false);
-
-document.addEventListener('dragstart', (e) => {
-    if (e.target.tagName === 'IMG' || e.target.closest('picture') || e.target.closest('img')) {
-        e.preventDefault();
-        return false;
-    }
-}, false);
-
 // Instant Asset Preloader for Referral and Profile Banners (Anti-Flicker Dual-Cache Ready)
 (() => {
     const criticalImages = [
@@ -355,8 +340,9 @@ onAuthStateChanged(auth, async (user) => {
 
                 if (currentUser.uid !== ADMIN_UID && localSignupApprovalInProgress) return;
 
+                const isOwner = checkIsOwner(currentUser, currentUserData);
                 const isAdmin = checkIsUserAdmin(currentUser, currentUserData);
-                const role = (currentUserData?.role || (isAdmin ? 'admin' : 'user'));
+                const role = isOwner ? 'owner' : (currentUserData?.role || (isAdmin ? (currentUserData?.role || 'subadmin') : 'user'));
                 localStorage.setItem('user_role', role);
                 try {
                     sessionStorage.setItem('user_role_ss', role);
@@ -507,7 +493,7 @@ onAuthStateChanged(auth, async (user) => {
 
                         // Silent prefetch of user task history for instant loading
                         if (typeof window.loadUserTaskHistory === 'function') {
-                            window.loadUserTaskHistory().catch(e => logBackgroundSkip('Silent prefetch of task history skipped', e));
+                            window.loadUserTaskHistory().catch(e => console.warn('Silent prefetch of task history skipped:', e));
                         }
 
                         // Preload Socket.io client script and connect in background for instant chat
@@ -515,10 +501,10 @@ onAuthStateChanged(auth, async (user) => {
                             window.loadSocketIoClient()
                                 .then(() => {
                                     if (typeof window.getSupportSocket === 'function') {
-                                        window.getSupportSocket({ timeoutMs: 4000 }).catch(e => logBackgroundSkip('Silent socket warmup connection failed', e));
+                                        window.getSupportSocket({ timeoutMs: 4000 }).catch(e => console.warn('Silent socket warmup connection failed:', e));
                                     }
                                 })
-                                .catch(e => logBackgroundSkip('Silent Socket.io script load failed', e));
+                                .catch(e => console.warn('Silent Socket.io script load failed:', e));
                         }
                     } catch (err) {
                         console.error("Error initializing user listeners:", err);

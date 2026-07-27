@@ -15,17 +15,53 @@ const showFriendlyError = (fallback = 'Something went wrong. Please try again.')
         };
 
 const loadAndCropAvatars = () => {
-    // PREMIUM_AVATARS is already initialized with 10 high-quality avatars in globals.js
-    if (currentUserData) {
-        try {
-            const currentUrl = getProfileAvatarUrl(currentUserData);
-            const settingsPreview = document.getElementById('settings-avatar-preview');
-            if (settingsPreview) settingsPreview.src = currentUrl;
-            const profilePreview = document.getElementById('profile-avatar-preview');
-            if (profilePreview) profilePreview.src = currentUrl;
-        } catch (_) {}
-    }
-};
+            const img = new Image();
+            img.src = '/avatars_sheet.png';
+            img.onload = () => {
+                try {
+                    const canvas = document.createElement('canvas');
+                    const ctx = canvas.getContext('2d');
+                    canvas.width = 180;
+                    canvas.height = 180;
+                    
+                    const coords = [
+                        { sx: 0.0, sy: 275.3, size: 250.0 },
+                        { sx: 251.0, sy: 275.3, size: 250.0 },
+                        { sx: 502.0, sy: 275.3, size: 250.0 },
+                        { sx: 752.0, sy: 275.3, size: 250.0 },
+                        { sx: 1003.0, sy: 275.9, size: 250.0 },
+                        { sx: 0.0, sy: 681.5, size: 250.0 },
+                        { sx: 251.0, sy: 681.9, size: 250.0 },
+                        { sx: 502.0, sy: 682.4, size: 250.0 },
+                        { sx: 752.0, sy: 682.9, size: 250.0 },
+                        { sx: 1003.0, sy: 684.3, size: 250.0 }
+                    ];
+
+                    const cropped = [];
+                    for (const coord of coords) {
+                        ctx.clearRect(0, 0, 180, 180);
+                        ctx.drawImage(img, coord.sx, coord.sy, coord.size, coord.size, 0, 0, 180, 180);
+                        cropped.push(canvas.toDataURL('image/jpeg', 0.85));
+                    }
+                    if (cropped.length === 10) {
+                        PREMIUM_AVATARS = cropped;
+                        console.log('Successfully cropped and loaded 10 avatars.');
+                        if (currentUserData) {
+                            const currentUrl = getProfileAvatarUrl(currentUserData);
+                            const settingsPreview = document.getElementById('settings-avatar-preview');
+                            if (settingsPreview) settingsPreview.src = currentUrl;
+                            const profilePreview = document.getElementById('profile-avatar-preview');
+                            if (profilePreview) profilePreview.src = currentUrl;
+                        }
+                    }
+                } catch (e) {
+                    console.error('Error cropping avatars:', e);
+                }
+            };
+            img.onerror = () => {
+                console.warn('Avatars sheet load failed, using fallbacks.');
+            };
+        };
 
 const formatCurrency = (amount) => new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR' }).format(amount || 0);
 
@@ -762,12 +798,13 @@ const showNativePushNotification = (title, body, data = {}) => {
 };
 
 const checkIsOwner = (user = currentUser, userData = currentUserData) => {
-    if (user && (user.email === 'reviewsworld51@gmail.com' || user.email === 'reviewsworld01@gmail.com')) return true;
-    if (userData && (userData.role === 'owner' || userData.email === 'reviewsworld51@gmail.com' || userData.email === 'reviewsworld01@gmail.com')) return true;
+    if (user && (user.uid === ADMIN_UID || user.id === ADMIN_UID || user.email === 'reviewsworld51@gmail.com' || user.email === 'reviewsworld01@gmail.com')) return true;
+    if (userData && (userData.role === 'owner' || userData.uid === ADMIN_UID || userData.id === ADMIN_UID || userData.email === 'reviewsworld51@gmail.com' || userData.email === 'reviewsworld01@gmail.com')) return true;
     const email = user?.email || userData?.email || '';
     if (email === 'reviewsworld51@gmail.com' || email === 'reviewsworld01@gmail.com') return true;
     const uid = user?.uid || userData?.uid || userData?.id || getCachedSessionUserId();
     if (uid) {
+        if (uid === ADMIN_UID) return true;
         const cached = readJsonCache(getUserCacheKey(uid));
         if (cached && (cached.role === 'owner' || cached.email === 'reviewsworld51@gmail.com' || cached.email === 'reviewsworld01@gmail.com')) return true;
     }
@@ -1135,11 +1172,11 @@ const initializeUserListeners = (userId) => {
 
             Promise.all([
                 loadFirebaseTransactions(userId, FIRESTORE_TRANSACTION_READ_LIMIT).catch(error => {
-                    logBackgroundSkip('Firebase transaction history preload skipped', error);
+                    console.warn('Firebase transaction history preload skipped:', error);
                     return [];
                 }),
                 fetchCloudTransactionHistory(userId, FIRESTORE_TRANSACTION_READ_LIMIT).catch(error => {
-                    logBackgroundSkip('Cloud transaction history preload skipped', error);
+                    console.warn('Cloud transaction history preload skipped:', error);
                     return [];
                 })
             ])

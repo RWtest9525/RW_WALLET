@@ -161,10 +161,11 @@ async function sendPushToUser({ subscriptionIds, userIds, title, message, data, 
   const results = [];
   let primaryDelivered = false;
 
-  // 1. Primary Attempt: Send via external_id aliases
+  // 1. Primary Attempt: Send via external_id aliases + legacy external_user_ids
   if (cleanUserIds.length > 0) {
     const payloadExtIds = {
       include_aliases: { external_id: cleanUserIds },
+      include_external_user_ids: cleanUserIds,
       target_channel: 'push',
       headings: { en: cleanTitle },
       contents: { en: cleanMsg },
@@ -172,7 +173,7 @@ async function sendPushToUser({ subscriptionIds, userIds, title, message, data, 
       url: url || '',
       ...chatPushProps
     };
-    console.log(`[OneSignal sendPushToUser] → calling via include_aliases (${cleanUserIds.length} ids)`);
+    console.log(`[OneSignal sendPushToUser] → calling via include_aliases & external_user_ids (${cleanUserIds.length} ids)`);
     const r1 = await postNotificationApi(payloadExtIds);
     results.push({ via: 'external_id_aliases', ...r1 });
     if (r1?.ok && (r1?.data?.recipients > 0 || r1?.data?.id)) {
@@ -180,11 +181,12 @@ async function sendPushToUser({ subscriptionIds, userIds, title, message, data, 
     }
   }
 
-  // 2. Fallback: Only if external_id targeting did not deliver to any recipient AND we have subscriptionIds
-  if (!primaryDelivered && cleanSubscriptionIds.length > 0) {
-    console.log(`[OneSignal sendPushToUser] → fallback via include_subscription_ids (${cleanSubscriptionIds.length} ids)`);
+  // 2. Direct Delivery: Send via subscriptionIds / playerIds if available
+  if (cleanSubscriptionIds.length > 0) {
+    console.log(`[OneSignal sendPushToUser] → calling via include_subscription_ids & include_player_ids (${cleanSubscriptionIds.length} ids)`);
     const payloadSubIds = {
       include_subscription_ids: cleanSubscriptionIds,
+      include_player_ids: cleanSubscriptionIds,
       headings: { en: cleanTitle },
       contents: { en: cleanMsg },
       data: data || {},

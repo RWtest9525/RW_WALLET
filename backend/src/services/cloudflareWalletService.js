@@ -662,35 +662,6 @@ async function upsertChatRoom(d1, { roomId, userId, userName = '', userEmail = '
 }
 
 async function listChatRooms(d1, { limit = 100, parentAdmin = null } = {}) {
-  try {
-    const missingRooms = await d1.all(
-      `SELECT c.room_id, c.sender_id, c.message, c.timestamp, u.name as user_name, u.email as user_email, u.mobile as user_mobile
-       FROM chats c
-       LEFT JOIN chat_rooms cr ON c.room_id = cr.room_id
-       LEFT JOIN users u ON (replace(c.room_id, 'support_', '') = u.id OR replace(c.room_id, 'support_', '') = u.firebase_uid)
-       WHERE cr.room_id IS NULL
-       GROUP BY c.room_id
-       ORDER BY c.timestamp DESC
-       LIMIT 100`
-    );
-    for (const r of (missingRooms || [])) {
-      const rawCleanId = (r.room_id || '').replace(/^support_/, '');
-      const cleanUserId = (rawCleanId.split('_')[0] || rawCleanId);
-      await upsertChatRoom(d1, {
-        roomId: r.room_id,
-        userId: cleanUserId,
-        userName: r.user_name || '',
-        userEmail: r.user_email || '',
-        userMobile: r.user_mobile || '',
-        lastMessage: r.message || 'Chat history',
-        lastSenderId: r.sender_id || '',
-        updatedAt: r.timestamp || nowMs()
-      });
-    }
-  } catch (err) {
-    console.warn('Sync missing chat rooms failed:', err);
-  }
-
   if (parentAdmin) {
     return d1.all(
       `SELECT cr.room_id, cr.user_id, cr.user_name, cr.user_email, cr.user_mobile, cr.last_message, cr.last_sender_id, cr.updated_at
@@ -1460,16 +1431,20 @@ async function findOrCreateDriveFolder(drive, parentId, folderName) {
 
 /**
  * Upload screenshot to Google Drive with organized folder structure:
- *   Root Folder → DD-MM-YYYY → AppName → screenshot files
+ *   Root Folder → Admin Folder (SuperAdmin_Owner or SubAdmin_<Name>) → DD-MM-YYYY → AppName → images → screenshot files
  */
-async function uploadToGoogleDrive(buffer, fileName, mimeType, rootFolderId, { appName = 'Unknown App' } = {}) {
+async function uploadToGoogleDrive(buffer, fileName, mimeType, rootFolderId, { appName = 'Unknown App', adminFolderName = 'SuperAdmin_Owner' } = {}) {
   const drive = getGoogleDriveClient();
   if (!drive) throw new Error('GOOGLE_DRIVE_NOT_CONFIGURED');
 
-  // Step 1: Find or create date folder (DD-MM-YYYY)
+  // Step 0: Find or create Admin Folder (e.g., "SuperAdmin_Owner" or "SubAdmin_John")
+  const safeAdminFolder = String(adminFolderName || 'SuperAdmin_Owner').replace(/[<>:"/\\|?*]+/g, '_').trim().slice(0, 80) || 'SuperAdmin_Owner';
+  const adminFolderId = await findOrCreateDriveFolder(drive, rootFolderId, safeAdminFolder);
+
+  // Step 1: Find or create date folder (DD-MM-YYYY) inside Admin Folder
   const now = new Date();
   const dateStr = `${String(now.getDate()).padStart(2, '0')}-${String(now.getMonth() + 1).padStart(2, '0')}-${now.getFullYear()}`;
-  const dateFolderId = await findOrCreateDriveFolder(drive, rootFolderId, dateStr);
+  const dateFolderId = await findOrCreateDriveFolder(drive, adminFolderId, dateStr);
 
   // Step 2: Find or create app name folder inside date folder
   const safeAppName = String(appName || 'Unknown App').replace(/[<>:"/\\|?*]+/g, '_').trim().slice(0, 100) || 'Unknown App';
@@ -1502,6 +1477,7 @@ async function uploadToGoogleDrive(buffer, fileName, mimeType, rootFolderId, { a
   return {
     fileId,
     name: response.data.name,
+    adminFolderName: safeAdminFolder,
     dateFolderName: dateStr,
     appFolderName: safeAppName,
     viewUrl: response.data.webViewLink || `https://drive.google.com/file/d/${fileId}/view`,
@@ -4858,11 +4834,25 @@ ${memoriesContext}`
       const safeGmailName = gmailName.replace(/[<>:"/\\|?*]+/g, '_').trim().slice(0, 30) || 'Unknown';
       const screenshotFileName = `${safeGmailName} - ${safeComment} (screenshot)${ext}`;
 
+      // Determine Admin Folder Name for Drive organization (SuperAdmin_Owner vs SubAdmin_<Name>)
+      let adminFolderName = 'SuperAdmin_Owner';
+      const creatorEmail = taskData?.creatorEmail || taskData?.adminEmail || taskData?.createdByEmail || '';
+      const creatorRole = taskData?.creatorRole || taskData?.adminRole || '';
+      const creatorName = taskData?.creatorName || taskData?.assignedAdminName || taskData?.adminName || '';
+      const creatorUid = taskData?.createdBy || taskData?.creatorUid || taskData?.parentAdmin || '';
+
+      if (creatorRole === 'subadmin' || (creatorUid && creatorUid !== ADMIN_UID) || (creatorEmail && !creatorEmail.includes('reviewsworld'))) {
+        const identifier = creatorName || (creatorEmail ? creatorEmail.split('@')[0] : (creatorUid ? creatorUid.slice(0, 8) : 'SubAdmin'));
+        adminFolderName = `SubAdmin_${identifier}`;
+      } else {
+        adminFolderName = 'SuperAdmin_Owner';
+      }
+
       let screenshotResult = {};
       const driveFolderId = process.env.GOOGLE_DRIVE_FOLDER_ID;
       if (driveFolderId && (process.env.GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON || process.env.FIREBASE_SERVICE_ACCOUNT_JSON)) {
         try {
-          const driveResult = await uploadToGoogleDrive(body, screenshotFileName, contentType, driveFolderId, { appName });
+          const driveResult = await uploadToGoogleDrive(body, screenshotFileName, contentType, driveFolderId, { appName, adminFolderName });
           screenshotResult = {
             name: originalName,
             size: body.length,
@@ -4871,7 +4861,7 @@ ${memoriesContext}`
             url: driveResult.directUrl,
             viewUrl: driveResult.viewUrl,
             thumbnailUrl: driveResult.thumbnailUrl,
-            drivePath: `${driveResult.dateFolderName}/${driveResult.appFolderName}`,
+            drivePath: `${driveResult.adminFolderName}/${driveResult.dateFolderName}/${driveResult.appFolderName}`,
             storage: 'google_drive',
             uploadedAt: nowMs()
           };
