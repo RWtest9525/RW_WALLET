@@ -4865,9 +4865,9 @@ class TaskUploadQueueManager {
         const queue = this.getQueue(taskId);
         
         while (navigator.onLine) {
-            // Count currently active uploads
-            const activeCount = queue.filter(item => item.status === 'Uploading' || item.status === 'System Checking').length;
-            if (activeCount >= 5) {
+            // Count currently active uploads - Fast parallel batching up to 15 concurrent uploads!
+            const activeCount = queue.filter(item => item.status === 'Uploading' || item.status === 'Verifying Screenshot' || item.status === 'Extracting Review' || item.status === 'Matching Comment' || item.status === 'System Checking').length;
+            if (activeCount >= 15) {
                 break;
             }
 
@@ -4877,7 +4877,7 @@ class TaskUploadQueueManager {
                 break;
             }
 
-            // Process item asynchronously to maintain concurrency
+            // Process item asynchronously to maintain high concurrency
             this.uploadItem(taskId, nextItem);
         }
 
@@ -6210,20 +6210,53 @@ window.submitSingleUserTask = async (task, file, reward, appName, taskLink, imag
         }
     };
 
-    // Show premium processing modal
-    renderModal('Submitting Proof', 
-        `<div class="text-center p-5 space-y-4 select-none">
-            <!-- Icon/Loader Container -->
-            <div class="flex justify-center items-center py-2" id="single-upload-status-icon">
-                <div class="animate-spin rounded-full h-12 w-12 border-4 border-indigo-500 border-t-transparent shadow-sm"></div>
+    // Show premium 5-step verification modal
+    renderModal('Review Verification', 
+        `<div class="p-5 space-y-4 select-none text-center">
+            <!-- Dynamic Status Icon -->
+            <div class="flex justify-center items-center py-1" id="single-upload-status-icon">
+                <div class="animate-spin rounded-full h-10 w-10 border-4 border-indigo-500 border-t-transparent shadow-sm"></div>
             </div>
-            <h4 class="text-sm font-black text-gray-900 dark:text-white uppercase tracking-wider" id="single-upload-status-title">Uploading Screenshot</h4>
-            <p class="text-[11px] text-gray-400 font-bold leading-normal px-2" id="single-upload-status-text">Compressing and scanning screenshot...</p>
-            <!-- Progress Bar Wrapper -->
-            <div class="h-2 w-full bg-slate-100 dark:bg-slate-700/60 rounded-full overflow-hidden mt-1 shadow-inner" id="single-upload-progress-bar-wrapper">
-                <div id="single-upload-progress" class="h-full bg-gradient-to-r from-indigo-500 to-blue-500 rounded-full transition-all duration-300" style="width: 5%"></div>
+            
+            <h4 class="text-sm font-black text-gray-900 dark:text-white uppercase tracking-wider" id="single-upload-status-title">Uploading...</h4>
+            
+            <!-- Step-by-Step Flow List -->
+            <div class="bg-slate-50 dark:bg-slate-800/80 rounded-2xl p-3.5 border border-slate-100 dark:border-slate-700/60 text-left space-y-2 text-xs">
+                <div id="step-ui-1" class="flex items-center gap-2.5 font-bold text-indigo-600 dark:text-indigo-400">
+                    <span id="step-icon-1" class="w-5 h-5 rounded-full bg-indigo-600 text-white text-[10px] flex items-center justify-center shrink-0">1</span>
+                    <span id="step-text-1">Uploading...</span>
+                </div>
+                <div class="text-gray-300 dark:text-gray-600 pl-2 text-[10px] leading-none">↓</div>
+                
+                <div id="step-ui-2" class="flex items-center gap-2.5 font-semibold text-gray-400 dark:text-gray-500">
+                    <span id="step-icon-2" class="w-5 h-5 rounded-full bg-gray-200 dark:bg-gray-700 text-gray-500 text-[10px] flex items-center justify-center shrink-0">2</span>
+                    <span id="step-text-2">Verifying Screenshot...</span>
+                </div>
+                <div class="text-gray-300 dark:text-gray-600 pl-2 text-[10px] leading-none">↓</div>
+                
+                <div id="step-ui-3" class="flex items-center gap-2.5 font-semibold text-gray-400 dark:text-gray-500">
+                    <span id="step-icon-3" class="w-5 h-5 rounded-full bg-gray-200 dark:bg-gray-700 text-gray-500 text-[10px] flex items-center justify-center shrink-0">3</span>
+                    <span id="step-text-3">Extracting Review...</span>
+                </div>
+                <div class="text-gray-300 dark:text-gray-600 pl-2 text-[10px] leading-none">↓</div>
+                
+                <div id="step-ui-4" class="flex items-center gap-2.5 font-semibold text-gray-400 dark:text-gray-500">
+                    <span id="step-icon-4" class="w-5 h-5 rounded-full bg-gray-200 dark:bg-gray-700 text-gray-500 text-[10px] flex items-center justify-center shrink-0">4</span>
+                    <span id="step-text-4">Matching Comment...</span>
+                </div>
+                <div class="text-gray-300 dark:text-gray-600 pl-2 text-[10px] leading-none">↓</div>
+                
+                <div id="step-ui-5" class="flex items-center gap-2.5 font-semibold text-gray-400 dark:text-gray-500">
+                    <span id="step-icon-5" class="w-5 h-5 rounded-full bg-gray-200 dark:bg-gray-700 text-gray-500 text-[10px] flex items-center justify-center shrink-0">5</span>
+                    <span id="step-text-5">✅ Verified</span>
+                </div>
             </div>
-            <p class="text-[10px] font-black text-indigo-600 dark:text-indigo-400 uppercase tracking-widest mt-1" id="single-upload-progress-percent">5%</p>
+
+            <!-- Progress Bar -->
+            <div class="h-2 w-full bg-slate-100 dark:bg-slate-700/60 rounded-full overflow-hidden shadow-inner">
+                <div id="single-upload-progress" class="h-full bg-gradient-to-r from-indigo-500 to-blue-500 rounded-full transition-all duration-300" style="width: 20%"></div>
+            </div>
+            <p class="text-[10px] font-black text-indigo-600 dark:text-indigo-400 uppercase tracking-widest" id="single-upload-progress-percent">20%</p>
         </div>`,
         `<button id="single-upload-close-btn" class="w-full py-2.5 text-xs font-black bg-gray-100 dark:bg-gray-700 text-gray-400 dark:text-gray-500 rounded-xl uppercase tracking-wider cursor-not-allowed" style="outline: none;" disabled>Please Wait</button>`,
         'max-w-sm'
@@ -6232,50 +6265,47 @@ window.submitSingleUserTask = async (task, file, reward, appName, taskLink, imag
     const progressEl = document.getElementById('single-upload-progress');
     const percentEl = document.getElementById('single-upload-progress-percent');
     const statusTitleEl = document.getElementById('single-upload-status-title');
-    const statusTextEl = document.getElementById('single-upload-status-text');
     const statusIconEl = document.getElementById('single-upload-status-icon');
     const closeBtn = document.getElementById('single-upload-close-btn');
 
-    const updateProgress = (pct, title, text) => {
+    const setStepActive = (stepNum, pct, titleText) => {
         if (progressEl) progressEl.style.width = `${pct}%`;
         if (percentEl) percentEl.textContent = `${pct}%`;
-        if (title && statusTitleEl) statusTitleEl.textContent = title;
-        if (text && statusTextEl) statusTextEl.textContent = text;
+        if (titleText && statusTitleEl) statusTitleEl.textContent = titleText;
+
+        for (let i = 1; i <= 5; i++) {
+            const stepUi = document.getElementById(`step-ui-${i}`);
+            const stepIcon = document.getElementById(`step-icon-${i}`);
+            if (!stepUi || !stepIcon) continue;
+
+            if (i < stepNum) {
+                // Completed steps
+                stepUi.className = 'flex items-center gap-2.5 font-bold text-emerald-600 dark:text-emerald-400';
+                stepIcon.className = 'w-5 h-5 rounded-full bg-emerald-500 text-white text-[10px] flex items-center justify-center shrink-0 font-bold';
+                stepIcon.textContent = '✓';
+            } else if (i === stepNum) {
+                // Active step
+                stepUi.className = 'flex items-center gap-2.5 font-bold text-indigo-600 dark:text-indigo-400 animate-pulse';
+                stepIcon.className = 'w-5 h-5 rounded-full bg-indigo-600 text-white text-[10px] flex items-center justify-center shrink-0 font-bold';
+                stepIcon.textContent = `${i}`;
+            } else {
+                // Upcoming steps
+                stepUi.className = 'flex items-center gap-2.5 font-semibold text-gray-400 dark:text-gray-500';
+                stepIcon.className = 'w-5 h-5 rounded-full bg-gray-200 dark:bg-gray-700 text-gray-500 text-[10px] flex items-center justify-center shrink-0 font-bold';
+                stepIcon.textContent = `${i}`;
+            }
+        }
+
+        if (stepNum === 5 && statusIconEl) {
+            statusIconEl.innerHTML = `<div class="w-12 h-12 rounded-full bg-emerald-500/20 text-emerald-500 flex items-center justify-center text-2xl font-black shadow-lg">✓</div>`;
+        }
     };
 
     try {
-        // 1. Compress image
-        updateProgress(8, 'Uploading Screenshot', 'Compressing image proof...');
+        // Step 1: Uploading...
+        setStepActive(1, 20, 'Uploading...');
         const compressed = await compressImage(file);
         
-        // 2. OCR check
-        updateProgress(15, 'Uploading Screenshot', 'Scanning review comment...');
-        let ocrText = '';
-        let clientOcrSuccess = false;
-        try {
-            const formData = new FormData();
-            formData.append('file', compressed);
-            formData.append('language', 'eng');
-            formData.append('OCREngine', '2');
-            formData.append('apikey', 'helloworld');
-
-            const ocrResponse = await fetch('https://api.ocr.space/parse/image', {
-                method: 'POST',
-                body: formData
-            });
-            if (ocrResponse.ok) {
-                const ocrData = await ocrResponse.json();
-                if (ocrData.OCRExitCode === 1 && ocrData.ParsedResults && ocrData.ParsedResults.length > 0) {
-                    ocrText = ocrData.ParsedResults[0].ParsedText || '';
-                    clientOcrSuccess = true;
-                }
-            }
-        } catch (ocrErr) {
-            console.error('Client OCR call failed:', ocrErr);
-        }
-
-        // 3. Match Comment
-        updateProgress(35, 'Uploading Screenshot', 'Verifying reviewer comment match...');
         let activeReservation = window.activeTaskReservation;
         if (!activeReservation || !activeReservation.comment) {
             try {
@@ -6298,59 +6328,26 @@ window.submitSingleUserTask = async (task, file, reward, appName, taskLink, imag
         }
         
         const matchedComment = activeReservation?.comment || '';
-        let gmailName = 'Unknown User';
-        let skipOcr = 'false';
 
-        const verifyCommentMatch = (text, expectedComment) => {
-            if (!expectedComment) return true;
-            const clean = (str) => String(str || '').toLowerCase().replace(/[^a-z0-9]/g, '');
-            const ocrNormalized = String(text || '').toLowerCase().replace(/[^a-z0-9\s]/g, '').replace(/\s+/g, ' ');
-            
-            const expectedWords = String(expectedComment || '')
-                .trim()
-                .split(/\s+/)
-                .map(clean)
-                .filter(w => w.length >= 3);
-                
-            if (expectedWords.length === 0) {
-                const shortWords = String(expectedComment || '').trim().split(/\s+/).map(clean).filter(Boolean);
-                if (shortWords.length === 0) return true;
-                return shortWords.every(word => ocrNormalized.includes(word));
-            }
+        // Step 2: Verifying Screenshot...
+        setStepActive(2, 40, 'Verifying Screenshot...');
 
-            let matchedCount = 0;
-            for (const word of expectedWords) {
-                if (ocrNormalized.includes(word)) matchedCount++;
-            }
+        // Step 3: Extracting Review...
+        setStepActive(3, 60, 'Extracting Review...');
 
-            const requiredMatches = Math.min(2, expectedWords.length);
-            return matchedCount >= requiredMatches;
-        };
-
-        if (clientOcrSuccess) {
-            try {
-                gmailName = await window.extractReviewerName(ocrText, matchedComment);
-            } catch (chatErr) {
-                console.warn('Failed to extract name:', chatErr);
-            }
-        }
-        skipOcr = 'true';
-
-        // 4. File Upload (using XHR with smooth progress listener!)
-        const gmailLogoUrl = `https://ui-avatars.com/api/?name=${encodeURIComponent(gmailName)}&background=random`;
         const token = await getBackendAuthToken();
         const params = new URLSearchParams({
             taskId: task.id,
             fileName: compressed.name,
             appName: appName || 'Unknown App',
             isBulk: 'false',
-            skipOcr,
-            ocrText: ocrText.slice(0, 1000),
-            gmailName,
-            gmailLogoUrl,
-            matchedComment: matchedComment || '',
-            assignedComment: matchedComment || ''
+            skipOcr: 'false',
+            assignedComment: matchedComment || '',
+            matchedComment: matchedComment || ''
         });
+
+        // Step 4: Matching Comment...
+        setStepActive(4, 80, 'Matching Comment...');
 
         const uploadUrl = `${BACKEND_BASE_URL}/api/uploads/task-screenshot?${params.toString()}`;
         const headers = {
@@ -6359,9 +6356,9 @@ window.submitSingleUserTask = async (task, file, reward, appName, taskLink, imag
         };
 
         const uploadResult = await uploadFileWithProgress(uploadUrl, compressed, headers, (percent) => {
-            // Map 0-100% upload progress to 40-85% overall progress
-            const overallPct = Math.round(40 + (percent * 0.45));
-            updateProgress(overallPct, 'Uploading Screenshot', `Uploading image proof (${percent}%)...`);
+            const pct = Math.round(60 + (percent * 0.25));
+            if (progressEl) progressEl.style.width = `${pct}%`;
+            if (percentEl) percentEl.textContent = `${pct}%`;
         });
 
         const uploadData = uploadResult.data || {};
@@ -6452,21 +6449,12 @@ window.submitSingleUserTask = async (task, file, reward, appName, taskLink, imag
             preloadUserTaskParticipation(currentUser.uid, { force: true });
         }
 
-        // Success Popup state
-        updateProgress(100, 'Upload Successful');
-        if (statusIconEl) {
-            statusIconEl.innerHTML = `
-                <div class="h-16 w-16 bg-emerald-100 dark:bg-emerald-950/30 rounded-full flex items-center justify-center border-2 border-emerald-500 scale-in-animation shadow-sm">
-                    <svg class="h-9 w-9 text-emerald-600 dark:text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="3">
-                        <path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5" />
-                    </svg>
-                </div>
-            `;
+        // Success Popup state: Step 5 Verified!
+        setStepActive(5, 100, '✅ Verified');
+        if (statusTitleEl) {
+            statusTitleEl.className = "text-sm font-black text-emerald-600 dark:text-emerald-400 uppercase tracking-wider mt-1";
+            statusTitleEl.textContent = "✅ Verification Successful";
         }
-        if (statusTitleEl) statusTitleEl.className = "text-sm font-black text-emerald-600 dark:text-emerald-400 uppercase tracking-wider";
-        if (statusTitleEl) statusTitleEl.textContent = "Upload Successful";
-        if (statusTextEl) statusTextEl.className = "text-xs text-gray-500 dark:text-gray-400 font-bold leading-normal px-2 mt-1";
-        if (statusTextEl) statusTextEl.textContent = "Your review screenshot has been uploaded successfully.";
 
         const progressWrapper = document.getElementById('single-upload-progress-bar-wrapper');
         if (progressWrapper) progressWrapper.classList.add('hidden');
