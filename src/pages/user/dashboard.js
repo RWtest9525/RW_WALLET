@@ -4591,15 +4591,15 @@ const watchAdVideoModal = (adCard) => {
         return showNotification(`You have reached the daily limit for ${adCard.title}. Come back tomorrow!`);
     }
 
-    const duration = adCard.duration || 30;
+    const duration = adCard.duration || 60;
     let secondsLeft = duration;
-    let isCompleted = false;
+    let isLiveAdCompleted = false;
     let timerInterval = null;
 
     const modalId = `modal-watch-ad-${Date.now()}`;
     const modalEl = document.createElement('div');
     modalEl.id = modalId;
-    modalEl.className = 'fixed inset-0 z-[9999] flex items-center justify-center bg-black/90 p-4 backdrop-blur-md transition-all duration-300 opacity-0';
+    modalEl.className = 'fixed inset-0 z-[9999] flex items-center justify-center bg-black/95 p-4 backdrop-blur-lg transition-all duration-300 opacity-0';
 
     modalEl.innerHTML = `
         <div class="relative w-full max-w-lg overflow-hidden rounded-3xl bg-slate-900 border border-slate-800 text-white shadow-2xl flex flex-col">
@@ -4611,7 +4611,7 @@ const watchAdVideoModal = (adCard) => {
                     </div>
                     <div>
                         <h4 class="text-sm font-black text-white leading-tight">${adCard.title}</h4>
-                        <p class="text-xs text-emerald-400 font-bold">Reward: +₹${adCard.reward.toFixed(2)}</p>
+                        <p class="text-xs text-emerald-400 font-bold">Reward: +₹${adCard.reward.toFixed(2)} (50% Share)</p>
                     </div>
                 </div>
                 <div class="flex items-center gap-2">
@@ -4619,20 +4619,26 @@ const watchAdVideoModal = (adCard) => {
                         <span class="h-2 w-2 rounded-full bg-amber-400 animate-ping"></span>
                         <span id="ad-timer-text">${secondsLeft}s</span>
                     </span>
+                    <button type="button" id="close-ad-modal-btn" class="p-1.5 text-gray-400 hover:text-white rounded-full">
+                        <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                    </button>
                 </div>
             </div>
 
-            <!-- Unity Video Player Container -->
+            <!-- Unity Live Video Container -->
             <div class="relative w-full aspect-video bg-black flex items-center justify-center overflow-hidden">
-                <video id="watch-ad-video-player" class="w-full h-full object-cover" autoplay playsinline muted loop>
-                    <source src="https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4" type="video/mp4">
-                    Your browser does not support video playback.
-                </video>
+                <!-- Unity Ad Container / Web Placement Frame -->
+                <iframe id="unity-ad-iframe" 
+                    class="w-full h-full border-0" 
+                    src="https://web.unityads.unity3d.com/ad?gameId=800108003&placementId=Rewarded_Android" 
+                    allow="autoplay; encrypted-media; fullscreen" 
+                    sandbox="allow-scripts allow-same-origin allow-popups allow-forms">
+                </iframe>
 
-                <!-- Unity Ads Badge -->
-                <div class="absolute top-3 left-3 bg-black/70 backdrop-blur px-3 py-1 rounded-full border border-white/10 text-[10px] font-black text-white flex items-center gap-1.5 shadow-md">
-                    <span class="h-2 w-2 rounded-full bg-blue-400 animate-pulse"></span>
-                    <span>Unity Ads Web</span>
+                <!-- Unity Ads Active Badge -->
+                <div class="absolute top-3 left-3 bg-black/80 backdrop-blur px-3 py-1 rounded-full border border-white/20 text-[10px] font-black text-white flex items-center gap-1.5 shadow-lg">
+                    <span class="h-2 w-2 rounded-full bg-emerald-400 animate-pulse"></span>
+                    <span>Unity Ads ID: 800108003</span>
                 </div>
 
                 <!-- Sound Control -->
@@ -4650,14 +4656,14 @@ const watchAdVideoModal = (adCard) => {
             <!-- Footer -->
             <div class="p-5 bg-slate-900 space-y-3 text-center">
                 <p id="ad-status-msg" class="text-xs text-slate-400 font-medium">
-                    Watch the video ad completely to earn <b class="text-emerald-400">₹${adCard.reward.toFixed(2)}</b>. Do not close this screen.
+                    Watch the Unity video ad completely (${duration}s) to receive <b class="text-emerald-400">₹${adCard.reward.toFixed(2)}</b>.
                 </p>
 
                 <button type="button" 
                     id="btn-claim-ad-reward"
                     class="w-full py-3.5 px-4 rounded-2xl font-black text-sm text-center transition-all bg-slate-800 text-slate-500 cursor-not-allowed border border-slate-700 shadow-none"
                     disabled>
-                    ⏳ Watching Unity Ad... (${secondsLeft}s)
+                    ⏳ Watching Live Unity Ad... (${secondsLeft}s)
                 </button>
             </div>
         </div>
@@ -4666,37 +4672,43 @@ const watchAdVideoModal = (adCard) => {
     document.body.appendChild(modalEl);
     requestAnimationFrame(() => modalEl.classList.remove('opacity-0'));
 
-    const videoEl = modalEl.querySelector('#watch-ad-video-player');
     const timerTextEl = modalEl.querySelector('#ad-timer-text');
     const progressBarEl = modalEl.querySelector('#ad-progress-bar');
     const claimBtn = modalEl.querySelector('#btn-claim-ad-reward');
     const statusMsgEl = modalEl.querySelector('#ad-status-msg');
     const timerBadgeEl = modalEl.querySelector('#ad-timer-badge');
-    const soundBtn = modalEl.querySelector('#toggle-ad-sound');
-    const mutedIcon = modalEl.querySelector('#sound-icon-muted');
-    const unmutedIcon = modalEl.querySelector('#sound-icon-unmuted');
+    const closeBtn = modalEl.querySelector('#close-ad-modal-btn');
 
-    if (soundBtn && videoEl) {
-        soundBtn.addEventListener('click', () => {
-            videoEl.muted = !videoEl.muted;
-            if (videoEl.muted) {
-                mutedIcon.classList.remove('hidden');
-                unmutedIcon.classList.add('hidden');
-            } else {
-                mutedIcon.classList.add('hidden');
-                unmutedIcon.classList.remove('hidden');
+    // Close button handler (Cancels without reward)
+    if (closeBtn) {
+        closeBtn.addEventListener('click', () => {
+            if (!isLiveAdCompleted) {
+                if (!confirm('If you close now, you will NOT get any money reward. Close anyway?')) {
+                    return;
+                }
             }
+            clearInterval(timerInterval);
+            modalEl.classList.add('opacity-0');
+            setTimeout(() => modalEl.remove(), 300);
         });
     }
 
-    if (window.UnityAds && typeof window.UnityAds.show === 'function') {
+    // Android Native Unity Ads bridge invocation if running in APK
+    if (window.AndroidUnityAds && typeof window.AndroidUnityAds.showRewardedAd === 'function') {
         try {
-            window.UnityAds.show(adCard.unityPlacementId || 'Rewarded_Android');
+            window.AndroidUnityAds.showRewardedAd('Rewarded_Android');
         } catch (e) {
-            console.warn('Unity Ads SDK trigger fallback:', e);
+            console.warn('Android Native Unity Ads call failed:', e);
+        }
+    } else if (window.UnityAds && typeof window.UnityAds.show === 'function') {
+        try {
+            window.UnityAds.show('Rewarded_Android');
+        } catch (e) {
+            console.warn('Web Unity Ads call failed:', e);
         }
     }
 
+    // Start strict timer countdown
     timerInterval = setInterval(() => {
         secondsLeft--;
         const elapsed = duration - secondsLeft;
@@ -4704,13 +4716,13 @@ const watchAdVideoModal = (adCard) => {
 
         if (progressBarEl) progressBarEl.style.width = `${pct}%`;
         if (timerTextEl) timerTextEl.textContent = `${secondsLeft}s`;
-        if (claimBtn && !isCompleted) {
-            claimBtn.textContent = `⏳ Watching Unity Ad... (${secondsLeft}s)`;
+        if (claimBtn && !isLiveAdCompleted) {
+            claimBtn.textContent = `⏳ Watching Live Unity Ad... (${secondsLeft}s)`;
         }
 
         if (secondsLeft <= 0) {
             clearInterval(timerInterval);
-            isCompleted = true;
+            isLiveAdCompleted = true;
 
             if (progressBarEl) progressBarEl.style.width = '100%';
             if (timerBadgeEl) {
@@ -4718,7 +4730,7 @@ const watchAdVideoModal = (adCard) => {
                 timerBadgeEl.innerHTML = '✓ Completed';
             }
             if (statusMsgEl) {
-                statusMsgEl.innerHTML = '🎉 Ad finished! Click below to claim <b class="text-emerald-400">₹' + adCard.reward.toFixed(2) + '</b> now!';
+                statusMsgEl.innerHTML = '🎉 Unity Ad complete! Click below to claim <b class="text-emerald-400">₹' + adCard.reward.toFixed(2) + '</b> into your wallet!';
             }
             if (claimBtn) {
                 claimBtn.disabled = false;
@@ -4730,7 +4742,7 @@ const watchAdVideoModal = (adCard) => {
 
     if (claimBtn) {
         claimBtn.addEventListener('click', async () => {
-            if (!isCompleted) return;
+            if (!isLiveAdCompleted) return;
             claimBtn.disabled = true;
             claimBtn.innerHTML = '⌛ Crediting Money...';
 
@@ -4751,7 +4763,7 @@ const watchAdVideoModal = (adCard) => {
                         await window.addDoc(txRef, {
                             type: 'watch_ad_reward',
                             amount: adCard.reward,
-                            comment: `Watch Video Ad Reward - ${adCard.title} (Unity Ads)`,
+                            comment: `Watch Unity Video Ad Reward - ${adCard.title} (ID: 800108003)`,
                             timestamp: window.serverTimestamp ? window.serverTimestamp() : Date.now(),
                             status: 'completed',
                             adId: adCard.id
