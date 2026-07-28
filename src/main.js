@@ -833,21 +833,8 @@ document.body.addEventListener('click', (e) => {
                     break;
 
                 case 'open-task-ads-page':
-                    if (typeof window.showWatchAdsPage === 'function') {
-                        window.showWatchAdsPage();
-                    } else if (typeof showTaskFeatureComingSoonPage === 'function') {
-                        showTaskFeatureComingSoonPage('ads');
-                    }
+                    showTaskFeatureComingSoonPage('ads');
                     break;
-
-                case 'start-watch-ad': {
-                    const adId = target.dataset.adid || target.closest('[data-adid]')?.dataset?.adid;
-                    const card = (window.WATCH_AD_CARDS || []).find(c => c.id === adId);
-                    if (card && typeof window.watchAdVideoModal === 'function') {
-                        window.watchAdVideoModal(card);
-                    }
-                    break;
-                }
 
                 case 'open-task-bonus-page':
                     if (typeof showTaskFeatureComingSoonPage === 'function') {
