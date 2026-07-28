@@ -182,7 +182,7 @@ root.outerHTML = `
                 </div>
             </header>
             <!-- Main Dashboard Area (Tabs) -->
-            <div id="dashboard-content">
+            <div id="dashboard-content" class="hidden">
                 <div id="tabs-container" class="hidden" aria-hidden="true">
                     <button data-tab="user-panel" class="tab-button" aria-selected="true">My Wallet</button>
                     <button data-tab="admin-panel" id="admin-tab-button" class="hidden tab-button" aria-selected="false">Admin Panel</button>

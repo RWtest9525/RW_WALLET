@@ -169,7 +169,8 @@ onAuthStateChanged(auth, async (user) => {
                 !pageContainerAtAuth.classList.contains('hidden') &&
                 pageContainerAtAuth.innerHTML.trim()
             );
-            const shouldPreserveHydratedDashboard = !!(
+            const lastActiveSection = localStorage.getItem('last_active_section') || 'task';
+            const shouldPreserveHydratedDashboard = lastActiveSection === 'home' && !!(
                 user &&
                 !shouldPreserveOpenPage &&
                 mainContentAtAuth &&
@@ -353,10 +354,10 @@ onAuthStateChanged(auth, async (user) => {
                 window.__appLoaded = true;
                 applyAdminBottomChrome(isAdmin);
                 document.getElementById('auth-screen')?.classList.add('hidden');
-                document.getElementById('main-content')?.classList.remove('hidden');
 
                 if (!shouldPreserveOpenPage && !shouldPreserveHydratedDashboard) {
                     if (isAdmin) {
+                        document.getElementById('main-content')?.classList.remove('hidden');
                         currentMainSection = 'admin';
                         switchTab('admin-panel');
                         setBottomNavActive('bottom-admin-btn');
@@ -365,6 +366,7 @@ onAuthStateChanged(auth, async (user) => {
                             window.showAdminMainPage();
                         }
                     } else {
+                        document.getElementById('dashboard-content')?.classList.add('hidden');
                         currentMainSection = 'task';
                         switchTab('user-panel');
                         setBottomNavActive('bottom-task-btn');
@@ -372,7 +374,10 @@ onAuthStateChanged(auth, async (user) => {
                         if (typeof window.showUserTaskPage === 'function') {
                             window.showUserTaskPage();
                         }
+                        document.getElementById('main-content')?.classList.remove('hidden');
                     }
+                } else {
+                    document.getElementById('main-content')?.classList.remove('hidden');
                 }
 
                 // Background config & approval checks
