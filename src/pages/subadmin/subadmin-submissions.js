@@ -1475,6 +1475,9 @@ const renderAdminSubmissions = () => {
         });
     } else {
         subs = subs.filter(sub => {
+            const subUserId = sub.user_id || sub.userId || sub.uid || '';
+            if (subUserId === currentUser?.uid) return true;
+
             const taskId = sub.task_id || sub.taskId;
             const task = (window.allTasksCache || []).find(t => t.id === taskId);
             if (task) {
@@ -1525,7 +1528,9 @@ const renderAdminSubmissions = () => {
         filteredTasks = filteredTasks.filter(task => {
             const creator = task.createdBy || task.creatorUid || task.adminId || task.subAdminId || '';
             const assigned = Array.isArray(task.assignedToSubAdmins) ? task.assignedToSubAdmins : [];
-            return creator === currentUser?.uid || assigned.includes(currentUser?.uid) || assigned.includes('all');
+            const taskSubs = subs.filter(s => (s.task_id === task.id || s.taskId === task.id));
+            const subSubmittedThisTask = taskSubs.some(s => (s.user_id === currentUser?.uid || s.userId === currentUser?.uid));
+            return creator === currentUser?.uid || assigned.includes(currentUser?.uid) || assigned.includes('all') || subSubmittedThisTask;
         });
     }
 
