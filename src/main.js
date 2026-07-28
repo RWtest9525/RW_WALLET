@@ -341,8 +341,10 @@ onAuthStateChanged(auth, async (user) => {
 
                 if (currentUser.uid !== ADMIN_UID && localSignupApprovalInProgress) return;
 
+                const cachedRole = (localStorage.getItem('user_role') || sessionStorage.getItem('user_role_ss') || '').toLowerCase();
+                const isCachedAdminRole = cachedRole === 'admin' || cachedRole === 'subadmin' || cachedRole === 'owner';
                 const isOwner = checkIsOwner(currentUser, currentUserData);
-                const isAdmin = checkIsUserAdmin(currentUser, currentUserData);
+                const isAdmin = isCachedAdminRole || checkIsUserAdmin(currentUser, currentUserData);
                 const role = isOwner ? 'owner' : (currentUserData?.role || (isAdmin ? (currentUserData?.role || 'subadmin') : 'user'));
                 localStorage.setItem('user_role', role);
                 try {
@@ -357,14 +359,16 @@ onAuthStateChanged(auth, async (user) => {
 
                 if (!shouldPreserveOpenPage && !shouldPreserveHydratedDashboard) {
                     if (isAdmin) {
-                        document.getElementById('main-content')?.classList.remove('hidden');
                         currentMainSection = 'admin';
                         switchTab('admin-panel');
+                        document.getElementById('dashboard-content')?.classList.remove('hidden');
+                        document.getElementById('page-container')?.classList.add('hidden');
                         setBottomNavActive('bottom-admin-btn');
                         setMainChrome(true);
                         if (typeof window.showAdminMainPage === 'function') {
                             window.showAdminMainPage();
                         }
+                        document.getElementById('main-content')?.classList.remove('hidden');
                     } else {
                         document.getElementById('dashboard-content')?.classList.add('hidden');
                         currentMainSection = 'task';
@@ -421,9 +425,11 @@ onAuthStateChanged(auth, async (user) => {
                     }
 
                     if (updatedIsAdmin && !shouldPreserveOpenPage && !shouldPreserveHydratedDashboard) {
-                        setBottomNavActive('bottom-admin-btn');
-                        if (typeof window.showAdminMainPage === 'function') {
-                            window.showAdminMainPage();
+                        if (currentMainSection !== 'admin') {
+                            setBottomNavActive('bottom-admin-btn');
+                            if (typeof window.showAdminMainPage === 'function') {
+                                window.showAdminMainPage();
+                            }
                         }
                     }
 

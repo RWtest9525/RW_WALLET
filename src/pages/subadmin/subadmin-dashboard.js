@@ -506,14 +506,13 @@ const showAdminMainPage = () => {
                 activeTaskReservationTimer = null;
             }
             activeTaskReservation = null;
-            window.activeTaskReservation = null;
+            switchTab('admin-panel');
             document.getElementById('dashboard-content').classList.remove('hidden');
             document.getElementById('page-container').classList.add('hidden');
             document.getElementById('page-container').innerHTML = '';
             setMainChrome(true);
             document.getElementById('app-footer')?.classList.add('app-footer-hidden');
             currentMainSection = 'admin';
-            switchTab('admin-panel');
             setBottomNavActive('bottom-admin-btn');
             updateAdminLoanRequestBadge();
 
