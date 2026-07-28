@@ -2,10 +2,20 @@ import sys
 import json
 import os
 
-# Ensure verification_engine can be imported
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+# Environment variables to suppress Paddle / PyTorch log noise
+os.environ["GLOG_minloglevel"] = "3"
+os.environ["FLAGS_allocator_strategy"] = "naive_best_fit"
 
-from verification_engine import verify_screenshot
+# Redirect stdout to stderr during imports to guarantee clean stdout for JSON
+_real_stdout = sys.stdout
+sys.stdout = sys.stderr
+
+try:
+    # Ensure verification_engine can be imported
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    from verification_engine import verify_screenshot
+finally:
+    sys.stdout = _real_stdout
 
 def verify_app_review(image_path: str, assigned_comment: str = "", task_type: str = "google_play_review", reviewer_name: str = "") -> dict:
     """
@@ -68,10 +78,16 @@ if __name__ == "__main__":
     input_task_type = sys.argv[3] if len(sys.argv) > 3 else "google_play_review"
     input_reviewer_name = sys.argv[4] if len(sys.argv) > 4 else ""
 
-    result = verify_app_review(
-        image_path=input_image_path,
-        assigned_comment=input_assigned_comment,
-        task_type=input_task_type,
-        reviewer_name=input_reviewer_name
-    )
-    print(json.dumps(result, ensure_ascii=False, indent=2))
+    # Redirect stdout to stderr during processing so stdout stays 100% clean
+    sys.stdout = sys.stderr
+    try:
+        result = verify_app_review(
+            image_path=input_image_path,
+            assigned_comment=input_assigned_comment,
+            task_type=input_task_type,
+            reviewer_name=input_reviewer_name
+        )
+    finally:
+        sys.stdout = _real_stdout
+
+    print(json.dumps(result, ensure_ascii=False))

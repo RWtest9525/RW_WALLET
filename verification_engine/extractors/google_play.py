@@ -12,25 +12,25 @@ def get_ocr_engine():
     if _OCR_ENGINE_TUPLE is not None:
         return _OCR_ENGINE_TUPLE
 
-    # Try PaddleOCR first
-    try:
-        from paddleocr import PaddleOCR
-        paddle_instance = PaddleOCR(use_angle_cls=False, lang='en')
-        _OCR_ENGINE_TUPLE = ("paddle", paddle_instance)
-        print("[GooglePlayExtractor] PaddleOCR initialized successfully.")
-        return _OCR_ENGINE_TUPLE
-    except Exception as paddle_err:
-        print(f"[GooglePlayExtractor] PaddleOCR init warning: {paddle_err}. Loading EasyOCR...")
-
-    # Fallback to EasyOCR
+    # Try EasyOCR first as fast primary CPU singleton engine
     try:
         import easyocr
         easy_instance = easyocr.Reader(['en'], gpu=False)
         _OCR_ENGINE_TUPLE = ("easyocr", easy_instance)
-        print("[GooglePlayExtractor] EasyOCR fallback initialized successfully.")
+        print("[GooglePlayExtractor] EasyOCR initialized as primary singleton engine.")
         return _OCR_ENGINE_TUPLE
     except Exception as easy_err:
         print(f"[GooglePlayExtractor] EasyOCR init error: {easy_err}")
+
+    # Fallback to PaddleOCR if available
+    try:
+        from paddleocr import PaddleOCR
+        paddle_instance = PaddleOCR(use_angle_cls=False, lang='en')
+        _OCR_ENGINE_TUPLE = ("paddle", paddle_instance)
+        print("[GooglePlayExtractor] PaddleOCR initialized as fallback engine.")
+        return _OCR_ENGINE_TUPLE
+    except Exception as paddle_err:
+        print(f"[GooglePlayExtractor] PaddleOCR init error: {paddle_err}")
 
     return (None, None)
 
@@ -109,10 +109,20 @@ class GooglePlayExtractor(BaseExtractor):
         Runs OCR ONLY on the cropped review card image.
         Extracts ONLY Reviewer Name and Review Comment.
         """
+        if cropped_img is None or cropped_img.size == 0:
+            return {"reviewer_name": "", "review_comment": ""}
+
         engine_type, ocr_engine = get_ocr_engine()
         lines = []
 
-        if engine_type == "paddle" and ocr_engine is not None:
+        if engine_type == "easyocr" and ocr_engine is not None:
+            try:
+                results = ocr_engine.readtext(cropped_img, detail=0)
+                lines = [str(r).strip() for r in results if str(r).strip()]
+            except Exception as easy_run_err:
+                print(f"[GooglePlayExtractor] EasyOCR run error: {easy_run_err}")
+
+        if engine_type == "paddle" and ocr_engine is not None and not lines:
             try:
                 ocr_result = ocr_engine.predict(cropped_img)
                 if ocr_result:
@@ -129,18 +139,7 @@ class GooglePlayExtractor(BaseExtractor):
                                     if text:
                                         lines.append(text)
             except Exception as paddle_run_err:
-                print(f"[GooglePlayExtractor] PaddleOCR predict error: {paddle_run_err}. Trying EasyOCR fallback...")
-                engine_type = "easyocr"
-
-        if (engine_type == "easyocr" or not lines) and ocr_engine is not None:
-            try:
-                import easyocr
-                if not isinstance(ocr_engine, easyocr.Reader):
-                    ocr_engine = easyocr.Reader(['en'], gpu=False)
-                results = ocr_engine.readtext(cropped_img, detail=0)
-                lines = [str(r).strip() for r in results if str(r).strip()]
-            except Exception as easy_run_err:
-                print(f"[GooglePlayExtractor] EasyOCR run error: {easy_run_err}")
+                print(f"[GooglePlayExtractor] PaddleOCR predict error: {paddle_run_err}")
 
         # Filter out UI noise elements
         clean_lines = []

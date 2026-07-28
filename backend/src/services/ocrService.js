@@ -405,8 +405,23 @@ async function verifyAppReviewWithPython(imagePathOrBuffer, assignedComment = ''
       }
 
       try {
-        const jsonResult = JSON.parse(stdout.trim());
-        resolve(jsonResult);
+        const rawStr = stdout.trim();
+        let jsonResult = null;
+        try {
+          jsonResult = JSON.parse(rawStr);
+        } catch (_) {
+          const lastOpen = rawStr.lastIndexOf('{');
+          const lastClose = rawStr.lastIndexOf('}');
+          if (lastOpen !== -1 && lastClose !== -1 && lastClose > lastOpen) {
+            jsonResult = JSON.parse(rawStr.substring(lastOpen, lastClose + 1));
+          }
+        }
+
+        if (jsonResult) {
+          resolve(jsonResult);
+        } else {
+          throw new Error('Could not find valid JSON object in Python output');
+        }
       } catch (parseErr) {
         console.error('[OCR-Service] Failed to parse Python OCR response:', stdout);
         resolve({ verified: false, score: 0, error: 'JSON_PARSE_ERROR', extracted_text: stdout.trim() });
