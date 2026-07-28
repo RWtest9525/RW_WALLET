@@ -11,20 +11,24 @@ let testOcrActiveIndex = -1;
 
 export function renderTestOcrPage() {
     const root = document.getElementById('rw-wallet-root');
-    if (!root) return;
-
-    // Hide standard user/admin page elements if present
+    
+    // Hide standard shell, admin/user panels, and bottom navigation
     document.getElementById('auth-screen')?.classList.add('hidden');
     document.getElementById('main-content')?.classList.add('hidden');
     document.getElementById('page-container')?.classList.add('hidden');
+    document.getElementById('bottom-nav')?.classList.add('hidden');
+    document.getElementById('admin-panel')?.classList.add('hidden');
+    document.getElementById('user-panel')?.classList.add('hidden');
+
+    let targetRoot = root || document.body;
 
     // Create container for test-ocr if not present
     let container = document.getElementById('test-ocr-container');
     if (!container) {
         container = document.createElement('div');
         container.id = 'test-ocr-container';
-        container.className = 'min-h-screen bg-gray-900 text-gray-100 p-4 sm:p-8 font-sans';
-        root.appendChild(container);
+        container.className = 'fixed inset-0 z-[99999] overflow-y-auto bg-gray-900 text-gray-100 p-4 sm:p-8 font-sans';
+        targetRoot.appendChild(container);
     } else {
         container.classList.remove('hidden');
     }

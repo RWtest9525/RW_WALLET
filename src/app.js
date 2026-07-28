@@ -31,6 +31,10 @@ window.addEventListener('unhandledrejection', (event) => {
 });
 
 const hydrateInstantShell = () => {
+    if (window.location.pathname.includes('/test-ocr') || window.location.hash.includes('test-ocr')) {
+        if (typeof window.renderTestOcrPage === 'function') window.renderTestOcrPage();
+        return;
+    }
     const ADMIN_UID = 'mOs5Fmp4RoRzeBDH4pZLMOpQx7Q2';
     const lastUser = localStorage.getItem('lastLoggedInUser');
     const isImpersonating = !!localStorage.getItem('impersonated_sub_admin_uid');
