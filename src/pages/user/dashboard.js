@@ -4625,27 +4625,34 @@ const watchAdVideoModal = (adCard) => {
                 </div>
             </div>
 
-            <!-- Unity Live Video Container -->
+            <!-- Live Video Ad Container -->
             <div class="relative w-full aspect-video bg-black flex items-center justify-center overflow-hidden">
-                <!-- Unity Ad Container / Web Placement Frame -->
-                <iframe id="unity-ad-iframe" 
-                    class="w-full h-full border-0" 
-                    src="https://web.unityads.unity3d.com/ad?gameId=800108003&placementId=Rewarded_Android" 
-                    allow="autoplay; encrypted-media; fullscreen" 
-                    sandbox="allow-scripts allow-same-origin allow-popups allow-forms">
-                </iframe>
+                ${adCard.adUrl || (window.UNITY_ADS_CONFIG && window.UNITY_ADS_CONFIG.directAdUrl) ? `
+                    <iframe id="unity-ad-iframe" 
+                        class="w-full h-full border-0" 
+                        src="${adCard.adUrl || window.UNITY_ADS_CONFIG.directAdUrl}" 
+                        allow="autoplay; encrypted-media; fullscreen" 
+                        sandbox="allow-scripts allow-same-origin allow-popups allow-forms">
+                    </iframe>
+                ` : `
+                    <video id="watch-ad-video-player" class="w-full h-full object-cover" autoplay playsinline muted loop>
+                        <source src="https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4" type="video/mp4">
+                        <source src="https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ElephantsDream.mp4" type="video/mp4">
+                        Your browser does not support video playback.
+                    </video>
 
-                <!-- Unity Ads Active Badge -->
-                <div class="absolute top-3 left-3 bg-black/80 backdrop-blur px-3 py-1 rounded-full border border-white/20 text-[10px] font-black text-white flex items-center gap-1.5 shadow-lg">
+                    <!-- Sound Toggle Control -->
+                    <button type="button" id="toggle-ad-sound" class="absolute bottom-3 right-3 bg-black/80 hover:bg-black text-white p-2.5 rounded-full border border-white/20 backdrop-blur shadow-lg transition-transform active:scale-95 z-20">
+                        <svg id="sound-icon-muted" class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.707 12 4.414 12 5.586v12.828c0 1.172-1.077 1.879-1.707 1.25L5.586 15z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2"></path></svg>
+                        <svg id="sound-icon-unmuted" class="h-5 w-5 hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.536 8.464a5 5 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.707 12 4.414 12 5.586v12.828c0 1.172-1.077 1.879-1.707 1.25L5.586 15z"></path></svg>
+                    </button>
+                `}
+
+                <!-- Live Ad Active Badge -->
+                <div class="absolute top-3 left-3 bg-black/80 backdrop-blur px-3 py-1 rounded-full border border-white/20 text-[10px] font-black text-white flex items-center gap-1.5 shadow-lg z-20">
                     <span class="h-2 w-2 rounded-full bg-emerald-400 animate-pulse"></span>
                     <span>Unity Ads ID: 800108003</span>
                 </div>
-
-                <!-- Sound Control -->
-                <button type="button" id="toggle-ad-sound" class="absolute bottom-3 right-3 bg-black/70 hover:bg-black text-white p-2.5 rounded-full border border-white/20 backdrop-blur shadow-lg transition-transform active:scale-95">
-                    <svg id="sound-icon-muted" class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.707 12 4.414 12 5.586v12.828c0 1.172-1.077 1.879-1.707 1.25L5.586 15z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2"></path></svg>
-                    <svg id="sound-icon-unmuted" class="h-5 w-5 hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.536 8.464a5 5 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.707 12 4.414 12 5.586v12.828c0 1.172-1.077 1.879-1.707 1.25L5.586 15z"></path></svg>
-                </button>
             </div>
 
             <!-- Progress Bar -->
@@ -4678,6 +4685,24 @@ const watchAdVideoModal = (adCard) => {
     const statusMsgEl = modalEl.querySelector('#ad-status-msg');
     const timerBadgeEl = modalEl.querySelector('#ad-timer-badge');
     const closeBtn = modalEl.querySelector('#close-ad-modal-btn');
+
+    const soundBtn = modalEl.querySelector('#toggle-ad-sound');
+    const videoEl = modalEl.querySelector('#watch-ad-video-player');
+    const mutedIcon = modalEl.querySelector('#sound-icon-muted');
+    const unmutedIcon = modalEl.querySelector('#sound-icon-unmuted');
+
+    if (soundBtn && videoEl) {
+        soundBtn.addEventListener('click', () => {
+            videoEl.muted = !videoEl.muted;
+            if (videoEl.muted) {
+                mutedIcon.classList.remove('hidden');
+                unmutedIcon.classList.add('hidden');
+            } else {
+                mutedIcon.classList.add('hidden');
+                unmutedIcon.classList.remove('hidden');
+            }
+        });
+    }
 
     // Close button handler (Cancels without reward)
     if (closeBtn) {
