@@ -372,7 +372,7 @@ async function cropReviewerAvatar(imageBuffer, nameLine, assignedComment = 'scre
  * Executes the Python verify_app_review.py script to handle EasyOCR scanning,
  * smart comment truncation, dynamic cropping, and RapidFuzz partial ratio verification.
  */
-async function verifyAppReviewWithPython(imagePathOrBuffer, assignedComment = '') {
+async function verifyAppReviewWithPython(imagePathOrBuffer, assignedComment = '', taskType = 'google_play_review', reviewerName = '') {
   return new Promise((resolve) => {
     let tempFilePath = null;
     let imagePath = imagePathOrBuffer;
@@ -384,9 +384,17 @@ async function verifyAppReviewWithPython(imagePathOrBuffer, assignedComment = ''
     }
 
     const scriptPath = path.resolve(__dirname, '../../../verify_app_review.py');
-    const pythonCmd = process.platform === 'win32' ? 'python' : 'python3';
+    const venvPythonPath = path.resolve(__dirname, '../../../.venv/Scripts/python.exe');
+    const venvLinuxPythonPath = path.resolve(__dirname, '../../../.venv/bin/python');
+    
+    let pythonCmd = process.platform === 'win32' ? 'python' : 'python3';
+    if (fs.existsSync(venvPythonPath)) {
+      pythonCmd = venvPythonPath;
+    } else if (fs.existsSync(venvLinuxPythonPath)) {
+      pythonCmd = venvLinuxPythonPath;
+    }
 
-    execFile(pythonCmd, [scriptPath, imagePath, assignedComment], { maxBuffer: 1024 * 1024 * 10 }, (error, stdout, stderr) => {
+    execFile(pythonCmd, [scriptPath, imagePath, assignedComment, taskType, reviewerName], { maxBuffer: 1024 * 1024 * 10 }, (error, stdout, stderr) => {
       if (tempFilePath && fs.existsSync(tempFilePath)) {
         try { fs.unlinkSync(tempFilePath); } catch (e) {}
       }
