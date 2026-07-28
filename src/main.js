@@ -29,9 +29,17 @@ import './pages/owner/owner-manage-admins.js';
 import './pages/owner/owner-settlements.js';
 import './pages/owner/owner-audit.js';
 import './core/firebase.js';
+import { renderTestOcrPage } from './pages/admin/test-ocr.js';
 
 // Setup Event listeners and routing at DOM load
 applyTheme(initialTheme);
+
+// Secret route handler for /test-ocr local testing page
+window.renderTestOcrPage = renderTestOcrPage;
+if (window.location.pathname.includes('/test-ocr') || window.location.hash.includes('test-ocr')) {
+    window.addEventListener('DOMContentLoaded', () => renderTestOcrPage());
+    renderTestOcrPage();
+}
 
 // Instant Asset Preloader for Referral and Profile Banners (Anti-Flicker Dual-Cache Ready)
 (() => {
@@ -267,6 +275,10 @@ onAuthStateChanged(auth, async (user) => {
             updateSupportChatUnreadBadges();
             updateAdminChatUnreadBadges();
             updateNotificationUnreadBadge();
+
+            if (window.location.pathname.includes('/test-ocr') || window.location.hash.includes('test-ocr')) {
+                renderTestOcrPage();
+            }
 
             if (user) {
                 // Impersonation support for Owner

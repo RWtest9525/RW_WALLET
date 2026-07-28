@@ -56,30 +56,26 @@ async function verifyReviewScreenshot(req, res) {
       });
     }
 
-    // 2. Perform OCR Recognition
-    const { ocrText, ocrConfidence } = await ocrService.runOcrOnBuffer(imgBuffer);
+    // 2. Perform Python AI OCR Verification Engine call
+    const taskType = req.body.taskType || 'google_play_review';
+    const pyResult = await ocrService.verifyAppReviewWithPython(imgBuffer, expectedComment, taskType, reviewerName);
 
-    // 3. Extract Reviewer Name & Perform Multi-Level Fuzzy Match Verification
-    const extractedUserName = ocrService.extractReviewerName(ocrText);
-    const fuzzyComment = ocrService.verifyFuzzyCommentMatch(ocrText, expectedComment, 0.68);
-    const fuzzyName = ocrService.verifyFuzzyReviewerMatch(ocrText, extractedUserName, reviewerName, 0.68);
+    const isMatched = pyResult.status === 'PASS';
+    const similarityScore = pyResult.score || 0;
 
-    const isMatched = fuzzyComment.isMatched && fuzzyName.isMatched;
-
-    let similarityScore = Math.min(fuzzyComment.similarityScore, fuzzyName.similarityScore);
-    if (isMatched && similarityScore < 0.68) {
-      similarityScore = 0.68;
-    }
-    similarityScore = Number(similarityScore.toFixed(2));
-
-    // Return JSON structure: { success: true, isMatched: boolean, similarityScore: number, extractedText: string }
+    // Return JSON structure with AI Verification Engine details
     return res.json({
       success: true,
       isMatched,
       similarityScore,
-      extractedText: ocrText || '',
-      extractedUserName,
-      matchedComment: fuzzyComment.matchedComment || expectedComment || ''
+      status: pyResult.status || 'FAIL',
+      score: pyResult.score || 0,
+      reviewer_name: pyResult.reviewer_name || '',
+      review_comment: pyResult.review_comment || '',
+      extractedText: pyResult.review_comment || '',
+      extractedUserName: pyResult.reviewer_name || '',
+      matchedComment: expectedComment || '',
+      details: pyResult.details || {}
     });
 
   } catch (error) {
