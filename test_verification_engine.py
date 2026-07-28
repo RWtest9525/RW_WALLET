@@ -25,10 +25,16 @@ def test_samples():
         filename = os.path.basename(img_path)
         start_time = time.time()
         
-        # Test verification engine
+        # Test candidate comment pool matching
+        sample_pool = """What Android version is required to use the app? How does the app help me discover new movies?
+Great app UI and fast performance.
+Easy navigation and clean design.
+Mukulsiwach14 Gift approved 22,184
+Learn more about collection Data is encrypted in transit Account deletion available"""
+
         result = verify_screenshot(
             image_path=img_path,
-            assigned_comment="",  # No target comment specified -> tests OCR card extraction & name parsing
+            assigned_comment=sample_pool,
             task_type="google_play_review"
         )
         
@@ -39,12 +45,14 @@ def test_samples():
         score = result.get("score")
         reviewer_name = result.get("reviewer_name", "N/A")
         review_comment = result.get("review_comment", "N/A")
+        matched_comment = result.get("matched_comment", "N/A")
         extractor = result.get("details", {}).get("extractor")
 
         print(f"[{idx}/{len(image_paths)}] {filename}")
         print(f"  |- Status: {status} | Score: {score}% | Extractor: {extractor} ({elapsed}s)")
         print(f"  |- Reviewer Name: {reviewer_name}")
-        print(f"  |- Review Comment: {review_comment[:80]}...\n")
+        print(f"  |- Matched Comment from Pool: {matched_comment[:80]}...")
+        print(f"  |- Extracted Review Comment: {review_comment[:80]}...\n")
 
         if review_comment or reviewer_name:
             passed_count += 1

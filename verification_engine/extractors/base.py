@@ -91,11 +91,14 @@ class BaseExtractor(ABC):
             "score": score,
             "reviewer_name": extracted_name,
             "review_comment": extracted_comment,
+            "matched_comment": match_res.get("matched_comment", assigned_comment),
             "name_verification": name_res,
             "details": {
                 "extractor": self.name,
                 "truncated": match_res.get("truncated", False),
                 "fallback_used": fallback_used,
+                "candidate_index": match_res.get("candidate_index", 1),
+                "total_candidates_tested": match_res.get("total_candidates_tested", 1),
                 "normalized_comment": match_res.get("normalized_extracted", ""),
                 "normalized_assigned": match_res.get("normalized_assigned", "")
             }

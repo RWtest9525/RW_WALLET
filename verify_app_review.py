@@ -23,6 +23,7 @@ def verify_app_review(image_path: str, assigned_comment: str = "", task_type: st
 
         status = res.get("status", "FAIL")
         is_verified = (status == "PASS")
+        matched_comment = res.get("matched_comment", assigned_comment)
 
         return {
             "verified": is_verified,
@@ -30,8 +31,9 @@ def verify_app_review(image_path: str, assigned_comment: str = "", task_type: st
             "score": res.get("score", 0.0),
             "reviewer_name": res.get("reviewer_name", ""),
             "review_comment": res.get("review_comment", ""),
+            "matched_comment": matched_comment,
             "truncated": res.get("details", {}).get("truncated", False),
-            "target_segment": assigned_comment,
+            "target_segment": matched_comment,
             "extracted_text": res.get("review_comment", ""),
             "details": res.get("details", {})
         }
@@ -43,6 +45,7 @@ def verify_app_review(image_path: str, assigned_comment: str = "", task_type: st
             "score": 0.0,
             "reviewer_name": "",
             "review_comment": "",
+            "matched_comment": "",
             "truncated": False,
             "target_segment": assigned_comment,
             "extracted_text": "",

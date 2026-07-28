@@ -286,9 +286,10 @@ function setupTestOcrEvents() {
 
             const backendUrl = window.BACKEND_BASE_URL || 'https://rw-wallet.onrender.com';
 
+            const candidatePool = lines.length > 0 ? lines.join('\n') : '';
+
             for (let i = 0; i < files.length; i++) {
                 const file = files[i];
-                const assignedComment = lines[i] || '';
                 const startTime = performance.now();
 
                 // Convert file to Base64
@@ -300,7 +301,7 @@ function setupTestOcrEvents() {
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({
                           image: base64,
-                          assignedComment: assignedComment,
+                          assignedComment: candidatePool || lines[i] || '',
                           taskType: taskType
                         })
                     });
@@ -316,11 +317,13 @@ function setupTestOcrEvents() {
                     else if (status === 'VISION_AI_REQUIRED') visionCount++;
                     else failCount++;
 
+                    const matchedCommentVal = data.matched_comment || data.matchedComment || data.target_segment || lines[i] || 'N/A';
+
                     const resultObj = {
                         index: i + 1,
                         filename: file.name,
                         base64: base64,
-                        assignedComment: assignedComment,
+                        assignedComment: matchedCommentVal,
                         reviewerName: data.reviewer_name || data.extractedUserName || 'N/A',
                         reviewComment: data.review_comment || data.extractedText || 'N/A',
                         status: status,

@@ -1,9 +1,48 @@
+import json
 from rapidfuzz import fuzz
 from .text_normalizer import normalize_for_matching, clean_reviewer_name
 
-def compare_review_comment(extracted_comment: str, assigned_comment: str) -> dict:
+def parse_comment_candidates(assigned_input) -> list:
     """
-    Compares extracted review comment against assigned comment using RapidFuzz.
+    Parses assigned_input into a list of candidate comments.
+    Supports JSON arrays, pipe-separated '|', newline-separated '\\n', or single string.
+    """
+    if not assigned_input:
+        return []
+    if isinstance(assigned_input, list):
+        return [str(c).strip() for c in assigned_input if str(c).strip()]
+    
+    raw = str(assigned_input).strip()
+    if not raw:
+        return []
+
+    # Check if JSON array string
+    if raw.startswith("[") and raw.endswith("]"):
+        try:
+            parsed = json.loads(raw)
+            if isinstance(parsed, list):
+                return [str(c).strip() for c in parsed if str(c).strip()]
+        except Exception:
+            pass
+
+    # Check if pipe-separated
+    if "|||" in raw or " | " in raw or "|" in raw:
+        sep = "|||" if "|||" in raw else (" | " if " | " in raw else "|")
+        parts = [p.strip() for p in raw.split(sep) if p.strip()]
+        if len(parts) > 1:
+            return parts
+
+    # Check if newline-separated
+    if "\n" in raw:
+        parts = [p.strip() for p in raw.split("\n") if p.strip()]
+        if len(parts) > 1:
+            return parts
+
+    return [raw]
+
+def compare_review_comment_single(extracted_comment: str, assigned_comment: str) -> dict:
+    """
+    Compares extracted review comment against a single assigned comment using RapidFuzz.
     Handles truncated comments ending with '...' without rejecting them.
     
     Similarity threshold rules:
@@ -17,7 +56,8 @@ def compare_review_comment(extracted_comment: str, assigned_comment: str) -> dic
             "score": 100.0,
             "truncated": False,
             "normalized_extracted": normalize_for_matching(extracted_comment),
-            "normalized_assigned": ""
+            "normalized_assigned": "",
+            "matched_comment": ""
         }
 
     norm_extracted = normalize_for_matching(extracted_comment)
@@ -29,7 +69,8 @@ def compare_review_comment(extracted_comment: str, assigned_comment: str) -> dic
             "score": 0.0,
             "truncated": False,
             "normalized_extracted": "",
-            "normalized_assigned": norm_assigned
+            "normalized_assigned": norm_assigned,
+            "matched_comment": assigned_comment
         }
 
     # Detect if extracted review ends with '...' or '…' or seems truncated
@@ -67,8 +108,39 @@ def compare_review_comment(extracted_comment: str, assigned_comment: str) -> dic
         "score": final_score,
         "truncated": is_truncated,
         "normalized_extracted": norm_extracted,
-        "normalized_assigned": norm_assigned
+        "normalized_assigned": norm_assigned,
+        "matched_comment": assigned_comment
     }
+
+def compare_review_comment(extracted_comment: str, assigned_comment_input) -> dict:
+    """
+    Compares extracted review comment against assigned_comment_input (which can be a single comment or a pool of candidate comments).
+    Automatically matches against the candidate with the highest similarity score.
+    """
+    candidates = parse_comment_candidates(assigned_comment_input)
+    
+    if not candidates:
+        return compare_review_comment_single(extracted_comment, "")
+
+    if len(candidates) == 1:
+        return compare_review_comment_single(extracted_comment, candidates[0])
+
+    # Evaluate against pool of candidate comments
+    best_result = None
+    best_score = -1.0
+
+    for idx, candidate in enumerate(candidates, 1):
+        res = compare_review_comment_single(extracted_comment, candidate)
+        res["candidate_index"] = idx
+        if res["score"] > best_score:
+            best_score = res["score"]
+            best_result = res
+
+    if best_result:
+        best_result["total_candidates_tested"] = len(candidates)
+        return best_result
+
+    return compare_review_comment_single(extracted_comment, candidates[0])
 
 def verify_reviewer_name(extracted_name: str, expected_name: str) -> dict:
     """
