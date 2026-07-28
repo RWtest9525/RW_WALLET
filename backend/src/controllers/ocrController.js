@@ -74,7 +74,8 @@ async function verifyReviewScreenshot(req, res) {
       review_comment: pyResult.review_comment || '',
       extractedText: pyResult.review_comment || '',
       extractedUserName: pyResult.reviewer_name || '',
-      matchedComment: expectedComment || '',
+      matchedComment: pyResult.matched_comment || pyResult.target_segment || expectedComment || '',
+      matched_comment: pyResult.matched_comment || pyResult.target_segment || expectedComment || '',
       details: pyResult.details || {}
     });
 

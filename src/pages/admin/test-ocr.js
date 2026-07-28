@@ -291,6 +291,7 @@ function setupTestOcrEvents() {
             for (let i = 0; i < files.length; i++) {
                 const file = files[i];
                 const startTime = performance.now();
+                const currentLineComment = lines[i] || '';
 
                 // Convert file to Base64
                 const base64 = await fileToBase64(file);
@@ -301,7 +302,8 @@ function setupTestOcrEvents() {
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({
                           image: base64,
-                          assignedComment: candidatePool || lines[i] || '',
+                          assignedComment: candidatePool || currentLineComment || '',
+                          expectedComment: currentLineComment,
                           taskType: taskType
                         })
                     });
@@ -317,7 +319,12 @@ function setupTestOcrEvents() {
                     else if (status === 'VISION_AI_REQUIRED') visionCount++;
                     else failCount++;
 
-                    const matchedCommentVal = data.matched_comment || data.matchedComment || data.target_segment || lines[i] || 'N/A';
+                    let matchedCommentVal = data.matched_comment || data.matchedComment || data.target_segment || currentLineComment || 'N/A';
+                    // If matchedCommentVal is multi-line pool string, slice first non-empty line for clean single display
+                    if (typeof matchedCommentVal === 'string' && matchedCommentVal.includes('\n')) {
+                        const splitLines = matchedCommentVal.split('\n').map(l => l.trim()).filter(Boolean);
+                        matchedCommentVal = currentLineComment || splitLines[0] || 'N/A';
+                    }
 
                     const resultObj = {
                         index: i + 1,
