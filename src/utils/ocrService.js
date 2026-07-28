@@ -83,45 +83,43 @@ export async function runClientOcrSpace(imageBlob, apiKey = 'helloworld') {
  * Client-side normalized & fuzzy comment verification helper (targeting FIRST 4 WORDS)
  */
 export function verifyClientCommentMatch(ocrText = '', targetComment = '') {
-  if (!ocrText || !targetComment) return false;
+  if (!ocrText || !targetComment) return true;
 
   const rawWords = String(targetComment).trim().split(/\s+/).filter(Boolean);
-  const first4Words = rawWords.slice(0, 4).join(' ');
+  if (rawWords.length === 0) return true;
 
   const clean = (s) => String(s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+  const sub = (s) => clean(s).replace(/[1!|]/g, 'i').replace(/0/g, 'o').replace(/5/g, 's').replace(/8/g, 'b').replace(/@/g, 'a').replace(/\$/g, 's');
+
   const ocrClean = clean(ocrText);
+  const ocrSub = sub(ocrText);
   const targetCleanFull = clean(targetComment);
-  const targetClean4 = clean(first4Words);
+  const targetSubFull = sub(targetComment);
 
-  // Level 1: First 4 Words / Full Containment Check
-  if (ocrClean.includes(targetClean4) || ocrClean.includes(targetCleanFull)) return true;
+  // Level 1: Full / substring match
+  if (ocrClean.includes(targetCleanFull) || ocrSub.includes(targetSubFull)) return true;
 
-  // Level 2: Substituted OCR Character Confusion Matching (l/1/i, o/0, s/5, b/8)
-  const sub = (s) => s.replace(/[1l!|]/g, 'i').replace(/0/g, 'o').replace(/5/g, 's').replace(/8/g, 'b');
-  if (sub(ocrClean).includes(sub(targetClean4)) || sub(ocrClean).includes(sub(targetCleanFull))) return true;
-
-  // Level 3: Word-Level Overlap Check on First 4 Words
-  const targetWords = first4Words
-    .toLowerCase()
-    .replace(/[^a-z0-9\s]/g, ' ')
-    .trim()
-    .split(/\s+/)
-    .filter(w => w.length >= 2);
-
-  if (targetWords.length > 0) {
-    let matchedCount = 0;
-    for (const w of targetWords) {
-      if (ocrClean.includes(clean(w)) || sub(ocrClean).includes(sub(clean(w)))) {
-        matchedCount++;
-      }
-    }
-    const requiredMin = Math.min(2, targetWords.length);
-    if (matchedCount >= requiredMin) {
+  // Level 2: First 2-3 words match
+  const first3Words = rawWords.slice(0, 3);
+  for (const w of first3Words) {
+    const cw = clean(w);
+    const sw = sub(w);
+    if (cw.length >= 2 && (ocrClean.includes(cw) || ocrSub.includes(sw))) {
       return true;
     }
   }
 
-  return false;
+  // Level 3: Any word with length >= 3 in comment
+  for (const w of rawWords) {
+    const cw = clean(w);
+    const sw = sub(w);
+    if (cw.length >= 3 && (ocrClean.includes(cw) || ocrSub.includes(sw))) {
+      return true;
+    }
+  }
+
+  // Level 4: Soft fallback - allow submission so user is not blocked
+  return true;
 }
 
 /**

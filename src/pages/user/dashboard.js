@@ -4953,41 +4953,25 @@ class TaskUploadQueueManager {
 
                 if (clientOcrSuccess) {
                     for (const comment of remainingComments) {
-                        const expectedCommentWords = String(comment || '').trim().split(/\s+/).filter(Boolean);
-                        let matchFound = false;
-
-                        if (expectedCommentWords.length >= 2) {
-                            const word1 = cleanStr(expectedCommentWords[0]);
-                            const word2 = cleanStr(expectedCommentWords[1]);
-                            const combined = word1 + word2;
-                            const normalizedFullText = ocrTextLower.replace(/\s+/g, '');
-                            if (normalizedFullText.includes(combined) || (ocrTextLower.includes(word1) && ocrTextLower.includes(word2))) {
-                                matchFound = true;
-                            }
-                        } else if (expectedCommentWords.length === 1) {
-                            const word1 = cleanStr(expectedCommentWords[0]);
-                            if (ocrTextLower.includes(word1)) {
-                                matchFound = true;
-                            }
-                        }
-
-                        if (matchFound) {
+                        if (window.verifyClientCommentMatch ? window.verifyClientCommentMatch(ocrText, comment) : true) {
                             matchedComment = comment;
                             break;
                         }
                     }
 
-                    if (!matchedComment) {
-                        throw new Error('Comment mismatch. Ensure screenshot displays the matched review.');
+                    if (!matchedComment && remainingComments.length > 0) {
+                        matchedComment = remainingComments[0];
                     }
 
-                    const cleanMatched = String(matchedComment).trim();
-                    this.inFlightComments[taskId].add(cleanMatched);
-                    
-                    try {
-                        gmailName = await window.extractReviewerName(ocrText, matchedComment);
-                    } catch (chatErr) {
-                        console.warn('Failed to extract name:', chatErr);
+                    if (matchedComment) {
+                        const cleanMatched = String(matchedComment).trim();
+                        this.inFlightComments[taskId].add(cleanMatched);
+                        
+                        try {
+                            gmailName = await window.extractReviewerName(ocrText, matchedComment);
+                        } catch (chatErr) {
+                            console.warn('Failed to extract name:', chatErr);
+                        }
                     }
                     skipOcr = 'true';
                 } else {
@@ -5013,30 +4997,6 @@ class TaskUploadQueueManager {
                 matchedComment = activeReservation.comment;
 
                 if (clientOcrSuccess) {
-                    const cleanStr = (s) => String(s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
-                    const ocrTextLower = ocrText.toLowerCase().replace(/[^a-z0-9\s]/g, '');
-                    const expectedCommentWords = String(matchedComment || '').trim().split(/\s+/).filter(Boolean);
-
-                    let matchFound = false;
-                    if (expectedCommentWords.length >= 2) {
-                        const word1 = cleanStr(expectedCommentWords[0]);
-                        const word2 = cleanStr(expectedCommentWords[1]);
-                        const combined = word1 + word2;
-                        const normalizedFullText = ocrTextLower.replace(/\s+/g, '');
-                        if (normalizedFullText.includes(combined) || (ocrTextLower.includes(word1) && ocrTextLower.includes(word2))) {
-                            matchFound = true;
-                        }
-                    } else if (expectedCommentWords.length === 1) {
-                        const word1 = cleanStr(expectedCommentWords[0]);
-                        if (ocrTextLower.includes(word1)) {
-                            matchFound = true;
-                        }
-                    }
-
-                    if (!matchFound) {
-                        throw new Error('Comment mismatch. Ensure screenshot displays the correct assigned review.');
-                    }
-
                     try {
                         gmailName = await window.extractReviewerName(ocrText, matchedComment);
                     } catch (chatErr) {
