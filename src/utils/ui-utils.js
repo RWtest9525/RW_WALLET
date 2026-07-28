@@ -2281,6 +2281,16 @@ const preloadUserTaskParticipation = async (userId = currentUser?.uid, { force =
                     const submittedAt = timestampToMillis(data.submittedAt || data.createdAt || data.timestamp);
                     if (submittedAt >= todayStart) todayIds.add(taskId);
                 });
+                if (Array.isArray(userTaskHistoryCache)) {
+                    userTaskHistoryCache.forEach(s => {
+                        const taskId = s.taskId || s.task_id;
+                        if (taskId) {
+                            allIds.add(taskId);
+                            const submittedAt = timestampToMillis(s.submittedAt || s.createdAt || s.timestamp);
+                            if (submittedAt >= todayStart) todayIds.add(taskId);
+                        }
+                    });
+                }
                 userTaskSubmissionIds = allIds;
                 userTaskTodaySubmissionIds = todayIds;
                 userTaskParticipationLoadedFor = userId;

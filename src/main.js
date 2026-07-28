@@ -96,11 +96,11 @@ const syncBottomNavFromCache = () => {
 };
 syncBottomNavFromCache();
 
-// Always default to Wallet (Home) page on initial boot/refresh
+// Always default to Task page on initial boot/refresh
 try {
     localStorage.removeItem('last_active_task_id');
     localStorage.removeItem('last_active_task_data');
-    localStorage.setItem('last_active_section', 'home');
+    localStorage.setItem('last_active_section', 'task');
 } catch (e) {
     console.warn('Boot check failed:', e);
 }
@@ -155,7 +155,7 @@ onAuthStateChanged(auth, async (user) => {
                 console.warn('[main.js] OneSignal login/logout sync error (non-fatal):', osErr);
             }
 
-            localStorage.setItem('last_active_section', 'home');
+            localStorage.setItem('last_active_section', 'task');
             const pageContainerAtAuth = document.getElementById('page-container');
             const mainContentAtAuth = document.getElementById('main-content');
             const dashboardAtAuth = document.getElementById('dashboard-content');
@@ -365,11 +365,13 @@ onAuthStateChanged(auth, async (user) => {
                             window.showAdminMainPage();
                         }
                     } else {
-                        currentMainSection = 'home';
+                        currentMainSection = 'task';
                         switchTab('user-panel');
-                        setBottomNavActive('bottom-home-btn');
+                        setBottomNavActive('bottom-task-btn');
                         setMainChrome(true);
-                        document.getElementById('dashboard-content')?.classList.remove('hidden');
+                        if (typeof window.showUserTaskPage === 'function') {
+                            window.showUserTaskPage();
+                        }
                     }
                 }
 

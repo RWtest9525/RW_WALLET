@@ -1378,10 +1378,20 @@ const loadUserTaskHistory = async () => {
                 const data = await response.json().catch(() => ({}));
                 if (data.ok && Array.isArray(data.submissions)) {
                     userTaskHistoryCache = data.submissions;
+                    const todayStart = typeof getStartOfTodayMillis === 'function' ? getStartOfTodayMillis() : new Date().setHours(0, 0, 0, 0);
+                    data.submissions.forEach(s => {
+                        const taskId = s.taskId || s.task_id;
+                        if (taskId) {
+                            userTaskSubmissionIds.add(taskId);
+                            const submittedAt = timestampToMillis(s.submittedAt || s.createdAt || s.timestamp);
+                            if (submittedAt >= todayStart) userTaskTodaySubmissionIds.add(taskId);
+                        }
+                    });
                     // Update cache in localStorage
                     if (typeof currentUser !== 'undefined' && currentUser?.uid) {
                         writeJsonCache(getUserTaskHistoryCacheKey(currentUser.uid), data.submissions);
                     }
+                    if (typeof renderHomeTaskCategories === 'function') renderHomeTaskCategories();
                 } else {
                     userTaskHistoryCache = [];
                     if (typeof currentUser !== 'undefined' && currentUser?.uid) {
@@ -5325,6 +5335,16 @@ const showUserTaskDetailsPage = async (taskId) => {
                 }
 
             const isBulk = isBulkTaskUser();
+            if (!isBulk && typeof userTaskSubmissionIds !== 'undefined' && userTaskSubmissionIds && userTaskSubmissionIds.has(task.id)) {
+                localStorage.removeItem('last_active_task_id');
+                localStorage.removeItem('last_active_task_data');
+                if (typeof showUserTaskPage === 'function') {
+                    showUserTaskPage();
+                } else if (typeof hidePage === 'function') {
+                    hidePage();
+                }
+                return showNotification('You have already completed this task.', true);
+            }
             if (isBulk) {
                 showLoading();
             }
@@ -6471,6 +6491,15 @@ window.submitSingleUserTask = async (task, file, reward, appName, taskLink, imag
         activeTaskReservation = null;
         window.activeTaskReservation = null;
 
+        userTaskSubmissionIds.add(task.id);
+        userTaskTodaySubmissionIds.add(task.id);
+        localStorage.removeItem('last_active_task_id');
+        localStorage.removeItem('last_active_task_data');
+
+        if (typeof preloadUserTaskParticipation === 'function' && currentUser?.uid) {
+            preloadUserTaskParticipation(currentUser.uid, { force: true });
+        }
+
         // Success Popup state
         updateProgress(100, 'Upload Successful');
         if (statusIconEl) {
@@ -6498,7 +6527,12 @@ window.submitSingleUserTask = async (task, file, reward, appName, taskLink, imag
             closeBtn.onclick = () => {
                 releaseLock();
                 window.closeModal();
-                showUserTaskPage();
+                if (typeof showUserTaskPage === 'function') {
+                    showUserTaskPage();
+                }
+                if (typeof renderHomeTaskCategories === 'function') {
+                    renderHomeTaskCategories();
+                }
             };
         }
     } catch (err) {

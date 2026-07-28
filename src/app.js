@@ -121,7 +121,7 @@ const hydrateInstantShell = () => {
                 bottomGrid.className = 'mx-auto grid w-full max-w-xl grid-cols-5 items-center px-2 pt-2 text-[10px] sm:text-xs font-semibold text-gray-500 dark:text-gray-400';
             }
             document.querySelectorAll('.bottom-nav-btn').forEach(btn => {
-                btn.classList.toggle('active', btn.id === 'bottom-home-btn');
+                btn.classList.toggle('active', btn.id === 'bottom-task-btn');
             });
             document.getElementById('admin-panel')?.classList.add('hidden');
             document.getElementById('user-panel')?.classList.remove('hidden');
