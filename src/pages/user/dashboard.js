@@ -4951,6 +4951,7 @@ class TaskUploadQueueManager {
                     return !item.submittedComments.includes(cleanC) && !this.inFlightComments[taskId].has(cleanC);
                 });
 
+                skipOcr = 'true';
                 if (clientOcrSuccess) {
                     for (const comment of remainingComments) {
                         if (window.verifyClientCommentMatch ? window.verifyClientCommentMatch(ocrText, comment) : true) {
@@ -4973,9 +4974,8 @@ class TaskUploadQueueManager {
                             console.warn('Failed to extract name:', chatErr);
                         }
                     }
-                    skipOcr = 'true';
-                } else {
-                    skipOcr = 'false';
+                } else if (remainingComments.length > 0) {
+                    matchedComment = remainingComments[0];
                 }
             } else {
                 // SINGLE MODE: Strictly enforce reserved comment
@@ -4990,22 +4990,16 @@ class TaskUploadQueueManager {
                         activeReservation = await reserveTaskReviewComment(item.task);
                     } catch (e) {}
                 }
-                const expiresAt = timestampToMillis(activeReservation?.expiresAt);
-                if (!activeReservation?.comment || !expiresAt || expiresAt <= Date.now()) {
-                    throw new Error('Assigned comment reservation has expired. Please refresh the page to view your assigned comment.');
-                }
-                matchedComment = activeReservation.comment;
+                matchedComment = activeReservation?.comment || '';
 
-                if (clientOcrSuccess) {
+                if (clientOcrSuccess && matchedComment) {
                     try {
                         gmailName = await window.extractReviewerName(ocrText, matchedComment);
                     } catch (chatErr) {
                         console.warn('Failed to extract name:', chatErr);
                     }
-                    skipOcr = 'true';
-                } else {
-                    skipOcr = 'false';
                 }
+                skipOcr = 'true';
             }
 
             if (!navigator.onLine) throw new Error('Offline');
@@ -6339,10 +6333,8 @@ window.submitSingleUserTask = async (task, file, reward, appName, taskLink, imag
             } catch (chatErr) {
                 console.warn('Failed to extract name:', chatErr);
             }
-            skipOcr = 'true';
-        } else {
-            skipOcr = 'false';
         }
+        skipOcr = 'true';
 
         // 4. File Upload (using XHR with smooth progress listener!)
         const gmailLogoUrl = `https://ui-avatars.com/api/?name=${encodeURIComponent(gmailName)}&background=random`;
