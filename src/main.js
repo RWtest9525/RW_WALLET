@@ -837,6 +837,20 @@ document.body.addEventListener('click', (e) => {
                     showAdminTaskCommentsPage(taskid);
                     break;
 
+                case 'open-task-submissions':
+                    if (typeof setAdminTaskPanel === 'function') {
+                        setAdminTaskPanel('submissions');
+                    }
+                    window.adminSubmissionsView = window.adminSubmissionsView || {};
+                    window.adminSubmissionsView.selectedTaskId = taskid;
+                    window.adminSubmissionsView.viewState = 'detail';
+                    window.adminSubmissionsView.selectedDetailTab = 'submissions';
+                    window.adminSubmissionsView.selectedSubFilter = 'all';
+                    if (typeof window.renderAdminSubmissions === 'function') {
+                        window.renderAdminSubmissions();
+                    }
+                    break;
+
                 case 'delete-admin-task':
                     handleDeleteAdminTask(taskid);
                     break;

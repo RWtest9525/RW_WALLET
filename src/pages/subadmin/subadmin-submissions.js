@@ -1475,9 +1475,15 @@ const renderAdminSubmissions = () => {
         });
     } else {
         subs = subs.filter(sub => {
-            const task = (window.allTasksCache || []).find(t => t.id === (sub.task_id || sub.taskId));
-            const creator = task ? (task.createdBy || task.creatorUid || '') : (sub.taskCreatedBy || sub.task_created_by || '');
-            return creator === currentUser.uid;
+            const taskId = sub.task_id || sub.taskId;
+            const task = (window.allTasksCache || []).find(t => t.id === taskId);
+            if (task) {
+                const creator = task.createdBy || task.creatorUid || task.adminId || task.subAdminId || '';
+                const assigned = Array.isArray(task.assignedToSubAdmins) ? task.assignedToSubAdmins : [];
+                return creator === currentUser?.uid || assigned.includes(currentUser?.uid) || assigned.includes('all');
+            }
+            const taskCreator = sub.taskCreatedBy || sub.task_created_by || '';
+            return taskCreator === currentUser?.uid;
         });
     }
 
@@ -1516,12 +1522,16 @@ const renderAdminSubmissions = () => {
     if (isOwner) {
         filteredTasks = filteredTasks.filter(isOwnerTask);
     } else {
-        filteredTasks = filteredTasks.filter(task => task.createdBy === currentUser.uid);
+        filteredTasks = filteredTasks.filter(task => {
+            const creator = task.createdBy || task.creatorUid || task.adminId || task.subAdminId || '';
+            const assigned = Array.isArray(task.assignedToSubAdmins) ? task.assignedToSubAdmins : [];
+            return creator === currentUser?.uid || assigned.includes(currentUser?.uid) || assigned.includes('all');
+        });
     }
 
     let taskRows = [];
     if (filteredTasks.length > 0) {
-        // Build from cache — only include tasks that have at least one submission on this selected date
+        // Build from cache — include all tasks created/assigned for this sub-admin
         taskRows = filteredTasks.map(task => {
             const taskSubs = dateSubs.filter(s => s.task_id === task.id || s.taskId === task.id);
             const family = window.getAdminTaskFamily ? window.getAdminTaskFamily(task) : 'review';
@@ -1538,7 +1548,7 @@ const renderAdminSubmissions = () => {
                 approved: taskSubs.filter(s => s.manual_status === 'approved').length,
                 rejected: taskSubs.filter(s => s.manual_status === 'rejected').length
             };
-        }).filter(r => r.total > 0);
+        });
     } else {
         // Fallback: Build task rows from submissions data when allTasksCache is empty
         const taskIdMap = {};
