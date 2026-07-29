@@ -1,6 +1,8 @@
 // Entry Point: src/main.js
 // Imports all modular components and pages in sequence
 
+import './shell.js';
+import './app.js';
 import './core/globals.js';
 import './utils/ui-utils.js';
 import './utils/ocrService.js';
