@@ -67,11 +67,14 @@ root.outerHTML = `
                                 </svg>
                             </button>
                         </div>
-                        <div class="flex items-center justify-between text-sm">
-                            <button type="button" id="forgot-password-link" class="text-blue-500 hover:underline">Forgot Password?</button>
+                        <div id="forgot-password-row" class="text-right -mt-2">
+                            <a href="#" id="forgot-password-link" class="text-sm font-semibold text-blue-500 hover:underline">Forgot Password?</a>
                         </div>
-                        <button type="submit" id="auth-submit-btn"
-                            class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 rounded-lg transition duration-200">Login</button>
+                        <button type="submit" id="auth-button"
+                            class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 rounded-lg transition duration-200 flex justify-center items-center h-[52px]">
+                            <span class="button-text">Login</span>
+                            <div class="loader hidden"></div>
+                        </button>
                     </form>
                     <p class="text-center text-sm text-gray-500 dark:text-gray-400 mt-6">
                         <span id="auth-prompt">Don't have an account?</span>

@@ -39,14 +39,14 @@ const handleAuth = async (e) => {
             e.preventDefault();
 
             // Get button elements
-            const authButton = document.getElementById('auth-button');
-            const buttonText = authButton.querySelector('.button-text');
-            const loader = authButton.querySelector('.loader');
+            const authButton = document.getElementById('auth-button') || document.getElementById('auth-submit-btn');
+            const buttonText = authButton ? authButton.querySelector('.button-text') : null;
+            const loader = authButton ? authButton.querySelector('.loader') : null;
 
             // --- Show loading spinner ---
-            authButton.disabled = true;
-            buttonText.classList.add('hidden');
-            loader.classList.remove('hidden');
+            if (authButton) authButton.disabled = true;
+            if (buttonText) buttonText.classList.add('hidden');
+            if (loader) loader.classList.remove('hidden');
 
             const email = document.getElementById('email').value;
             const password = document.getElementById('password').value;
@@ -306,34 +306,37 @@ const handleAuth = async (e) => {
                 console.error("Auth failed:", error);
 
                 // --- THIS IS IMPORTANT: Hide spinner on error ---
-                authButton.disabled = false;
-                buttonText.classList.remove('hidden');
-                loader.classList.add('hidden');
+                if (authButton) authButton.disabled = false;
+                if (buttonText) buttonText.classList.remove('hidden');
+                if (loader) loader.classList.add('hidden');
             }
         };
 
 const toggleAuthMode = () => {
             const form = document.getElementById('auth-form');
+            if (!form) return;
             const isLogin = form.dataset.authMode === 'signup';
             form.dataset.authMode = isLogin ? 'login' : 'signup';
             form.classList.toggle('signup-mode', !isLogin);
-            document.getElementById('auth-error').textContent = '';
+            const errEl = document.getElementById('auth-error');
+            if (errEl) errEl.textContent = '';
             form.reset();
-            document.getElementById('auth-title').textContent = isLogin ? 'Login to your Wallet' : 'Create a New Wallet';
+            const titleEl = document.getElementById('auth-title');
+            if (titleEl) titleEl.textContent = isLogin ? 'Login to your Wallet' : 'Create a New Wallet';
             document.getElementById('forgot-password-row')?.classList.toggle('hidden', !isLogin);
 
             // Get button elements
-            const authButton = document.getElementById('auth-button');
-            const buttonText = authButton.querySelector('.button-text');
-            const loader = authButton.querySelector('.loader');
+            const authButton = document.getElementById('auth-button') || document.getElementById('auth-submit-btn');
+            const buttonText = authButton ? authButton.querySelector('.button-text') : null;
+            const loader = authButton ? authButton.querySelector('.loader') : null;
 
             // Set the new button text
-            buttonText.textContent = isLogin ? 'Login' : 'Sign Up';
+            if (buttonText) buttonText.textContent = isLogin ? 'Login' : 'Sign Up';
 
             // Reset the button to its normal state
-            authButton.disabled = false;
-            buttonText.classList.remove('hidden');
-            loader.classList.add('hidden');
+            if (authButton) authButton.disabled = false;
+            if (buttonText) buttonText.classList.remove('hidden');
+            if (loader) loader.classList.add('hidden');
 
             document.getElementById('auth-prompt').textContent = isLogin ? "Don't have an account? " : 'Already have an account? ';
             document.getElementById('auth-toggle').textContent = isLogin ? 'Sign Up' : 'Login';
