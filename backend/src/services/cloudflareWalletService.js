@@ -6836,6 +6836,20 @@ function registerSocketHandlers(io, { d1 }) {
       }
     });
 
+    socket.on('clear_chat', async ({ roomId }, ack) => {
+      try {
+        if (!roomId) throw new Error('ROOM_REQUIRED');
+        await d1.query(`DELETE FROM chats WHERE room_id = ?`, [roomId]);
+        await d1.query(`UPDATE chat_rooms SET last_message = '', last_sender_id = '', updated_at = ? WHERE id = ?`, [nowMs(), roomId]).catch(() => {});
+
+        io.to(roomId).emit('chat_cleared', { roomId });
+
+        if (ack) ack({ ok: true });
+      } catch (error) {
+        if (ack) ack({ ok: false, error: error.message });
+      }
+    });
+
     socket.on('disconnect', () => {
       adminSockets.delete(socket.id);
       socket.adminJoinedRooms.forEach((roomId) => removeAdminRoomPresence(roomId, socket.id));

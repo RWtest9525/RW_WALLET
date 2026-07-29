@@ -2377,4 +2377,53 @@ html,
             }
         }
 
+        /* WhatsApp-Style Chat Dropdown Menu Slide-Down Animation */
+        @keyframes chatMenuSlideDown {
+            from {
+                opacity: 0;
+                transform: scale(0.92) translateY(-10px);
+            }
+            to {
+                opacity: 1;
+                transform: scale(1) translateY(0);
+            }
+        }
+
+        .animate-slide-down-menu {
+            animation: chatMenuSlideDown 0.2s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+            transform-origin: top right;
+        }
+
+        .chat-system-banner {
+            max-w-xs: 20rem;
+            margin: 0.75rem auto;
+            padding: 0.5rem 0.85rem;
+            background-color: rgba(254, 243, 199, 0.85);
+            border: 1px solid rgba(245, 158, 11, 0.3);
+            border-radius: 0.85rem;
+            color: #92400e;
+            font-size: 0.75rem;
+            font-weight: 600;
+            text-align: center;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+        }
+        .dark .chat-system-banner {
+            background-color: rgba(69, 26, 3, 0.5);
+            border-color: rgba(245, 158, 11, 0.25);
+            color: #fef3c7;
+        }
+
+        .chat-search-highlight {
+            background-color: #fef08a;
+            color: #854d0e;
+            padding: 0.1rem 0.2rem;
+            border-radius: 0.25rem;
+            font-weight: 700;
+        }
+        .dark .chat-search-highlight {
+            background-color: #854d0e;
+            color: #fef08a;
+        }
+
+
     

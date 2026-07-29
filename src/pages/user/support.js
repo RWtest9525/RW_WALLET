@@ -298,6 +298,10 @@ const markChatMessagesRead = async (messageDocs, readerRole) => {
                 await batch.commit();
             }
         };
+const getFormattedCurrentDateDMY = (ts = Date.now()) => formatChatDate(ts) || `${String(new Date().getDate()).padStart(2, '0')}/${String(new Date().getMonth() + 1).padStart(2, '0')}/${new Date().getFullYear()}`;
+
+const escapeRegExp = (string) => string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
 let isMultiSelectMode = false;
 const selectedMessageIds = new Set();
 
@@ -308,9 +312,47 @@ const renderSupportMessages = (messages, viewerRole) => {
 
             const myUid = (typeof getCurrentUserId === 'function' ? getCurrentUserId() : (currentUser?.uid || ''));
             const deletedIds = JSON.parse(localStorage.getItem(`deleted_message_ids_${myUid}`) || '[]');
-            const visibleMessages = messages.filter(msg => !deletedIds.includes(msg.id));
 
-            list.innerHTML = visibleMessages.length === 0
+            // 1. Apply Disappearing Messages filter
+            const disappearingTimer = localStorage.getItem(`rw_chat_disappearing_${activeSupportRoomId}`) || 'off';
+            let timerMillis = 0;
+            if (disappearingTimer === '24h') timerMillis = 24 * 3600 * 1000;
+            else if (disappearingTimer === '7d') timerMillis = 7 * 86400 * 1000;
+            else if (disappearingTimer === '90d') timerMillis = 90 * 86400 * 1000;
+
+            const now = Date.now();
+            const timeFiltered = (timerMillis > 0)
+                ? messages.filter(msg => {
+                    const ts = timestampToMillis(msg.createdAt) || now;
+                    return (now - ts) <= timerMillis;
+                  })
+                : messages;
+
+            const visibleMessages = timeFiltered.filter(msg => !deletedIds.includes(msg.id));
+
+            // 2. Apply Block status notice & input bar control
+            const blockState = JSON.parse(localStorage.getItem(`rw_chat_block_state_${activeSupportRoomId}`) || 'null');
+            let blockNoticeHtml = '';
+            const composerEl = document.getElementById('support-chat-composer');
+            if (blockState && blockState.isBlocked) {
+                const isBlocker = blockState.blockedBy === myUid;
+                const noticeText = isBlocker
+                    ? `You have blocked this user on ${blockState.date || getFormattedCurrentDateDMY()}.`
+                    : `You have been blocked by this user on ${blockState.date || getFormattedCurrentDateDMY()}.`;
+                blockNoticeHtml = `
+                    <div class="chat-system-banner my-3">
+                        <span class="inline-flex items-center gap-1.5">
+                            <svg class="h-3.5 w-3.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"></line></svg>
+                            ${escapeHtml(noticeText)}
+                        </span>
+                    </div>
+                `;
+                if (composerEl) composerEl.classList.add('hidden');
+            } else {
+                if (composerEl) composerEl.classList.remove('hidden');
+            }
+
+            const messagesListHtml = visibleMessages.length === 0
                 ? '<p class="text-center text-sm text-gray-500 dark:text-gray-400 py-8">Start a chat with Reviews World support.</p>'
                 : visibleMessages.map((message, index) => {
                     const msgSenderId = typeof getResolvedSenderId === 'function' ? getResolvedSenderId(message) : (message.senderId || '');
@@ -359,12 +401,20 @@ const renderSupportMessages = (messages, viewerRole) => {
                         `;
                     }
 
+                    // 3. Search query highlighting
+                    let msgTextEscaped = escapeHtml(message.text || '');
+                    if (window.activeChatSearchQuery) {
+                        const safeSearchQuery = escapeRegExp(window.activeChatSearchQuery);
+                        const regex = new RegExp(`(${safeSearchQuery})`, 'gi');
+                        msgTextEscaped = msgTextEscaped.replace(regex, '<mark class="chat-search-highlight">$1</mark>');
+                    }
+
                     return `
                         ${dateDivider}
                         <div class="flex items-center ${isMine ? 'justify-end' : 'justify-start'} py-1" data-message-id="${message.id}">
                             ${!isMine ? selectionCheckHtml : ''}
                             <div class="relative support-chat-bubble w-fit max-w-[82%] px-3 py-1.5 shadow-sm cursor-pointer select-none rounded-2xl ${isMine ? 'chat-bubble-user bg-emerald-50 dark:bg-emerald-900/40 text-gray-900 dark:text-white border border-emerald-100 dark:border-emerald-800' : 'chat-bubble-admin bg-white dark:bg-gray-800 text-gray-900 dark:text-white border border-gray-100 dark:border-gray-700'}" data-msg-id="${message.id}" data-is-mine="${isMine}">
-                                <span class="text-sm leading-5 break-words align-baseline whitespace-pre-wrap block" id="msg-text-content-${message.id}">${escapeHtml(message.text || '')}</span>
+                                <span class="text-sm leading-5 break-words align-baseline whitespace-pre-wrap block" id="msg-text-content-${message.id}">${msgTextEscaped}</span>
                                 ${inspectBtnHtml}
                                 <span class="inline-flex items-center text-[10px] ml-2 text-gray-400 align-baseline mt-1.5 w-full justify-end select-none">
                                     <span>${formatChatTime(message.createdAt)}</span>
@@ -375,6 +425,8 @@ const renderSupportMessages = (messages, viewerRole) => {
                             ${isMine ? selectionCheckHtml : ''}
                         </div>`;
                 }).join('');
+
+            list.innerHTML = blockNoticeHtml + messagesListHtml;
 
             // Bind Inspect Details button handlers
             if (viewerRole === 'admin' && window.activeChatUserId) {
@@ -909,6 +961,17 @@ const openSupportChatPage = async (chatUserId, viewerRole = 'user', chatMeta = {
                 <div id="support-chat-shell" class="max-w-xl mx-auto bg-gray-100 dark:bg-gray-900 h-[100dvh] flex flex-col">
                     <div class="bg-white dark:bg-gray-800 border border-gray-100 dark:border-gray-700 rounded-xl shadow-sm overflow-hidden flex flex-col h-full min-h-0">
                         <div class="relative flex items-center gap-3 px-3 pb-3 pt-[calc(1.85rem+env(safe-area-inset-top))] border-b border-gray-100 dark:border-gray-700">
+                            <!-- Inline Top Search Header (hidden by default) -->
+                            <div id="chat-inline-search-bar" class="hidden absolute inset-0 z-20 flex items-center gap-2 bg-white dark:bg-gray-800 px-3 pt-[calc(1.85rem+env(safe-area-inset-top))] pb-3 border-b border-gray-100 dark:border-gray-700">
+                                <button id="chat-search-back-btn" class="h-9 w-9 shrink-0 rounded-full bg-gray-100 dark:bg-gray-700 flex items-center justify-center text-gray-600 dark:text-gray-200">
+                                    <svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M19 12H5"></path><path d="M12 19l-7-7 7-7"></path></svg>
+                                </button>
+                                <input type="text" id="chat-search-input" placeholder="Search messages..." class="flex-1 min-w-0 bg-gray-100 dark:bg-gray-700 px-3.5 py-2 rounded-xl text-sm font-semibold outline-none focus:ring-2 focus:ring-blue-500">
+                                <span id="chat-search-count-badge" class="text-xs font-bold text-gray-500 shrink-0">0 of 0</span>
+                                <button id="chat-search-prev-btn" class="h-8 w-8 shrink-0 rounded-lg bg-gray-100 dark:bg-gray-700 flex items-center justify-center text-gray-600 dark:text-gray-200 font-bold" title="Previous match">↑</button>
+                                <button id="chat-search-next-btn" class="h-8 w-8 shrink-0 rounded-lg bg-gray-100 dark:bg-gray-700 flex items-center justify-center text-gray-600 dark:text-gray-200 font-bold" title="Next match">↓</button>
+                            </div>
+
                             <button class="page-back-btn h-10 w-10 shrink-0 rounded-full bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 flex items-center justify-center">
                                 <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5"></path><path d="M12 19l-7-7 7-7"></path></svg>
                             </button>
@@ -917,9 +980,32 @@ const openSupportChatPage = async (chatUserId, viewerRole = 'user', chatMeta = {
                                 <h3 class="font-bold truncate inline-flex items-center gap-1">${escapeHtml(displayName)} ${!isAdminView ? getVerifiedBadge() : ''}</h3>
                                 <p class="text-xs text-gray-500 dark:text-gray-400 truncate">${escapeHtml(displayEmail)}</p>
                             </button>
-                            <button id="chat-disappear-info-btn" class="h-9 w-9 shrink-0 rounded-full bg-gray-100 dark:bg-gray-700 text-xs font-bold text-gray-600 dark:text-gray-200 hover:bg-gray-200 dark:hover:bg-gray-600" title="Disappearing chat">15d</button>
-                            <div id="chat-disappear-info-popup" class="hidden absolute right-3 top-14 z-20 w-64 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-3 text-xs leading-5 text-gray-600 dark:text-gray-300 shadow-xl">
-                                All chat will automatically delete after 15 days after read by admin.
+                            
+                            <!-- WhatsApp-Style 3-Dots Button -->
+                            <button id="chat-options-menu-btn" class="h-10 w-10 shrink-0 rounded-full bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-200 hover:bg-gray-200 dark:hover:bg-gray-600 flex items-center justify-center transition active:scale-95" title="Menu Options">
+                                <svg class="h-5 w-5" viewBox="0 0 24 24" fill="currentColor">
+                                    <path d="M12 8c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm0 2c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm0 6c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2z"/>
+                                </svg>
+                            </button>
+
+                            <!-- Top-to-Bottom Sliding Options Dropdown Card -->
+                            <div id="chat-options-dropdown-menu" class="hidden absolute right-3 top-16 z-30 w-52 rounded-2xl border border-gray-100 dark:border-gray-700 bg-white dark:bg-gray-800 p-2 shadow-2xl animate-slide-down-menu">
+                                <button id="chat-option-search" class="w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl hover:bg-gray-100 dark:hover:bg-gray-700/60 text-xs font-bold text-gray-700 dark:text-gray-200 transition">
+                                    <svg class="h-4 w-4 text-blue-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+                                    Search
+                                </button>
+                                <button id="chat-option-block" class="w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl hover:bg-red-50 dark:hover:bg-red-950/30 text-xs font-bold text-red-600 dark:text-red-400 transition">
+                                    <svg class="h-4 w-4 text-red-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"></circle><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"></line></svg>
+                                    <span id="chat-option-block-label">Block</span>
+                                </button>
+                                <button id="chat-option-disappearing" class="w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl hover:bg-gray-100 dark:hover:bg-gray-700/60 text-xs font-bold text-gray-700 dark:text-gray-200 transition">
+                                    <svg class="h-4 w-4 text-amber-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+                                    Disappearing Messages
+                                </button>
+                                <button id="chat-option-clear" class="w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl hover:bg-red-50 dark:hover:bg-red-950/30 text-xs font-bold text-red-600 dark:text-red-400 transition">
+                                    <svg class="h-4 w-4 text-rose-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M3 6h18"></path><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+                                    Clear Chat
+                                </button>
                             </div>
                         </div>
                         <div id="support-chat-messages" class="flex-1 min-h-0 space-y-3 overflow-y-auto p-4 bg-gray-50 dark:bg-gray-900"></div>
@@ -939,6 +1025,7 @@ const openSupportChatPage = async (chatUserId, viewerRole = 'user', chatMeta = {
             const goBackFromSupportChat = () => {
                 isMultiSelectMode = false;
                 selectedMessageIds.clear();
+                window.activeChatSearchQuery = '';
                 if (activeChatUnsubscribe) {
                     activeChatUnsubscribe();
                     activeChatUnsubscribe = null;
@@ -971,20 +1058,248 @@ const openSupportChatPage = async (chatUserId, viewerRole = 'user', chatMeta = {
                     showSupportProfileModal();
                 }
             };
-            document.getElementById('chat-disappear-info-btn').onclick = (event) => {
-                event.stopPropagation();
-                document.getElementById('chat-disappear-info-popup').classList.toggle('hidden');
-            };
-            document.addEventListener('click', function closeDisappearPopup(event) {
-                const popup = document.getElementById('chat-disappear-info-popup');
-                const button = document.getElementById('chat-disappear-info-btn');
-                if (!popup || !button) {
-                    document.removeEventListener('click', closeDisappearPopup);
+
+            // Bind 3-Dots Dropdown Options Menu
+            const optionsBtn = document.getElementById('chat-options-menu-btn');
+            const optionsDropdown = document.getElementById('chat-options-dropdown-menu');
+            if (optionsBtn && optionsDropdown) {
+                optionsBtn.onclick = (e) => {
+                    e.stopPropagation();
+                    optionsDropdown.classList.toggle('hidden');
+                    const blockState = JSON.parse(localStorage.getItem(`rw_chat_block_state_${activeSupportRoomId}`) || 'null');
+                    const blockLabel = document.getElementById('chat-option-block-label');
+                    if (blockLabel) {
+                        blockLabel.textContent = (blockState && blockState.isBlocked) ? 'Unblock' : 'Block';
+                    }
+                };
+                document.addEventListener('click', function closeOptionsOnClickOutside(e) {
+                    if (!optionsDropdown || !optionsBtn) {
+                        document.removeEventListener('click', closeOptionsOnClickOutside);
+                        return;
+                    }
+                    if (!optionsDropdown.contains(e.target) && !optionsBtn.contains(e.target)) {
+                        optionsDropdown.classList.add('hidden');
+                    }
+                });
+            }
+
+            // 1. Search Option Binding
+            const searchOptionBtn = document.getElementById('chat-option-search');
+            const searchBar = document.getElementById('chat-inline-search-bar');
+            const searchInput = document.getElementById('chat-search-input');
+            const searchBackBtn = document.getElementById('chat-search-back-btn');
+            const searchPrevBtn = document.getElementById('chat-search-prev-btn');
+            const searchNextBtn = document.getElementById('chat-search-next-btn');
+            const searchCountBadge = document.getElementById('chat-search-count-badge');
+
+            let currentSearchMatchIndex = -1;
+            let currentSearchMatches = [];
+
+            const performChatSearch = () => {
+                const query = (searchInput?.value || '').trim();
+                window.activeChatSearchQuery = query;
+                renderSupportMessages(activeSupportMessages, viewerRole);
+                if (!query) {
+                    currentSearchMatches = [];
+                    currentSearchMatchIndex = -1;
+                    if (searchCountBadge) searchCountBadge.textContent = '0 of 0';
                     return;
                 }
-                if (!popup.contains(event.target) && !button.contains(event.target)) {
-                    popup.classList.add('hidden');
+                currentSearchMatches = Array.from(document.querySelectorAll('#support-chat-messages mark.chat-search-highlight'));
+                if (currentSearchMatches.length > 0) {
+                    currentSearchMatchIndex = 0;
+                    highlightCurrentSearchMatch();
+                } else {
+                    currentSearchMatchIndex = -1;
+                    if (searchCountBadge) searchCountBadge.textContent = '0 of 0';
                 }
+            };
+
+            const highlightCurrentSearchMatch = () => {
+                if (currentSearchMatches.length === 0 || currentSearchMatchIndex < 0) {
+                    if (searchCountBadge) searchCountBadge.textContent = '0 of 0';
+                    return;
+                }
+                if (searchCountBadge) {
+                    searchCountBadge.textContent = `${currentSearchMatchIndex + 1} of ${currentSearchMatches.length}`;
+                }
+                const targetEl = currentSearchMatches[currentSearchMatchIndex];
+                if (targetEl) {
+                    targetEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                }
+            };
+
+            if (searchOptionBtn) {
+                searchOptionBtn.onclick = () => {
+                    optionsDropdown?.classList.add('hidden');
+                    if (searchBar) {
+                        searchBar.classList.remove('hidden');
+                        if (searchInput) {
+                            searchInput.value = '';
+                            searchInput.focus();
+                        }
+                    }
+                };
+            }
+
+            if (searchInput) {
+                searchInput.oninput = () => performChatSearch();
+            }
+            if (searchPrevBtn) {
+                searchPrevBtn.onclick = () => {
+                    if (currentSearchMatches.length === 0) return;
+                    currentSearchMatchIndex = (currentSearchMatchIndex - 1 + currentSearchMatches.length) % currentSearchMatches.length;
+                    highlightCurrentSearchMatch();
+                };
+            }
+            if (searchNextBtn) {
+                searchNextBtn.onclick = () => {
+                    if (currentSearchMatches.length === 0) return;
+                    currentSearchMatchIndex = (currentSearchMatchIndex + 1) % currentSearchMatches.length;
+                    highlightCurrentSearchMatch();
+                };
+            }
+            if (searchBackBtn) {
+                searchBackBtn.onclick = () => {
+                    if (searchBar) searchBar.classList.add('hidden');
+                    window.activeChatSearchQuery = '';
+                    renderSupportMessages(activeSupportMessages, viewerRole);
+                };
+            }
+
+            // 2. Block Option Binding
+            document.getElementById('chat-option-block')?.addEventListener('click', () => {
+                optionsDropdown?.classList.add('hidden');
+                const blockState = JSON.parse(localStorage.getItem(`rw_chat_block_state_${activeSupportRoomId}`) || 'null');
+                const isCurrentlyBlocked = blockState && blockState.isBlocked;
+                
+                if (isCurrentlyBlocked) {
+                    renderModal('Unblock User', `
+                        <div class="space-y-2 text-center">
+                            <p class="text-sm font-semibold text-gray-700 dark:text-gray-200">Are you sure you want to unblock this user?</p>
+                            <p class="text-xs text-gray-500">You will be able to send and receive messages again.</p>
+                        </div>
+                    `, `
+                        <button onclick="window.closeModal()" class="px-4 py-2 text-xs font-bold bg-gray-200 dark:bg-gray-700 rounded-xl">Cancel</button>
+                        <button id="confirm-unblock-btn" class="px-4 py-2 text-xs font-bold bg-blue-600 text-white rounded-xl shadow-sm hover:bg-blue-700">Unblock</button>
+                    `, 'max-w-xs');
+
+                    document.getElementById('confirm-unblock-btn').onclick = () => {
+                        localStorage.removeItem(`rw_chat_block_state_${activeSupportRoomId}`);
+                        window.closeModal();
+                        showNotification('User unblocked successfully.');
+                        renderSupportMessages(activeSupportMessages, viewerRole);
+                    };
+                } else {
+                    renderModal('Block User', `
+                        <div class="space-y-2 text-center">
+                            <p class="text-sm font-semibold text-gray-700 dark:text-gray-200">Are you sure you want to block this user?</p>
+                            <p class="text-xs text-red-500 font-medium font-semibold">Blocked users will not be able to send or receive messages in this chat.</p>
+                        </div>
+                    `, `
+                        <button onclick="window.closeModal()" class="px-4 py-2 text-xs font-bold bg-gray-200 dark:bg-gray-700 rounded-xl">Cancel</button>
+                        <button id="confirm-block-btn" class="px-4 py-2 text-xs font-bold bg-red-600 text-white rounded-xl shadow-sm hover:bg-red-700">Yes, Block</button>
+                    `, 'max-w-xs');
+
+                    document.getElementById('confirm-block-btn').onclick = () => {
+                        const todayDMY = getFormattedCurrentDateDMY();
+                        const myUid = (typeof getCurrentUserId === 'function' ? getCurrentUserId() : (currentUser?.uid || ''));
+                        const newBlockState = {
+                            isBlocked: true,
+                            blockedBy: myUid,
+                            date: todayDMY
+                        };
+                        localStorage.setItem(`rw_chat_block_state_${activeSupportRoomId}`, JSON.stringify(newBlockState));
+                        window.closeModal();
+                        showNotification('User blocked.');
+                        renderSupportMessages(activeSupportMessages, viewerRole);
+                    };
+                }
+            });
+
+            // 3. Disappearing Messages Option Binding
+            document.getElementById('chat-option-disappearing')?.addEventListener('click', () => {
+                optionsDropdown?.classList.add('hidden');
+                const currentTimer = localStorage.getItem(`rw_chat_disappearing_${activeSupportRoomId}`) || 'off';
+
+                renderModal('Disappearing Messages', `
+                    <div class="space-y-3">
+                        <p class="text-xs text-gray-500 dark:text-gray-400">For more privacy, new and existing messages will disappear from this chat after the selected duration.</p>
+                        <div class="space-y-2 pt-1">
+                            ${[
+                                { id: 'off', label: 'Off (Default)' },
+                                { id: '24h', label: '24 Hours' },
+                                { id: '7d', label: '7 Days' },
+                                { id: '90d', label: '90 Days' }
+                            ].map(opt => `
+                                <label class="flex items-center justify-between p-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-700/40 cursor-pointer">
+                                    <span class="text-xs font-bold text-gray-800 dark:text-gray-100">${opt.label}</span>
+                                    <input type="radio" name="disappearing-timer" value="${opt.id}" ${currentTimer === opt.id ? 'checked' : ''} class="h-4 w-4 text-blue-600 focus:ring-blue-500">
+                                </label>
+                            `).join('')}
+                        </div>
+                    </div>
+                `, `
+                    <button onclick="window.closeModal()" class="px-4 py-2 text-xs font-bold bg-gray-200 dark:bg-gray-700 rounded-xl">Cancel</button>
+                    <button id="save-disappearing-timer-btn" class="px-4 py-2 text-xs font-bold bg-blue-600 text-white rounded-xl shadow-sm hover:bg-blue-700">Save</button>
+                `, 'max-w-xs');
+
+                document.getElementById('save-disappearing-timer-btn').onclick = () => {
+                    const selected = document.querySelector('input[name="disappearing-timer"]:checked')?.value || 'off';
+                    localStorage.setItem(`rw_chat_disappearing_${activeSupportRoomId}`, selected);
+                    window.closeModal();
+                    const labels = { off: 'Off', '24h': '24 Hours', '7d': '7 Days', '90d': '90 Days' };
+                    showNotification(`Disappearing messages set to ${labels[selected] || 'Off'}.`);
+                    renderSupportMessages(activeSupportMessages, viewerRole);
+                };
+            });
+
+            // 4. Clear Chat Option Binding
+            document.getElementById('chat-option-clear')?.addEventListener('click', () => {
+                optionsDropdown?.classList.add('hidden');
+                renderModal('Clear Chat', `
+                    <div class="space-y-2 text-center">
+                        <div class="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-red-100 text-red-600 dark:bg-red-950/40">
+                            <svg class="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+                        </div>
+                        <h3 class="text-base font-bold text-gray-900 dark:text-white">Clear all messages?</h3>
+                        <p class="text-xs text-gray-500 dark:text-gray-400">This will permanently delete all chat history in this chat room for your account across all devices.</p>
+                    </div>
+                `, `
+                    <button onclick="window.closeModal()" class="px-4 py-2 text-xs font-bold bg-gray-200 dark:bg-gray-700 rounded-xl">Cancel</button>
+                    <button id="confirm-clear-chat-btn" class="px-4 py-2 text-xs font-bold bg-red-600 text-white rounded-xl shadow-sm hover:bg-red-700">Clear Chat</button>
+                `, 'max-w-xs');
+
+                document.getElementById('confirm-clear-chat-btn').onclick = async () => {
+                    try {
+                        window.closeModal();
+                        showLoading('Clearing chat history...');
+                        if (window.activeSupportSocket && window.activeSupportSocket.connected) {
+                            window.activeSupportSocket.emit('clear_chat', { roomId: activeSupportRoomId });
+                        }
+                        const token = await getBackendAuthToken();
+                        await fetchWithTimeout(`${BACKEND_BASE_URL}/api/chat/clear`, {
+                            method: 'POST',
+                            headers: {
+                                Authorization: `Bearer ${token}`,
+                                'Content-Type': 'application/json'
+                            },
+                            body: JSON.stringify({ roomId: activeSupportRoomId })
+                        }, 8000).catch(() => {});
+                        hideLoading();
+                        activeSupportMessages = [];
+                        writeSupportChatCache(activeSupportRoomId, []);
+                        renderSupportMessages([], viewerRole);
+                        showNotification('Chat history cleared permanently.');
+                    } catch (err) {
+                        hideLoading();
+                        console.error('Clear chat error:', err);
+                        activeSupportMessages = [];
+                        writeSupportChatCache(activeSupportRoomId, []);
+                        renderSupportMessages([], viewerRole);
+                        showNotification('Chat history cleared.');
+                    }
+                };
             });
 
             const keyboardCleanup = installChatViewportLock({
@@ -1041,6 +1356,12 @@ const openSupportChatPage = async (chatUserId, viewerRole = 'user', chatMeta = {
                 writeSupportChatCache(activeSupportRoomId, activeSupportMessages);
                 renderSupportMessages(activeSupportMessages, viewerRole);
             };
+            const handleChatCleared = ({ roomId }) => {
+                if (roomId !== activeSupportRoomId) return;
+                activeSupportMessages = [];
+                writeSupportChatCache(activeSupportRoomId, []);
+                renderSupportMessages([], viewerRole);
+            };
             let socket = null;
             let realtimeAttached = false;
             const roomIdAtOpen = activeSupportRoomId;
@@ -1053,6 +1374,7 @@ const openSupportChatPage = async (chatUserId, viewerRole = 'user', chatMeta = {
                         socket.off('new_message', handleNewMessage);
                         socket.off('chat_read', handleReadReceipt);
                         socket.off('message_deleted', handleMessageDeleted);
+                        socket.off('chat_cleared', handleChatCleared);
                     } catch (_) {}
                 }
                 socket = nextSocket;
@@ -1060,6 +1382,7 @@ const openSupportChatPage = async (chatUserId, viewerRole = 'user', chatMeta = {
                 socket.on('new_message', handleNewMessage);
                 socket.on('chat_read', handleReadReceipt);
                 socket.on('message_deleted', handleMessageDeleted);
+                socket.on('chat_cleared', handleChatCleared);
                 realtimeAttached = true;
                 socket.emit('join_room', { roomId: roomIdAtOpen, limit: 200, markRead: true }, (response) => {
                     if (!response?.ok) {
@@ -1080,6 +1403,7 @@ const openSupportChatPage = async (chatUserId, viewerRole = 'user', chatMeta = {
                     socket.off('new_message', handleNewMessage);
                     socket.off('chat_read', handleReadReceipt);
                     socket.off('message_deleted', handleMessageDeleted);
+                    socket.off('chat_cleared', handleChatCleared);
                     socket.emit('leave_room', { roomId: roomIdAtOpen });
                 }
                 realtimeAttached = false;
@@ -1090,6 +1414,13 @@ const openSupportChatPage = async (chatUserId, viewerRole = 'user', chatMeta = {
                 const input = document.getElementById('support-message-input');
                 const sendBtn = document.getElementById('support-send-btn');
                 if (!input) return;
+
+                const blockState = JSON.parse(localStorage.getItem(`rw_chat_block_state_${activeSupportRoomId}`) || 'null');
+                if (blockState && blockState.isBlocked) {
+                    showNotification('Cannot send message in a blocked chat.', true);
+                    return;
+                }
+
                 const text = input.value.trim();
                 if (!text) return;
                 const now = Date.now();
