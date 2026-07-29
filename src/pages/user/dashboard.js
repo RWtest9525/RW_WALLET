@@ -689,45 +689,51 @@ const showBlockedAccountPage = (data = currentUserData || {}) => {
             document.getElementById('dashboard-content')?.classList.add('hidden');
             document.getElementById('menu-overlay')?.classList.add('hidden');
             document.getElementById('slide-menu')?.classList.add('translate-x-full');
-            const pageContainer = document.getElementById('page-container');
-            pageContainer.innerHTML = `
-                <div class="min-h-[100dvh] flex items-center justify-center p-4 bg-gray-100 dark:bg-gray-900">
-                    <div class="w-full max-w-md rounded-3xl bg-white dark:bg-gray-800 border border-red-100 dark:border-red-900/50 shadow-xl overflow-hidden">
-                        <div class="bg-gradient-to-br from-red-600 to-rose-700 p-6 text-white">
-                            <div class="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-white/15 ring-1 ring-white/25">
-                                <svg xmlns="http://www.w3.org/2000/svg" class="h-9 w-9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                    <path d="M12 9v4"></path><path d="M12 17h.01"></path><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0Z"></path>
-                                </svg>
-                            </div>
-                            <h2 class="text-center text-2xl font-black">Account Blocked</h2>
-                            <p class="mt-2 text-center text-sm text-white/80">Your wallet access is currently limited by admin.</p>
-                        </div>
-                        <div class="space-y-4 p-5">
-                            <div class="rounded-2xl bg-red-50 dark:bg-red-900/20 border border-red-100 dark:border-red-800 p-4">
-                                <p class="text-xs font-black uppercase text-red-500 dark:text-red-300">Reason</p>
-                                <p class="mt-1 text-sm font-semibold text-gray-900 dark:text-white">${escapeHtml(details.reason)}</p>
-                            </div>
-                            <div class="rounded-2xl bg-gray-50 dark:bg-gray-700/50 border border-gray-100 dark:border-gray-700 p-4">
-                                <p class="text-xs font-black uppercase text-gray-400">Ban Time</p>
-                                <p class="mt-1 text-sm font-semibold text-gray-900 dark:text-white">${escapeHtml(details.time)}</p>
-                            </div>
-                            <button id="blocked-contact-admin-btn" class="w-full rounded-2xl bg-blue-600 px-4 py-3 font-black text-white shadow-sm hover:bg-blue-700 transition">Contact Admin</button>
-                        </div>
-                    </div>
-                </div>`;
-            pageContainer.classList.remove('hidden');
-            pageContainer.style.paddingBottom = '0';
-            pageContainer.style.overflowY = 'hidden';
-            document.getElementById('blocked-contact-admin-btn').onclick = () => {
-                openSupportChatPage(currentUser.uid, 'user', {
-                    initialMessage: `My account is blocked. Reason: ${details.reason}. Ban time: ${details.time}. Please help.`,
+
+            // Hide all bottom nav buttons except Chat
+            document.querySelectorAll('.bottom-nav-btn').forEach(btn => {
+                if (btn.id === 'bottom-help-btn') {
+                    btn.classList.remove('hidden');
+                    btn.classList.add('active');
+                } else {
+                    btn.classList.add('hidden');
+                }
+            });
+
+            // Open Chat page directly
+            const targetUid = currentUser?.uid || data?.uid || data?.id;
+            if (targetUid && typeof openSupportChatPage === 'function') {
+                openSupportChatPage(targetUid, 'user', {
+                    initialMessage: `My account is blocked. Reason: ${details.reason}. Ban duration: ${details.time}. Please help unban my account.`,
                     returnToBlocked: true,
                     blockedData: data
                 });
-            };
-            if (currentUser?.uid) {
-                preloadSupportChatForUser(currentUser.uid).catch(error => console.warn('Blocked support chat preload skipped:', error));
             }
+
+            // Render persistent Banned Popup Modal
+            renderModal('Account Blocked', `
+                <div class="space-y-4 text-center">
+                    <div class="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-red-100 dark:bg-red-900/30 text-red-600">
+                        <svg class="h-8 w-8" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                            <path d="M12 9v4"></path><path d="M12 17h.01"></path><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0Z"></path>
+                        </svg>
+                    </div>
+                    <div>
+                        <h3 class="text-xl font-black text-gray-900 dark:text-white">Account Blocked</h3>
+                        <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">Your account is suspended by admin. You can send messages to support below.</p>
+                    </div>
+                    <div class="rounded-2xl bg-red-50 dark:bg-red-900/20 border border-red-100 dark:border-red-800 p-3.5 text-left">
+                        <p class="text-[10px] font-black uppercase text-red-500 dark:text-red-300">Reason for Ban</p>
+                        <p class="mt-0.5 text-sm font-semibold text-gray-900 dark:text-white">${escapeHtml(details.reason)}</p>
+                    </div>
+                    <div class="rounded-2xl bg-gray-50 dark:bg-gray-700/50 border border-gray-100 dark:border-gray-700 p-3.5 text-left">
+                        <p class="text-[10px] font-black uppercase text-gray-400">Ban Duration</p>
+                        <p class="mt-0.5 text-sm font-semibold text-gray-900 dark:text-white">${escapeHtml(details.time)}</p>
+                    </div>
+                </div>`,
+                `<button onclick="window.closeModal()" class="w-full py-3 rounded-xl bg-blue-600 font-black text-xs uppercase tracking-wider text-white shadow-sm hover:bg-blue-700 transition">Chat with Support</button>`,
+                'max-w-md'
+            );
         };
 
 const showVerificationPendingPage = (data = currentUserData || {}) => {
@@ -4269,7 +4275,28 @@ const showUserTaskPage = () => {
                     </section>`;
 
                 let bodyContent = '';
-                if (taskCategories.length === 0) {
+                const isInitialTaskLoading = !window.hasInitialTasksLoaded && (!allTasksCache || allTasksCache.length === 0);
+                if (isInitialTaskLoading) {
+                    bodyContent = `
+                        <div class="space-y-4">
+                            <div class="glass-task-skeleton glass-shimmer p-5">
+                                <div class="flex items-center gap-3 mb-3">
+                                    <div class="h-4 w-4 rounded-full bg-indigo-500/40"></div>
+                                    <div class="h-4 w-36 rounded-md bg-slate-200 dark:bg-slate-700"></div>
+                                </div>
+                                <div class="h-16 w-full rounded-xl bg-slate-100 dark:bg-slate-800/70 mb-3"></div>
+                                <div class="h-11 w-full rounded-2xl bg-indigo-600/25"></div>
+                            </div>
+                            <div class="glass-task-skeleton glass-shimmer p-5">
+                                <div class="flex items-center gap-3 mb-3">
+                                    <div class="h-4 w-4 rounded-full bg-indigo-500/40"></div>
+                                    <div class="h-4 w-44 rounded-md bg-slate-200 dark:bg-slate-700"></div>
+                                </div>
+                                <div class="h-16 w-full rounded-xl bg-slate-100 dark:bg-slate-800/70 mb-3"></div>
+                                <div class="h-11 w-full rounded-2xl bg-indigo-600/25"></div>
+                            </div>
+                        </div>`;
+                } else if (taskCategories.length === 0) {
                     bodyContent = `
                         <div class="rounded-3xl border border-dashed border-gray-200 dark:border-gray-700 p-8 text-center bg-white dark:bg-gray-800 shadow-sm">
                             <div class="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-indigo-50 dark:bg-indigo-900/20 mb-4">
@@ -4329,6 +4356,7 @@ const showUserTaskPage = () => {
                             const docs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
                             allTasksCache = docs.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
                             localStorage.setItem('all_tasks_cache', JSON.stringify(allTasksCache));
+                            window.hasInitialTasksLoaded = true;
                             if (currentMainSection === 'task') {
                                 renderUI(window.lastTakenCommentsMap || {}, true);
                             }

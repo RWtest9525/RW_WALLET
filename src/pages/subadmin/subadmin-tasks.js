@@ -517,6 +517,16 @@ const showAdminTaskPage = () => {
                                             ${isTaskPageEnabled ? 'ON' : 'OFF'}
                                         </button>
                                     </div>
+                                    ${isOwner ? `
+                                    <div class="mt-4 pt-3 border-t border-white/10 flex items-center justify-between">
+                                        <div>
+                                            <p class="text-xs font-black uppercase text-rose-300">Fresh Start (Purge All)</p>
+                                            <p class="text-[10px] text-white/60">Delete all tasks & user submission history</p>
+                                        </div>
+                                        <button type="button" onclick="window.handlePurgeAllTasksAndHistory()" class="px-3.5 py-1.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs shadow-sm transition">
+                                            Purge Tasks
+                                        </button>
+                                    </div>` : ''}
                                 </section>
                             </section>
                     <section id="admin-task-add-section" class="hidden bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 p-4 sm:p-5">
@@ -1712,5 +1722,51 @@ window.handleToggleAdminTaskStatus = handleToggleAdminTaskStatus;
 window.handleDeleteAdminTask = handleDeleteAdminTask;
 window.handleEditAdminTaskComment = handleEditAdminTaskComment;
 window.renderAdminTaskList = renderAdminTaskList;
+const handlePurgeAllTasksAndHistory = async () => {
+    const isOwner = checkIsOwner(currentUser, currentUserData);
+    if (!isOwner) return showNotification('Only Super Admin / Owner can purge all tasks.', true);
+    
+    renderModal('Purge All Tasks & History', `
+        <div class="space-y-3 text-center">
+            <div class="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-red-100 text-red-600">
+                <svg class="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+            </div>
+            <h3 class="text-lg font-black text-gray-900 dark:text-white">Delete All Tasks & History?</h3>
+            <p class="text-xs text-red-600 dark:text-red-400 font-semibold">WARNING: This will permanently delete ALL tasks, user submission histories, and comment reservations from Cloudflare D1 and Firestore. User accounts & balances will remain safe.</p>
+        </div>`,
+        `<button onclick="window.closeModal()" class="px-4 py-2 text-xs font-bold bg-gray-200 dark:bg-gray-700 rounded-xl">Cancel</button>
+         <button id="confirm-purge-all-tasks-btn" class="px-4 py-2 text-xs font-bold bg-red-600 text-white rounded-xl shadow-sm hover:bg-red-700">Yes, Purge Everything</button>`,
+        'max-w-md'
+    );
+
+    document.getElementById('confirm-purge-all-tasks-btn').onclick = async () => {
+        try {
+            showLoading('Purging all tasks & history...');
+            const token = await getBackendAuthToken();
+            const response = await fetchWithTimeout(`${BACKEND_BASE_URL}/api/admin/purge-task-data`, {
+                method: 'DELETE',
+                headers: { Authorization: `Bearer ${token}` }
+            }, 25000);
+            const data = await response.json().catch(() => ({}));
+            hideLoading();
+            window.closeModal();
+            if (response.ok && data.ok) {
+                allTasksCache = [];
+                localStorage.removeItem('all_tasks_cache');
+                showNotification(`Purge complete! ${data.tasksDeleted || 0} tasks & ${data.subsDeleted || 0} submissions deleted.`);
+                if (typeof showAdminTasksPage === 'function') showAdminTasksPage();
+            } else {
+                showNotification(`Purge failed: ${data.error || 'Unknown error'}`, true);
+            }
+        } catch (err) {
+            hideLoading();
+            window.closeModal();
+            console.error('Task purge error:', err);
+            showNotification(`Purge failed: ${err.message}`, true);
+        }
+    };
+};
+
+window.handlePurgeAllTasksAndHistory = handlePurgeAllTasksAndHistory;
 window.showAdminTaskCommentsPage = showAdminTaskCommentsPage;
 window.showAdminTaskSubmissionsPage = showAdminTaskSubmissionsPage;

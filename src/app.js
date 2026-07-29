@@ -136,32 +136,16 @@ const hydrateInstantShell = () => {
             if (cachedUser) {
                 if (cachedUser.isFlagged || cachedUser.isDisabled) {
                     document.getElementById('dashboard-content')?.classList.add('hidden');
-                    document.getElementById('bottom-nav')?.classList.add('hidden');
-                    const pageContainer = document.getElementById('page-container');
-                    const reason = escapeHtml(cachedUser.banReason || 'No reason specified.');
-                    const time = cachedUser.banExpiry ? new Date(cachedUser.banExpiry).toLocaleString('en-IN') : 'Permanent suspension';
-                    if (pageContainer) {
-                        pageContainer.innerHTML = `
-                                    <div class="min-h-[100dvh] flex items-center justify-center p-4 bg-gray-100 dark:bg-gray-900">
-                                        <div class="w-full max-w-md rounded-3xl bg-white dark:bg-gray-800 border border-red-100 dark:border-red-900/50 shadow-xl overflow-hidden">
-                                            <div class="bg-gradient-to-br from-red-600 to-rose-700 p-6 text-white">
-                                                <h2 class="text-center text-2xl font-black">Account Blocked</h2>
-                                                <p class="mt-2 text-center text-sm text-white/80">Your wallet access is currently limited by admin.</p>
-                                            </div>
-                                            <div class="space-y-4 p-5">
-                                                <div class="rounded-2xl bg-red-50 dark:bg-red-900/20 border border-red-100 dark:border-red-800 p-4">
-                                                    <p class="text-xs font-black uppercase text-red-500 dark:text-red-300">Reason</p>
-                                                    <p class="mt-1 text-sm font-semibold text-gray-900 dark:text-white">${reason}</p>
-                                                </div>
-                                                <div class="rounded-2xl bg-gray-50 dark:bg-gray-700/50 border border-gray-100 dark:border-gray-700 p-4">
-                                                    <p class="text-xs font-black uppercase text-gray-400">Ban Time</p>
-                                                    <p class="mt-1 text-sm font-semibold text-gray-900 dark:text-white">${time}</p>
-                                                </div>
-                                                <button class="w-full rounded-2xl bg-blue-600 px-4 py-3 font-black text-white shadow-sm opacity-80">Contact Admin</button>
-                                            </div>
-                                        </div>
-                                    </div>`;
-                        pageContainer.classList.remove('hidden');
+                    document.querySelectorAll('.bottom-nav-btn').forEach(btn => {
+                        if (btn.id === 'bottom-help-btn') {
+                            btn.classList.remove('hidden');
+                            btn.classList.add('active');
+                        } else {
+                            btn.classList.add('hidden');
+                        }
+                    });
+                    if (typeof showBlockedAccountPage === 'function') {
+                        showBlockedAccountPage(cachedUser);
                     }
                     return;
                 }

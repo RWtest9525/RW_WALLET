@@ -432,7 +432,6 @@ const showNotificationsPage = async () => {
                             </div>
                             <div>
                                 <h3 class="text-lg font-black">REVIEWS WORLD Updates</h3>
-                                <p class="text-sm text-white/80">Read-only messages from admin</p>
                             </div>
                         </div>
                     </div>

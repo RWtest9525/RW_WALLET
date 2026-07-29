@@ -140,7 +140,7 @@ function createAppToken(user) {
   const email = normalizeEmail(user.email);
   const effectiveUserId = firebaseUid || user.id;
   const role = (user.id === ADMIN_UID || firebaseUid === ADMIN_UID || email === 'reviewsworld01@gmail.com') ? 'owner' : (user.role || 'user');
-  const isAdmin = role === 'owner' || role === 'admin';
+  const isAdmin = role === 'owner' || role === 'admin' || role === 'subadmin';
   return jwt.sign(
     {
       sub: effectiveUserId,
@@ -6414,16 +6414,48 @@ async function fetchPlayStoreReviewsForDate(packageId, targetDateMs) {
         return res.status(403).json({ ok: false, error: 'OWNER_ONLY' });
       }
 
-      // Delete all task_submissions from D1
-      const subResult = await d1.query('DELETE FROM task_submissions');
+      // 1. Delete all tasks from D1
+      const taskResult = await d1.query('DELETE FROM tasks').catch(() => ({ changes: 0 }));
+      const tasksDeleted = taskResult?.changes || 0;
+
+      // 2. Delete all task_submissions from D1
+      const subResult = await d1.query('DELETE FROM task_submissions').catch(() => ({ changes: 0 }));
       const subsDeleted = subResult?.changes || 0;
 
-      // Delete all task_comment_reservations from D1
-      const resResult = await d1.query('DELETE FROM task_comment_reservations');
+      // 3. Delete all task_comment_reservations from D1
+      const resResult = await d1.query('DELETE FROM task_comment_reservations').catch(() => ({ changes: 0 }));
       const reservationsDeleted = resResult?.changes || 0;
 
-      console.log(`[PURGE] Owner ${email} purged D1 task data: ${subsDeleted} submissions, ${reservationsDeleted} reservations`);
-      res.json({ ok: true, subsDeleted, reservationsDeleted });
+      // 4. Delete Firestore collections if Firestore Admin SDK is available
+      try {
+        const collectionsToPurge = [
+          'artifacts/digital-wallet-prod/public/data/tasks',
+          'artifacts/digital-wallet-prod/public/data/task_submissions',
+          'artifacts/digital-wallet-prod/public/data/task_comment_reservations'
+        ];
+        for (const colPath of collectionsToPurge) {
+          const snap = await db.collection(colPath).get();
+          const batchSize = 400;
+          let batch = db.batch();
+          let count = 0;
+          for (const doc of snap.docs) {
+            batch.delete(doc.ref);
+            count++;
+            if (count % batchSize === 0) {
+              await batch.commit();
+              batch = db.batch();
+            }
+          }
+          if (count % batchSize !== 0 && count > 0) {
+            await batch.commit();
+          }
+        }
+      } catch (fsErr) {
+        console.warn('[PURGE] Firestore collection purge note:', fsErr.message);
+      }
+
+      console.log(`[PURGE] Owner ${email} purged all tasks & history: ${tasksDeleted} tasks, ${subsDeleted} submissions, ${reservationsDeleted} reservations`);
+      res.json({ ok: true, tasksDeleted, subsDeleted, reservationsDeleted });
     } catch (error) {
       console.error('Purge task data failed:', error);
       res.status(500).json({ ok: false, error: 'PURGE_FAILED' });

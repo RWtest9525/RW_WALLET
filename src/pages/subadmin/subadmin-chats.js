@@ -201,7 +201,8 @@ const populateFallbackAdminChatsFromUsers = () => {
     }
 };
 
-const loadAdminChatsFromBackend = async ({ silent = false, retry = true, subscribeRealtime = true } = {}) => {
+const loadAdminChatsFromBackend = async (options = {}) => {
+            const { silent = false, retry = true, subscribeRealtime = true } = options || {};
             if (!hasAdminSessionReadyOrCached()) return;
             await ensureAdminChatUsersLoaded();
             populateFallbackAdminChatsFromUsers();
