@@ -116,7 +116,7 @@ root.outerHTML = `
         <div id="main-content" class="hidden fade-in">
             <!-- Header with Colorful Border -->
             <header id="app-top-header"
-                class="hidden flex justify-between items-center mb-6 bg-white dark:bg-gray-800 p-4 rounded-xl shadow-md header-border">
+                class="flex justify-between items-center mb-6 bg-white dark:bg-gray-800 p-4 rounded-xl shadow-md header-border">
                 <div class="flex items-center">
                     <!-- Logo with fallback -->
                     <img src="/assets/images/logo_512.png" alt="Reviews World Logo"

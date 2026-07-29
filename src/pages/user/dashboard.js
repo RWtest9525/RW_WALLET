@@ -3089,6 +3089,7 @@ const showHomeMainPage = () => {
             pageContainer.style.paddingBottom = '';
             pageContainer.classList.add('hidden');
             document.getElementById('dashboard-content').classList.remove('hidden');
+            document.getElementById('app-top-header')?.classList.remove('hidden');
             setMainChrome(true);
             document.getElementById('app-footer')?.classList.add('app-footer-hidden');
             currentMainSection = 'home';
