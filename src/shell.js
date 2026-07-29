@@ -1,43 +1,3 @@
-(() => {
-    const criticalImages = [
-        '/assets/images/logo_192.png',
-        '/assets/images/logo_512.png',
-        '/assets/images/profile_card_bg.png',
-        '/assets/images/referral_banner.webp',
-        '/assets/images/referral_howitworks_cards.webp',
-        '/assets/images/referral_banner.png',
-        '/assets/images/referral_howitworks_cards.png',
-        '/assets/images/notification_bell.png',
-        '/assets/images/whats_new_megaphone.png',
-        '/assets/images/withdraw_confirm_bg.png',
-        '/assets/images/withdraw_upi.png',
-        '/assets/images/withdraw_bank.png',
-        '/assets/images/withdraw_crypto.png',
-        '/assets/images/withdraw_amazon.png',
-        '/assets/images/withdraw_playstore.png',
-        '/assets/images/withdraw_flipkart.png',
-        '/assets/images/withdraw_paypal.png'
-    ];
-    try {
-        const frag = document.createDocumentFragment();
-        criticalImages.forEach(src => {
-            if (document.querySelector(`link[rel="preload"][href="${src}"]`)) return;
-            const link = document.createElement('link');
-            link.rel = 'preload';
-            link.as = 'image';
-            link.href = src;
-            link.setAttribute('fetchpriority', 'high');
-            frag.appendChild(link);
-            const img = document.createElement('link');
-            img.rel = 'prefetch';
-            img.as = 'image';
-            img.href = src;
-            frag.appendChild(img);
-        });
-        document.head.appendChild(frag);
-    } catch (_) {}
-})();
-
 const root = document.getElementById('rw-wallet-root');
 
 if (!root) {
@@ -100,22 +60,18 @@ root.outerHTML = `
                                 <svg id="eye-closed" xmlns="http://www.w3.org/2000/svg" width="20" height="20"
                                     viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
                                     stroke-linecap="round" stroke-linejoin="round" class="hidden">
+                                    <path d="m2 2 20 20" />
                                     <path d="M9.88 9.88a3 3 0 1 0 4.24 4.24" />
-                                    <path
-                                        d="M10.73 5.08A10.43 10.43 0 0 1 12 5c7 0 10 7 10 7a13.16 13.16 0 0 1-1.67 2.68" />
-                                    <path d="M6.61 6.61A13.526 13.526 0 0 0 2 12s3 7 10 7a9.74 9.74 0 0 0 5.39-1.61" />
-                                    <line x1="2" x2="22" y1="2" y2="22" />
+                                    <path d="M10.73 5.08A10.43 10.43 0 0 1 12 5c7 0 10 7 10 7a13.16 13.16 0 0 1-1.67 2.68" />
+                                    <path d="M6.61 6.61A13.52 13.52 0 0 0 2 12s3 7 10 7a9.74 9.74 0 0 0 5.39-1.61" />
                                 </svg>
                             </button>
                         </div>
-                        <div id="forgot-password-row" class="text-right -mt-2">
-                            <a href="#" id="forgot-password-link" class="text-sm font-semibold text-blue-500 hover:underline">Forgot Password?</a>
+                        <div class="flex items-center justify-between text-sm">
+                            <button type="button" id="forgot-password-link" class="text-blue-500 hover:underline">Forgot Password?</button>
                         </div>
-                        <button type="submit" id="auth-button"
-                            class="w-full bg-blue-600 text-white font-semibold py-3 rounded-lg hover:bg-blue-700 transition duration-300 flex justify-center items-center h-[52px]">
-                            <span class="button-text">Login</span>
-                            <div class="loader hidden"></div>
-                        </button>
+                        <button type="submit" id="auth-submit-btn"
+                            class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 rounded-lg transition duration-200">Login</button>
                     </form>
                     <p class="text-center text-sm text-gray-500 dark:text-gray-400 mt-6">
                         <span id="auth-prompt">Don't have an account?</span>
@@ -159,8 +115,8 @@ root.outerHTML = `
         <!-- Main Content (Logged In) -->
         <div id="main-content" class="hidden fade-in">
             <!-- Header with Colorful Border -->
-            <header
-                class="flex justify-between items-center mb-6 bg-white dark:bg-gray-800 p-4 rounded-xl shadow-md header-border">
+            <header id="app-top-header"
+                class="hidden flex justify-between items-center mb-6 bg-white dark:bg-gray-800 p-4 rounded-xl shadow-md header-border">
                 <div class="flex items-center">
                     <!-- Logo with fallback -->
                     <img src="/assets/images/logo_512.png" alt="Reviews World Logo"

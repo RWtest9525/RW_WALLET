@@ -4039,6 +4039,8 @@ const showUserTaskPage = () => {
             if (!ensureUserSessionReady()) return;
             currentMainSection = 'task';
             localStorage.setItem('last_active_section', 'task');
+            document.getElementById('app-top-header')?.classList.add('hidden');
+            document.getElementById('dashboard-content')?.classList.add('hidden');
             const isTaskPageEnabled = true;
 
             const renderUI = (takenCommentsMap = {}, isBackground = false) => {
