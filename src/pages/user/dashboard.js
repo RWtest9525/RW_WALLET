@@ -7300,11 +7300,11 @@ const handleGenerateDepositQR = async () => {
     const upiId = appConfigCache?.fampay_upi || '9525182488@fam';
     const apiKey = appConfigCache?.fampay_api_key || 'FAM_fbc1b443110a37b5f2f1de5bef365c90defb23c1a38d19c0';
 
-    showLoading(true);
+    showLoading();
     try {
         const response = await fetch(`https://anujbots.xyz/api/qr.php?upi=${encodeURIComponent(upiId)}`);
         const res = await response.json();
-        showLoading(false);
+        hideLoading();
 
         if (res && (res.status === 'success' || res.data?.order_id)) {
             const orderId = res.data.order_id;
@@ -7345,7 +7345,7 @@ const handleGenerateDepositQR = async () => {
             showNotification('Failed to generate UPI QR. Please try again.', true);
         }
     } catch (err) {
-        showLoading(false);
+        hideLoading();
         console.error('FamPay QR Error:', err);
         showNotification('Network error while generating UPI QR code.', true);
     }
@@ -7544,7 +7544,7 @@ const processSuccessfulDeposit = async ({ orderId, amount, taxAmount, txnId, utr
             console.warn('Global deposit record update error:', e);
         }
 
-        showLoading(false);
+        hideLoading();
         window.closeModal();
         showNotification(`✅ Payment Successful! ₹${amount} credited to your wallet.`, false, true);
 
@@ -7558,7 +7558,7 @@ const processSuccessfulDeposit = async ({ orderId, amount, taxAmount, txnId, utr
         }
         hidePage();
     } catch (e) {
-        showLoading(false);
+        hideLoading();
         console.error('Process Deposit Error:', e);
         showNotification(e.message || 'Failed to update wallet balance.', true);
     }

@@ -1,12 +1,15 @@
 // File: src/utils/ui-utils.js
 
-const showLoading = () => {
-            document.getElementById('loading-overlay').classList.remove('hidden');
-        };
+const showLoading = (flag = true) => {
+    if (flag === false) {
+        return hideLoading();
+    }
+    document.getElementById('loading-overlay')?.classList.remove('hidden');
+};
 
 const hideLoading = () => {
-            document.getElementById('loading-overlay').classList.add('hidden');
-        };
+    document.getElementById('loading-overlay')?.classList.add('hidden');
+};
 
 const friendlyErrorMessage = (fallback = 'Something went wrong. Please try again.') => fallback;
 
