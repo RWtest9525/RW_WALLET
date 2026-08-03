@@ -7145,6 +7145,7 @@ window.refreshTransactionHistoryFromFirebase = refreshTransactionHistoryFromFire
 window.showAllTransactionsPage = showAllTransactionsPage;
 window.showPayToWalletPage = showPayToWalletPage;
 let famPayDepositPollTimer = null;
+let famPayDepositCountdownTimer = null;
 const processedDepositOrders = new Set();
 
 const showDepositMoneyPage = () => {
@@ -7356,6 +7357,10 @@ const showFamPayPaymentModal = ({ orderId, qrUrl, expireAt, depositAmount, taxAm
         clearInterval(famPayDepositPollTimer);
         famPayDepositPollTimer = null;
     }
+    if (famPayDepositCountdownTimer) {
+        clearInterval(famPayDepositCountdownTimer);
+        famPayDepositCountdownTimer = null;
+    }
 
     const upiDeepLink = `upi://pay?pa=${encodeURIComponent(upiId)}&pn=RWWallet&am=${totalPayable}&tn=${encodeURIComponent(orderId)}&cu=INR`;
     const gpayDeepLink = `intent://pay?pa=${encodeURIComponent(upiId)}&pn=RWWallet&am=${totalPayable}&tn=${encodeURIComponent(orderId)}&cu=INR#Intent;scheme=upi;package=com.google.android.apps.nbu.paisa.user;end`;
@@ -7364,6 +7369,14 @@ const showFamPayPaymentModal = ({ orderId, qrUrl, expireAt, depositAmount, taxAm
 
     renderModal('UPI Payment - Deposit Funds',
         `<div class="space-y-4 text-center">
+            <!-- 10-Minute Live Countdown Timer Badge -->
+            <div class="flex items-center justify-center">
+                <div class="inline-flex items-center justify-center gap-1.5 px-3.5 py-1.5 bg-rose-50 dark:bg-rose-900/30 border border-rose-200 dark:border-rose-800/60 rounded-full text-rose-600 dark:text-rose-400 font-bold text-xs shadow-sm">
+                    <svg class="w-4 h-4 text-rose-500 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                    <span>Pay Within: <span id="fampay-timer-display" class="font-mono text-sm font-black text-rose-700 dark:text-rose-300">10:00</span></span>
+                </div>
+            </div>
+
             <div class="bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800 rounded-xl p-3 text-xs space-y-1">
                 <div class="flex justify-between">
                     <span class="text-gray-500 dark:text-gray-400">Order ID:</span>
@@ -7387,7 +7400,6 @@ const showFamPayPaymentModal = ({ orderId, qrUrl, expireAt, depositAmount, taxAm
             <div class="flex flex-col items-center justify-center p-3 bg-white rounded-xl shadow-inner border border-gray-200 max-w-[240px] mx-auto">
                 <img src="${escapeHtml(qrUrl)}" alt="Scan & Pay QR" class="w-48 h-48 object-contain rounded-lg">
                 <p class="text-[11px] text-gray-500 font-semibold mt-2">Scan QR with any UPI App</p>
-                <p class="text-[10px] text-red-500 mt-0.5">Expires at: ${escapeHtml(expireAt)}</p>
             </div>
 
             <!-- Pay via App Deep Link Buttons -->
@@ -7419,11 +7431,40 @@ const showFamPayPaymentModal = ({ orderId, qrUrl, expireAt, depositAmount, taxAm
         'max-w-md'
     );
 
-    let pollAttempts = 0;
-    const maxPollAttempts = 45; // ~3 minutes polling
+    let remainingSeconds = 600; // 10 minutes live timer
+
+    const updateCountdownDisplay = () => {
+        const mins = Math.floor(remainingSeconds / 60);
+        const secs = remainingSeconds % 60;
+        const timeStr = `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+        const timerEl = document.getElementById('fampay-timer-display');
+        if (timerEl) {
+            timerEl.textContent = timeStr;
+        }
+
+        if (remainingSeconds <= 0) {
+            if (famPayDepositPollTimer) {
+                clearInterval(famPayDepositPollTimer);
+                famPayDepositPollTimer = null;
+            }
+            if (famPayDepositCountdownTimer) {
+                clearInterval(famPayDepositCountdownTimer);
+                famPayDepositCountdownTimer = null;
+            }
+            markDepositFailed({ orderId, depositAmount, taxAmount, reason: '10 Minute Payment Window Expired' });
+            const statusEl = document.getElementById('fampay-verify-status');
+            if (statusEl) {
+                statusEl.innerHTML = `<span class="text-rose-500 font-bold">❌ 10-Minute Timer Expired! Recorded as failed.</span>`;
+            }
+        } else {
+            remainingSeconds--;
+        }
+    };
+
+    updateCountdownDisplay();
+    famPayDepositCountdownTimer = setInterval(updateCountdownDisplay, 1000);
 
     const checkVerification = async (isManual = false) => {
-        pollAttempts++;
         const statusEl = document.getElementById('fampay-verify-status');
         if (isManual && statusEl) {
             statusEl.innerHTML = `<div class="w-3 h-3 border-2 border-emerald-600 border-t-transparent rounded-full animate-spin"></div> Checking payment status...`;
@@ -7437,6 +7478,10 @@ const showFamPayPaymentModal = ({ orderId, qrUrl, expireAt, depositAmount, taxAm
                 if (famPayDepositPollTimer) {
                     clearInterval(famPayDepositPollTimer);
                     famPayDepositPollTimer = null;
+                }
+                if (famPayDepositCountdownTimer) {
+                    clearInterval(famPayDepositCountdownTimer);
+                    famPayDepositCountdownTimer = null;
                 }
                 const txnId = vRes.data?.transaction_id || `TXN_${orderId}`;
                 const utr = vRes.data?.utr || 'N/A';
@@ -7452,13 +7497,6 @@ const showFamPayPaymentModal = ({ orderId, qrUrl, expireAt, depositAmount, taxAm
                 });
             } else if (isManual) {
                 if (statusEl) statusEl.innerHTML = `<span class="text-rose-500">❌ Payment Not Received Yet. Please scan & pay first.</span>`;
-            } else if (pollAttempts >= maxPollAttempts) {
-                if (famPayDepositPollTimer) {
-                    clearInterval(famPayDepositPollTimer);
-                    famPayDepositPollTimer = null;
-                }
-                markDepositFailed({ orderId, depositAmount, taxAmount, reason: 'Payment Verification Timed Out' });
-                if (statusEl) statusEl.innerHTML = `<span class="text-rose-500">❌ Payment session timed out. Recorded as failed.</span>`;
             }
         } catch (e) {
             console.warn('FamPay Verify Error:', e);
@@ -7475,6 +7513,10 @@ const showFamPayPaymentModal = ({ orderId, qrUrl, expireAt, depositAmount, taxAm
         if (famPayDepositPollTimer) {
             clearInterval(famPayDepositPollTimer);
             famPayDepositPollTimer = null;
+        }
+        if (famPayDepositCountdownTimer) {
+            clearInterval(famPayDepositCountdownTimer);
+            famPayDepositCountdownTimer = null;
         }
         markDepositFailed({ orderId, depositAmount, taxAmount, reason: 'User Cancelled Modal' });
         window.closeModal();
