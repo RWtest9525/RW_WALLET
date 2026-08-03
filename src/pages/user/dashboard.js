@@ -7297,7 +7297,7 @@ const handleGenerateDepositQR = async () => {
     const taxAmount = Math.ceil(depositAmount / 100) * 5;
     const totalPayable = (depositAmount + taxAmount).toFixed(2);
 
-    const upiId = appConfigCache?.fampay_upi || 'anujffseller@fam';
+    const upiId = appConfigCache?.fampay_upi || '9525182488@fam';
     const apiKey = appConfigCache?.fampay_api_key || 'FAM_fbc1b443110a37b5f2f1de5bef365c90defb23c1a38d19c0';
 
     showLoading(true);
