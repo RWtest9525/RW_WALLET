@@ -1,8 +1,44 @@
 // File: src/pages/admin/admin-dashboard.js
 
+let adminFundRequestsRealtimeStarted = false;
+
+const setupAdminRealtimeFundRequestsListener = () => {
+    const isCurrentAdmin = currentUser?.uid === ADMIN_UID || currentUserData?.role === 'admin' || currentUserData?.role === 'owner';
+    if (!isCurrentAdmin || adminFundRequestsRealtimeStarted) return;
+    adminFundRequestsRealtimeStarted = true;
+
+    try {
+        const reqsRef = collection(db, `artifacts/${appId}/public/data/fund_requests`);
+        const reqsQuery = query(reqsRef, where("status", "==", "pending"));
+
+        onSnapshot(reqsQuery, (snapshot) => {
+            const firebasePending = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+
+            const merged = mergeFundRequestsById(allFundRequestsCache.concat(allRechargeRequestsCache), firebasePending);
+
+            allFundRequestsCache = merged.filter(req => (req.type || 'withdrawal') === 'withdrawal' && (!req.status || req.status === 'pending') && !isFundRequestLocallyProcessed(req));
+            allRechargeRequestsCache = merged.filter(req => req.type === 'mobile_recharge' && (!req.status || req.status === 'pending') && !isFundRequestLocallyProcessed(req));
+
+            updateAdminPendingRequestSummary();
+
+            if (document.getElementById('admin-fund-requests-list-page')) {
+                renderAdminFundRequests(allFundRequestsCache);
+            }
+            if (document.getElementById('admin-recharge-requests-list-page')) {
+                renderAdminRechargeRequests(allRechargeRequestsCache);
+            }
+        }, (err) => {
+            console.warn('Realtime admin fund requests snapshot skipped:', err);
+        });
+    } catch (e) {
+        console.warn('Admin realtime fund requests listener init skipped:', e);
+    }
+};
+
 const refreshAdminFundRequestsFromCloud = async () => {
             const isCurrentAdmin = currentUser?.uid === ADMIN_UID || currentUserData?.role === 'admin' || currentUserData?.role === 'owner';
             if (!isCurrentAdmin) return;
+            setupAdminRealtimeFundRequestsListener();
             try {
                 const cloudRequests = await loadCloudFundRequests({ status: 'pending' });
                 let firebasePendingRequests = [];

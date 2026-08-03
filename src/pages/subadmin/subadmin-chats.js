@@ -521,12 +521,17 @@ const showAdminChatsPage = () => {
                 ${getPageFooter()}`;
             showPage(content);
             setBottomNavActive('bottom-settings-btn');
-            document.getElementById('admin-chat-search').addEventListener('input', renderAdminChatsList);
+            document.getElementById('admin-chat-search')?.addEventListener('input', renderAdminChatsList);
+
+            // Render instantly from local cache
             renderAdminChatsList();
-            ensureAdminChatUsersLoaded(true).then(() => {
-                loadAdminChatsFromBackend({ silent: false, subscribeRealtime: false });
-                renderAdminChatsList();
-            });
+
+            // Non-blocking background sync
+            ensureAdminChatUsersLoaded(false).then(() => {
+                loadAdminChatsFromBackend({ silent: true, subscribeRealtime: true }).then(() => {
+                    renderAdminChatsList();
+                }).catch(e => console.warn('Background admin chat sync skipped:', e));
+            }).catch(e => console.warn('Background admin chat users skipped:', e));
         };
 
 // Expose functions to window for global access

@@ -384,13 +384,12 @@ onAuthStateChanged(auth, async (user) => {
                         }
                         document.getElementById('main-content')?.classList.remove('hidden');
                     } else {
-                        document.getElementById('dashboard-content')?.classList.add('hidden');
-                        currentMainSection = 'task';
+                        currentMainSection = 'home';
                         switchTab('user-panel');
-                        setBottomNavActive('bottom-task-btn');
+                        setBottomNavActive('bottom-home-btn');
                         setMainChrome(true);
-                        if (typeof window.showUserTaskPage === 'function') {
-                            window.showUserTaskPage();
+                        if (typeof window.showHomeMainPage === 'function') {
+                            window.showHomeMainPage();
                         }
                         document.getElementById('main-content')?.classList.remove('hidden');
                     }
@@ -1052,6 +1051,8 @@ document.getElementById('admin-tasks-btn')?.addEventListener('click', () => open
 document.getElementById('admin-settlement-btn')?.addEventListener('click', () => openAdminQuickAction(showAdminSettlementPage));
 document.getElementById('admin-check-referral-btn')?.addEventListener('click', () => openAdminQuickAction(showAdminReferralLookupPage));
 document.getElementById('admin-train-ai-btn')?.addEventListener('click', () => openAdminQuickAction(() => openRevyBotChatPage(true)));
+
+document.getElementById('deposit-money-btn')?.addEventListener('click', () => openUserQuickAction(showDepositMoneyPage));
 
 document.getElementById('withdraw-fund-btn')?.addEventListener('click', () => openUserQuickAction(showWithdrawPage));
 

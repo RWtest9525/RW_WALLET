@@ -246,6 +246,14 @@ root.outerHTML = `
                                     </button>
                                 </div>
                                 <div class="grid grid-cols-3 gap-2 sm:gap-3">
+                                <button id="deposit-money-btn"
+                                    class="relative group w-full min-h-28 flex flex-col items-center justify-between gap-2 bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-200 font-semibold p-3 rounded-xl hover:bg-emerald-100 dark:hover:bg-emerald-900/30 transition border border-emerald-200 dark:border-emerald-800 text-center">
+                                    <span class="absolute right-1.5 top-1.5 rounded-full bg-blue-600 px-1.5 py-0.5 text-[9px] font-bold text-white shadow-sm">1% tax</span>
+                                    <span class="w-12 h-12 rounded-xl bg-emerald-500 flex items-center justify-center shadow-sm p-2">
+                                        <img src="https://cdn-icons-png.flaticon.com/512/12449/12449036.png" alt="Add Money" class="w-full h-full object-contain">
+                                    </span>
+                                    <span class="text-xs sm:text-sm leading-tight">Add Money</span>
+                                </button>
                                 <button id="withdraw-fund-btn"
                                     class="relative group w-full min-h-28 flex flex-col items-center justify-between gap-2 bg-yellow-50 dark:bg-yellow-900/20 text-yellow-700 dark:text-yellow-200 font-semibold p-3 rounded-xl hover:bg-yellow-100 dark:hover:bg-yellow-900/30 transition border border-yellow-200 dark:border-yellow-800 text-center">
                                     <span class="absolute right-1.5 top-1.5 rounded-full bg-red-600 px-1.5 py-0.5 text-[9px] font-bold text-white shadow-sm">0% tax</span>
@@ -449,13 +457,13 @@ root.outerHTML = `
                         </span>
                         <span>Refer</span>
                     </button>
-                    <button id="bottom-home-btn" class="bottom-nav-btn flex flex-col items-center gap-1 py-1">
+                    <button id="bottom-home-btn" class="bottom-nav-btn active flex flex-col items-center gap-1 py-1">
                         <span class="bottom-nav-icon flex h-10 w-10 items-center justify-center rounded-xl bg-gray-100 dark:bg-gray-700 transition">
                             <img src="https://cdn-icons-png.flaticon.com/512/1946/1946436.png" alt="Home" class="bottom-nav-img" loading="eager" fetchpriority="high" decoding="async">
                         </span>
                         <span id="bottom-home-label">Wallet</span>
                     </button>
-                    <button id="bottom-task-btn" class="bottom-nav-btn active flex flex-col items-center gap-1 py-1">
+                    <button id="bottom-task-btn" class="bottom-nav-btn flex flex-col items-center gap-1 py-1">
                         <span class="bottom-nav-icon flex h-9 w-9 items-center justify-center rounded-xl bg-gray-100 dark:bg-gray-700 transition">
                             <img src="https://cdn-icons-png.flaticon.com/512/3176/3176366.png" alt="Task" class="bottom-nav-img" loading="eager" fetchpriority="high" decoding="async">
                         </span>

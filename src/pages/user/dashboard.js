@@ -7144,6 +7144,329 @@ window.loadMoreTransactionsIfNeeded = loadMoreTransactionsIfNeeded;
 window.refreshTransactionHistoryFromFirebase = refreshTransactionHistoryFromFirebase;
 window.showAllTransactionsPage = showAllTransactionsPage;
 window.showPayToWalletPage = showPayToWalletPage;
+let famPayDepositPollTimer = null;
+const processedDepositOrders = new Set();
+
+const showDepositMoneyPage = () => {
+    if (!currentUserData) return showNotification('User data not loaded. Please wait.', true);
+    if (currentUserData.isFlagged) {
+        return showNotification('Your account is flagged. Please contact support.', true);
+    }
+
+    const content = `
+        ${getPageHeader('Add Money to Wallet')}
+        <div class="max-w-md mx-auto bg-white dark:bg-gray-800 p-6 rounded-2xl shadow-lg space-y-6">
+            <div class="text-center">
+                <div class="mx-auto w-16 h-16 rounded-2xl bg-emerald-100 dark:bg-emerald-900/40 flex items-center justify-center mb-3 p-3 shadow-sm">
+                    <img src="https://cdn-icons-png.flaticon.com/512/12449/12449036.png" alt="Add Money" class="w-full h-full object-contain">
+                </div>
+                <h3 class="text-xl font-bold text-gray-900 dark:text-white">Add Money via UPI</h3>
+                <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">Instant Wallet Credit | 1% Extra Tax Applies</p>
+            </div>
+
+            <div>
+                <label class="text-xs font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500 mb-2 block">Quick Select Amount</label>
+                <div class="grid grid-cols-4 gap-2">
+                    <button type="button" class="deposit-preset-chip px-3 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-700/50 hover:bg-emerald-50 hover:border-emerald-500 dark:hover:bg-emerald-900/30 text-center font-bold text-sm transition text-gray-800 dark:text-gray-200" data-amount="10">₹10</button>
+                    <button type="button" class="deposit-preset-chip px-3 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-700/50 hover:bg-emerald-50 hover:border-emerald-500 dark:hover:bg-emerald-900/30 text-center font-bold text-sm transition text-gray-800 dark:text-gray-200" data-amount="20">₹20</button>
+                    <button type="button" class="deposit-preset-chip px-3 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-700/50 hover:bg-emerald-50 hover:border-emerald-500 dark:hover:bg-emerald-900/30 text-center font-bold text-sm transition text-gray-800 dark:text-gray-200" data-amount="50">₹50</button>
+                    <button type="button" class="deposit-preset-chip px-3 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-700/50 hover:bg-emerald-50 hover:border-emerald-500 dark:hover:bg-emerald-900/30 text-center font-bold text-sm transition text-gray-800 dark:text-gray-200" data-amount="100">₹100</button>
+                </div>
+            </div>
+
+            <div>
+                <label class="text-xs font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500 mb-1 block">Deposit Amount (₹)</label>
+                <div class="relative">
+                    <span class="absolute inset-y-0 left-0 pl-4 flex items-center text-lg font-bold text-gray-500">₹</span>
+                    <input type="number" id="deposit-amount-input" min="10" placeholder="Enter amount (Min ₹10)" value="50" class="w-full pl-9 pr-4 py-3.5 bg-gray-100 dark:bg-gray-700/70 border border-transparent rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 font-bold text-lg text-gray-900 dark:text-white">
+                </div>
+                <p class="text-[11px] text-gray-400 mt-1">Minimum deposit amount is ₹10.</p>
+            </div>
+
+            <div id="deposit-summary-box" class="space-y-2 bg-slate-50 dark:bg-gray-900/50 border border-gray-200 dark:border-gray-700 rounded-xl p-4 text-xs">
+            </div>
+
+            <button id="proceed-deposit-btn" class="w-full bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white font-bold py-3.5 rounded-xl shadow-lg transition flex items-center justify-center gap-2">
+                <span>Generate UPI Payment QR</span>
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"/></svg>
+            </button>
+        </div>
+        ${getPageFooter()}`;
+    showPage(content);
+
+    const amountInput = document.getElementById('deposit-amount-input');
+    document.querySelectorAll('.deposit-preset-chip').forEach(btn => {
+        btn.onclick = () => {
+            if (amountInput) {
+                amountInput.value = btn.dataset.amount;
+                updateDepositSummary();
+            }
+        };
+    });
+    if (amountInput) {
+        amountInput.oninput = updateDepositSummary;
+    }
+    updateDepositSummary();
+
+    const proceedBtn = document.getElementById('proceed-deposit-btn');
+    if (proceedBtn) {
+        proceedBtn.onclick = handleGenerateDepositQR;
+    }
+};
+
+const updateDepositSummary = () => {
+    const amountInput = document.getElementById('deposit-amount-input');
+    const summaryBox = document.getElementById('deposit-summary-box');
+    if (!amountInput || !summaryBox) return;
+
+    const depositAmount = parseFloat(amountInput.value) || 0;
+    const taxAmount = Math.ceil(depositAmount * 0.01 * 100) / 100;
+    const totalPayable = (depositAmount + taxAmount).toFixed(2);
+
+    if (depositAmount < 10) {
+        summaryBox.innerHTML = `
+            <div class="text-rose-500 font-semibold text-center py-1">
+                ⚠️ Minimum deposit amount is ₹10
+            </div>`;
+        return;
+    }
+
+    summaryBox.innerHTML = `
+        <div class="flex justify-between text-gray-600 dark:text-gray-400">
+            <span>Wallet Credit Amount:</span>
+            <span class="font-bold text-gray-900 dark:text-white">₹${depositAmount.toFixed(2)}</span>
+        </div>
+        <div class="flex justify-between text-blue-600 dark:text-blue-400">
+            <span>1% Tax Charge:</span>
+            <span class="font-bold">+₹${taxAmount.toFixed(2)}</span>
+        </div>
+        <div class="pt-2 border-t border-gray-200 dark:border-gray-700 flex justify-between font-bold text-sm text-emerald-600 dark:text-emerald-400">
+            <span>Total Payable via UPI:</span>
+            <span>₹${totalPayable}</span>
+        </div>`;
+};
+
+const handleGenerateDepositQR = async () => {
+    const amountInput = document.getElementById('deposit-amount-input');
+    const depositAmount = parseFloat(amountInput?.value || 0);
+
+    if (isNaN(depositAmount) || depositAmount < 10) {
+        return showNotification('Minimum deposit amount is ₹10.', true);
+    }
+
+    const taxAmount = Math.ceil(depositAmount * 0.01 * 100) / 100;
+    const totalPayable = (depositAmount + taxAmount).toFixed(2);
+
+    const upiId = appConfigCache?.fampay_upi || 'anujffseller@fam';
+    const apiKey = appConfigCache?.fampay_api_key || 'FAM_fbc1b443110a37b5f2f1de5bef365c90defb23c1a38d19c0';
+
+    showLoading(true);
+    try {
+        const response = await fetch(`https://anujbots.xyz/api/qr.php?upi=${encodeURIComponent(upiId)}`);
+        const res = await response.json();
+        showLoading(false);
+
+        if (res && (res.status === 'success' || res.data?.order_id)) {
+            const orderId = res.data.order_id;
+            const qrUrl = res.data.qr_url || `https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${encodeURIComponent(`upi://pay?pa=${upiId}&pn=RWWallet&am=${totalPayable}&tn=${orderId}&cu=INR`)}`;
+            const expireAt = res.data.expires_at_ist || '10 minutes';
+
+            showFamPayPaymentModal({
+                orderId,
+                qrUrl,
+                expireAt,
+                depositAmount,
+                taxAmount,
+                totalPayable,
+                upiId,
+                apiKey
+            });
+        } else {
+            showNotification('Failed to generate UPI QR. Please try again.', true);
+        }
+    } catch (err) {
+        showLoading(false);
+        console.error('FamPay QR Error:', err);
+        showNotification('Network error while generating UPI QR code.', true);
+    }
+};
+
+const showFamPayPaymentModal = ({ orderId, qrUrl, expireAt, depositAmount, taxAmount, totalPayable, upiId, apiKey }) => {
+    if (famPayDepositPollTimer) {
+        clearInterval(famPayDepositPollTimer);
+        famPayDepositPollTimer = null;
+    }
+
+    const upiDeepLink = `upi://pay?pa=${encodeURIComponent(upiId)}&pn=RWWallet&am=${totalPayable}&tn=${encodeURIComponent(orderId)}&cu=INR`;
+    const gpayDeepLink = `intent://pay?pa=${encodeURIComponent(upiId)}&pn=RWWallet&am=${totalPayable}&tn=${encodeURIComponent(orderId)}&cu=INR#Intent;scheme=upi;package=com.google.android.apps.nbu.paisa.user;end`;
+    const phonepeDeepLink = `intent://pay?pa=${encodeURIComponent(upiId)}&pn=RWWallet&am=${totalPayable}&tn=${encodeURIComponent(orderId)}&cu=INR#Intent;scheme=upi;package=com.phonepe.app;end`;
+    const paytmDeepLink = `intent://pay?pa=${encodeURIComponent(upiId)}&pn=RWWallet&am=${totalPayable}&tn=${encodeURIComponent(orderId)}&cu=INR#Intent;scheme=upi;package=net.one97.paytm;end`;
+
+    renderModal('UPI Payment - Deposit Funds',
+        `<div class="space-y-4 text-center">
+            <div class="bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800 rounded-xl p-3 text-xs space-y-1">
+                <div class="flex justify-between">
+                    <span class="text-gray-500 dark:text-gray-400">Order ID:</span>
+                    <span class="font-mono font-bold text-gray-900 dark:text-white">${orderId}</span>
+                </div>
+                <div class="flex justify-between">
+                    <span class="text-gray-500 dark:text-gray-400">Wallet Credit:</span>
+                    <span class="font-bold text-emerald-600 dark:text-emerald-400">₹${depositAmount.toFixed(2)}</span>
+                </div>
+                <div class="flex justify-between text-blue-600 dark:text-blue-400">
+                    <span>Tax (1%):</span>
+                    <span>₹${taxAmount.toFixed(2)}</span>
+                </div>
+                <div class="pt-1 border-t border-emerald-200 dark:border-emerald-800 flex justify-between font-bold text-sm text-gray-900 dark:text-white">
+                    <span>Pay Exact Amount:</span>
+                    <span class="text-emerald-600 dark:text-emerald-400">₹${totalPayable}</span>
+                </div>
+            </div>
+
+            <!-- QR Code display -->
+            <div class="flex flex-col items-center justify-center p-3 bg-white rounded-xl shadow-inner border border-gray-200 max-w-[240px] mx-auto">
+                <img src="${escapeHtml(qrUrl)}" alt="Scan & Pay QR" class="w-48 h-48 object-contain rounded-lg">
+                <p class="text-[11px] text-gray-500 font-semibold mt-2">Scan QR with any UPI App</p>
+                <p class="text-[10px] text-red-500 mt-0.5">Expires at: ${escapeHtml(expireAt)}</p>
+            </div>
+
+            <!-- Pay via App Deep Link Buttons -->
+            <div>
+                <p class="text-xs font-bold text-gray-500 dark:text-gray-400 mb-2">Or Pay Directly Using App</p>
+                <div class="grid grid-cols-2 gap-2">
+                    <a href="${gpayDeepLink}" class="px-3 py-2 bg-slate-100 dark:bg-gray-700 hover:bg-slate-200 dark:hover:bg-gray-600 rounded-lg text-xs font-bold text-gray-800 dark:text-gray-200 flex items-center justify-center gap-1.5 transition">
+                        <span>GPay</span>
+                    </a>
+                    <a href="${phonepeDeepLink}" class="px-3 py-2 bg-purple-50 dark:bg-purple-900/30 hover:bg-purple-100 rounded-lg text-xs font-bold text-purple-700 dark:text-purple-300 flex items-center justify-center gap-1.5 transition">
+                        <span>PhonePe</span>
+                    </a>
+                    <a href="${paytmDeepLink}" class="px-3 py-2 bg-sky-50 dark:bg-sky-900/30 hover:bg-sky-100 rounded-lg text-xs font-bold text-sky-700 dark:text-sky-300 flex items-center justify-center gap-1.5 transition">
+                        <span>Paytm</span>
+                    </a>
+                    <a href="${upiDeepLink}" class="px-3 py-2 bg-emerald-50 dark:bg-emerald-900/30 hover:bg-emerald-100 rounded-lg text-xs font-bold text-emerald-700 dark:text-emerald-300 flex items-center justify-center gap-1.5 transition">
+                        <span>Other UPI</span>
+                    </a>
+                </div>
+            </div>
+
+            <div id="fampay-verify-status" class="text-xs text-center font-bold text-amber-600 dark:amber-400 flex items-center justify-center gap-2">
+                <div class="w-3 h-3 border-2 border-amber-600 border-t-transparent rounded-full animate-spin"></div>
+                <span>Waiting for payment verification...</span>
+            </div>
+        </div>`,
+        `<button id="cancel-deposit-modal-btn" class="px-4 py-2 text-sm bg-gray-200 dark:bg-gray-600 rounded-lg">Cancel</button>
+         <button id="manual-verify-deposit-btn" class="px-4 py-2 text-sm bg-emerald-600 text-white rounded-lg font-bold">✅ Verify Payment</button>`,
+        'max-w-md'
+    );
+
+    const checkVerification = async (isManual = false) => {
+        const statusEl = document.getElementById('fampay-verify-status');
+        if (isManual && statusEl) {
+            statusEl.innerHTML = `<div class="w-3 h-3 border-2 border-emerald-600 border-t-transparent rounded-full animate-spin"></div> Checking payment status...`;
+        }
+
+        try {
+            const verifyUrl = `https://fampay.anujbots.xyz/verify.php?order_id=${encodeURIComponent(orderId)}&api_key=${encodeURIComponent(apiKey)}`;
+            const vRes = await fetch(verifyUrl).then(r => r.json());
+
+            if (vRes && vRes.status === 'success') {
+                if (famPayDepositPollTimer) {
+                    clearInterval(famPayDepositPollTimer);
+                    famPayDepositPollTimer = null;
+                }
+                const txnId = vRes.data?.transaction_id || `TXN_${orderId}`;
+                const utr = vRes.data?.utr || 'N/A';
+                const senderName = vRes.data?.sender_name || 'UPI User';
+
+                await processSuccessfulDeposit({
+                    orderId,
+                    amount: depositAmount,
+                    txnId,
+                    utr,
+                    senderName
+                });
+            } else if (isManual && statusEl) {
+                statusEl.innerHTML = `<span class="text-rose-500">❌ Payment Not Received Yet. Please scan & pay first.</span>`;
+            }
+        } catch (e) {
+            console.warn('FamPay Verify Error:', e);
+            if (isManual && statusEl) {
+                statusEl.innerHTML = `<span class="text-rose-500">❌ Network check failed. Try again.</span>`;
+            }
+        }
+    };
+
+    famPayDepositPollTimer = setInterval(() => checkVerification(false), 4000);
+
+    document.getElementById('manual-verify-deposit-btn').onclick = () => checkVerification(true);
+    document.getElementById('cancel-deposit-modal-btn').onclick = () => {
+        if (famPayDepositPollTimer) {
+            clearInterval(famPayDepositPollTimer);
+            famPayDepositPollTimer = null;
+        }
+        window.closeModal();
+    };
+};
+
+const processSuccessfulDeposit = async ({ orderId, amount, txnId, utr, senderName }) => {
+    if (processedDepositOrders.has(orderId) || processedDepositOrders.has(txnId)) {
+        showNotification('Payment already credited to your wallet.', true);
+        window.closeModal();
+        return;
+    }
+    processedDepositOrders.add(orderId);
+    processedDepositOrders.add(txnId);
+
+    try {
+        showLoading(true);
+        const userRef = doc(db, `artifacts/${appId}/public/data/users`, currentUser.uid);
+
+        await runTransaction(db, async (tx) => {
+            const userDoc = await tx.get(userRef);
+            if (!userDoc.exists()) throw new Error('User record not found.');
+
+            const currentBal = Number(userDoc.data().balance || 0);
+            const newBal = currentBal + Number(amount);
+
+            tx.update(userRef, { balance: newBal });
+
+            const txRef = doc(collection(userRef, 'transactions'));
+            tx.set(txRef, {
+                type: 'deposit',
+                amount: Number(amount),
+                balanceBefore: currentBal,
+                balanceAfter: newBal,
+                comment: `Deposit via UPI (UTR: ${utr})`,
+                orderId,
+                transactionId: txnId,
+                utr,
+                senderName,
+                status: 'completed',
+                timestamp: serverTimestamp()
+            });
+        });
+
+        showLoading(false);
+        window.closeModal();
+        showNotification(`✅ Payment Successful! ₹${amount} credited to your wallet.`, false, true);
+
+        if (typeof window.notifyWalletBalanceChange === 'function') {
+            window.notifyWalletBalanceChange(currentUser.uid, 'credit', amount, `UPI Deposit (UTR: ${utr})`);
+        }
+        if (typeof currentUserData === 'object' && currentUserData) {
+            currentUserData.balance = (currentUserData.balance || 0) + Number(amount);
+            const userBalEl = document.getElementById('user-balance');
+            if (userBalEl) userBalEl.textContent = formatCurrency(currentUserData.balance);
+        }
+        hidePage();
+    } catch (e) {
+        showLoading(false);
+        console.error('Process Deposit Error:', e);
+        showNotification(e.message || 'Failed to update wallet balance.', true);
+    }
+};
+
+window.showDepositMoneyPage = showDepositMoneyPage;
 window.showTransactionDetails = showTransactionDetails;
 
 
