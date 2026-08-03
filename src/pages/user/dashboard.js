@@ -7254,6 +7254,17 @@ const showDepositMoneyPage = () => {
                 <span>Generate UPI Payment QR</span>
                 <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"/></svg>
             </button>
+
+            <!-- Recent Deposits / Verify Section -->
+            <div class="pt-4 border-t border-gray-200 dark:border-gray-700 space-y-3">
+                <div class="flex items-center justify-between">
+                    <h4 class="text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400">Recent UPI Deposits</h4>
+                    <button id="refresh-user-deposits-btn" class="text-xs text-emerald-600 dark:text-emerald-400 font-bold hover:underline">🔄 Refresh</button>
+                </div>
+                <div id="user-recent-deposits-list" class="space-y-2 text-xs">
+                    <p class="text-center text-gray-400 py-3">Loading recent deposits...</p>
+                </div>
+            </div>
         </div>
         ${getPageFooter()}`;
     showPage(content);
@@ -7276,7 +7287,146 @@ const showDepositMoneyPage = () => {
     if (proceedBtn) {
         proceedBtn.onclick = handleGenerateDepositQR;
     }
+
+    document.getElementById('refresh-user-deposits-btn')?.addEventListener('click', loadUserRecentDepositsList);
+    loadUserRecentDepositsList();
 };
+
+const loadUserRecentDepositsList = async () => {
+    const listEl = document.getElementById('user-recent-deposits-list');
+    if (!listEl || !currentUser?.uid) return;
+
+    try {
+        const depositsRef = collection(db, `artifacts/${appId}/public/data/deposits`);
+        const q = query(depositsRef, where("userId", "==", currentUser.uid), orderBy("createdAt", "desc"), firestoreLimit(15));
+        const snap = await getDocs(q).catch(() => null);
+
+        if (!snap || snap.empty) {
+            listEl.innerHTML = `<p class="text-center text-gray-400 py-3 font-medium">No recent UPI deposits found.</p>`;
+            return;
+        }
+
+        const items = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+
+        listEl.innerHTML = items.map(item => {
+            const isSuccess = item.status === 'completed';
+            const isPendingAdmin = item.status === 'pending_admin_approval';
+            const statusBg = isSuccess
+                ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-200'
+                : isPendingAdmin
+                    ? 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-200'
+                    : 'bg-rose-100 text-rose-800 dark:bg-rose-900/40 dark:text-rose-200';
+
+            const statusText = isSuccess
+                ? '✅ Completed'
+                : isPendingAdmin
+                    ? '⏳ Admin Verification'
+                    : '❌ Failed / Pending';
+
+            const dateStr = formatDate(item.createdAt || item.timestamp);
+
+            return `
+                <div class="p-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-700/50 space-y-2">
+                    <div class="flex justify-between items-start">
+                        <div>
+                            <div class="flex items-center gap-2">
+                                <span class="font-bold text-gray-900 dark:text-white text-sm">₹${(item.amount || 0).toFixed(2)}</span>
+                                <span class="px-2 py-0.5 rounded text-[10px] font-bold ${statusBg}">${statusText}</span>
+                            </div>
+                            <p class="text-[10px] text-gray-500 font-mono mt-0.5">Order ID: ${item.orderId || item.id}</p>
+                            ${item.utr ? `<p class="text-[10px] text-gray-500 font-mono">UTR: ${escapeHtml(item.utr)}</p>` : ''}
+                            <p class="text-[10px] text-gray-400 mt-0.5">${dateStr}</p>
+                        </div>
+                        <div class="text-right">
+                            <span class="text-xs font-bold text-emerald-600 dark:text-emerald-400">+₹${(item.amount || 0).toFixed(2)}</span>
+                            <p class="text-[10px] text-gray-400">+Tax ₹${(item.taxAmount || 0).toFixed(2)}</p>
+                        </div>
+                    </div>
+
+                    ${!isSuccess ? `
+                        <div class="pt-2 border-t border-gray-200 dark:border-gray-600 flex gap-2 justify-end">
+                            <button onclick="handleReverifyDeposit('${item.orderId || item.id}', ${item.amount || 10}, ${item.taxAmount || 0})" class="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-lg shadow-sm flex items-center gap-1 transition">
+                                <span>🔄 Verify Again</span>
+                            </button>
+                        </div>
+                    ` : ''}
+                </div>`;
+        }).join('');
+    } catch (e) {
+        console.warn('Load user recent deposits error:', e);
+        listEl.innerHTML = `<p class="text-center text-gray-400 py-3 font-medium">Failed to load recent deposits.</p>`;
+    }
+};
+
+const handleReverifyDeposit = async (orderId, amount, taxAmount) => {
+    if (!orderId) return;
+
+    showLoading();
+    try {
+        const apiKey = appConfigCache?.fampay_api_key || 'FAM_fbc1b443110a37b5f2f1de5bef365c90defb23c1a38d19c0';
+        const verifyUrl = `https://fampay.anujbots.xyz/verify.php?order_id=${encodeURIComponent(orderId)}&api_key=${encodeURIComponent(apiKey)}`;
+        const vRes = await fetch(verifyUrl).then(r => r.json()).catch(() => null);
+
+        if (vRes && (vRes.status === 'success' || vRes.success === true)) {
+            const txnId = vRes.data?.transaction_id || `TXN_${orderId}`;
+            const utr = vRes.data?.utr || 'N/A';
+            const senderName = vRes.data?.sender_name || 'UPI User';
+
+            await processSuccessfulDeposit({
+                orderId,
+                amount: Number(amount),
+                taxAmount: Number(taxAmount),
+                txnId,
+                utr,
+                senderName
+            });
+            loadUserRecentDepositsList();
+        } else {
+            hideLoading();
+            // Ask for UTR input in modal
+            renderModal('Manual Payment Verification',
+                `<div class="space-y-3 text-center">
+                    <p class="text-xs text-gray-600 dark:text-gray-300">Payment not detected automatically yet. If you paid via UPI, enter your 12-digit UTR number below:</p>
+                    <input type="text" id="reverify-utr-input" placeholder="Enter 12-digit UTR (e.g. 4215...)" class="w-full px-3 py-2 bg-gray-100 dark:bg-gray-700 rounded-lg text-xs font-mono border border-gray-300 dark:border-gray-600 focus:ring-2 focus:ring-emerald-500">
+                </div>`,
+                `<button onclick="window.closeModal()" class="px-3.5 py-1.5 text-xs bg-gray-200 dark:bg-gray-600 rounded-lg">Cancel</button>
+                 <button id="submit-reverify-utr-btn" class="px-3.5 py-1.5 text-xs bg-emerald-600 text-white rounded-lg font-bold">Submit UTR</button>`,
+                'max-w-sm'
+            );
+
+            document.getElementById('submit-reverify-utr-btn').onclick = async () => {
+                const utrVal = (document.getElementById('reverify-utr-input')?.value || '').trim();
+                if (!utrVal || utrVal.length < 6) {
+                    return showNotification('Please enter a valid UTR number (min 6 chars).', true);
+                }
+                showLoading();
+                try {
+                    const depositRef = doc(db, `artifacts/${appId}/public/data/deposits`, orderId);
+                    await setDoc(depositRef, {
+                        utr: utrVal,
+                        status: 'pending_admin_approval',
+                        updatedAt: serverTimestamp()
+                    }, { merge: true });
+
+                    hideLoading();
+                    window.closeModal();
+                    showNotification('UTR submitted! Admin will verify and credit your wallet shortly.', false, true);
+                    loadUserRecentDepositsList();
+                } catch (err) {
+                    hideLoading();
+                    showNotification('UTR saved! Admin will verify and credit your wallet.', false, true);
+                    window.closeModal();
+                }
+            };
+        }
+    } catch (e) {
+        hideLoading();
+        console.warn('Reverify error:', e);
+        showNotification('Verification check failed. Please try submitting UTR.', true);
+    }
+};
+
+window.handleReverifyDeposit = handleReverifyDeposit;
 
 const updateDepositSummary = () => {
     const amountInput = document.getElementById('deposit-amount-input');
