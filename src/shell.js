@@ -248,6 +248,7 @@ root.outerHTML = `
                                 <div class="grid grid-cols-3 gap-2 sm:gap-3">
                                 <button id="deposit-money-btn"
                                     class="relative group w-full min-h-28 flex flex-col items-center justify-between gap-2 bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-200 font-semibold p-3 rounded-xl hover:bg-emerald-100 dark:hover:bg-emerald-900/30 transition border border-emerald-200 dark:border-emerald-800 text-center">
+                                    <span class="absolute right-1.5 top-1.5 rounded-full bg-red-600 px-1.5 py-0.5 text-[9px] font-black text-white shadow-sm uppercase tracking-wider">NEW</span>
                                     <span class="w-12 h-12 rounded-xl bg-emerald-500 flex items-center justify-center shadow-sm p-2">
                                         <img src="https://cdn-icons-png.flaticon.com/512/12449/12449036.png" alt="Add Money" class="w-full h-full object-contain">
                                     </span>

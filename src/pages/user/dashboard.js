@@ -7237,7 +7237,7 @@ const updateDepositSummary = () => {
             <span class="font-bold text-gray-900 dark:text-white">₹${depositAmount.toFixed(2)}</span>
         </div>
         <div class="flex justify-between text-blue-600 dark:text-blue-400">
-            <span>Tax Charge (₹5 / ₹100):</span>
+            <span>Tax Charge:</span>
             <span class="font-bold">+₹${taxAmount.toFixed(2)}</span>
         </div>
         <div class="pt-2 border-t border-gray-200 dark:border-gray-700 flex justify-between font-bold text-sm text-emerald-600 dark:text-emerald-400">
@@ -7374,7 +7374,7 @@ const showFamPayPaymentModal = ({ orderId, qrUrl, expireAt, depositAmount, taxAm
                     <span class="font-bold text-emerald-600 dark:text-emerald-400">₹${depositAmount.toFixed(2)}</span>
                 </div>
                 <div class="flex justify-between text-blue-600 dark:text-blue-400">
-                    <span>Tax (₹5 / ₹100):</span>
+                    <span>Tax Charge:</span>
                     <span>+₹${taxAmount.toFixed(2)}</span>
                 </div>
                 <div class="pt-1 border-t border-emerald-200 dark:border-emerald-800 flex justify-between font-bold text-sm text-gray-900 dark:text-white">
