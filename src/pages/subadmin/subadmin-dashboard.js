@@ -1718,10 +1718,90 @@ const renderAdminDepositHistoryList = () => {
                         <p class="text-[11px] text-gray-400">${dateDisplay}</p>
                     </div>
                 </div>
+                ${!isSuccess ? `
+                    <div class="mt-3 pt-2.5 border-t border-gray-200 dark:border-gray-700 flex justify-end">
+                        <button onclick="handleAdminManualApproveDeposit('${d.id || d.orderId}', ${d.amount || 0}, ${d.taxAmount || 0}, '${d.userId}', '${escapeHtml(d.userName || 'User')}')" class="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow-sm transition flex items-center gap-1.5">
+                            <span>✅ Approve & Credit ₹${(d.amount || 0).toFixed(2)}</span>
+                        </button>
+                    </div>
+                ` : ''}
             </div>`;
     }).join('');
 };
 
+const handleAdminManualApproveDeposit = async (orderId, amount, taxAmount, userId, userName) => {
+    if (!orderId || !userId) return showNotification('Invalid deposit record.', true);
+
+    renderModal('Manual Deposit Approval',
+        `<div class="space-y-4 text-center">
+            <div class="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-xl p-3 text-xs space-y-1">
+                <p class="font-bold text-gray-900 dark:text-white text-sm">Credit ₹${amount} to ${escapeHtml(userName)}?</p>
+                <p class="text-gray-500">Order ID: <span class="font-mono font-bold">${orderId}</span></p>
+                <p class="text-blue-600 font-semibold">Wallet Credit: ₹${amount} | Tax Paid: ₹${taxAmount}</p>
+            </div>
+            <div>
+                <label class="block text-xs font-semibold text-gray-400 uppercase mb-1 text-left">Enter UTR / Transaction ID (Optional)</label>
+                <input type="text" id="admin-manual-utr-input" placeholder="e.g. 421598371029" class="w-full px-4 py-2.5 bg-gray-100 dark:bg-gray-700 rounded-xl text-sm font-mono border border-gray-200 dark:border-gray-600">
+            </div>
+        </div>`,
+        `<button onclick="window.closeModal()" class="px-4 py-2 text-sm bg-gray-200 dark:bg-gray-600 rounded-lg">Cancel</button>
+         <button id="confirm-admin-credit-btn" class="px-4 py-2 text-sm bg-emerald-600 text-white rounded-lg font-bold">Confirm & Credit ₹${amount}</button>`,
+        'max-w-md'
+    );
+
+    document.getElementById('confirm-admin-credit-btn').onclick = async () => {
+        const utr = (document.getElementById('admin-manual-utr-input')?.value || '').trim() || 'ADMIN_MANUAL_CREDIT';
+        showLoading();
+        try {
+            const userRef = doc(db, `artifacts/${appId}/public/data/users`, userId);
+            await runTransaction(db, async (tx) => {
+                const uSnap = await tx.get(userRef);
+                if (!uSnap.exists()) throw new Error('User record not found.');
+
+                const curBal = Number(uSnap.data().balance || 0);
+                const newBal = curBal + Number(amount);
+
+                tx.update(userRef, { balance: newBal });
+
+                const txRef = doc(userRef, 'transactions', `dep_${orderId}`);
+                tx.set(txRef, {
+                    type: 'deposit',
+                    amount: Number(amount),
+                    taxAmount: Number(taxAmount || 0),
+                    totalPayable: Number(amount) + Number(taxAmount || 0),
+                    balanceBefore: curBal,
+                    balanceAfter: newBal,
+                    comment: `Deposit Approved by Admin (UTR: ${utr})`,
+                    orderId,
+                    utr,
+                    status: 'completed',
+                    timestamp: serverTimestamp()
+                }, { merge: true });
+            });
+
+            const depositRef = doc(db, `artifacts/${appId}/public/data/deposits`, orderId);
+            await setDoc(depositRef, {
+                status: 'completed',
+                utr,
+                approvedByAdmin: true,
+                approvedBy: currentUser?.uid || 'ADMIN',
+                completedAt: serverTimestamp()
+            }, { merge: true }).catch(() => {});
+
+            hideLoading();
+            window.closeModal();
+            showNotification(`✅ Successfully credited ₹${amount} to ${userName}'s wallet!`, false, true);
+
+            fetchAdminDepositHistory();
+        } catch (err) {
+            hideLoading();
+            console.error('Admin manual credit error:', err);
+            showNotification(err.message || 'Failed to credit user wallet.', true);
+        }
+    };
+};
+
+window.handleAdminManualApproveDeposit = handleAdminManualApproveDeposit;
 window.showAdminDepositHistoryPage = showAdminDepositHistoryPage;
 window.showAdminLiveListsPage = showAdminLiveListsPage;
 window.loadAdminLiveLists = loadAdminLiveLists;
