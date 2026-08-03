@@ -3407,27 +3407,27 @@ ${t}`,n=`
                 </div>
             </div>
         </div>
-        ${pe()}`;ue(e);const t=document.getElementById("deposit-amount-input");document.querySelectorAll(".deposit-preset-chip").forEach(r=>{r.onclick=()=>{t&&(t.value=r.dataset.amount,$n())}}),t&&(t.oninput=$n),$n();const a=document.getElementById("proceed-deposit-btn");a&&(a.onclick=c0),(n=document.getElementById("refresh-user-deposits-btn"))==null||n.addEventListener("click",Sa),Sa()},Sa=async()=>{const e=document.getElementById("user-recent-deposits-list");if(!(!e||!(currentUser!=null&&currentUser.uid)))try{const t=collection(db,`artifacts/${appId}/public/data/deposits`),a=query(t,where("userId","==",currentUser.uid),orderBy("createdAt","desc"),firestoreLimit(15)),n=await getDocs(a).catch(()=>null);if(!n||n.empty){e.innerHTML='<p class="text-center text-gray-400 py-3 font-medium">No recent UPI deposits found.</p>';return}const r=n.docs.map(s=>({id:s.id,...s.data()}));e.innerHTML=r.map(s=>{const o=s.status==="completed",i=s.status==="pending_admin_approval",d=o?"bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-200":i?"bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-200":"bg-rose-100 text-rose-800 dark:bg-rose-900/40 dark:text-rose-200",l=o?"✅ Completed":i?"⏳ Admin Verification":"❌ Failed / Pending",c=formatDate(s.createdAt||s.timestamp);return`
+        ${pe()}`;ue(e);const t=document.getElementById("deposit-amount-input");document.querySelectorAll(".deposit-preset-chip").forEach(r=>{r.onclick=()=>{t&&(t.value=r.dataset.amount,$n())}}),t&&(t.oninput=$n),$n();const a=document.getElementById("proceed-deposit-btn");a&&(a.onclick=c0),(n=document.getElementById("refresh-user-deposits-btn"))==null||n.addEventListener("click",Sa),Sa()},Sa=async()=>{const e=document.getElementById("user-recent-deposits-list");if(!(!e||!(currentUser!=null&&currentUser.uid)))try{const t=collection(db,`artifacts/${appId}/public/data/deposits`),a=await getDocs(query(t,where("userId","==",currentUser.uid),firestoreLimit(50))).catch(r=>(console.warn("Query by userId error:",r),null));let n=a&&!a.empty?a.docs.map(r=>({id:r.id,...r.data()})):[];if(n.length===0&&currentUser.email){const r=await getDocs(query(t,where("userEmail","==",currentUser.email),firestoreLimit(50))).catch(()=>null);r&&!r.empty&&(n=r.docs.map(s=>({id:s.id,...s.data()})))}if(n.sort((r,s)=>{var d,l;const o=(d=r.createdAt)!=null&&d.toMillis?r.createdAt.toMillis():new Date(r.createdAt||r.timestamp||0).getTime()||0;return((l=s.createdAt)!=null&&l.toMillis?s.createdAt.toMillis():new Date(s.createdAt||s.timestamp||0).getTime()||0)-o}),n.length===0){e.innerHTML='<p class="text-center text-gray-400 py-3 font-medium">No recent UPI deposits found.</p>';return}e.innerHTML=n.slice(0,15).map(r=>{const s=r.status==="completed",o=r.status==="pending_admin_approval",i=s?"bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-200":o?"bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-200":"bg-rose-100 text-rose-800 dark:bg-rose-900/40 dark:text-rose-200",d=s?"✅ Completed":o?"⏳ Admin Verification":"❌ Failed / Pending",l=formatDate(r.createdAt||r.timestamp);return`
                 <div class="p-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-700/50 space-y-2">
                     <div class="flex justify-between items-start">
                         <div>
                             <div class="flex items-center gap-2">
-                                <span class="font-bold text-gray-900 dark:text-white text-sm">₹${(s.amount||0).toFixed(2)}</span>
-                                <span class="px-2 py-0.5 rounded text-[10px] font-bold ${d}">${l}</span>
+                                <span class="font-bold text-gray-900 dark:text-white text-sm">₹${(r.amount||0).toFixed(2)}</span>
+                                <span class="px-2 py-0.5 rounded text-[10px] font-bold ${i}">${d}</span>
                             </div>
-                            <p class="text-[10px] text-gray-500 font-mono mt-0.5">Order ID: ${s.orderId||s.id}</p>
-                            ${s.utr?`<p class="text-[10px] text-gray-500 font-mono">UTR: ${escapeHtml(s.utr)}</p>`:""}
-                            <p class="text-[10px] text-gray-400 mt-0.5">${c}</p>
+                            <p class="text-[10px] text-gray-500 font-mono mt-0.5">Order ID: ${r.orderId||r.id}</p>
+                            ${r.utr?`<p class="text-[10px] text-gray-500 font-mono">UTR: ${escapeHtml(r.utr)}</p>`:""}
+                            <p class="text-[10px] text-gray-400 mt-0.5">${l}</p>
                         </div>
                         <div class="text-right">
-                            <span class="text-xs font-bold text-emerald-600 dark:text-emerald-400">+₹${(s.amount||0).toFixed(2)}</span>
-                            <p class="text-[10px] text-gray-400">+Tax ₹${(s.taxAmount||0).toFixed(2)}</p>
+                            <span class="text-xs font-bold text-emerald-600 dark:text-emerald-400">+₹${(r.amount||0).toFixed(2)}</span>
+                            <p class="text-[10px] text-gray-400">+Tax ₹${(r.taxAmount||0).toFixed(2)}</p>
                         </div>
                     </div>
 
-                    ${o?"":`
+                    ${s?"":`
                         <div class="pt-2 border-t border-gray-200 dark:border-gray-600 flex gap-2 justify-end">
-                            <button onclick="handleReverifyDeposit('${s.orderId||s.id}', ${s.amount||10}, ${s.taxAmount||0})" class="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-lg shadow-sm flex items-center gap-1 transition">
+                            <button onclick="handleReverifyDeposit('${r.orderId||r.id}', ${r.amount||10}, ${r.taxAmount||0})" class="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-lg shadow-sm flex items-center gap-1 transition">
                                 <span>🔄 Verify Again</span>
                             </button>
                         </div>

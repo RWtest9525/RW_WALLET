@@ -7298,17 +7298,36 @@ const loadUserRecentDepositsList = async () => {
 
     try {
         const depositsRef = collection(db, `artifacts/${appId}/public/data/deposits`);
-        const q = query(depositsRef, where("userId", "==", currentUser.uid), orderBy("createdAt", "desc"), firestoreLimit(15));
-        const snap = await getDocs(q).catch(() => null);
+        
+        // Query by userId without ordering to avoid Firestore composite index missing error
+        const snap = await getDocs(query(depositsRef, where("userId", "==", currentUser.uid), firestoreLimit(50))).catch(e => {
+            console.warn('Query by userId error:', e);
+            return null;
+        });
 
-        if (!snap || snap.empty) {
+        let items = snap && !snap.empty ? snap.docs.map(d => ({ id: d.id, ...d.data() })) : [];
+
+        // Fallback: search by userEmail if items is empty
+        if (items.length === 0 && currentUser.email) {
+            const snapEmail = await getDocs(query(depositsRef, where("userEmail", "==", currentUser.email), firestoreLimit(50))).catch(() => null);
+            if (snapEmail && !snapEmail.empty) {
+                items = snapEmail.docs.map(d => ({ id: d.id, ...d.data() }));
+            }
+        }
+
+        // Client-side sort by createdAt / timestamp descending
+        items.sort((a, b) => {
+            const timeA = a.createdAt?.toMillis ? a.createdAt.toMillis() : (new Date(a.createdAt || a.timestamp || 0).getTime() || 0);
+            const timeB = b.createdAt?.toMillis ? b.createdAt.toMillis() : (new Date(b.createdAt || b.timestamp || 0).getTime() || 0);
+            return timeB - timeA;
+        });
+
+        if (items.length === 0) {
             listEl.innerHTML = `<p class="text-center text-gray-400 py-3 font-medium">No recent UPI deposits found.</p>`;
             return;
         }
 
-        const items = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-
-        listEl.innerHTML = items.map(item => {
+        listEl.innerHTML = items.slice(0, 15).map(item => {
             const isSuccess = item.status === 'completed';
             const isPendingAdmin = item.status === 'pending_admin_approval';
             const statusBg = isSuccess
