@@ -7220,7 +7220,7 @@ const updateDepositSummary = () => {
     if (!amountInput || !summaryBox) return;
 
     const depositAmount = parseFloat(amountInput.value) || 0;
-    const taxAmount = Math.ceil(depositAmount * 0.01 * 100) / 100;
+    const taxAmount = Math.ceil(depositAmount / 100) * 5;
     const totalPayable = (depositAmount + taxAmount).toFixed(2);
 
     if (depositAmount < 10) {
@@ -7237,13 +7237,53 @@ const updateDepositSummary = () => {
             <span class="font-bold text-gray-900 dark:text-white">₹${depositAmount.toFixed(2)}</span>
         </div>
         <div class="flex justify-between text-blue-600 dark:text-blue-400">
-            <span>1% Tax Charge:</span>
+            <span>Tax Charge (₹5 / ₹100):</span>
             <span class="font-bold">+₹${taxAmount.toFixed(2)}</span>
         </div>
         <div class="pt-2 border-t border-gray-200 dark:border-gray-700 flex justify-between font-bold text-sm text-emerald-600 dark:text-emerald-400">
             <span>Total Payable via UPI:</span>
             <span>₹${totalPayable}</span>
         </div>`;
+};
+
+const markDepositFailed = async ({ orderId, depositAmount, taxAmount, reason = 'Payment Cancelled or Failed' }) => {
+    if (!orderId || processedDepositOrders.has(`failed_${orderId}`)) return;
+    processedDepositOrders.add(`failed_${orderId}`);
+
+    try {
+        const depositRef = doc(db, `artifacts/${appId}/public/data/deposits`, orderId);
+        await setDoc(depositRef, {
+            id: orderId,
+            orderId,
+            userId: currentUser?.uid || 'N/A',
+            userName: currentUserData?.name || 'N/A',
+            userEmail: currentUserData?.email || 'N/A',
+            userMobile: currentUserData?.mobile || 'N/A',
+            amount: Number(depositAmount),
+            taxAmount: Number(taxAmount),
+            totalPayable: Number(depositAmount) + Number(taxAmount),
+            status: 'failed',
+            failedReason: reason,
+            updatedAt: serverTimestamp()
+        }, { merge: true }).catch(() => {});
+
+        if (currentUser) {
+            const userRef = doc(db, `artifacts/${appId}/public/data/users`, currentUser.uid);
+            const txRef = doc(userRef, 'transactions', `dep_${orderId}`);
+            await setDoc(txRef, {
+                type: 'deposit',
+                amount: Number(depositAmount),
+                taxAmount: Number(taxAmount),
+                totalPayable: Number(depositAmount) + Number(taxAmount),
+                comment: `UPI Deposit - Failed (${reason})`,
+                orderId,
+                status: 'failed',
+                timestamp: serverTimestamp()
+            }, { merge: true }).catch(() => {});
+        }
+    } catch (e) {
+        console.warn('Mark deposit failed error:', e);
+    }
 };
 
 const handleGenerateDepositQR = async () => {
@@ -7254,7 +7294,7 @@ const handleGenerateDepositQR = async () => {
         return showNotification('Minimum deposit amount is ₹10.', true);
     }
 
-    const taxAmount = Math.ceil(depositAmount * 0.01 * 100) / 100;
+    const taxAmount = Math.ceil(depositAmount / 100) * 5;
     const totalPayable = (depositAmount + taxAmount).toFixed(2);
 
     const upiId = appConfigCache?.fampay_upi || 'anujffseller@fam';
@@ -7270,6 +7310,26 @@ const handleGenerateDepositQR = async () => {
             const orderId = res.data.order_id;
             const qrUrl = res.data.qr_url || `https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${encodeURIComponent(`upi://pay?pa=${upiId}&pn=RWWallet&am=${totalPayable}&tn=${orderId}&cu=INR`)}`;
             const expireAt = res.data.expires_at_ist || '10 minutes';
+
+            // Record initiated deposit in Firestore
+            try {
+                const depositRef = doc(db, `artifacts/${appId}/public/data/deposits`, orderId);
+                await setDoc(depositRef, {
+                    id: orderId,
+                    orderId,
+                    userId: currentUser?.uid || 'N/A',
+                    userName: currentUserData?.name || 'N/A',
+                    userEmail: currentUserData?.email || 'N/A',
+                    userMobile: currentUserData?.mobile || 'N/A',
+                    amount: Number(depositAmount),
+                    taxAmount: Number(taxAmount),
+                    totalPayable: parseFloat(totalPayable),
+                    status: 'pending',
+                    createdAt: serverTimestamp()
+                }, { merge: true });
+            } catch (e) {
+                console.warn('Initiated deposit record error:', e);
+            }
 
             showFamPayPaymentModal({
                 orderId,
@@ -7314,8 +7374,8 @@ const showFamPayPaymentModal = ({ orderId, qrUrl, expireAt, depositAmount, taxAm
                     <span class="font-bold text-emerald-600 dark:text-emerald-400">₹${depositAmount.toFixed(2)}</span>
                 </div>
                 <div class="flex justify-between text-blue-600 dark:text-blue-400">
-                    <span>Tax (1%):</span>
-                    <span>₹${taxAmount.toFixed(2)}</span>
+                    <span>Tax (₹5 / ₹100):</span>
+                    <span>+₹${taxAmount.toFixed(2)}</span>
                 </div>
                 <div class="pt-1 border-t border-emerald-200 dark:border-emerald-800 flex justify-between font-bold text-sm text-gray-900 dark:text-white">
                     <span>Pay Exact Amount:</span>
@@ -7359,7 +7419,11 @@ const showFamPayPaymentModal = ({ orderId, qrUrl, expireAt, depositAmount, taxAm
         'max-w-md'
     );
 
+    let pollAttempts = 0;
+    const maxPollAttempts = 45; // ~3 minutes polling
+
     const checkVerification = async (isManual = false) => {
+        pollAttempts++;
         const statusEl = document.getElementById('fampay-verify-status');
         if (isManual && statusEl) {
             statusEl.innerHTML = `<div class="w-3 h-3 border-2 border-emerald-600 border-t-transparent rounded-full animate-spin"></div> Checking payment status...`;
@@ -7381,12 +7445,20 @@ const showFamPayPaymentModal = ({ orderId, qrUrl, expireAt, depositAmount, taxAm
                 await processSuccessfulDeposit({
                     orderId,
                     amount: depositAmount,
+                    taxAmount,
                     txnId,
                     utr,
                     senderName
                 });
-            } else if (isManual && statusEl) {
-                statusEl.innerHTML = `<span class="text-rose-500">❌ Payment Not Received Yet. Please scan & pay first.</span>`;
+            } else if (isManual) {
+                if (statusEl) statusEl.innerHTML = `<span class="text-rose-500">❌ Payment Not Received Yet. Please scan & pay first.</span>`;
+            } else if (pollAttempts >= maxPollAttempts) {
+                if (famPayDepositPollTimer) {
+                    clearInterval(famPayDepositPollTimer);
+                    famPayDepositPollTimer = null;
+                }
+                markDepositFailed({ orderId, depositAmount, taxAmount, reason: 'Payment Verification Timed Out' });
+                if (statusEl) statusEl.innerHTML = `<span class="text-rose-500">❌ Payment session timed out. Recorded as failed.</span>`;
             }
         } catch (e) {
             console.warn('FamPay Verify Error:', e);
@@ -7404,11 +7476,12 @@ const showFamPayPaymentModal = ({ orderId, qrUrl, expireAt, depositAmount, taxAm
             clearInterval(famPayDepositPollTimer);
             famPayDepositPollTimer = null;
         }
+        markDepositFailed({ orderId, depositAmount, taxAmount, reason: 'User Cancelled Modal' });
         window.closeModal();
     };
 };
 
-const processSuccessfulDeposit = async ({ orderId, amount, txnId, utr, senderName }) => {
+const processSuccessfulDeposit = async ({ orderId, amount, taxAmount, txnId, utr, senderName }) => {
     if (processedDepositOrders.has(orderId) || processedDepositOrders.has(txnId)) {
         showNotification('Payment already credited to your wallet.', true);
         window.closeModal();
@@ -7430,10 +7503,12 @@ const processSuccessfulDeposit = async ({ orderId, amount, txnId, utr, senderNam
 
             tx.update(userRef, { balance: newBal });
 
-            const txRef = doc(collection(userRef, 'transactions'));
+            const txRef = doc(userRef, 'transactions', `dep_${orderId}`);
             tx.set(txRef, {
                 type: 'deposit',
                 amount: Number(amount),
+                taxAmount: Number(taxAmount || 0),
+                totalPayable: Number(amount) + Number(taxAmount || 0),
                 balanceBefore: currentBal,
                 balanceAfter: newBal,
                 comment: `Deposit via UPI (UTR: ${utr})`,
@@ -7445,6 +7520,29 @@ const processSuccessfulDeposit = async ({ orderId, amount, txnId, utr, senderNam
                 timestamp: serverTimestamp()
             });
         });
+
+        // Also update global deposit record for Admin view
+        try {
+            const depositRef = doc(db, `artifacts/${appId}/public/data/deposits`, orderId);
+            await setDoc(depositRef, {
+                id: orderId,
+                orderId,
+                userId: currentUser?.uid || 'N/A',
+                userName: currentUserData?.name || 'N/A',
+                userEmail: currentUserData?.email || 'N/A',
+                userMobile: currentUserData?.mobile || 'N/A',
+                amount: Number(amount),
+                taxAmount: Number(taxAmount || 0),
+                totalPayable: Number(amount) + Number(taxAmount || 0),
+                transactionId: txnId,
+                utr,
+                senderName,
+                status: 'completed',
+                completedAt: serverTimestamp()
+            }, { merge: true });
+        } catch (e) {
+            console.warn('Global deposit record update error:', e);
+        }
 
         showLoading(false);
         window.closeModal();

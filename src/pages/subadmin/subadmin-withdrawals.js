@@ -263,9 +263,18 @@ const renderLocalWithdrawalHistoryList = () => {
 
         let requestDate = 'N/A';
         let requestTime = 'N/A';
-        if (w.requestedAt) {
-            requestDate = formatDate(w.requestedAt).split(' ')[0];
-            requestTime = getTimeFromTimestamp(w.requestedAt);
+        const reqTs = w.requestedAt || w.requested_at || w.createdAt || w.timestamp;
+        if (reqTs) {
+            requestDate = formatDate(reqTs).split(' ')[0];
+            requestTime = getTimeFromTimestamp(reqTs);
+        }
+
+        let proceedDate = '';
+        let proceedTime = '';
+        const procTs = w.processedAt || w.completedAt || w.updatedAt || w.processed_at;
+        if (procTs && (w.status === 'completed' || w.status === 'rejected')) {
+            proceedDate = formatDate(procTs).split(' ')[0];
+            proceedTime = getTimeFromTimestamp(procTs);
         }
 
         const escapedDetail = escapeHtml(payoutDetails);
@@ -301,8 +310,11 @@ const renderLocalWithdrawalHistoryList = () => {
                             <span class="rounded-lg bg-emerald-50 dark:bg-emerald-900/30 border border-emerald-200 dark:border-emerald-800 px-2.5 py-1 text-sm font-black text-emerald-700 dark:text-emerald-200 leading-none">${formatCurrencyAbs(w.amount)}</span>
                         </div>
                     </div>
-                    <div class="flex justify-between items-center text-[10px] font-semibold text-gray-400 mt-2">
-                        <span>Requested: ${requestDate} ${requestTime}</span>
+                    <div class="flex flex-col sm:flex-row justify-between sm:items-center text-[10px] font-semibold text-gray-400 mt-2 gap-1">
+                        <div class="space-x-1">
+                            <span>Requested: ${requestDate} ${requestTime}</span>
+                            ${proceedDate ? `<span class="text-blue-600 dark:text-blue-400 font-bold">| Proceeded: ${proceedDate} ${proceedTime}</span>` : ''}
+                        </div>
                         ${w.adminTransactionId ? `<span class="px-1.5 py-0.2 bg-slate-100 dark:bg-slate-700 rounded font-mono text-[9px] text-gray-500 dark:text-gray-300">TXID: ${w.adminTransactionId}</span>` : ''}
                     </div>
                     <div id="hist-card-${w.id}-details" class="hidden mt-2 pt-2 border-t border-slate-100 dark:border-slate-700/80 space-y-1 text-xs">

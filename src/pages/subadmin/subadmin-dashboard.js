@@ -1606,6 +1606,123 @@ window.applyAdminInvestmentsSnapshot = applyAdminInvestmentsSnapshot;
 window.initializeAdminSecondaryRealtime = initializeAdminSecondaryRealtime;
 window.refreshAdminSecondaryCaches = refreshAdminSecondaryCaches;
 window.refreshAdminLoanCaches = refreshAdminLoanCaches;
+let allAdminDepositsCache = [];
+
+const showAdminDepositHistoryPage = async () => {
+    const isCurrentAdmin = currentUser?.uid === ADMIN_UID || currentUserData?.role === 'admin' || currentUserData?.role === 'owner';
+    if (!isCurrentAdmin) return showNotification('Admin access required.', true);
+
+    const content = `
+        ${getPageHeader('All Deposits / Add Money History')}
+        <div class="max-w-4xl mx-auto space-y-4">
+            <div class="bg-white dark:bg-gray-800 p-4 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 flex flex-col sm:flex-row items-center justify-between gap-3">
+                <input type="search" id="admin-deposit-search" placeholder="Search user name, email, mobile, UTR, Order ID" class="w-full sm:w-80 px-4 py-2.5 bg-gray-100 dark:bg-gray-700 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500">
+                <div class="flex items-center gap-2 w-full sm:w-auto">
+                    <select id="admin-deposit-filter" class="px-3 py-2 bg-gray-100 dark:bg-gray-700 rounded-xl text-sm font-semibold">
+                        <option value="all">All Deposits</option>
+                        <option value="completed">Completed Only</option>
+                        <option value="failed">Failed Only</option>
+                    </select>
+                    <button id="admin-refresh-deposits-btn" class="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-sm font-bold shadow-sm transition">Refresh</button>
+                </div>
+            </div>
+
+            <div class="bg-white dark:bg-gray-800 p-6 rounded-2xl shadow-md border border-gray-100 dark:border-gray-700">
+                <div id="admin-deposits-list" class="max-h-[70vh] overflow-y-auto space-y-3">
+                    <p class="text-center text-gray-500 py-8 font-semibold">Loading deposit history...</p>
+                </div>
+            </div>
+        </div>
+        ${getPageFooter()}`;
+
+    showPage(content);
+
+    document.getElementById('admin-deposit-search')?.addEventListener('input', renderAdminDepositHistoryList);
+    document.getElementById('admin-deposit-filter')?.addEventListener('change', renderAdminDepositHistoryList);
+    document.getElementById('admin-refresh-deposits-btn')?.addEventListener('click', fetchAdminDepositHistory);
+
+    renderAdminDepositHistoryList();
+    fetchAdminDepositHistory();
+};
+
+const fetchAdminDepositHistory = async () => {
+    try {
+        const depositsRef = collection(db, `artifacts/${appId}/public/data/deposits`);
+        const snapshot = await getDocs(query(depositsRef, orderBy("createdAt", "desc"), firestoreLimit(300))).catch(() => null);
+
+        if (snapshot && !snapshot.empty) {
+            allAdminDepositsCache = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+        } else {
+            allAdminDepositsCache = [];
+        }
+        renderAdminDepositHistoryList();
+    } catch (e) {
+        console.warn('Admin deposit history load error:', e);
+        renderAdminDepositHistoryList();
+    }
+};
+
+const renderAdminDepositHistoryList = () => {
+    const listEl = document.getElementById('admin-deposits-list');
+    if (!listEl) return;
+
+    const search = (document.getElementById('admin-deposit-search')?.value || '').trim().toLowerCase();
+    const filter = document.getElementById('admin-deposit-filter')?.value || 'all';
+
+    let items = [...allAdminDepositsCache];
+
+    if (filter === 'completed') {
+        items = items.filter(d => d.status === 'completed');
+    } else if (filter === 'failed') {
+        items = items.filter(d => d.status === 'failed' || d.status === 'rejected');
+    }
+
+    if (search) {
+        items = items.filter(d =>
+            (d.userName || '').toLowerCase().includes(search) ||
+            (d.userEmail || '').toLowerCase().includes(search) ||
+            (d.userMobile || '').toLowerCase().includes(search) ||
+            (d.utr || '').toLowerCase().includes(search) ||
+            (d.orderId || '').toLowerCase().includes(search)
+        );
+    }
+
+    if (items.length === 0) {
+        listEl.innerHTML = `<p class="text-center text-gray-500 dark:text-gray-400 py-8 font-medium">No deposit history found.</p>`;
+        return;
+    }
+
+    listEl.innerHTML = items.map(d => {
+        const isSuccess = d.status === 'completed';
+        const statusBg = isSuccess ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-200' : 'bg-rose-100 text-rose-800 dark:bg-rose-900/40 dark:text-rose-200';
+        const statusText = isSuccess ? 'Completed' : 'Failed / Cancelled';
+        const dateDisplay = formatDate(d.createdAt || d.timestamp || d.completedAt);
+
+        return `
+            <div class="p-4 rounded-xl border border-gray-100 dark:border-gray-700 bg-gray-50/50 dark:bg-gray-800/60 hover:bg-gray-100 dark:hover:bg-gray-700/50 transition">
+                <div class="flex flex-col sm:flex-row justify-between sm:items-start gap-2">
+                    <div class="space-y-1">
+                        <div class="flex items-center gap-2 flex-wrap">
+                            <span class="font-bold text-gray-900 dark:text-white text-base">${escapeHtml(d.userName || 'User')}</span>
+                            <span class="px-2 py-0.5 rounded text-[10px] font-black uppercase ${statusBg}">${statusText}</span>
+                        </div>
+                        <p class="text-xs text-gray-500 dark:text-gray-400">${escapeHtml(d.userMobile || 'No Mobile')} | ${escapeHtml(d.userEmail || 'No Email')}</p>
+                        <div class="flex flex-wrap gap-2 text-xs pt-1">
+                            <span class="bg-white dark:bg-gray-700 px-2 py-1 rounded border border-gray-200 dark:border-gray-600">UTR: <span class="font-mono font-bold">${escapeHtml(d.utr || 'N/A')}</span></span>
+                            <span class="bg-white dark:bg-gray-700 px-2 py-1 rounded border border-gray-200 dark:border-gray-600">Order ID: <span class="font-mono font-bold">${escapeHtml(d.orderId || 'N/A')}</span></span>
+                        </div>
+                    </div>
+                    <div class="text-left sm:text-right space-y-1">
+                        <p class="text-lg font-black text-emerald-600 dark:text-emerald-400">+₹${(d.amount || 0).toFixed(2)}</p>
+                        <p class="text-xs text-blue-600 dark:text-blue-400 font-semibold">Tax Paid: ₹${(d.taxAmount || 0).toFixed(2)} (Total ₹${(d.totalPayable || d.amount || 0).toFixed(2)})</p>
+                        <p class="text-[11px] text-gray-400">${dateDisplay}</p>
+                    </div>
+                </div>
+            </div>`;
+    }).join('');
+};
+
+window.showAdminDepositHistoryPage = showAdminDepositHistoryPage;
 window.showAdminLiveListsPage = showAdminLiveListsPage;
 window.loadAdminLiveLists = loadAdminLiveLists;
 window.showAdminMainPage = showAdminMainPage;
