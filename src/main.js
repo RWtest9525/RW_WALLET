@@ -372,29 +372,18 @@ onAuthStateChanged(auth, async (user) => {
                 document.getElementById('auth-screen')?.classList.add('hidden');
 
                 if (!shouldPreserveOpenPage && !shouldPreserveHydratedDashboard) {
-                    if (isAdmin) {
-                        currentMainSection = 'admin';
-                        switchTab('admin-panel');
-                        document.getElementById('dashboard-content')?.classList.remove('hidden');
-                        document.getElementById('page-container')?.classList.add('hidden');
-                        setBottomNavActive('bottom-admin-btn');
-                        setMainChrome(true);
-                        if (typeof window.showAdminMainPage === 'function') {
-                            window.showAdminMainPage();
-                        }
-                        document.getElementById('main-content')?.classList.remove('hidden');
-                    } else {
-                        currentMainSection = 'home';
-                        switchTab('user-panel');
-                        setBottomNavActive('bottom-home-btn');
-                        setMainChrome(true);
-                        if (typeof window.showHomeMainPage === 'function') {
-                            window.showHomeMainPage();
-                        }
-                        document.getElementById('main-content')?.classList.remove('hidden');
+                    currentMainSection = 'home';
+                    switchTab('user-panel');
+                    setBottomNavActive('bottom-home-btn');
+                    setMainChrome(true);
+                    if (typeof window.showHomeMainPage === 'function') {
+                        window.showHomeMainPage();
                     }
+                    document.getElementById('main-content')?.classList.remove('hidden');
+                    document.getElementById('dashboard-content')?.classList.remove('hidden');
                 } else {
                     document.getElementById('main-content')?.classList.remove('hidden');
+                    document.getElementById('dashboard-content')?.classList.remove('hidden');
                 }
 
                 // Background config & approval checks
@@ -433,15 +422,6 @@ onAuthStateChanged(auth, async (user) => {
                                 window.initializeAdminListeners();
                             } catch (err) {
                                 console.error("Error initializing admin listeners:", err);
-                            }
-                        }
-                    }
-
-                    if (updatedIsAdmin && !shouldPreserveOpenPage && !shouldPreserveHydratedDashboard) {
-                        if (currentMainSection !== 'admin') {
-                            setBottomNavActive('bottom-admin-btn');
-                            if (typeof window.showAdminMainPage === 'function') {
-                                window.showAdminMainPage();
                             }
                         }
                     }
