@@ -47,14 +47,18 @@ const showAdminManageSettingsPage = async () => {
     const wnUpdatedMillis = timestampToMillis(appConfigCache.whatsNewUpdatedAt || appConfigCache.whats_new_updated_at || 0);
     const wnUpdatedText = wnUpdatedMillis ? new Date(wnUpdatedMillis).toLocaleString('en-IN') : 'Not sent yet';
 
+    const fampayUpi = appConfigCache.fampay_upi || '9525182488@fam';
+    const fampayApiKey = appConfigCache.fampay_api_key || 'FAM_fbc1b443110a37b5f2f1de5bef365c90defb23c1a38d19c0';
+
     const content = `
         ${getPageHeader('Manage Settings')}
         <div class="max-w-4xl mx-auto space-y-6">
             <!-- Tabs Navigation -->
-            <div class="flex border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-2 rounded-2xl shadow-sm">
-                <button id="tab-rates-btn" class="flex-1 py-3 text-sm font-bold text-center text-blue-600 border-b-2 border-blue-600 transition animate-fade-in" onclick="switchSettingsTab('rates')">Rate Settings</button>
-                <button id="tab-maintenance-btn" class="flex-1 py-3 text-sm font-bold text-center text-gray-500 hover:text-blue-600 transition" onclick="switchSettingsTab('maintenance')">Maintenance Mode</button>
-                <button id="tab-whatsnew-btn" class="flex-1 py-3 text-sm font-bold text-center text-gray-500 hover:text-blue-600 transition" onclick="switchSettingsTab('whatsnew')">What's New</button>
+            <div class="flex border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-2 rounded-2xl shadow-sm overflow-x-auto">
+                <button id="tab-rates-btn" class="flex-1 min-w-[100px] py-3 text-xs sm:text-sm font-bold text-center text-blue-600 border-b-2 border-blue-600 transition animate-fade-in" onclick="switchSettingsTab('rates')">Rate Settings</button>
+                <button id="tab-payment-btn" class="flex-1 min-w-[100px] py-3 text-xs sm:text-sm font-bold text-center text-gray-500 hover:text-blue-600 transition" onclick="switchSettingsTab('payment')">UPI Payment</button>
+                <button id="tab-maintenance-btn" class="flex-1 min-w-[100px] py-3 text-xs sm:text-sm font-bold text-center text-gray-500 hover:text-blue-600 transition" onclick="switchSettingsTab('maintenance')">Maintenance</button>
+                <button id="tab-whatsnew-btn" class="flex-1 min-w-[100px] py-3 text-xs sm:text-sm font-bold text-center text-gray-500 hover:text-blue-600 transition" onclick="switchSettingsTab('whatsnew')">What's New</button>
             </div>
 
             <!-- Tab 1: Rate Settings -->
@@ -93,7 +97,27 @@ const showAdminManageSettingsPage = async () => {
                 <button onclick="handleSaveRatesSettingsTab()" class="px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-lg transition">Save Rates Settings</button>
             </div>
 
-            <!-- Tab 2: Maintenance Settings -->
+            <!-- Tab 2: UPI Payment Settings -->
+            <div id="settings-payment-section" class="bg-white dark:bg-gray-800 p-6 rounded-2xl shadow-md border border-gray-100 dark:border-gray-700 space-y-4 hidden animate-fade-in">
+                <div class="flex justify-between items-center">
+                    <h3 class="text-lg font-bold">UPI Deposit & Payment Gateway Settings</h3>
+                    <span class="px-3 py-1 bg-green-100 text-green-700 text-xs font-bold rounded-full">Editable</span>
+                </div>
+                <p class="text-xs text-gray-500 font-semibold">Configure your FamPay UPI ID and API Key for receiving deposits from users.</p>
+                <div class="space-y-4">
+                    <div>
+                        <label class="block text-xs font-semibold text-gray-400 uppercase mb-1">FamPay UPI ID</label>
+                        <input type="text" id="setting-fampay-upi" value="${escapeHtml(fampayUpi)}" placeholder="9525182488@fam" class="w-full px-4 py-3 bg-gray-100 dark:bg-gray-700 rounded-lg font-bold text-sm">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold text-gray-400 uppercase mb-1">FamPay API Key</label>
+                        <input type="text" id="setting-fampay-api-key" value="${escapeHtml(fampayApiKey)}" placeholder="FAM_fbc..." class="w-full px-4 py-3 bg-gray-100 dark:bg-gray-700 rounded-lg font-mono text-sm">
+                    </div>
+                </div>
+                <button onclick="handleSavePaymentSettingsTab()" class="px-6 py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-lg transition">Save Payment Settings</button>
+            </div>
+
+            <!-- Tab 3: Maintenance Settings -->
             <div id="settings-maintenance-section" class="bg-white dark:bg-gray-800 p-6 rounded-2xl shadow-md border border-gray-100 dark:border-gray-700 space-y-4 hidden animate-fade-in">
                 <div class="flex justify-between items-center">
                     <h3 class="text-lg font-bold">Maintenance Mode</h3>
@@ -126,7 +150,7 @@ const showAdminManageSettingsPage = async () => {
                 ` : `<p class="text-xs text-red-500 italic">You must be the main Owner to edit maintenance configuration.</p>`}
             </div>
 
-            <!-- Tab 3: What's New Settings -->
+            <!-- Tab 4: What's New Settings -->
             <div id="settings-whatsnew-section" class="bg-white dark:bg-gray-800 p-6 rounded-2xl shadow-md border border-gray-100 dark:border-gray-700 space-y-4 hidden animate-fade-in">
                 <div class="flex justify-between items-center">
                     <h3 class="text-lg font-bold">What's New popup</h3>
@@ -167,7 +191,7 @@ const showAdminManageSettingsPage = async () => {
 };
 
 const switchSettingsTab = (tab) => {
-    const tabs = ['rates', 'maintenance', 'whatsnew'];
+    const tabs = ['rates', 'payment', 'maintenance', 'whatsnew'];
     tabs.forEach(t => {
         const btn = document.getElementById(`tab-${t}-btn`);
         const sec = document.getElementById(`settings-${t}-section`);
@@ -352,8 +376,44 @@ const handleDisableWhatsNewTab = async () => {
     }
 };
 
+const handleSavePaymentSettingsTab = async () => {
+    const fampayUpi = String(document.getElementById('setting-fampay-upi')?.value || '').trim();
+    const fampayApiKey = String(document.getElementById('setting-fampay-api-key')?.value || '').trim();
+
+    if (!fampayUpi) return showNotification('Please enter a valid UPI ID.', true);
+
+    try {
+        await setDoc(doc(db, `artifacts/${appId}/settings`, 'app_config'), {
+            fampay_upi: fampayUpi,
+            fampay_api_key: fampayApiKey,
+            paymentSettingsUpdatedAt: serverTimestamp(),
+            paymentSettingsUpdatedBy: currentUser.uid
+        }, { merge: true });
+
+        appConfigCache = {
+            ...appConfigCache,
+            fampay_upi: fampayUpi,
+            fampay_api_key: fampayApiKey
+        };
+        if (typeof rememberAppConfig === 'function') rememberAppConfig(appConfigCache);
+
+        showNotification('UPI Payment Settings saved successfully!');
+        await showAdminManageSettingsPage();
+        switchSettingsTab('payment');
+    } catch (error) {
+        showNotification(error.message || 'Failed to save payment settings.', true);
+    }
+};
+
 // Expose to window
 window.showAdminManageSettingsPage = showAdminManageSettingsPage;
+window.switchSettingsTab = switchSettingsTab;
+window.handleSaveRatesSettingsTab = handleSaveRatesSettingsTab;
+window.handleSavePaymentSettingsTab = handleSavePaymentSettingsTab;
+window.handleStartMaintenanceTab = handleStartMaintenanceTab;
+window.handleTurnOffMaintenanceTab = handleTurnOffMaintenanceTab;
+window.handleSaveWhatsNewTab = handleSaveWhatsNewTab;
+window.handleDisableWhatsNewTab = handleDisableWhatsNewTab;
 window.switchSettingsTab = switchSettingsTab;
 window.handleSaveRatesSettingsTab = handleSaveRatesSettingsTab;
 window.handleStartMaintenanceTab = handleStartMaintenanceTab;
