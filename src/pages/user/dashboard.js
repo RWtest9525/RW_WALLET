@@ -6847,21 +6847,22 @@ const renderFilteredTransactions = (filter, options = {}) => {
         let monthReceived = 0;
         monthGroups[monthKey].forEach(t => {
             const amt = Math.abs(Number(t.amount || 0));
+            const isDeposit = t.type === 'deposit' || !!t.orderId;
             const isCredit = t.type === 'deposit' || t.type === 'credit' || t.type === 'gift_card' || (!['debit', 'withdrawal', 'mobile_recharge'].includes(t.type) && Number(t.amount || 0) > 0);
-            if (isCredit) monthReceived += amt;
+            if (isCredit && !isDeposit) monthReceived += amt;
         });
 
         html += `
-            <div class="mt-6 mb-3 pt-3 border-t border-gray-200 dark:border-gray-700/80">
-                <div onclick="showMonthlyAISpendSummaryPage('${monthKey}')" class="flex items-center justify-between bg-slate-100 dark:bg-gray-750 px-4 py-3.5 rounded-2xl shadow-2xs cursor-pointer hover:bg-slate-200 dark:hover:bg-gray-700 transition">
-                    <span class="text-sm font-black text-gray-900 dark:text-white">${monthKey}</span>
-                    <div class="flex items-center gap-3">
+            <div class="mt-5 mb-2 pt-2 border-t border-gray-200 dark:border-gray-700/80">
+                <div onclick="showMonthlyAISpendSummaryPage('${monthKey}')" class="flex items-center justify-between bg-slate-100 dark:bg-gray-750 px-3.5 py-2.5 rounded-xl shadow-2xs cursor-pointer hover:bg-slate-200 dark:hover:bg-gray-700 transition">
+                    <span class="text-xs font-black text-gray-900 dark:text-white">${monthKey}</span>
+                    <div class="flex items-center gap-2.5">
                         <div class="text-right">
-                            <span class="text-[11px] font-bold text-gray-500 dark:text-gray-400 block">Total Received</span>
-                            <span class="text-base font-black text-gray-900 dark:text-white block">₹${monthReceived.toLocaleString('en-IN')}</span>
+                            <span class="text-[10px] font-bold text-gray-500 dark:text-gray-400 block leading-tight">Total Received</span>
+                            <span class="text-sm font-black text-gray-900 dark:text-white block leading-tight">₹${monthReceived.toLocaleString('en-IN')}</span>
                         </div>
-                        <div class="w-8 h-8 rounded-full bg-blue-100 dark:bg-blue-900/40 text-blue-600 dark:text-blue-300 flex items-center justify-center shrink-0 shadow-2xs">
-                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M9 5l7 7-7 7"/></svg>
+                        <div class="w-6 h-6 rounded-full bg-blue-100 dark:bg-blue-900/40 text-blue-600 dark:text-blue-300 flex items-center justify-center shrink-0 shadow-2xs">
+                            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M9 5l7 7-7 7"/></svg>
                         </div>
                     </div>
                 </div>
