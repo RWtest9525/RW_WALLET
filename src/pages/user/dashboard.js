@@ -269,6 +269,41 @@ const syncRecentTransactionsToCloud = async (userId = currentUser?.uid) => {
             }
         };
 
+const loadUserDepositsForHistory = async (userId = currentUser?.uid) => {
+    if (!userId) return [];
+    try {
+        const depositsRef = collection(db, `artifacts/${appId}/public/data/deposits`);
+        const snap = await getDocs(query(depositsRef, where("userId", "==", userId), firestoreLimit(50))).catch(() => null);
+        let items = snap && !snap.empty ? snap.docs.map(d => ({ id: d.id, ...d.data() })) : [];
+
+        if (items.length === 0 && currentUser?.email) {
+            const snapEmail = await getDocs(query(depositsRef, where("userEmail", "==", currentUser.email), firestoreLimit(50))).catch(() => null);
+            if (snapEmail && !snapEmail.empty) {
+                items = snapEmail.docs.map(d => ({ id: d.id, ...d.data() }));
+            }
+        }
+
+        return items.map(d => ({
+            key: `dep_${d.orderId || d.id}`,
+            transactionId: d.orderId || d.id,
+            orderId: d.orderId || d.id,
+            type: 'deposit',
+            amount: Number(d.amount || 0),
+            taxAmount: Number(d.taxAmount || 0),
+            totalPayable: Number(d.totalPayable || d.amount || 0),
+            utr: d.utr || '',
+            senderName: d.userName || 'UPI User',
+            comment: `Add Money via UPI (Order: ${d.orderId || d.id})`,
+            status: d.status || 'pending',
+            timestamp: d.createdAt || d.timestamp || Date.now(),
+            createdAt: d.createdAt || d.timestamp || Date.now()
+        }));
+    } catch (e) {
+        console.warn('Load user deposits for history skipped:', e);
+        return [];
+    }
+};
+
 const prefetchTransactionHistory = (userId = currentUser?.uid, { force = false } = {}) => {
             if (!userId) return Promise.resolve([]);
             if (!force && transactionHistoryPrefetch.userId === userId && transactionHistoryPrefetch.promise) {
@@ -283,7 +318,7 @@ const prefetchTransactionHistory = (userId = currentUser?.uid, { force = false }
             }
             transactionHistoryPrefetch.userId = userId;
             transactionHistoryPrefetch.promise = (async () => {
-                const [firebaseTransactions, cloudTransactions, pendingWithdrawals] = await Promise.all([
+                const [firebaseTransactions, cloudTransactions, pendingWithdrawals, userDeposits] = await Promise.all([
                     loadFirebaseTransactions(userId, FIRESTORE_TRANSACTION_READ_LIMIT).catch(error => {
                         logBackgroundSkip('Firebase transaction prefetch skipped', error);
                         return [];
@@ -295,12 +330,16 @@ const prefetchTransactionHistory = (userId = currentUser?.uid, { force = false }
                     loadUserPendingWithdrawalsMerged(userId).catch(error => {
                         logBackgroundSkip('Pending withdrawal prefetch skipped', error);
                         return [];
+                    }),
+                    loadUserDepositsForHistory(userId).catch(error => {
+                        logBackgroundSkip('User deposits prefetch skipped', error);
+                        return [];
                     })
                 ]);
                 const activeHistoryCache = currentUser?.uid === userId ? unifiedHistoryCache : readHistoryItemsFromCache(userId);
                 const cachedPending = (activeHistoryCache || []).filter(item => String(item.status || '').toLowerCase() === 'pending');
                 const pendingHistoryItems = pendingWithdrawals.map(normalizePendingRequestForHistory);
-                const mergedUserHistory = mergeTransactionsByKey(firebaseTransactions, cloudTransactions, cachedPending, pendingHistoryItems);
+                const mergedUserHistory = mergeTransactionsByKey(firebaseTransactions, cloudTransactions, cachedPending, pendingHistoryItems, userDeposits);
                 writeHistoryItemsToCache(userId, mergedUserHistory);
                 if (currentUser?.uid === userId) {
                     unifiedHistoryCache = mergedUserHistory;
@@ -368,6 +407,49 @@ const renderTransactionItem = (item, isFullPage = false) => {
                 }
                 return false;
             };
+
+            if (item.type === 'deposit' || item.orderId) {
+                const isSuccess = item.status === 'completed';
+                const isPendingAdmin = item.status === 'pending_admin_approval';
+                const statusBg = isSuccess
+                    ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-200'
+                    : isPendingAdmin
+                        ? 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-200'
+                        : 'bg-rose-100 text-rose-800 dark:bg-rose-900/40 dark:text-rose-200';
+                const statusText = isSuccess
+                    ? 'Completed'
+                    : isPendingAdmin
+                        ? 'Admin Verifying'
+                        : 'Pending / Action Required';
+                const statusColor = isSuccess ? 'text-emerald-600 dark:text-emerald-400' : 'text-amber-600 dark:text-amber-400';
+
+                return `
+                    <div class="p-3.5 sm:p-4 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-700/50 space-y-2 ${clickableClass}" ${dataKey}>
+                        <div class="flex justify-between items-start">
+                            <div class="flex-1 min-w-0">
+                                <div class="flex items-center gap-2 flex-wrap">
+                                    <span class="font-bold text-gray-900 dark:text-white text-base">Add Money via UPI</span>
+                                    <span class="px-2 py-0.5 rounded text-[10px] font-black uppercase ${statusBg}">${statusText}</span>
+                                </div>
+                                <p class="text-xs text-gray-500 font-mono mt-0.5">Order ID: ${escapeHtml(item.orderId || item.id || item.transactionId)}</p>
+                                ${item.utr ? `<p class="text-xs text-gray-500 font-mono">UTR: ${escapeHtml(item.utr)}</p>` : ''}
+                                <p class="text-xs font-medium text-slate-500 dark:text-slate-400 mt-0.5">${formatDateDDMMYY(item.timestamp || item.createdAt)}</p>
+                            </div>
+                            <div class="text-right shrink-0">
+                                <p class="text-base sm:text-lg font-black ${statusColor}">+${formatCurrencyAbs(item.amount)}</p>
+                                <p class="text-xs text-blue-600 dark:text-blue-400 font-semibold">+Tax ₹${(item.taxAmount || 0).toFixed(2)}</p>
+                            </div>
+                        </div>
+
+                        ${!isSuccess ? `
+                            <div class="pt-2 border-t border-gray-200 dark:border-gray-600 flex gap-2 justify-end">
+                                <button onclick="event.stopPropagation(); handleReverifyDeposit('${item.orderId || item.id}', ${item.amount || 10}, ${item.taxAmount || 0})" class="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow-sm flex items-center gap-1.5 transition">
+                                    <span>🔄 Verify Payment</span>
+                                </button>
+                            </div>
+                        ` : ''}
+                    </div>`;
+            }
 
             if (item.type === 'mobile_recharge') {
                 const isPending = item.status === 'pending';
@@ -7217,52 +7299,68 @@ const showDepositMoneyPage = () => {
         return showNotification('Your account is flagged. Please contact support.', true);
     }
 
+    const currentBalanceStr = formatCurrency(currentUserData.balance || 0);
+
     const content = `
         ${getPageHeader('Add Money to Wallet')}
-        <div class="max-w-md mx-auto bg-white dark:bg-gray-800 p-6 rounded-2xl shadow-lg space-y-6">
-            <div class="text-center">
-                <div class="mx-auto w-16 h-16 rounded-2xl bg-emerald-100 dark:bg-emerald-900/40 flex items-center justify-center mb-3 p-3 shadow-sm">
-                    <img src="https://cdn-icons-png.flaticon.com/512/12449/12449036.png" alt="Add Money" class="w-full h-full object-contain">
+        <div class="max-w-md mx-auto space-y-4">
+            <div class="bg-white dark:bg-gray-800 p-6 rounded-2xl shadow-lg border border-gray-100 dark:border-gray-700/60 space-y-5">
+                <!-- Header with Balance Badge -->
+                <div class="flex items-center justify-between bg-gradient-to-r from-emerald-500/10 to-teal-500/10 border border-emerald-500/20 rounded-2xl p-4">
+                    <div class="flex items-center gap-3">
+                        <div class="w-12 h-12 rounded-xl bg-emerald-500 flex items-center justify-center p-2.5 shadow-md shrink-0">
+                            <img src="https://cdn-icons-png.flaticon.com/512/12449/12449036.png" alt="Add Money" class="w-full h-full object-contain">
+                        </div>
+                        <div>
+                            <h3 class="text-base font-bold text-gray-900 dark:text-white">Add Money via UPI</h3>
+                            <p class="text-xs text-emerald-600 dark:text-emerald-400 font-semibold">Instant Wallet Credit</p>
+                        </div>
+                    </div>
+                    <div class="text-right">
+                        <span class="text-[10px] font-bold uppercase text-gray-400 block">Current Balance</span>
+                        <span class="text-sm font-black text-gray-900 dark:text-white">${currentBalanceStr}</span>
+                    </div>
                 </div>
-                <h3 class="text-xl font-bold text-gray-900 dark:text-white">Add Money via UPI</h3>
-                <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">Instant Wallet Credit | 1% Extra Tax Applies</p>
-            </div>
 
-            <div>
-                <label class="text-xs font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500 mb-2 block">Quick Select Amount</label>
-                <div class="grid grid-cols-4 gap-2">
-                    <button type="button" class="deposit-preset-chip px-3 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-700/50 hover:bg-emerald-50 hover:border-emerald-500 dark:hover:bg-emerald-900/30 text-center font-bold text-sm transition text-gray-800 dark:text-gray-200" data-amount="10">₹10</button>
-                    <button type="button" class="deposit-preset-chip px-3 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-700/50 hover:bg-emerald-50 hover:border-emerald-500 dark:hover:bg-emerald-900/30 text-center font-bold text-sm transition text-gray-800 dark:text-gray-200" data-amount="20">₹20</button>
-                    <button type="button" class="deposit-preset-chip px-3 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-700/50 hover:bg-emerald-50 hover:border-emerald-500 dark:hover:bg-emerald-900/30 text-center font-bold text-sm transition text-gray-800 dark:text-gray-200" data-amount="50">₹50</button>
-                    <button type="button" class="deposit-preset-chip px-3 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-700/50 hover:bg-emerald-50 hover:border-emerald-500 dark:hover:bg-emerald-900/30 text-center font-bold text-sm transition text-gray-800 dark:text-gray-200" data-amount="100">₹100</button>
+                <!-- Preset Chips -->
+                <div>
+                    <label class="text-xs font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500 mb-2 block">Select Deposit Amount</label>
+                    <div class="grid grid-cols-3 gap-2">
+                        <button type="button" class="deposit-preset-chip px-3 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-700/50 hover:bg-emerald-50 hover:border-emerald-500 dark:hover:bg-emerald-900/30 text-center font-bold text-sm transition text-gray-800 dark:text-gray-200 shadow-sm" data-amount="10">₹10</button>
+                        <button type="button" class="deposit-preset-chip px-3 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-700/50 hover:bg-emerald-50 hover:border-emerald-500 dark:hover:bg-emerald-900/30 text-center font-bold text-sm transition text-gray-800 dark:text-gray-200 shadow-sm" data-amount="20">₹20</button>
+                        <button type="button" class="deposit-preset-chip px-3 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-700/50 hover:bg-emerald-50 hover:border-emerald-500 dark:hover:bg-emerald-900/30 text-center font-bold text-sm transition text-gray-800 dark:text-gray-200 shadow-sm" data-amount="50">₹50</button>
+                        <button type="button" class="deposit-preset-chip px-3 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-700/50 hover:bg-emerald-50 hover:border-emerald-500 dark:hover:bg-emerald-900/30 text-center font-bold text-sm transition text-gray-800 dark:text-gray-200 shadow-sm" data-amount="100">₹100</button>
+                        <button type="button" class="deposit-preset-chip px-3 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-700/50 hover:bg-emerald-50 hover:border-emerald-500 dark:hover:bg-emerald-900/30 text-center font-bold text-sm transition text-gray-800 dark:text-gray-200 shadow-sm" data-amount="200">₹200</button>
+                        <button type="button" class="deposit-preset-chip px-3 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-700/50 hover:bg-emerald-50 hover:border-emerald-500 dark:hover:bg-emerald-900/30 text-center font-bold text-sm transition text-gray-800 dark:text-gray-200 shadow-sm" data-amount="500">₹500</button>
+                    </div>
                 </div>
-            </div>
 
-            <div>
-                <label class="text-xs font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500 mb-1 block">Deposit Amount (₹)</label>
-                <div class="relative">
-                    <span class="absolute inset-y-0 left-0 pl-4 flex items-center text-lg font-bold text-gray-500">₹</span>
-                    <input type="number" id="deposit-amount-input" min="10" placeholder="Enter amount (Min ₹10)" value="50" class="w-full pl-9 pr-4 py-3.5 bg-gray-100 dark:bg-gray-700/70 border border-transparent rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 font-bold text-lg text-gray-900 dark:text-white">
+                <!-- Custom Amount Input -->
+                <div>
+                    <label class="text-xs font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500 mb-1 block">Or Enter Custom Amount (₹)</label>
+                    <div class="relative">
+                        <span class="absolute inset-y-0 left-0 pl-4 flex items-center text-lg font-bold text-gray-500">₹</span>
+                        <input type="number" id="deposit-amount-input" min="10" placeholder="Enter amount (Min ₹10)" value="50" class="w-full pl-9 pr-4 py-3.5 bg-gray-100 dark:bg-gray-700/70 border border-transparent rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 font-bold text-lg text-gray-900 dark:text-white">
+                    </div>
+                    <p class="text-[11px] text-gray-400 mt-1">Minimum deposit amount is ₹10.</p>
                 </div>
-                <p class="text-[11px] text-gray-400 mt-1">Minimum deposit amount is ₹10.</p>
-            </div>
 
-            <div id="deposit-summary-box" class="space-y-2 bg-slate-50 dark:bg-gray-900/50 border border-gray-200 dark:border-gray-700 rounded-xl p-4 text-xs">
-            </div>
-
-            <button id="proceed-deposit-btn" class="w-full bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white font-bold py-3.5 rounded-xl shadow-lg transition flex items-center justify-center gap-2">
-                <span>Generate UPI Payment QR</span>
-                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"/></svg>
-            </button>
-
-            <!-- Recent Deposits / Verify Section -->
-            <div class="pt-4 border-t border-gray-200 dark:border-gray-700 space-y-3">
-                <div class="flex items-center justify-between">
-                    <h4 class="text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400">Recent UPI Deposits</h4>
-                    <button id="refresh-user-deposits-btn" class="text-xs text-emerald-600 dark:text-emerald-400 font-bold hover:underline">🔄 Refresh</button>
+                <!-- Real-time Tax Summary Box -->
+                <div id="deposit-summary-box" class="space-y-2 bg-slate-50 dark:bg-gray-900/50 border border-gray-200 dark:border-gray-700 rounded-xl p-4 text-xs">
                 </div>
-                <div id="user-recent-deposits-list" class="space-y-2 text-xs">
-                    <p class="text-center text-gray-400 py-3">Loading recent deposits...</p>
+
+                <!-- Action CTA -->
+                <button id="proceed-deposit-btn" class="w-full bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white font-bold py-3.5 rounded-xl shadow-lg hover:shadow-emerald-500/25 transition-all flex items-center justify-center gap-2">
+                    <span>Generate UPI Payment QR</span>
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"/></svg>
+                </button>
+
+                <!-- Navigation link to Transaction History -->
+                <div class="pt-3 border-t border-gray-100 dark:border-gray-700 text-center">
+                    <button onclick="showAllTransactionsPage()" class="inline-flex items-center gap-1.5 text-xs font-bold text-emerald-600 dark:text-emerald-400 hover:underline">
+                        <span>View Deposit History & Status in Transactions</span>
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
+                    </button>
                 </div>
             </div>
         </div>
@@ -7287,9 +7385,6 @@ const showDepositMoneyPage = () => {
     if (proceedBtn) {
         proceedBtn.onclick = handleGenerateDepositQR;
     }
-
-    document.getElementById('refresh-user-deposits-btn')?.addEventListener('click', loadUserRecentDepositsList);
-    loadUserRecentDepositsList();
 };
 
 const loadUserRecentDepositsList = async () => {
