@@ -411,8 +411,36 @@ const formatPaytmDate = (timestamp) => {
     return `${day} ${month}, ${timeStr}`;
 };
 
-const getPaytmInitialAvatar = (name) => {
+const getPaytmInitialAvatar = (name, item = {}) => {
     const cleanName = (name || 'User').trim();
+
+    // 1. Check if item has explicit photoURL / avatar / senderPhoto / recipientPhoto
+    let avatarUrl = item.photoURL || item.avatar || item.senderPhoto || item.recipientPhoto || item.senderProfilePic || item.recipientProfilePic;
+
+    // 2. Search in allUsersCache or currentUserData
+    if (!avatarUrl && typeof allUsersCache !== 'undefined' && Array.isArray(allUsersCache)) {
+        const normName = cleanName.toLowerCase();
+        const found = allUsersCache.find(u =>
+            (u.name || '').toLowerCase() === normName ||
+            (u.displayName || '').toLowerCase() === normName ||
+            (item.senderMobile && u.mobile === item.senderMobile) ||
+            (item.recipientMobile && u.mobile === item.recipientMobile)
+        );
+        if (found) {
+            avatarUrl = typeof getProfileAvatarUrl === 'function' ? getProfileAvatarUrl(found) : (found.photoURL || found.avatar || found.profilePic);
+        }
+    }
+
+    if (!avatarUrl && currentUserData && (currentUserData.name || '').toLowerCase() === cleanName.toLowerCase()) {
+        avatarUrl = typeof getProfileAvatarUrl === 'function' ? getProfileAvatarUrl(currentUserData) : (currentUserData.photoURL || currentUserData.avatar);
+    }
+
+    // If valid profile photo exists, render image avatar
+    if (avatarUrl && typeof avatarUrl === 'string' && avatarUrl.length > 5 && !avatarUrl.includes('default-avatar') && !avatarUrl.includes('ui-avatars')) {
+        return `<img src="${escapeHtml(avatarUrl)}" class="w-11 h-11 rounded-full object-cover shrink-0 border border-gray-200 dark:border-gray-700 shadow-xs" alt="${escapeHtml(cleanName)}" loading="lazy">`;
+    }
+
+    // Fallback: Initial circle
     const parts = cleanName.split(' ');
     let initials = '';
     if (parts.length >= 2) {
@@ -598,7 +626,7 @@ const renderTransactionItem = (item, isFullPage = false) => {
     const amountColor = isCredit ? 'text-emerald-600 dark:text-emerald-400' : 'text-gray-900 dark:text-white';
     const sourceLabel = isCredit ? 'In' : 'From';
 
-    const avatarHtml = getPaytmInitialAvatar(partyName);
+    const avatarHtml = getPaytmInitialAvatar(partyName, item);
 
     return `
         <div class="py-3 px-1 border-b border-gray-100 dark:border-gray-800 space-y-1 ${clickableClass}" ${dataKey}>
