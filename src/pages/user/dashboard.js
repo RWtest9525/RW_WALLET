@@ -385,213 +385,252 @@ const generateTransactionId = () => {
             return `TXN${timestamp}${random}`.toUpperCase();
         };
 
+const formatPaytmDate = (timestamp) => {
+    if (!timestamp) return 'Recent';
+    let date;
+    if (timestamp?.toDate) date = timestamp.toDate();
+    else if (timestamp?.seconds) date = new Date(timestamp.seconds * 1000);
+    else if (typeof timestamp === 'number') date = new Date(timestamp);
+    else date = new Date(timestamp);
+
+    if (isNaN(date.getTime())) return 'Recent';
+
+    const now = new Date();
+    const isToday = date.toDateString() === now.toDateString();
+    const yesterday = new Date(now);
+    yesterday.setDate(yesterday.getDate() - 1);
+    const isYesterday = date.toDateString() === yesterday.toDateString();
+
+    const timeStr = date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
+
+    if (isToday) return `Today, ${timeStr}`;
+    if (isYesterday) return `Yesterday, ${timeStr}`;
+
+    const day = String(date.getDate()).padStart(2, '0');
+    const month = date.toLocaleDateString('en-US', { month: 'short' });
+    return `${day} ${month}, ${timeStr}`;
+};
+
+const getPaytmInitialAvatar = (name) => {
+    const cleanName = (name || 'User').trim();
+    const parts = cleanName.split(' ');
+    let initials = '';
+    if (parts.length >= 2) {
+        initials = (parts[0][0] + parts[1][0]).toUpperCase();
+    } else if (cleanName.length >= 2) {
+        initials = cleanName.substring(0, 2).toUpperCase();
+    } else {
+        initials = cleanName[0].toUpperCase();
+    }
+
+    const colorPairs = [
+        'bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-300',
+        'bg-pink-100 text-pink-700 dark:bg-pink-900/40 dark:text-pink-300',
+        'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300',
+        'bg-rose-100 text-rose-700 dark:bg-rose-900/40 dark:text-rose-300',
+        'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300',
+        'bg-sky-100 text-sky-700 dark:bg-sky-900/40 dark:text-sky-300',
+        'bg-teal-100 text-teal-700 dark:bg-teal-900/40 dark:text-teal-300'
+    ];
+    let charSum = 0;
+    for (let i = 0; i < cleanName.length; i++) charSum += cleanName.charCodeAt(i);
+    const colorClass = colorPairs[charSum % colorPairs.length];
+
+    return `<div class="w-11 h-11 rounded-full ${colorClass} font-bold text-sm flex items-center justify-center shrink-0 border border-black/5 shadow-xs">${initials}</div>`;
+};
+
 const renderTransactionItem = (item, isFullPage = false) => {
-            const hasDetailKey = !!item.key;
-            const clickableClass = hasDetailKey ? 'tx-item-clickable cursor-pointer' : '';
-            const dataKey = hasDetailKey ? `data-key="${item.key}"` : '';
+    const hasDetailKey = !!item.key;
+    const clickableClass = hasDetailKey ? 'tx-item-clickable cursor-pointer' : '';
+    const dataKey = hasDetailKey ? `data-key="${item.key}"` : '';
 
-            const checkUserIsVerified = (name, mobile) => {
-                if (!name) return false;
-                const lowerName = name.toLowerCase();
-                if (lowerName.includes('reviews world') || lowerName.includes('admin wallet') || lowerName.includes('digital wallet')) {
-                    return true;
-                }
-                const cache = window.allUsersCache || [];
-                const profile = cache.find(u =>
-                    (mobile && u.mobile === mobile) ||
-                    (u.name && u.name.toLowerCase() === lowerName)
-                );
-                if (profile) {
-                    const role = String(profile.role || '').toLowerCase();
-                    return role === 'admin' || role === 'subadmin' || role === 'owner' || !!profile.isVerified || !!profile.verified;
-                }
-                return false;
-            };
+    const timestamp = item.timestamp || item.createdAt || item.requestedAt;
+    const dateStr = formatPaytmDate(timestamp);
+    const rawType = normalizeTransactionType(item);
 
-            if (item.type === 'deposit' || item.orderId) {
-                const isSuccess = item.status === 'completed';
-                const isPendingAdmin = item.status === 'pending_admin_approval';
-                const statusBg = isSuccess
-                    ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-200'
-                    : isPendingAdmin
-                        ? 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-200'
-                        : 'bg-rose-100 text-rose-800 dark:bg-rose-900/40 dark:text-rose-200';
-                const statusText = isSuccess
-                    ? 'Completed'
-                    : isPendingAdmin
-                        ? 'Admin Verifying'
-                        : 'Pending / Action Required';
-                const statusColor = isSuccess ? 'text-emerald-600 dark:text-emerald-400' : 'text-amber-600 dark:text-amber-400';
+    // 1. DEPOSIT / ADD MONEY
+    if (item.type === 'deposit' || item.orderId) {
+        const isSuccess = item.status === 'completed';
+        const isPending = item.status === 'pending' || item.status === 'pending_admin_approval';
+        const statusText = isSuccess
+            ? `Added on ${dateStr}`
+            : isPending
+                ? `Requested on ${dateStr}`
+                : `${dateStr}`;
 
-                return `
-                    <div class="p-3.5 sm:p-4 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-700/50 space-y-2 ${clickableClass}" ${dataKey}>
-                        <div class="flex justify-between items-start">
-                            <div class="flex-1 min-w-0">
-                                <div class="flex items-center gap-2 flex-wrap">
-                                    <span class="font-bold text-gray-900 dark:text-white text-base">Add Money via UPI</span>
-                                    <span class="px-2 py-0.5 rounded text-[10px] font-black uppercase ${statusBg}">${statusText}</span>
-                                </div>
-                                <p class="text-xs text-gray-500 font-mono mt-0.5">Order ID: ${escapeHtml(item.orderId || item.id || item.transactionId)}</p>
-                                ${item.utr ? `<p class="text-xs text-gray-500 font-mono">UTR: ${escapeHtml(item.utr)}</p>` : ''}
-                                <p class="text-xs font-medium text-slate-500 dark:text-slate-400 mt-0.5">${formatDateDDMMYY(item.timestamp || item.createdAt)}</p>
-                            </div>
-                            <div class="text-right shrink-0">
-                                <p class="text-base sm:text-lg font-black ${statusColor}">+${formatCurrencyAbs(item.amount)}</p>
-                                <p class="text-xs text-blue-600 dark:text-blue-400 font-semibold">+Tax ₹${(item.taxAmount || 0).toFixed(2)}</p>
+        const leftIcon = `
+            <div class="w-11 h-11 rounded-full bg-amber-100 dark:bg-amber-900/40 text-amber-600 dark:text-amber-300 flex items-center justify-center shrink-0 shadow-xs">
+                <svg class="w-6 h-6 fill-current" viewBox="0 0 24 24"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
+            </div>`;
+
+        return `
+            <div class="py-3 px-1 border-b border-gray-100 dark:border-gray-800 space-y-2 ${clickableClass}" ${dataKey}>
+                <div class="flex items-center justify-between gap-3">
+                    <div class="flex items-center gap-3 flex-1 min-w-0">
+                        ${leftIcon}
+                        <div class="min-w-0 flex-1">
+                            <h4 class="text-sm font-bold text-gray-900 dark:text-white truncate">UPI Lite - Add Money</h4>
+                            <p class="text-xs font-medium ${!isSuccess && !isPending ? 'text-rose-500 font-bold flex items-center gap-1' : 'text-gray-500 dark:text-gray-400'} mt-0.5">
+                                ${statusText}
+                                ${!isSuccess && !isPending ? '<span class="inline-block w-2 h-2 rounded-full bg-rose-500"></span> Failed' : ''}
+                            </p>
+                            <div class="mt-1">
+                                <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400 text-[10px] font-bold">
+                                    💵 Self-Transfer
+                                </span>
                             </div>
                         </div>
-
-                        ${!isSuccess ? `
-                            <div class="pt-2 border-t border-gray-200 dark:border-gray-600 flex gap-2 justify-end">
-                                <button onclick="event.stopPropagation(); handleReverifyDeposit('${item.orderId || item.id}', ${item.amount || 10}, ${item.taxAmount || 0})" class="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow-sm flex items-center gap-1.5 transition">
-                                    <span>🔄 Verify Payment</span>
-                                </button>
-                            </div>
-                        ` : ''}
-                    </div>`;
-            }
-
-            if (item.type === 'mobile_recharge') {
-                const isPending = item.status === 'pending';
-                const isRejected = item.status === 'rejected';
-                const statusText = isPending ? 'Pending' : isRejected ? 'Rejected' : 'Completed';
-                const statusColor = isPending ? 'text-yellow-600' : isRejected ? 'text-red-500' : 'text-green-500';
-                const bgColor = isPending ? 'bg-sky-50 dark:bg-sky-900/20' : isRejected ? 'bg-red-50 dark:bg-red-900/20' : 'bg-gray-50 dark:bg-gray-700/50';
-                const chargeAmount = item.chargeAmount || item.amount || 0;
-
-                return `
-                    <div class="flex justify-between items-center p-3.5 sm:p-4 ${bgColor} rounded-xl text-sm sm:text-base ${clickableClass}" ${dataKey}>
-                        <div class="flex-1 min-w-0">
-                            <p class="text-base font-bold text-gray-900 dark:text-white">Mobile Recharge</p>
-                            <p class="text-xs sm:text-sm font-medium text-slate-600 dark:text-slate-300 mt-0.5">${item.mobileNumber || ''} ${item.operator ? `| ${item.operator}` : ''}</p>
-                            <p class="text-xs sm:text-sm font-medium text-slate-500 dark:text-slate-400">${formatDateDDMMYY(item.timestamp || item.requestedAt)}</p>
-                        </div>
-                        <div class="text-right">
-                            <p class="text-base sm:text-lg font-black text-red-500">-${formatCurrencyAbs(chargeAmount)}</p>
-                            <p class="text-xs sm:text-sm font-bold ${statusColor}">${statusText}</p>
-                        </div>
-                    </div>`;
-            }
-
-            if (item.status === 'pending') {
-                return `
-                    <div class="flex justify-between items-center p-3.5 sm:p-4 bg-yellow-50 dark:bg-yellow-900/20 rounded-xl text-sm sm:text-base ${clickableClass}" ${dataKey}>
-                        <div class="flex-1">
-                            <p class="text-base font-bold text-gray-900 dark:text-white capitalize">Withdrawal Request</p>
-                            <p class="text-xs sm:text-sm font-medium text-slate-600 dark:text-slate-300 mt-0.5">${formatDate(item.timestamp)}</p>
-                        </div>
-                        <div class="text-right">
-                            <p class="text-base sm:text-lg font-black text-yellow-600">${formatCurrencyAbs(item.amount)}</p>
-                            <p class="text-xs sm:text-sm font-bold text-yellow-600">Pending</p>
-                        </div>
-                    </div>`;
-            }
-
-            // Handle withdrawal status
-            if (item.type === 'withdrawal') {
-                let statusText = 'Completed';
-                let statusColor = 'text-red-500';
-                let bgColor = 'bg-red-50 dark:bg-red-900/20';
-                let txnIdBadge = '';
-                const methodId = item.methodId || item.withdraw_method || item.paymentMethod || (item.upiId ? 'upi' : item.accountNumber ? 'bank' : '');
-                const logoUrl = getWithdrawMethodLogo(methodId);
-
-                if (item.adminTransactionId) {
-                    txnIdBadge = `<span class="txn-id-badge text-xs font-bold ml-2">${item.adminTransactionId}</span>`;
-                }
-
-                if (item.status === 'rejected') {
-                    statusText = 'Rejected';
-                    statusColor = 'text-red-500';
-                    bgColor = 'bg-red-50 dark:bg-red-900/20';
-                }
-
-                return `
-                    <div class="flex justify-between items-center p-3.5 sm:p-4 ${bgColor} rounded-xl text-sm sm:text-base ${clickableClass}" ${dataKey}>
-                        <div class="flex items-center gap-3 flex-1 min-w-0">
-                            ${logoUrl ? `<img src="${logoUrl}" class="h-10 w-10 shrink-0 object-contain rounded-xl border border-slate-200 dark:border-slate-700 bg-white p-0.5 shadow-sm" alt="Logo">` : ''}
-                            <div class="min-w-0 flex-1">
-                                <p class="text-base font-bold text-gray-900 dark:text-white truncate">Withdrawal ${txnIdBadge}</p>
-                                <p class="text-xs sm:text-sm font-medium text-slate-600 dark:text-slate-300 mt-0.5">${formatDateDDMMYY(item.timestamp)}</p>
-                                ${item.rejectionReason ? `<p class="text-xs sm:text-sm font-semibold text-red-500 mt-1">Reason: ${escapeHtml(item.rejectionReason)}</p>` : ''}
-                            </div>
-                        </div>
-                        <div class="text-right shrink-0">
-                            <p class="text-base sm:text-lg font-black ${statusColor}">-${formatCurrencyAbs(item.amount)}</p>
-                            <p class="text-xs sm:text-sm font-bold ${statusColor}">${statusText}</p>
-                        </div>
-                    </div>`;
-            }
-
-            // Handle wallet transfers (Pay to Wallet) - Show clear From/To information
-            if (item.type === 'wallet_transfer') {
-                const isCredit = item.amount > 0;
-                const sign = isCredit ? '+' : '-';
-                const colorClass = isCredit ? 'text-green-600 dark:text-green-400' : 'text-red-500';
-                const actionText = isCredit ? 'From: ' : 'To: ';
-                const userName = isCredit ? (item.senderName || 'User') : (item.recipientName || 'User');
-                const userMobile = isCredit ? (item.senderMobile || '') : (item.recipientMobile || '');
-                const isVerified = checkUserIsVerified(userName, userMobile);
-
-                return `
-                    <div class="flex justify-between items-center p-3.5 sm:p-4 bg-gray-50 dark:bg-gray-700/50 rounded-xl text-sm sm:text-base ${clickableClass}" ${dataKey}>
-                        <div class="flex-1 min-w-0">
-                            <p class="text-base font-bold text-gray-900 dark:text-white truncate inline-flex items-center gap-1">${actionText}${escapeHtml(userName)}${isVerified ? getVerifiedBadge() : ''}</p>
-                            <p class="text-xs sm:text-sm font-medium text-slate-600 dark:text-slate-300 mt-0.5">${formatDateDDMMYY(item.timestamp)}</p>
-                            <p class="text-xs sm:text-sm font-semibold text-slate-500 dark:text-slate-400">Wallet Transfer</p>
-                        </div>
-                        <p class="text-base sm:text-lg font-black ${colorClass} shrink-0">
-                            ${sign}${formatCurrency(Math.abs(item.amount))}
-                        </p>
-                    </div>`;
-            }
-
-            // Handle debit transactions (when user sends money) - Show To information
-            if (item.type === 'debit' && item.recipientName) {
-                const isVerified = checkUserIsVerified(item.recipientName, item.recipientMobile);
-                return `
-                    <div class="flex justify-between items-center p-3.5 sm:p-4 bg-gray-50 dark:bg-gray-700/50 rounded-xl text-sm sm:text-base ${clickableClass}" ${dataKey}>
-                        <div class="flex-1 min-w-0">
-                            <p class="text-base font-bold text-gray-900 dark:text-white truncate inline-flex items-center gap-1">To: ${escapeHtml(item.recipientName || 'User')}${isVerified ? getVerifiedBadge() : ''}</p>
-                            <p class="text-xs sm:text-sm font-medium text-slate-600 dark:text-slate-300 mt-0.5">${formatDateDDMMYY(item.timestamp)}</p>
-                            <p class="text-xs sm:text-sm font-semibold text-slate-500 dark:text-slate-400">Money Sent</p>
-                        </div>
-                        <p class="text-base sm:text-lg font-black text-red-500 shrink-0">
-                            -${formatCurrencyAbs(item.amount)}
-                        </p>
-                    </div>`;
-            }
-
-            // Handle other transaction types
-            const normalizedType = normalizeTransactionType(item);
-            const isCredit = ['credit', 'gift_card'].includes(normalizedType) || (Number(item.amount || 0) > 0 && !['debit', 'withdrawal', 'mobile_recharge'].includes(normalizedType));
-            const sign = isCredit ? '+' : '-';
-            const colorClass = isCredit ? 'text-green-600 dark:text-green-400' : 'text-red-500';
-
-            // Check if this is a debit (wallet send) and use recipientName if available
-            let displayText = (item.comment || item.type || 'Wallet Transaction').replace(/_/g, ' ');
-            let targetMobile = '';
-            if (item.type === 'debit' && item.recipientName) {
-                displayText = item.recipientName;
-                targetMobile = item.recipientMobile || '';
-            } else if (item.senderName) {
-                displayText = item.senderName;
-                targetMobile = item.senderMobile || '';
-            }
-
-            const isVerified = checkUserIsVerified(displayText, targetMobile);
-
-            return `
-                <div class="flex justify-between items-center p-3.5 sm:p-4 bg-gray-50 dark:bg-gray-700/50 rounded-xl text-sm sm:text-base ${clickableClass}" ${dataKey}>
-                    <div class="flex-1 min-w-0">
-                        <p class="text-base font-bold text-gray-900 dark:text-white capitalize truncate inline-flex items-center gap-1">${escapeHtml(displayText)}${isVerified ? getVerifiedBadge() : ''}</p>
-                        <p class="text-xs sm:text-sm font-medium text-slate-600 dark:text-slate-300 mt-0.5">${formatDateDDMMYY(item.timestamp)}</p>
                     </div>
-                    <p class="text-base sm:text-lg font-black ${colorClass} shrink-0">
-                        ${sign}${formatCurrencyAbs(item.amount)}
+                    <div class="text-right shrink-0">
+                        <p class="text-base font-bold text-gray-900 dark:text-white">₹${(item.amount || 0).toLocaleString('en-IN')}</p>
+                        <p class="text-[11px] text-gray-400 font-medium mt-0.5 flex items-center justify-end gap-1">
+                            <span>From</span>
+                            <span class="inline-flex items-center justify-center w-4 h-4 rounded-full bg-blue-600 text-white text-[9px] font-black">₹</span>
+                        </p>
+                    </div>
+                </div>
+                ${!isSuccess ? `
+                    <div class="pt-1 flex justify-end">
+                        <button onclick="event.stopPropagation(); handleReverifyDeposit('${item.orderId || item.id}', ${item.amount || 10}, ${item.taxAmount || 0})" class="px-3 py-1 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-lg shadow-sm transition flex items-center gap-1">
+                            <span>🔄 Verify Payment</span>
+                        </button>
+                    </div>
+                ` : ''}
+            </div>`;
+    }
+
+    // 2. WITHDRAWAL
+    if (item.type === 'withdrawal' || rawType === 'withdrawal') {
+        const isPending = item.status === 'pending';
+        const isRejected = item.status === 'rejected';
+
+        const methodId = item.methodId || item.withdraw_method || item.paymentMethod || (item.upiId ? 'upi' : item.accountNumber ? 'bank' : '');
+        const logoUrl = getWithdrawMethodLogo(methodId);
+        const leftIcon = logoUrl
+            ? `<img src="${logoUrl}" class="w-11 h-11 rounded-full object-contain p-1 border border-gray-200 dark:border-gray-700 bg-white shrink-0 shadow-xs" alt="Logo">`
+            : `<div class="w-11 h-11 rounded-full bg-blue-100 dark:bg-blue-900/40 text-blue-600 dark:text-blue-300 flex items-center justify-center font-bold text-xs shrink-0">₹</div>`;
+
+        const statusSubtext = isPending
+            ? `Requested on ${dateStr}`
+            : isRejected
+                ? `Failed on ${dateStr}`
+                : `Paid on ${dateStr}`;
+
+        return `
+            <div class="py-3 px-1 border-b border-gray-100 dark:border-gray-800 space-y-1 ${clickableClass}" ${dataKey}>
+                <div class="flex items-center justify-between gap-3">
+                    <div class="flex items-center gap-3 flex-1 min-w-0">
+                        ${leftIcon}
+                        <div class="min-w-0 flex-1">
+                            <h4 class="text-sm font-bold text-gray-900 dark:text-white truncate">Withdrawal</h4>
+                            <p class="text-xs font-medium ${isRejected ? 'text-rose-500 font-bold' : 'text-gray-500 dark:text-gray-400'} mt-0.5">
+                                ${statusSubtext}
+                            </p>
+                            <div class="mt-1">
+                                <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400 text-[10px] font-bold">
+                                    💵 Withdrawal
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="text-right shrink-0">
+                        <p class="text-base font-bold text-gray-900 dark:text-white">- ₹${(item.amount || 0).toLocaleString('en-IN')}</p>
+                        <p class="text-[11px] text-gray-400 font-medium mt-0.5 flex items-center justify-end gap-1">
+                            <span>From</span>
+                            <span class="inline-flex items-center justify-center w-4 h-4 rounded-full bg-amber-500 text-white text-[9px] font-black">⚡</span>
+                        </p>
+                    </div>
+                </div>
+            </div>`;
+    }
+
+    // 3. MOBILE RECHARGE
+    if (item.type === 'mobile_recharge') {
+        const isPending = item.status === 'pending';
+        const isRejected = item.status === 'rejected';
+        const chargeAmount = item.chargeAmount || item.amount || 0;
+        const statusSubtext = isPending ? `Requested on ${dateStr}` : isRejected ? `Failed on ${dateStr}` : `Paid on ${dateStr}`;
+
+        const leftIcon = `
+            <div class="w-11 h-11 rounded-full bg-sky-100 dark:bg-sky-900/40 text-sky-600 dark:text-sky-300 flex items-center justify-center shrink-0 shadow-xs">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z"/></svg>
+            </div>`;
+
+        return `
+            <div class="py-3 px-1 border-b border-gray-100 dark:border-gray-800 space-y-1 ${clickableClass}" ${dataKey}>
+                <div class="flex items-center justify-between gap-3">
+                    <div class="flex items-center gap-3 flex-1 min-w-0">
+                        ${leftIcon}
+                        <div class="min-w-0 flex-1">
+                            <h4 class="text-sm font-bold text-gray-900 dark:text-white truncate">${escapeHtml(item.mobileNumber || 'Mobile Recharge')}</h4>
+                            <p class="text-xs font-medium text-gray-500 dark:text-gray-400 mt-0.5">${statusSubtext}</p>
+                            <div class="mt-1">
+                                <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400 text-[10px] font-bold">
+                                    💵 Mobile Recharge
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="text-right shrink-0">
+                        <p class="text-base font-bold text-gray-900 dark:text-white">- ₹${Number(chargeAmount).toLocaleString('en-IN')}</p>
+                        <p class="text-[11px] text-gray-400 font-medium mt-0.5 flex items-center justify-end gap-1">
+                            <span>From</span>
+                            <span class="inline-flex items-center justify-center w-4 h-4 rounded-full bg-amber-500 text-white text-[9px] font-black">⚡</span>
+                        </p>
+                    </div>
+                </div>
+            </div>`;
+    }
+
+    // 4. USER P2P / WALLET TRANSFERS & OTHERS
+    const isCredit = rawType === 'credit' || rawType === 'gift_card' || (Number(item.amount || 0) > 0 && !['debit', 'withdrawal', 'mobile_recharge'].includes(rawType));
+    const isWalletTransfer = item.type === 'wallet_transfer';
+
+    let partyName = '';
+    if (isWalletTransfer) {
+        partyName = isCredit ? (item.senderName || 'User') : (item.recipientName || 'User');
+    } else if (item.type === 'debit' && item.recipientName) {
+        partyName = item.recipientName;
+    } else if (item.senderName) {
+        partyName = item.senderName;
+    } else {
+        partyName = item.comment || item.type || 'Wallet Transaction';
+    }
+    partyName = partyName.replace(/_/g, ' ');
+
+    const dateVerb = isCredit ? `Received on ${dateStr}` : `Sent on ${dateStr}`;
+    const pillText = isCredit ? '💵 Money Received' : '💵 Money Transfer';
+    const amountSign = isCredit ? '+ ₹' : '- ₹';
+    const amountColor = isCredit ? 'text-emerald-600 dark:text-emerald-400' : 'text-gray-900 dark:text-white';
+    const sourceLabel = isCredit ? 'In' : 'From';
+
+    const avatarHtml = getPaytmInitialAvatar(partyName);
+
+    return `
+        <div class="py-3 px-1 border-b border-gray-100 dark:border-gray-800 space-y-1 ${clickableClass}" ${dataKey}>
+            <div class="flex items-center justify-between gap-3">
+                <div class="flex items-center gap-3 flex-1 min-w-0">
+                    ${avatarHtml}
+                    <div class="min-w-0 flex-1">
+                        <h4 class="text-sm font-bold text-gray-900 dark:text-white truncate">${escapeHtml(partyName)}</h4>
+                        <p class="text-xs font-medium text-gray-500 dark:text-gray-400 mt-0.5">${dateVerb}</p>
+                        <div class="mt-1">
+                            <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400 text-[10px] font-bold">
+                                ${pillText}
+                            </span>
+                        </div>
+                    </div>
+                </div>
+                <div class="text-right shrink-0">
+                    <p class="text-base font-bold ${amountColor}">${amountSign}${Math.abs(Number(item.amount || 0)).toLocaleString('en-IN')}</p>
+                    <p class="text-[11px] text-gray-400 font-medium mt-0.5 flex items-center justify-end gap-1">
+                        <span>${sourceLabel}</span>
+                        <span class="inline-flex items-center justify-center w-4 h-4 rounded-full bg-blue-600 text-white text-[9px] font-black">🔵</span>
                     </p>
-                </div>`;
-        };
+                </div>
+            </div>
+        </div>`;
+};
 
 const setBottomNavActive = (activeId) => {
             document.querySelectorAll('.bottom-nav-btn').forEach(btn => {
@@ -6691,127 +6730,193 @@ const getLatestTransactionsForBot = async (limit = 5) => {
         };
 
 const getFilteredTransactions = (filter) => {
-            if ((!unifiedHistoryCache || unifiedHistoryCache.length === 0) && currentUser?.uid) {
-                unifiedHistoryCache = readHistoryItemsFromCache(currentUser.uid);
-            }
+    if ((!unifiedHistoryCache || unifiedHistoryCache.length === 0) && currentUser?.uid) {
+        unifiedHistoryCache = readHistoryItemsFromCache(currentUser.uid);
+    }
 
-            if (filter === 'all') {
-                return unifiedHistoryCache;
-            }
+    if (filter === 'all') {
+        return unifiedHistoryCache;
+    }
 
-            if (filter === 'withdrawal') {
-                return unifiedHistoryCache.filter(item =>
-                    normalizeTransactionType(item) === 'withdrawal' ||
-                    (item.status === 'pending' && normalizeTransactionType(item) !== 'loan')
-                );
-            }
+    if (filter === 'deposit') {
+        return unifiedHistoryCache.filter(item => item.type === 'deposit' || !!item.orderId);
+    }
 
-            if (filter === 'received') {
-                return unifiedHistoryCache.filter(item => {
-                    const type = normalizeTransactionType(item);
-                    return ['credit', 'gift_card'].includes(type) || (type === 'wallet_transfer' && Number(item.amount || 0) > 0);
-                });
-            }
+    if (filter === 'withdrawal') {
+        return unifiedHistoryCache.filter(item =>
+            normalizeTransactionType(item) === 'withdrawal' ||
+            (item.status === 'pending' && normalizeTransactionType(item) !== 'loan')
+        );
+    }
 
-            if (filter === 'sent') {
-                return unifiedHistoryCache.filter(item => {
-                    const type = normalizeTransactionType(item);
-                    return type === 'debit' || type === 'mobile_recharge' || type === 'withdrawal' || (type === 'wallet_transfer' && Number(item.amount || 0) < 0);
-                });
-            }
+    if (filter === 'received') {
+        return unifiedHistoryCache.filter(item => {
+            const type = normalizeTransactionType(item);
+            return ['credit', 'gift_card'].includes(type) || (type === 'wallet_transfer' && Number(item.amount || 0) > 0);
+        });
+    }
 
-            if (filter === 'debit') {
-                return unifiedHistoryCache.filter(item => normalizeTransactionType(item) === 'debit');
-            }
+    if (filter === 'sent') {
+        return unifiedHistoryCache.filter(item => {
+            const type = normalizeTransactionType(item);
+            return type === 'debit' || type === 'mobile_recharge' || type === 'withdrawal' || (type === 'wallet_transfer' && Number(item.amount || 0) < 0);
+        });
+    }
 
-            return unifiedHistoryCache;
-        };
+    if (filter === 'debit') {
+        return unifiedHistoryCache.filter(item => normalizeTransactionType(item) === 'debit');
+    }
+
+    return unifiedHistoryCache;
+};
 
 const renderFilteredTransactions = (filter, options = {}) => {
-            const { reset = true } = options;
-            const filteredList = getFilteredTransactions(filter);
-            transactionListState.filter = filter;
-            transactionListState.items = filteredList;
-            if (reset) {
-                transactionListState.visibleCount = TRANSACTION_PAGE_SIZE;
-            }
+    const { reset = true } = options;
+    let filteredList = getFilteredTransactions(filter);
 
-            const listElement = document.getElementById('all-transactions-list');
-            if (listElement) {
-                const visibleItems = filteredList.slice(0, transactionListState.visibleCount);
-                const hasMore = transactionListState.visibleCount < filteredList.length;
-                listElement.innerHTML = filteredList.length === 0
-                    ? '<p class="text-gray-500 dark:text-gray-400 text-center py-4">No transactions found for this filter.</p>'
-                    : `${visibleItems.map(item => renderTransactionItem(item, true)).join('')}
-                       ${hasMore ? '<p id="transactions-load-hint" class="text-center text-xs font-semibold text-gray-500 dark:text-gray-400 py-3">Scroll to load more</p>' : ''}`;
-            }
-        };
+    // Apply real-time search filter if text is entered
+    const searchQuery = (document.getElementById('transaction-search-input')?.value || '').toLowerCase().trim();
+    if (searchQuery) {
+        filteredList = filteredList.filter(item => {
+            const name = (item.senderName || item.recipientName || item.userName || item.comment || item.type || '').toLowerCase();
+            const orderId = (item.orderId || item.id || item.transactionId || '').toLowerCase();
+            const mobile = (item.mobileNumber || item.senderMobile || item.recipientMobile || '').toLowerCase();
+            const amount = String(item.amount || '');
+            const utr = (item.utr || '').toLowerCase();
+            return name.includes(searchQuery) || orderId.includes(searchQuery) || mobile.includes(searchQuery) || amount.includes(searchQuery) || utr.includes(searchQuery);
+        });
+    }
+
+    transactionListState.filter = filter;
+    transactionListState.items = filteredList;
+    if (reset) {
+        transactionListState.visibleCount = TRANSACTION_PAGE_SIZE;
+    }
+
+    const listElement = document.getElementById('all-transactions-list');
+    if (!listElement) return;
+
+    if (filteredList.length === 0) {
+        listElement.innerHTML = '<p class="text-gray-500 dark:text-gray-400 text-center py-8 text-xs font-semibold">No transactions found.</p>';
+        return;
+    }
+
+    const visibleItems = filteredList.slice(0, transactionListState.visibleCount);
+    const hasMore = transactionListState.visibleCount < filteredList.length;
+
+    // Paytm Style: Group visible items by Month Year
+    const monthGroups = {};
+    visibleItems.forEach(item => {
+        const timestamp = item.timestamp || item.createdAt || item.requestedAt;
+        let date;
+        if (timestamp?.toDate) date = timestamp.toDate();
+        else if (timestamp?.seconds) date = new Date(timestamp.seconds * 1000);
+        else if (typeof timestamp === 'number') date = new Date(timestamp);
+        else date = new Date(timestamp);
+        if (isNaN(date.getTime())) date = new Date();
+
+        const monthKey = date.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+        if (!monthGroups[monthKey]) monthGroups[monthKey] = [];
+        monthGroups[monthKey].push(item);
+    });
+
+    let html = '';
+    Object.keys(monthGroups).forEach(monthKey => {
+        html += `
+            <div class="mt-3 mb-1">
+                <span class="text-[11px] font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400 block px-1 py-1 bg-gray-100/70 dark:bg-gray-750 rounded-lg">${monthKey}</span>
+            </div>
+            <div class="space-y-0.5">
+                ${monthGroups[monthKey].map(item => renderTransactionItem(item, true)).join('')}
+            </div>`;
+    });
+
+    if (hasMore) {
+        html += `<p id="transactions-load-hint" class="text-center text-xs font-semibold text-gray-500 dark:text-gray-400 py-3">Scroll to load more</p>`;
+    }
+
+    listElement.innerHTML = html;
+};
 
 const loadMoreTransactionsIfNeeded = () => {
-            if (!document.getElementById('all-transactions-list')) return;
-            if (transactionListState.visibleCount >= transactionListState.items.length) return;
+    if (!document.getElementById('all-transactions-list')) return;
+    if (transactionListState.visibleCount >= transactionListState.items.length) return;
 
-            transactionListState.visibleCount += TRANSACTION_PAGE_SIZE;
-            renderFilteredTransactions(transactionListState.filter, { reset: false });
-        };
+    transactionListState.visibleCount += TRANSACTION_PAGE_SIZE;
+    renderFilteredTransactions(transactionListState.filter, { reset: false });
+};
 
 const refreshTransactionHistoryFromFirebase = async (userId = currentUser?.uid) => {
-            if (!userId) return [];
-            return prefetchTransactionHistory(userId, { force: true });
-        };
+    if (!userId) return [];
+    return prefetchTransactionHistory(userId, { force: true });
+};
 
 const showAllTransactionsPage = () => {
-            if ((!unifiedHistoryCache || unifiedHistoryCache.length === 0) && currentUser?.uid) {
-                unifiedHistoryCache = readHistoryItemsFromCache(currentUser.uid);
-            }
+    if ((!unifiedHistoryCache || unifiedHistoryCache.length === 0) && currentUser?.uid) {
+        unifiedHistoryCache = readHistoryItemsFromCache(currentUser.uid);
+    }
 
-            const content = `
-                ${getPageHeader('Transaction History')}
-                <div class="max-w-2xl mx-auto bg-white dark:bg-gray-800 p-6 rounded-xl shadow-md">
-                    
-                    <div id="filter-bar" class="flex space-x-2 overflow-x-auto pb-2 mb-4">
-                        <button data-filter="all" class="filter-btn active-filter">All</button>
-                        <button data-filter="withdrawal" class="filter-btn">Withdrawal</button>
-                        <button data-filter="debit" class="filter-btn">Debit</button>
-                        <button data-filter="received" class="filter-btn">Received</button>
-                        <button data-filter="sent" class="filter-btn">Sent</button>
-                    </div>
-                    
-                    <div id="all-transactions-list" class="space-y-3 pr-1">
-                        </div>
-                </div>
-                ${getPageFooter()}`;
-            showPage(content, { keepBottomNav: true });
-            currentMainSection = 'transactions';
-            setBottomNavActive('bottom-home-btn');
-            const pageContainer = document.getElementById('page-container');
+    const content = `
+        ${getPageHeader('Payment History')}
+        <div class="max-w-2xl mx-auto bg-white dark:bg-gray-800 p-5 rounded-2xl shadow-lg space-y-4">
+            
+            <!-- Paytm Style Search Box -->
+            <div class="relative">
+                <span class="absolute inset-y-0 left-0 pl-3.5 flex items-center text-gray-400 pointer-events-none">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+                </span>
+                <input type="text" id="transaction-search-input" placeholder="Search by name, mobile, order ID or amount..." class="w-full pl-10 pr-4 py-2.5 bg-gray-100 dark:bg-gray-700/60 border border-transparent rounded-xl text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-emerald-500 text-gray-900 dark:text-white transition">
+            </div>
 
-            // Initial render of all transactions
-            renderFilteredTransactions('all');
-            prefetchTransactionHistory(currentUser?.uid)
-                .then(() => {
-                    const activeFilter = document.querySelector('#filter-bar .active-filter')?.dataset.filter || 'all';
-                    renderFilteredTransactions(activeFilter, { reset: false });
-                })
-                .catch((error) => {
-                    console.error('Background transaction refresh failed:', error);
-                });
+            <!-- Filter Chips Bar -->
+            <div id="filter-bar" class="flex space-x-2 overflow-x-auto pb-1">
+                <button data-filter="all" class="filter-btn active-filter">All</button>
+                <button data-filter="deposit" class="filter-btn">Add Money</button>
+                <button data-filter="withdrawal" class="filter-btn">Withdrawal</button>
+                <button data-filter="received" class="filter-btn">Received</button>
+                <button data-filter="sent" class="filter-btn">Sent</button>
+            </div>
+            
+            <!-- Paytm Style Transactions List -->
+            <div id="all-transactions-list" class="space-y-1">
+            </div>
+        </div>
+        ${getPageFooter()}`;
+    showPage(content, { keepBottomNav: true });
+    currentMainSection = 'transactions';
+    setBottomNavActive('bottom-home-btn');
+    const pageContainer = document.getElementById('page-container');
 
-            // Add click listener for filter buttons
-            document.getElementById('filter-bar').addEventListener('click', (e) => {
-                if (e.target.matches('.filter-btn')) {
-                    // Update active button
-                    document.querySelectorAll('.filter-btn').forEach(btn => btn.classList.remove('active-filter'));
-                    e.target.classList.add('active-filter');
+    // Initial render of all transactions
+    renderFilteredTransactions('all');
+    prefetchTransactionHistory(currentUser?.uid)
+        .then(() => {
+            const activeFilter = document.querySelector('#filter-bar .active-filter')?.dataset.filter || 'all';
+            renderFilteredTransactions(activeFilter, { reset: false });
+        })
+        .catch((error) => {
+            console.error('Background transaction refresh failed:', error);
+        });
 
-                    // Filter the list
-                    const filter = e.target.dataset.filter;
-                    renderFilteredTransactions(filter);
-                    pageContainer.scrollTop = 0;
-                }
-            });
+    // Add search input listener for real-time search
+    document.getElementById('transaction-search-input')?.addEventListener('input', () => {
+        const activeFilter = document.querySelector('#filter-bar .active-filter')?.dataset.filter || 'all';
+        renderFilteredTransactions(activeFilter);
+    });
 
-            pageContainer.onscroll = () => {
+    // Add click listener for filter buttons
+    document.getElementById('filter-bar')?.addEventListener('click', (e) => {
+        if (e.target.matches('.filter-btn')) {
+            document.querySelectorAll('.filter-btn').forEach(btn => btn.classList.remove('active-filter'));
+            e.target.classList.add('active-filter');
+
+            const filter = e.target.dataset.filter;
+            renderFilteredTransactions(filter);
+            pageContainer.scrollTop = 0;
+        }
+    });
+
+    pageContainer.onscroll = () => {
                 if (currentMainSection !== 'transactions') return;
                 const distanceFromBottom = pageContainer.scrollHeight - pageContainer.scrollTop - pageContainer.clientHeight;
                 if (distanceFromBottom < 180) {
