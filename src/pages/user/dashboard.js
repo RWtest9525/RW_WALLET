@@ -7404,45 +7404,34 @@ const showDepositMoneyPage = () => {
         return showNotification('Your account is flagged. Please contact support.', true);
     }
 
-    const currentBalanceStr = formatCurrency(currentUserData.balance || 0);
-
     const content = `
-        ${getPageHeader('Add Money to Wallet')}
+        ${getPageHeader('Add Money')}
         <div class="max-w-md mx-auto space-y-4">
-            <div class="bg-white dark:bg-gray-800 p-6 rounded-2xl shadow-lg border border-gray-100 dark:border-gray-700/60 space-y-5">
-                <!-- Header with Balance Badge -->
-                <div class="flex items-center justify-between bg-gradient-to-r from-emerald-500/10 to-teal-500/10 border border-emerald-500/20 rounded-2xl p-4">
-                    <div class="flex items-center gap-3">
-                        <div class="w-12 h-12 rounded-xl bg-emerald-500 flex items-center justify-center p-2.5 shadow-md shrink-0">
-                            <img src="https://cdn-icons-png.flaticon.com/512/12449/12449036.png" alt="Add Money" class="w-full h-full object-contain">
-                        </div>
-                        <div>
-                            <h3 class="text-base font-bold text-gray-900 dark:text-white">Add Money via UPI</h3>
-                            <p class="text-xs text-emerald-600 dark:text-emerald-400 font-semibold">Instant Wallet Credit</p>
-                        </div>
-                    </div>
-                    <div class="text-right">
-                        <span class="text-[10px] font-bold uppercase text-gray-400 block">Current Balance</span>
-                        <span class="text-sm font-black text-gray-900 dark:text-white">${currentBalanceStr}</span>
-                    </div>
-                </div>
+            <!-- Top Right Action Bar -->
+            <div class="flex justify-between items-center px-1">
+                <h3 class="text-lg font-black text-gray-900 dark:text-white">Add Money</h3>
+                <button onclick="showAllTransactionsPage()" class="px-3.5 py-1.5 bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300 rounded-xl font-bold text-xs hover:bg-emerald-200 transition flex items-center gap-1 shadow-xs">
+                    <span>Payment History 📜</span>
+                </button>
+            </div>
 
+            <div class="bg-white dark:bg-gray-800 p-6 rounded-2xl shadow-lg border border-gray-100 dark:border-gray-700/60 space-y-5">
                 <!-- Preset Chips -->
                 <div>
-                    <label class="text-xs font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500 mb-2 block">Select Deposit Amount</label>
+                    <label class="text-xs font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500 mb-2 block">Select Amount</label>
                     <div class="grid grid-cols-3 gap-2">
-                        <button type="button" class="deposit-preset-chip px-3 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-700/50 hover:bg-emerald-50 hover:border-emerald-500 dark:hover:bg-emerald-900/30 text-center font-bold text-sm transition text-gray-800 dark:text-gray-200 shadow-sm" data-amount="10">₹10</button>
-                        <button type="button" class="deposit-preset-chip px-3 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-700/50 hover:bg-emerald-50 hover:border-emerald-500 dark:hover:bg-emerald-900/30 text-center font-bold text-sm transition text-gray-800 dark:text-gray-200 shadow-sm" data-amount="20">₹20</button>
-                        <button type="button" class="deposit-preset-chip px-3 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-700/50 hover:bg-emerald-50 hover:border-emerald-500 dark:hover:bg-emerald-900/30 text-center font-bold text-sm transition text-gray-800 dark:text-gray-200 shadow-sm" data-amount="50">₹50</button>
-                        <button type="button" class="deposit-preset-chip px-3 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-700/50 hover:bg-emerald-50 hover:border-emerald-500 dark:hover:bg-emerald-900/30 text-center font-bold text-sm transition text-gray-800 dark:text-gray-200 shadow-sm" data-amount="100">₹100</button>
-                        <button type="button" class="deposit-preset-chip px-3 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-700/50 hover:bg-emerald-50 hover:border-emerald-500 dark:hover:bg-emerald-900/30 text-center font-bold text-sm transition text-gray-800 dark:text-gray-200 shadow-sm" data-amount="200">₹200</button>
-                        <button type="button" class="deposit-preset-chip px-3 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-700/50 hover:bg-emerald-50 hover:border-emerald-500 dark:hover:bg-emerald-900/30 text-center font-bold text-sm transition text-gray-800 dark:text-gray-200 shadow-sm" data-amount="500">₹500</button>
+                        <button type="button" class="deposit-preset-chip px-3 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-700/50 hover:bg-emerald-50 hover:border-emerald-500 dark:hover:bg-emerald-900/30 text-center font-bold text-sm transition text-gray-800 dark:text-gray-200 shadow-xs" data-amount="10">₹10</button>
+                        <button type="button" class="deposit-preset-chip px-3 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-700/50 hover:bg-emerald-50 hover:border-emerald-500 dark:hover:bg-emerald-900/30 text-center font-bold text-sm transition text-gray-800 dark:text-gray-200 shadow-xs" data-amount="20">₹20</button>
+                        <button type="button" class="deposit-preset-chip px-3 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-700/50 hover:bg-emerald-50 hover:border-emerald-500 dark:hover:bg-emerald-900/30 text-center font-bold text-sm transition text-gray-800 dark:text-gray-200 shadow-xs" data-amount="50">₹50</button>
+                        <button type="button" class="deposit-preset-chip px-3 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-700/50 hover:bg-emerald-50 hover:border-emerald-500 dark:hover:bg-emerald-900/30 text-center font-bold text-sm transition text-gray-800 dark:text-gray-200 shadow-xs" data-amount="100">₹100</button>
+                        <button type="button" class="deposit-preset-chip px-3 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-700/50 hover:bg-emerald-50 hover:border-emerald-500 dark:hover:bg-emerald-900/30 text-center font-bold text-sm transition text-gray-800 dark:text-gray-200 shadow-xs" data-amount="200">₹200</button>
+                        <button type="button" class="deposit-preset-chip px-3 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-700/50 hover:bg-emerald-50 hover:border-emerald-500 dark:hover:bg-emerald-900/30 text-center font-bold text-sm transition text-gray-800 dark:text-gray-200 shadow-xs" data-amount="500">₹500</button>
                     </div>
                 </div>
 
                 <!-- Custom Amount Input -->
                 <div>
-                    <label class="text-xs font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500 mb-1 block">Or Enter Custom Amount (₹)</label>
+                    <label class="text-xs font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500 mb-1 block">Deposit Amount (₹)</label>
                     <div class="relative">
                         <span class="absolute inset-y-0 left-0 pl-4 flex items-center text-lg font-bold text-gray-500">₹</span>
                         <input type="number" id="deposit-amount-input" min="10" placeholder="Enter amount (Min ₹10)" value="50" class="w-full pl-9 pr-4 py-3.5 bg-gray-100 dark:bg-gray-700/70 border border-transparent rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 font-bold text-lg text-gray-900 dark:text-white">
@@ -7456,17 +7445,9 @@ const showDepositMoneyPage = () => {
 
                 <!-- Action CTA -->
                 <button id="proceed-deposit-btn" class="w-full bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white font-bold py-3.5 rounded-xl shadow-lg hover:shadow-emerald-500/25 transition-all flex items-center justify-center gap-2">
-                    <span>Generate UPI Payment QR</span>
+                    <span>Make Payment</span>
                     <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"/></svg>
                 </button>
-
-                <!-- Navigation link to Transaction History -->
-                <div class="pt-3 border-t border-gray-100 dark:border-gray-700 text-center">
-                    <button onclick="showAllTransactionsPage()" class="inline-flex items-center gap-1.5 text-xs font-bold text-emerald-600 dark:text-emerald-400 hover:underline">
-                        <span>View Deposit History & Status in Transactions</span>
-                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
-                    </button>
-                </div>
             </div>
         </div>
         ${getPageFooter()}`;
@@ -7498,16 +7479,9 @@ const loadUserRecentDepositsList = async () => {
 
     try {
         const depositsRef = collection(db, `artifacts/${appId}/public/data/deposits`);
-        
-        // Query by userId without ordering to avoid Firestore composite index missing error
-        const snap = await getDocs(query(depositsRef, where("userId", "==", currentUser.uid), firestoreLimit(50))).catch(e => {
-            console.warn('Query by userId error:', e);
-            return null;
-        });
-
+        const snap = await getDocs(query(depositsRef, where("userId", "==", currentUser.uid), firestoreLimit(50))).catch(() => null);
         let items = snap && !snap.empty ? snap.docs.map(d => ({ id: d.id, ...d.data() })) : [];
 
-        // Fallback: search by userEmail if items is empty
         if (items.length === 0 && currentUser.email) {
             const snapEmail = await getDocs(query(depositsRef, where("userEmail", "==", currentUser.email), firestoreLimit(50))).catch(() => null);
             if (snapEmail && !snapEmail.empty) {
@@ -7515,7 +7489,6 @@ const loadUserRecentDepositsList = async () => {
             }
         }
 
-        // Client-side sort by createdAt / timestamp descending
         items.sort((a, b) => {
             const timeA = a.createdAt?.toMillis ? a.createdAt.toMillis() : (new Date(a.createdAt || a.timestamp || 0).getTime() || 0);
             const timeB = b.createdAt?.toMillis ? b.createdAt.toMillis() : (new Date(b.createdAt || b.timestamp || 0).getTime() || 0);
@@ -7565,7 +7538,7 @@ const loadUserRecentDepositsList = async () => {
                     ${!isSuccess ? `
                         <div class="pt-2 border-t border-gray-200 dark:border-gray-600 flex gap-2 justify-end">
                             <button onclick="handleReverifyDeposit('${item.orderId || item.id}', ${item.amount || 10}, ${item.taxAmount || 0})" class="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-lg shadow-sm flex items-center gap-1 transition">
-                                <span>🔄 Verify Again</span>
+                                <span>🔄 Verify Payment</span>
                             </button>
                         </div>
                     ` : ''}
@@ -7602,122 +7575,16 @@ const handleReverifyDeposit = async (orderId, amount, taxAmount) => {
             loadUserRecentDepositsList();
         } else {
             hideLoading();
-            // Ask for UTR input in modal
-            renderModal('Manual Payment Verification',
-                `<div class="space-y-3 text-center">
-                    <p class="text-xs text-gray-600 dark:text-gray-300">Payment not detected automatically yet. If you paid via UPI, enter your 12-digit UTR number below:</p>
-                    <input type="text" id="reverify-utr-input" placeholder="Enter 12-digit UTR (e.g. 4215...)" class="w-full px-3 py-2 bg-gray-100 dark:bg-gray-700 rounded-lg text-xs font-mono border border-gray-300 dark:border-gray-600 focus:ring-2 focus:ring-emerald-500">
-                </div>`,
-                `<button onclick="window.closeModal()" class="px-3.5 py-1.5 text-xs bg-gray-200 dark:bg-gray-600 rounded-lg">Cancel</button>
-                 <button id="submit-reverify-utr-btn" class="px-3.5 py-1.5 text-xs bg-emerald-600 text-white rounded-lg font-bold">Submit UTR</button>`,
-                'max-w-sm'
-            );
-
-            document.getElementById('submit-reverify-utr-btn').onclick = async () => {
-                const utrVal = (document.getElementById('reverify-utr-input')?.value || '').trim();
-                if (!utrVal || utrVal.length < 6) {
-                    return showNotification('Please enter a valid UTR number (min 6 chars).', true);
-                }
-                showLoading();
-                try {
-                    const depositRef = doc(db, `artifacts/${appId}/public/data/deposits`, orderId);
-                    await setDoc(depositRef, {
-                        utr: utrVal,
-                        status: 'pending_admin_approval',
-                        updatedAt: serverTimestamp()
-                    }, { merge: true });
-
-                    hideLoading();
-                    window.closeModal();
-                    showNotification('UTR submitted! Admin will verify and credit your wallet shortly.', false, true);
-                    loadUserRecentDepositsList();
-                } catch (err) {
-                    hideLoading();
-                    showNotification('UTR saved! Admin will verify and credit your wallet.', false, true);
-                    window.closeModal();
-                }
-            };
+            showNotification('Payment not detected automatically yet. Please ensure payment completed in your UPI app.', true);
         }
     } catch (e) {
         hideLoading();
         console.warn('Reverify error:', e);
-        showNotification('Verification check failed. Please try submitting UTR.', true);
+        showNotification('Verification check failed.', true);
     }
 };
 
 window.handleReverifyDeposit = handleReverifyDeposit;
-
-const updateDepositSummary = () => {
-    const amountInput = document.getElementById('deposit-amount-input');
-    const summaryBox = document.getElementById('deposit-summary-box');
-    if (!amountInput || !summaryBox) return;
-
-    const depositAmount = parseFloat(amountInput.value) || 0;
-    const taxAmount = Math.ceil(depositAmount / 100) * 5;
-    const totalPayable = (depositAmount + taxAmount).toFixed(2);
-
-    if (depositAmount < 10) {
-        summaryBox.innerHTML = `
-            <div class="text-rose-500 font-semibold text-center py-1">
-                ⚠️ Minimum deposit amount is ₹10
-            </div>`;
-        return;
-    }
-
-    summaryBox.innerHTML = `
-        <div class="flex justify-between text-gray-600 dark:text-gray-400">
-            <span>Wallet Credit Amount:</span>
-            <span class="font-bold text-gray-900 dark:text-white">₹${depositAmount.toFixed(2)}</span>
-        </div>
-        <div class="flex justify-between text-blue-600 dark:text-blue-400">
-            <span>Tax Charge:</span>
-            <span class="font-bold">+₹${taxAmount.toFixed(2)}</span>
-        </div>
-        <div class="pt-2 border-t border-gray-200 dark:border-gray-700 flex justify-between font-bold text-sm text-emerald-600 dark:text-emerald-400">
-            <span>Total Payable via UPI:</span>
-            <span>₹${totalPayable}</span>
-        </div>`;
-};
-
-const markDepositFailed = async ({ orderId, depositAmount, taxAmount, reason = 'Payment Cancelled or Failed' }) => {
-    if (!orderId || processedDepositOrders.has(`failed_${orderId}`)) return;
-    processedDepositOrders.add(`failed_${orderId}`);
-
-    try {
-        const depositRef = doc(db, `artifacts/${appId}/public/data/deposits`, orderId);
-        await setDoc(depositRef, {
-            id: orderId,
-            orderId,
-            userId: currentUser?.uid || 'N/A',
-            userName: currentUserData?.name || 'N/A',
-            userEmail: currentUserData?.email || 'N/A',
-            userMobile: currentUserData?.mobile || 'N/A',
-            amount: Number(depositAmount),
-            taxAmount: Number(taxAmount),
-            totalPayable: Number(depositAmount) + Number(taxAmount),
-            status: 'failed',
-            failedReason: reason,
-            updatedAt: serverTimestamp()
-        }, { merge: true }).catch(() => {});
-
-        if (currentUser) {
-            const userRef = doc(db, `artifacts/${appId}/public/data/users`, currentUser.uid);
-            const txRef = doc(userRef, 'transactions', `dep_${orderId}`);
-            await setDoc(txRef, {
-                type: 'deposit',
-                amount: Number(depositAmount),
-                taxAmount: Number(taxAmount),
-                totalPayable: Number(depositAmount) + Number(taxAmount),
-                comment: `UPI Deposit - Failed (${reason})`,
-                orderId,
-                status: 'failed',
-                timestamp: serverTimestamp()
-            }, { merge: true }).catch(() => {});
-        }
-    } catch (e) {
-        console.warn('Mark deposit failed error:', e);
-    }
-};
 
 const handleGenerateDepositQR = async () => {
     const amountInput = document.getElementById('deposit-amount-input');
@@ -7742,9 +7609,7 @@ const handleGenerateDepositQR = async () => {
         if (res && (res.status === 'success' || res.data?.order_id)) {
             const orderId = res.data.order_id;
             const qrUrl = res.data.qr_url || `https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${encodeURIComponent(`upi://pay?pa=${upiId}&pn=RWWallet&am=${totalPayable}&tn=${orderId}&cu=INR`)}`;
-            const expireAt = res.data.expires_at_ist || '10 minutes';
-
-            // Record initiated deposit in Firestore
+            
             try {
                 const depositRef = doc(db, `artifacts/${appId}/public/data/deposits`, orderId);
                 await setDoc(depositRef, {
@@ -7767,7 +7632,6 @@ const handleGenerateDepositQR = async () => {
             showFamPayPaymentModal({
                 orderId,
                 qrUrl,
-                expireAt,
                 depositAmount,
                 taxAmount,
                 totalPayable,
@@ -7784,7 +7648,7 @@ const handleGenerateDepositQR = async () => {
     }
 };
 
-const showFamPayPaymentModal = ({ orderId, qrUrl, expireAt, depositAmount, taxAmount, totalPayable, upiId, apiKey }) => {
+const showFamPayPaymentModal = ({ orderId, qrUrl, depositAmount, taxAmount, totalPayable, upiId, apiKey }) => {
     if (famPayDepositPollTimer) {
         clearInterval(famPayDepositPollTimer);
         famPayDepositPollTimer = null;
@@ -7794,86 +7658,46 @@ const showFamPayPaymentModal = ({ orderId, qrUrl, expireAt, depositAmount, taxAm
         famPayDepositCountdownTimer = null;
     }
 
-    const upiDeepLink = `upi://pay?pa=${encodeURIComponent(upiId)}&pn=RWWallet&am=${totalPayable}&tn=${encodeURIComponent(orderId)}&cu=INR`;
-    const gpayDeepLink = `intent://pay?pa=${encodeURIComponent(upiId)}&pn=RWWallet&am=${totalPayable}&tn=${encodeURIComponent(orderId)}&cu=INR#Intent;scheme=upi;package=com.google.android.apps.nbu.paisa.user;end`;
-    const phonepeDeepLink = `intent://pay?pa=${encodeURIComponent(upiId)}&pn=RWWallet&am=${totalPayable}&tn=${encodeURIComponent(orderId)}&cu=INR#Intent;scheme=upi;package=com.phonepe.app;end`;
-    const paytmDeepLink = `intent://pay?pa=${encodeURIComponent(upiId)}&pn=RWWallet&am=${totalPayable}&tn=${encodeURIComponent(orderId)}&cu=INR#Intent;scheme=upi;package=net.one97.paytm;end`;
+    const upiDeepLink = `upi://pay?pa=${encodeURIComponent(upiId)}&pn=RWWallet&am=${totalPayable}&tr=${encodeURIComponent(orderId)}&cu=INR`;
 
-    renderModal('UPI Payment - Deposit Funds',
-        `<div class="space-y-2.5 text-center">
-            <!-- 10-Minute Live Countdown Timer Badge -->
-            <div class="flex items-center justify-between bg-rose-50 dark:bg-rose-900/30 border border-rose-200 dark:border-rose-800/60 rounded-xl px-3 py-1.5 text-xs text-rose-700 dark:text-rose-300 font-bold">
-                <span class="flex items-center gap-1.5">
-                    <svg class="w-3.5 h-3.5 text-rose-500 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
-                    <span>Pay Within:</span>
-                </span>
+    renderModal('UPI Payment',
+        `<div class="space-y-4 text-center py-1">
+            <!-- QR Code Card -->
+            <div class="flex flex-col items-center justify-center p-3 bg-white rounded-2xl shadow-sm border border-gray-200 max-w-[210px] mx-auto">
+                <img src="${escapeHtml(qrUrl)}" alt="Scan & Pay QR" class="w-44 h-44 object-contain rounded-lg">
+                <p class="text-[11px] text-gray-500 font-bold mt-1.5">Scan QR with any UPI App</p>
+            </div>
+
+            <!-- Countdown Timer right under QR -->
+            <div class="inline-flex items-center gap-1.5 bg-rose-50 dark:bg-rose-900/30 border border-rose-200 dark:border-rose-800/60 rounded-full px-4 py-1 text-xs text-rose-700 dark:text-rose-300 font-bold">
+                <svg class="w-3.5 h-3.5 text-rose-500 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                <span>Pay Within:</span>
                 <span id="fampay-timer-display" class="font-mono text-sm font-black">10:00</span>
             </div>
 
-            <div class="bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800 rounded-xl p-2.5 text-xs space-y-1">
-                <div class="flex justify-between">
-                    <span class="text-gray-500 dark:text-gray-400">Order ID:</span>
-                    <span class="font-mono font-bold text-gray-900 dark:text-white text-[11px]">${orderId}</span>
-                </div>
-                <div class="flex justify-between">
-                    <span class="text-gray-500 dark:text-gray-400">Wallet Credit:</span>
-                    <span class="font-bold text-emerald-600 dark:text-emerald-400">₹${depositAmount.toFixed(2)}</span>
-                </div>
-                <div class="flex justify-between text-blue-600 dark:text-blue-400">
-                    <span>Tax Charge:</span>
-                    <span>+₹${taxAmount.toFixed(2)}</span>
-                </div>
-                <div class="pt-1 border-t border-emerald-200 dark:border-emerald-800 flex justify-between font-bold text-xs text-gray-900 dark:text-white">
-                    <span>Pay Exact Amount:</span>
-                    <span class="text-emerald-600 dark:text-emerald-400 text-sm">₹${totalPayable}</span>
-                </div>
+            <!-- Big Payable Amount -->
+            <div class="bg-gray-50 dark:bg-gray-750 border border-gray-200 dark:border-gray-700 rounded-2xl p-3">
+                <span class="text-[10px] font-bold text-gray-400 uppercase tracking-wider block">Total Payable Amount</span>
+                <span class="text-3xl font-black text-emerald-600 dark:text-emerald-400">₹${totalPayable}</span>
             </div>
 
-            <!-- Compact QR Code display -->
-            <div class="flex flex-col items-center justify-center p-2 bg-white rounded-xl shadow-sm border border-gray-200 max-w-[200px] mx-auto">
-                <img src="${escapeHtml(qrUrl)}" alt="Scan & Pay QR" class="w-36 h-36 object-contain rounded-md">
-                <p class="text-[10px] text-gray-500 font-semibold mt-1">Scan QR with any UPI App</p>
-            </div>
+            <!-- Direct Pay via UPI App Deep-link Button -->
+            <a href="${upiDeepLink}" class="w-full py-3.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white font-bold rounded-xl text-sm shadow-md transition flex items-center justify-center gap-2">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z"/></svg>
+                <span>Open UPI App / Pay Now</span>
+            </a>
 
-            <!-- Pay via App Buttons -->
-            <div>
-                <p class="text-[11px] font-bold text-gray-500 dark:text-gray-400 mb-1.5">Tap to Pay via App</p>
-                <div class="grid grid-cols-2 gap-1.5">
-                    <a href="${gpayDeepLink}" class="px-2.5 py-1.5 bg-slate-100 dark:bg-gray-700 hover:bg-slate-200 rounded-lg text-xs font-bold text-gray-800 dark:text-gray-200 flex items-center justify-center gap-1">
-                        <span>GPay</span>
-                    </a>
-                    <a href="${phonepeDeepLink}" class="px-2.5 py-1.5 bg-purple-50 dark:bg-purple-900/30 hover:bg-purple-100 rounded-lg text-xs font-bold text-purple-700 dark:text-purple-300 flex items-center justify-center gap-1">
-                        <span>PhonePe</span>
-                    </a>
-                    <a href="${paytmDeepLink}" class="px-2.5 py-1.5 bg-sky-50 dark:bg-sky-900/30 hover:bg-sky-100 rounded-lg text-xs font-bold text-sky-700 dark:text-sky-300 flex items-center justify-center gap-1">
-                        <span>Paytm</span>
-                    </a>
-                    <a href="${upiDeepLink}" class="px-2.5 py-1.5 bg-emerald-50 dark:bg-emerald-900/30 hover:bg-emerald-100 rounded-lg text-xs font-bold text-emerald-700 dark:text-emerald-300 flex items-center justify-center gap-1">
-                        <span>Any UPI App</span>
-                    </a>
-                </div>
-            </div>
-
-            <!-- Manual UTR Entry Box -->
-            <div class="pt-2 border-t border-gray-200 dark:border-gray-700 text-left">
-                <p class="text-[11px] font-bold text-gray-600 dark:text-gray-300 mb-1">Paid manually? Enter UTR / Ref No:</p>
-                <div class="flex gap-1.5">
-                    <input type="text" id="manual-utr-modal-input" placeholder="12-digit UTR (e.g. 4215...)" class="flex-1 px-3 py-1.5 bg-gray-100 dark:bg-gray-700 rounded-lg text-xs font-mono border border-gray-300 dark:border-gray-600 focus:ring-2 focus:ring-emerald-500">
-                    <button id="submit-modal-utr-btn" class="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold transition shadow-sm whitespace-nowrap">Submit UTR</button>
-                </div>
-            </div>
-
-            <div id="fampay-verify-status" class="text-xs text-center font-bold text-amber-600 dark:amber-400 flex items-center justify-center gap-2 pt-1">
-                <div class="w-3 h-3 border-2 border-amber-600 border-t-transparent rounded-full animate-spin"></div>
-                <span>Waiting for payment verification...</span>
+            <!-- Auto-Verifier Status Badge -->
+            <div id="fampay-verify-status" class="text-xs text-center font-bold text-emerald-600 dark:text-emerald-400 flex items-center justify-center gap-2 pt-1">
+                <div class="w-3.5 h-3.5 border-2 border-emerald-600 border-t-transparent rounded-full animate-spin"></div>
+                <span>Auto Verifying Payment...</span>
             </div>
         </div>`,
-        `<button id="cancel-deposit-modal-btn" class="px-3.5 py-1.5 text-xs bg-gray-200 dark:bg-gray-600 rounded-lg">Cancel</button>
-         <button id="manual-verify-deposit-btn" class="px-3.5 py-1.5 text-xs bg-emerald-600 text-white rounded-lg font-bold">✅ Verify Payment</button>`,
+        `<button id="cancel-deposit-modal-btn" onclick="window.closeModal()" class="w-full py-2.5 text-xs font-bold bg-gray-200 dark:bg-gray-600 text-gray-800 dark:text-gray-200 rounded-xl">Cancel</button>`,
         'max-w-sm'
     );
 
-    let remainingSeconds = 600; // 10 minutes live timer
+    let remainingSeconds = 600;
 
     const updateCountdownDisplay = () => {
         const mins = Math.floor(remainingSeconds / 60);
@@ -7896,7 +7720,7 @@ const showFamPayPaymentModal = ({ orderId, qrUrl, expireAt, depositAmount, taxAm
             markDepositFailed({ orderId, depositAmount, taxAmount, reason: '10 Minute Payment Window Expired' });
             const statusEl = document.getElementById('fampay-verify-status');
             if (statusEl) {
-                statusEl.innerHTML = `<span class="text-rose-500 font-bold">❌ 10-Minute Timer Expired! Transaction saved in history.</span>`;
+                statusEl.innerHTML = `<span class="text-rose-500 font-bold">❌ Timer Expired! Order saved in Payment History.</span>`;
             }
         } else {
             remainingSeconds--;
@@ -7906,18 +7730,9 @@ const showFamPayPaymentModal = ({ orderId, qrUrl, expireAt, depositAmount, taxAm
     updateCountdownDisplay();
     famPayDepositCountdownTimer = setInterval(updateCountdownDisplay, 1000);
 
-    const checkVerification = async (isManual = false, enteredUtr = '') => {
-        const statusEl = document.getElementById('fampay-verify-status');
-        if (isManual && statusEl) {
-            statusEl.innerHTML = `<div class="w-3 h-3 border-2 border-emerald-600 border-t-transparent rounded-full animate-spin"></div> Checking payment status...`;
-        }
-
+    const checkVerification = async () => {
         try {
-            let verifyUrl = `https://fampay.anujbots.xyz/verify.php?order_id=${encodeURIComponent(orderId)}&api_key=${encodeURIComponent(apiKey)}`;
-            if (enteredUtr) {
-                verifyUrl += `&utr=${encodeURIComponent(enteredUtr)}`;
-            }
-
+            const verifyUrl = `https://fampay.anujbots.xyz/verify.php?order_id=${encodeURIComponent(orderId)}&api_key=${encodeURIComponent(apiKey)}`;
             const vRes = await fetch(verifyUrl).then(r => r.json()).catch(() => null);
 
             if (vRes && (vRes.status === 'success' || vRes.success === true)) {
@@ -7930,7 +7745,7 @@ const showFamPayPaymentModal = ({ orderId, qrUrl, expireAt, depositAmount, taxAm
                     famPayDepositCountdownTimer = null;
                 }
                 const txnId = vRes.data?.transaction_id || `TXN_${orderId}`;
-                const utr = enteredUtr || vRes.data?.utr || 'N/A';
+                const utr = vRes.data?.utr || 'N/A';
                 const senderName = vRes.data?.sender_name || 'UPI User';
 
                 await processSuccessfulDeposit({
@@ -7941,59 +7756,20 @@ const showFamPayPaymentModal = ({ orderId, qrUrl, expireAt, depositAmount, taxAm
                     utr,
                     senderName
                 });
-            } else if (isManual) {
-                if (enteredUtr && enteredUtr.length >= 6) {
-                    // Update deposit record in Firestore with user's UTR for Admin approval
-                    try {
-                        const depositRef = doc(db, `artifacts/${appId}/public/data/deposits`, orderId);
-                        await setDoc(depositRef, {
-                            utr: enteredUtr,
-                            status: 'pending_admin_approval',
-                            updatedAt: serverTimestamp()
-                        }, { merge: true });
-                    } catch (e) {}
-
-                    if (statusEl) statusEl.innerHTML = `<span class="text-amber-600 font-bold">⚠️ UTR Submitting... Saved for Admin Verification!</span>`;
-                    showNotification('UTR saved! Admin will verify and credit your wallet shortly.', false, true);
-                } else if (statusEl) {
-                    statusEl.innerHTML = `<span class="text-rose-500">❌ Payment Not Found Yet. If paid, enter UTR above.</span>`;
-                }
             }
         } catch (e) {
-            console.warn('FamPay Verify Error:', e);
-            if (isManual && statusEl) {
-                if (enteredUtr && enteredUtr.length >= 6) {
-                    showNotification('UTR recorded! Admin will credit your wallet upon verification.', false, true);
-                } else {
-                    statusEl.innerHTML = `<span class="text-rose-500">❌ Check failed. Please enter your 12-digit UTR above.</span>`;
-                }
-            }
+            console.warn('Auto verifier check skipped:', e);
         }
     };
 
-    famPayDepositPollTimer = setInterval(() => checkVerification(false), 4000);
+    famPayDepositPollTimer = setInterval(checkVerification, 2500);
+    checkVerification();
 
-    document.getElementById('manual-verify-deposit-btn').onclick = () => checkVerification(true);
-    document.getElementById('submit-modal-utr-btn').onclick = () => {
-        const utrVal = (document.getElementById('manual-utr-modal-input')?.value || '').trim();
-        if (!utrVal || utrVal.length < 6) {
-            return showNotification('Please enter a valid UTR / Transaction ID (min 6 chars).', true);
-        }
-        checkVerification(true, utrVal);
-    };
-
-    document.getElementById('cancel-deposit-modal-btn').onclick = () => {
-        if (famPayDepositPollTimer) {
-            clearInterval(famPayDepositPollTimer);
-            famPayDepositPollTimer = null;
-        }
-        if (famPayDepositCountdownTimer) {
-            clearInterval(famPayDepositCountdownTimer);
-            famPayDepositCountdownTimer = null;
-        }
-        markDepositFailed({ orderId, depositAmount, taxAmount, reason: 'User Cancelled Modal' });
+    document.getElementById('cancel-deposit-modal-btn')?.addEventListener('click', () => {
+        if (famPayDepositPollTimer) clearInterval(famPayDepositPollTimer);
+        if (famPayDepositCountdownTimer) clearInterval(famPayDepositCountdownTimer);
         window.closeModal();
-    };
+    });
 };
 
 const processSuccessfulDeposit = async ({ orderId, amount, taxAmount, txnId, utr, senderName }) => {
