@@ -7149,32 +7149,47 @@ const showAllTransactionsPage = () => {
 
     const content = `
         ${getPageHeader('Payment History')}
-        <div class="max-w-2xl mx-auto bg-white dark:bg-gray-800 p-5 rounded-2xl shadow-lg space-y-4">
+        <div class="max-w-2xl mx-auto bg-white dark:bg-gray-800 p-4 rounded-2xl shadow-lg space-y-3">
             
-            <!-- Header Action Row (Download Statement & Filters) -->
-            <div class="flex items-center justify-between gap-2 pb-1 border-b border-gray-100 dark:border-gray-700">
-                <h3 class="text-base font-black text-gray-900 dark:text-white">Transactions</h3>
-                <button onclick="downloadTransactionStatement()" class="px-3 py-1.5 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-100 rounded-xl text-xs font-bold transition flex items-center gap-1.5 shadow-2xs">
-                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
-                    <span>Download Statement</span>
+            <!-- Compact Single Row Header: Search Input + Filter Icon + Download Icon -->
+            <div class="relative flex items-center gap-2">
+                <!-- Search Input Box -->
+                <div class="relative flex-1">
+                    <span class="absolute inset-y-0 left-0 pl-3 flex items-center text-gray-400 pointer-events-none">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+                    </span>
+                    <input type="text" id="transaction-search-input" placeholder="Search by name, mobile, order ID or amount..." class="w-full pl-9 pr-3 py-2 bg-gray-100 dark:bg-gray-700/60 border border-transparent rounded-xl text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-emerald-500 text-gray-900 dark:text-white transition">
+                </div>
+
+                <!-- Filter Toggle Icon Button -->
+                <button id="filter-toggle-btn" title="Filter Transactions" class="p-2 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 rounded-xl text-gray-700 dark:text-gray-200 border border-gray-200/80 dark:border-gray-600 transition shrink-0 shadow-2xs">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z"/></svg>
                 </button>
-            </div>
 
-            <!-- Paytm Style Search Box -->
-            <div class="relative">
-                <span class="absolute inset-y-0 left-0 pl-3.5 flex items-center text-gray-400 pointer-events-none">
-                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
-                </span>
-                <input type="text" id="transaction-search-input" placeholder="Search by name, mobile, order ID or amount..." class="w-full pl-10 pr-4 py-2.5 bg-gray-100 dark:bg-gray-700/60 border border-transparent rounded-xl text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-emerald-500 text-gray-900 dark:text-white transition">
-            </div>
+                <!-- Download PDF Statement Icon Button -->
+                <button onclick="downloadTransactionStatement()" title="Download PDF Statement" class="p-2 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-300 hover:bg-emerald-100 rounded-xl border border-emerald-200 dark:border-emerald-800 transition shrink-0 shadow-2xs">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+                </button>
 
-            <!-- Filter Chips Bar -->
-            <div id="filter-bar" class="flex space-x-2 overflow-x-auto pb-1">
-                <button data-filter="all" class="filter-btn active-filter">All</button>
-                <button data-filter="deposit" class="filter-btn">Add Money</button>
-                <button data-filter="withdrawal" class="filter-btn">Withdrawal</button>
-                <button data-filter="received" class="filter-btn">Received</button>
-                <button data-filter="sent" class="filter-btn">Sent</button>
+                <!-- Floating Filter Dropdown Popup Menu -->
+                <div id="filter-dropdown-menu" class="hidden absolute right-10 top-11 z-50 bg-white dark:bg-gray-800 rounded-2xl shadow-xl border border-gray-200 dark:border-gray-700 p-1.5 w-44 space-y-1">
+                    <button data-filter="all" class="filter-dropdown-btn w-full text-left px-3 py-2 text-xs font-bold rounded-xl hover:bg-emerald-50 dark:hover:bg-emerald-900/30 text-gray-800 dark:text-gray-200 flex items-center justify-between">
+                        <span>All Transactions</span>
+                        <span class="active-dot text-emerald-500 font-bold">✓</span>
+                    </button>
+                    <button data-filter="deposit" class="filter-dropdown-btn w-full text-left px-3 py-2 text-xs font-bold rounded-xl hover:bg-emerald-50 dark:hover:bg-emerald-900/30 text-gray-800 dark:text-gray-200 flex items-center justify-between">
+                        <span>Add Money</span>
+                    </button>
+                    <button data-filter="withdrawal" class="filter-dropdown-btn w-full text-left px-3 py-2 text-xs font-bold rounded-xl hover:bg-emerald-50 dark:hover:bg-emerald-900/30 text-gray-800 dark:text-gray-200 flex items-center justify-between">
+                        <span>Withdrawal</span>
+                    </button>
+                    <button data-filter="received" class="filter-dropdown-btn w-full text-left px-3 py-2 text-xs font-bold rounded-xl hover:bg-emerald-50 dark:hover:bg-emerald-900/30 text-gray-800 dark:text-gray-200 flex items-center justify-between">
+                        <span>Received</span>
+                    </button>
+                    <button data-filter="sent" class="filter-dropdown-btn w-full text-left px-3 py-2 text-xs font-bold rounded-xl hover:bg-emerald-50 dark:hover:bg-emerald-900/30 text-gray-800 dark:text-gray-200 flex items-center justify-between">
+                        <span>Sent</span>
+                    </button>
+                </div>
             </div>
             
             <!-- Paytm Style Transactions List -->
@@ -7186,13 +7201,13 @@ const showAllTransactionsPage = () => {
     currentMainSection = 'transactions';
     setBottomNavActive('bottom-home-btn');
     const pageContainer = document.getElementById('page-container');
+    let activeFilterName = 'all';
 
     // Initial render of all transactions
     renderFilteredTransactions('all');
     prefetchTransactionHistory(currentUser?.uid)
         .then(() => {
-            const activeFilter = document.querySelector('#filter-bar .active-filter')?.dataset.filter || 'all';
-            renderFilteredTransactions(activeFilter, { reset: false });
+            renderFilteredTransactions(activeFilterName, { reset: false });
         })
         .catch((error) => {
             console.error('Background transaction refresh failed:', error);
@@ -7200,29 +7215,45 @@ const showAllTransactionsPage = () => {
 
     // Add search input listener for real-time search
     document.getElementById('transaction-search-input')?.addEventListener('input', () => {
-        const activeFilter = document.querySelector('#filter-bar .active-filter')?.dataset.filter || 'all';
-        renderFilteredTransactions(activeFilter);
+        renderFilteredTransactions(activeFilterName);
     });
 
-    // Add click listener for filter buttons
-    document.getElementById('filter-bar')?.addEventListener('click', (e) => {
-        if (e.target.matches('.filter-btn')) {
-            document.querySelectorAll('.filter-btn').forEach(btn => btn.classList.remove('active-filter'));
-            e.target.classList.add('active-filter');
+    const dropdownMenu = document.getElementById('filter-dropdown-menu');
+    const filterToggleBtn = document.getElementById('filter-toggle-btn');
 
-            const filter = e.target.dataset.filter;
-            renderFilteredTransactions(filter);
+    filterToggleBtn?.addEventListener('click', (e) => {
+        e.stopPropagation();
+        dropdownMenu?.classList.toggle('hidden');
+    });
+
+    document.querySelectorAll('.filter-dropdown-btn').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            activeFilterName = btn.dataset.filter;
+            document.querySelectorAll('.filter-dropdown-btn .active-dot').forEach(dot => dot.remove());
+            btn.insertAdjacentHTML('beforeend', '<span class="active-dot text-emerald-500 font-bold">✓</span>');
+            dropdownMenu?.classList.add('hidden');
+            renderFilteredTransactions(activeFilterName);
             pageContainer.scrollTop = 0;
-        }
+        });
     });
 
+    // Auto-hide dropdown on page scroll or outside click
     pageContainer.onscroll = () => {
-                if (currentMainSection !== 'transactions') return;
-                const distanceFromBottom = pageContainer.scrollHeight - pageContainer.scrollTop - pageContainer.clientHeight;
-                if (distanceFromBottom < 180) {
-                    loadMoreTransactionsIfNeeded();
-                }
-            };
+        dropdownMenu?.classList.add('hidden');
+        if (currentMainSection !== 'transactions') return;
+        const distanceFromBottom = pageContainer.scrollHeight - pageContainer.scrollTop - pageContainer.clientHeight;
+        if (distanceFromBottom < 180) {
+            loadMoreTransactionsIfNeeded();
+        }
+    };
+
+    const handleOutsideClick = (e) => {
+        if (dropdownMenu && !dropdownMenu.contains(e.target) && !filterToggleBtn?.contains(e.target)) {
+            dropdownMenu.classList.add('hidden');
+        }
+    };
+    document.addEventListener('click', handleOutsideClick);
 
             // Keep the click listener for transaction details
             document.getElementById('all-transactions-list').addEventListener('click', (e) => {

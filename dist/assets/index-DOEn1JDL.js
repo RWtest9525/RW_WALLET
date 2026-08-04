@@ -3369,41 +3369,56 @@ ${t}`,n=`
             <\/script>
         </body>
         </html>
-    `),g.document.close()};window.openDownloadStatementModal=Ji;window.downloadTransactionStatement=Ji;const Qi=()=>{document.getElementById("all-transactions-list")&&(transactionListState.visibleCount>=transactionListState.items.length||(transactionListState.visibleCount+=TRANSACTION_PAGE_SIZE,Qe(transactionListState.filter,{reset:!1})))},i0=async(e=currentUser==null?void 0:currentUser.uid)=>e?Qa(e,{force:!0}):[],Zi=()=>{var a,n;(!unifiedHistoryCache||unifiedHistoryCache.length===0)&&(currentUser!=null&&currentUser.uid)&&(unifiedHistoryCache=qe(currentUser.uid));const e=`
+    `),g.document.close()};window.openDownloadStatementModal=Ji;window.downloadTransactionStatement=Ji;const Qi=()=>{document.getElementById("all-transactions-list")&&(transactionListState.visibleCount>=transactionListState.items.length||(transactionListState.visibleCount+=TRANSACTION_PAGE_SIZE,Qe(transactionListState.filter,{reset:!1})))},i0=async(e=currentUser==null?void 0:currentUser.uid)=>e?Qa(e,{force:!0}):[],Zi=()=>{var o;(!unifiedHistoryCache||unifiedHistoryCache.length===0)&&(currentUser!=null&&currentUser.uid)&&(unifiedHistoryCache=qe(currentUser.uid));const e=`
         ${Ke("Payment History")}
-        <div class="max-w-2xl mx-auto bg-white dark:bg-gray-800 p-5 rounded-2xl shadow-lg space-y-4">
+        <div class="max-w-2xl mx-auto bg-white dark:bg-gray-800 p-4 rounded-2xl shadow-lg space-y-3">
             
-            <!-- Header Action Row (Download Statement & Filters) -->
-            <div class="flex items-center justify-between gap-2 pb-1 border-b border-gray-100 dark:border-gray-700">
-                <h3 class="text-base font-black text-gray-900 dark:text-white">Transactions</h3>
-                <button onclick="downloadTransactionStatement()" class="px-3 py-1.5 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-100 rounded-xl text-xs font-bold transition flex items-center gap-1.5 shadow-2xs">
-                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
-                    <span>Download Statement</span>
+            <!-- Compact Single Row Header: Search Input + Filter Icon + Download Icon -->
+            <div class="relative flex items-center gap-2">
+                <!-- Search Input Box -->
+                <div class="relative flex-1">
+                    <span class="absolute inset-y-0 left-0 pl-3 flex items-center text-gray-400 pointer-events-none">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+                    </span>
+                    <input type="text" id="transaction-search-input" placeholder="Search by name, mobile, order ID or amount..." class="w-full pl-9 pr-3 py-2 bg-gray-100 dark:bg-gray-700/60 border border-transparent rounded-xl text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-emerald-500 text-gray-900 dark:text-white transition">
+                </div>
+
+                <!-- Filter Toggle Icon Button -->
+                <button id="filter-toggle-btn" title="Filter Transactions" class="p-2 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 rounded-xl text-gray-700 dark:text-gray-200 border border-gray-200/80 dark:border-gray-600 transition shrink-0 shadow-2xs">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z"/></svg>
                 </button>
-            </div>
 
-            <!-- Paytm Style Search Box -->
-            <div class="relative">
-                <span class="absolute inset-y-0 left-0 pl-3.5 flex items-center text-gray-400 pointer-events-none">
-                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
-                </span>
-                <input type="text" id="transaction-search-input" placeholder="Search by name, mobile, order ID or amount..." class="w-full pl-10 pr-4 py-2.5 bg-gray-100 dark:bg-gray-700/60 border border-transparent rounded-xl text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-emerald-500 text-gray-900 dark:text-white transition">
-            </div>
+                <!-- Download PDF Statement Icon Button -->
+                <button onclick="downloadTransactionStatement()" title="Download PDF Statement" class="p-2 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-300 hover:bg-emerald-100 rounded-xl border border-emerald-200 dark:border-emerald-800 transition shrink-0 shadow-2xs">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+                </button>
 
-            <!-- Filter Chips Bar -->
-            <div id="filter-bar" class="flex space-x-2 overflow-x-auto pb-1">
-                <button data-filter="all" class="filter-btn active-filter">All</button>
-                <button data-filter="deposit" class="filter-btn">Add Money</button>
-                <button data-filter="withdrawal" class="filter-btn">Withdrawal</button>
-                <button data-filter="received" class="filter-btn">Received</button>
-                <button data-filter="sent" class="filter-btn">Sent</button>
+                <!-- Floating Filter Dropdown Popup Menu -->
+                <div id="filter-dropdown-menu" class="hidden absolute right-10 top-11 z-50 bg-white dark:bg-gray-800 rounded-2xl shadow-xl border border-gray-200 dark:border-gray-700 p-1.5 w-44 space-y-1">
+                    <button data-filter="all" class="filter-dropdown-btn w-full text-left px-3 py-2 text-xs font-bold rounded-xl hover:bg-emerald-50 dark:hover:bg-emerald-900/30 text-gray-800 dark:text-gray-200 flex items-center justify-between">
+                        <span>All Transactions</span>
+                        <span class="active-dot text-emerald-500 font-bold">✓</span>
+                    </button>
+                    <button data-filter="deposit" class="filter-dropdown-btn w-full text-left px-3 py-2 text-xs font-bold rounded-xl hover:bg-emerald-50 dark:hover:bg-emerald-900/30 text-gray-800 dark:text-gray-200 flex items-center justify-between">
+                        <span>Add Money</span>
+                    </button>
+                    <button data-filter="withdrawal" class="filter-dropdown-btn w-full text-left px-3 py-2 text-xs font-bold rounded-xl hover:bg-emerald-50 dark:hover:bg-emerald-900/30 text-gray-800 dark:text-gray-200 flex items-center justify-between">
+                        <span>Withdrawal</span>
+                    </button>
+                    <button data-filter="received" class="filter-dropdown-btn w-full text-left px-3 py-2 text-xs font-bold rounded-xl hover:bg-emerald-50 dark:hover:bg-emerald-900/30 text-gray-800 dark:text-gray-200 flex items-center justify-between">
+                        <span>Received</span>
+                    </button>
+                    <button data-filter="sent" class="filter-dropdown-btn w-full text-left px-3 py-2 text-xs font-bold rounded-xl hover:bg-emerald-50 dark:hover:bg-emerald-900/30 text-gray-800 dark:text-gray-200 flex items-center justify-between">
+                        <span>Sent</span>
+                    </button>
+                </div>
             </div>
             
             <!-- Paytm Style Transactions List -->
             <div id="all-transactions-list" class="space-y-1">
             </div>
         </div>
-        ${pe()}`;ue(e,{keepBottomNav:!0}),currentMainSection="transactions",Se("bottom-home-btn");const t=document.getElementById("page-container");Qe("all"),Qa(currentUser==null?void 0:currentUser.uid).then(()=>{var s;const r=((s=document.querySelector("#filter-bar .active-filter"))==null?void 0:s.dataset.filter)||"all";Qe(r,{reset:!1})}).catch(r=>{console.error("Background transaction refresh failed:",r)}),(a=document.getElementById("transaction-search-input"))==null||a.addEventListener("input",()=>{var s;const r=((s=document.querySelector("#filter-bar .active-filter"))==null?void 0:s.dataset.filter)||"all";Qe(r)}),(n=document.getElementById("filter-bar"))==null||n.addEventListener("click",r=>{if(r.target.matches(".filter-btn")){document.querySelectorAll(".filter-btn").forEach(o=>o.classList.remove("active-filter")),r.target.classList.add("active-filter");const s=r.target.dataset.filter;Qe(s),t.scrollTop=0}}),t.onscroll=()=>{if(currentMainSection!=="transactions")return;t.scrollHeight-t.scrollTop-t.clientHeight<180&&Qi()},document.getElementById("all-transactions-list").addEventListener("click",r=>{const s=r.target.closest(".tx-item-clickable");s&&Xi(s.dataset.key)})},d0=()=>{const e=`
+        ${pe()}`;ue(e,{keepBottomNav:!0}),currentMainSection="transactions",Se("bottom-home-btn");const t=document.getElementById("page-container");let a="all";Qe("all"),Qa(currentUser==null?void 0:currentUser.uid).then(()=>{Qe(a,{reset:!1})}).catch(i=>{console.error("Background transaction refresh failed:",i)}),(o=document.getElementById("transaction-search-input"))==null||o.addEventListener("input",()=>{Qe(a)});const n=document.getElementById("filter-dropdown-menu"),r=document.getElementById("filter-toggle-btn");r==null||r.addEventListener("click",i=>{i.stopPropagation(),n==null||n.classList.toggle("hidden")}),document.querySelectorAll(".filter-dropdown-btn").forEach(i=>{i.addEventListener("click",d=>{d.stopPropagation(),a=i.dataset.filter,document.querySelectorAll(".filter-dropdown-btn .active-dot").forEach(l=>l.remove()),i.insertAdjacentHTML("beforeend",'<span class="active-dot text-emerald-500 font-bold">✓</span>'),n==null||n.classList.add("hidden"),Qe(a),t.scrollTop=0})}),t.onscroll=()=>{if(n==null||n.classList.add("hidden"),currentMainSection!=="transactions")return;t.scrollHeight-t.scrollTop-t.clientHeight<180&&Qi()};const s=i=>{n&&!n.contains(i.target)&&!(r!=null&&r.contains(i.target))&&n.classList.add("hidden")};document.addEventListener("click",s),document.getElementById("all-transactions-list").addEventListener("click",i=>{const d=i.target.closest(".tx-item-clickable");d&&Xi(d.dataset.key)})},d0=()=>{const e=`
                 ${Ke("Pay to Wallet")}
                 <div class="max-w-md mx-auto bg-white dark:bg-gray-800 p-6 rounded-xl shadow-md space-y-6">
                     <div class="text-center">
