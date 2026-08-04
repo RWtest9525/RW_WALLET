@@ -6844,25 +6844,25 @@ const renderFilteredTransactions = (filter, options = {}) => {
 
     let html = '';
     Object.keys(monthGroups).forEach(monthKey => {
-        let monthEarned = 0;
-        let monthSpent = 0;
+        let monthReceived = 0;
         monthGroups[monthKey].forEach(t => {
             const amt = Math.abs(Number(t.amount || 0));
             const isCredit = t.type === 'deposit' || t.type === 'credit' || t.type === 'gift_card' || (!['debit', 'withdrawal', 'mobile_recharge'].includes(t.type) && Number(t.amount || 0) > 0);
-            if (isCredit) monthEarned += amt;
-            else monthSpent += amt;
+            if (isCredit) monthReceived += amt;
         });
 
         html += `
             <div class="mt-6 mb-3 pt-3 border-t border-gray-200 dark:border-gray-700/80">
-                <div onclick="showMonthlyAISpendSummaryPage('${monthKey}')" class="flex items-center justify-between bg-gradient-to-r from-slate-100 to-emerald-50/40 dark:from-gray-750 dark:to-gray-700 px-3.5 py-2 rounded-xl border-l-4 border-emerald-500 shadow-2xs cursor-pointer hover:bg-emerald-100/50 transition group">
-                    <div>
-                        <span class="text-xs font-black uppercase tracking-wider text-gray-800 dark:text-gray-200 block">${monthKey}</span>
-                        <span class="text-[10px] font-bold text-gray-500 dark:text-gray-400">Earned/Recv: <span class="text-emerald-600 dark:text-emerald-400 font-extrabold">₹${monthEarned.toLocaleString('en-IN')}</span> | Spent: <span class="text-rose-600 dark:text-rose-400 font-extrabold">₹${monthSpent.toLocaleString('en-IN')}</span></span>
-                    </div>
-                    <div class="flex items-center gap-1 text-emerald-600 dark:text-emerald-400 text-xs font-bold group-hover:translate-x-1 transition-transform">
-                        <span class="hidden sm:inline text-[11px]">AI Summary</span>
-                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M9 5l7 7-7 7"/></svg>
+                <div onclick="showMonthlyAISpendSummaryPage('${monthKey}')" class="flex items-center justify-between bg-slate-100 dark:bg-gray-750 px-4 py-3.5 rounded-2xl shadow-2xs cursor-pointer hover:bg-slate-200 dark:hover:bg-gray-700 transition">
+                    <span class="text-sm font-black text-gray-900 dark:text-white">${monthKey}</span>
+                    <div class="flex items-center gap-3">
+                        <div class="text-right">
+                            <span class="text-[11px] font-bold text-gray-500 dark:text-gray-400 block">Total Received</span>
+                            <span class="text-base font-black text-gray-900 dark:text-white block">₹${monthReceived.toLocaleString('en-IN')}</span>
+                        </div>
+                        <div class="w-8 h-8 rounded-full bg-blue-100 dark:bg-blue-900/40 text-blue-600 dark:text-blue-300 flex items-center justify-center shrink-0 shadow-2xs">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M9 5l7 7-7 7"/></svg>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -7311,12 +7311,6 @@ const showMonthlyAISpendSummaryPage = (targetMonthKey = '') => {
     let totalReceived = 0;
     let receivedCount = 0;
 
-    let taskEarnings = 0;
-    let taskCount = 0;
-
-    let adminCredits = 0;
-    let adminCount = 0;
-
     let addMoneyAmount = 0;
     let addMoneyCount = 0;
 
@@ -7332,14 +7326,9 @@ const showMonthlyAISpendSummaryPage = (targetMonthKey = '') => {
     monthItems.forEach(t => {
         const amt = Math.abs(Number(t.amount || 0));
         const rawType = normalizeTransactionType(t);
-        const remarks = (t.comment || '').toLowerCase();
-        const sender = (t.senderName || '').toLowerCase();
 
         const isDeposit = t.type === 'deposit' || !!t.orderId;
         const isWithdrawal = t.type === 'withdrawal' || rawType === 'withdrawal';
-        const isRecharge = t.type === 'mobile_recharge';
-        const isAdminCredit = t.isAdminTransaction || remarks.includes('admin') || sender.includes('reviews world');
-        const isTaskReward = t.type === 'income' || remarks.includes('task') || remarks.includes('reward');
         const isCredit = rawType === 'credit' || t.type === 'gift_card' || (!['debit', 'withdrawal', 'mobile_recharge'].includes(rawType) && amt > 0);
 
         if (isDeposit) {
@@ -7352,19 +7341,6 @@ const showMonthlyAISpendSummaryPage = (targetMonthKey = '') => {
             withdrawalCount++;
             totalSpent += amt;
             spentCount++;
-        } else if (isRecharge) {
-            totalSpent += amt;
-            spentCount++;
-        } else if (isTaskReward) {
-            taskEarnings += amt;
-            taskCount++;
-            totalReceived += amt;
-            receivedCount++;
-        } else if (isAdminCredit) {
-            adminCredits += amt;
-            adminCount++;
-            totalReceived += amt;
-            receivedCount++;
         } else if (isCredit) {
             moneyReceivedAmount += amt;
             moneyReceivedCount++;
@@ -7379,7 +7355,10 @@ const showMonthlyAISpendSummaryPage = (targetMonthKey = '') => {
     });
 
     const monthShortNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-    const monthTabsHtml = monthShortNames.map((m, idx) => {
+    const currentMonthIdx = now.getMonth();
+    const availableMonths = monthShortNames.slice(0, currentMonthIdx + 1);
+
+    const monthTabsHtml = availableMonths.map((m, idx) => {
         const mFull = new Date(currentYear, idx, 1).toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
         const isActive = mFull.toLowerCase() === targetMonthKey.toLowerCase();
         const activeClass = isActive
@@ -7405,7 +7384,7 @@ const showMonthlyAISpendSummaryPage = (targetMonthKey = '') => {
             </div>
 
             <!-- Overview Spent vs Received Card -->
-            <div class="bg-white dark:bg-gray-800 p-5 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 space-y-4">
+            <div class="bg-white dark:bg-gray-800 p-5 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700">
                 <div class="grid grid-cols-2 gap-4 divide-x divide-gray-100 dark:divide-gray-700">
                     <div>
                         <span class="text-xs text-gray-500 dark:text-gray-400 font-bold block">Total Spent</span>
@@ -7418,10 +7397,6 @@ const showMonthlyAISpendSummaryPage = (targetMonthKey = '') => {
                         <span class="text-[11px] text-gray-400 font-medium">${receivedCount} Payments</span>
                     </div>
                 </div>
-
-                <div class="bg-slate-50 dark:bg-gray-750 p-3 rounded-xl border border-gray-100 dark:border-gray-700 text-[11px] text-gray-500 dark:text-gray-400">
-                    Note: Self-transfers and payments hidden by you are excluded from total paid/received calculations.
-                </div>
             </div>
 
             <!-- Categories Breakdown Table Header -->
@@ -7433,36 +7408,18 @@ const showMonthlyAISpendSummaryPage = (targetMonthKey = '') => {
             <!-- Category Rows -->
             <div class="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 divide-y divide-gray-100 dark:divide-gray-700 overflow-hidden">
                 
-                <!-- Task Earnings -->
-                <div onclick="showMonthlyCategoryDetail('${targetMonthKey}', 'task')" class="p-4 flex items-center justify-between hover:bg-gray-50 dark:hover:bg-gray-750 cursor-pointer transition group">
+                <!-- Money Received -->
+                <div onclick="showMonthlyCategoryDetail('${targetMonthKey}', 'received')" class="p-4 flex items-center justify-between hover:bg-gray-50 dark:hover:bg-gray-750 cursor-pointer transition group">
                     <div class="flex items-center gap-3">
                         <div class="w-10 h-10 rounded-full bg-emerald-100 dark:bg-emerald-900/40 text-emerald-600 dark:text-emerald-300 flex items-center justify-center font-bold text-sm shrink-0">💵</div>
                         <div>
-                            <h4 class="text-sm font-bold text-gray-900 dark:text-white">Task Earnings / Rewards</h4>
-                            <p class="text-xs text-gray-500 dark:text-gray-400 mt-0.5">${taskCount} Payments</p>
+                            <h4 class="text-sm font-bold text-gray-900 dark:text-white">Money Received</h4>
+                            <p class="text-xs text-gray-500 dark:text-gray-400 mt-0.5">${moneyReceivedCount} Payments</p>
                         </div>
                     </div>
                     <div class="text-right flex items-center gap-2">
                         <div>
-                            <span class="text-base font-bold text-emerald-600 dark:text-emerald-400 block">₹${taskEarnings.toLocaleString('en-IN')}</span>
-                            <span class="text-[10px] text-gray-400 block">Received</span>
-                        </div>
-                        <svg class="w-4 h-4 text-gray-400 group-hover:translate-x-1 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
-                    </div>
-                </div>
-
-                <!-- Admin Credits -->
-                <div onclick="showMonthlyCategoryDetail('${targetMonthKey}', 'admin')" class="p-4 flex items-center justify-between hover:bg-gray-50 dark:hover:bg-gray-750 cursor-pointer transition group">
-                    <div class="flex items-center gap-3">
-                        <div class="w-10 h-10 rounded-full bg-blue-100 dark:bg-blue-900/40 text-blue-600 dark:text-blue-300 flex items-center justify-center font-bold text-sm shrink-0">🏛️</div>
-                        <div>
-                            <h4 class="text-sm font-bold text-gray-900 dark:text-white">Admin Credits</h4>
-                            <p class="text-xs text-gray-500 dark:text-gray-400 mt-0.5">${adminCount} Payments</p>
-                        </div>
-                    </div>
-                    <div class="text-right flex items-center gap-2">
-                        <div>
-                            <span class="text-base font-bold text-emerald-600 dark:text-emerald-400 block">₹${adminCredits.toLocaleString('en-IN')}</span>
+                            <span class="text-base font-bold text-emerald-600 dark:text-emerald-400 block">₹${moneyReceivedAmount.toLocaleString('en-IN')}</span>
                             <span class="text-[10px] text-gray-400 block">Received</span>
                         </div>
                         <svg class="w-4 h-4 text-gray-400 group-hover:translate-x-1 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
@@ -7487,7 +7444,7 @@ const showMonthlyAISpendSummaryPage = (targetMonthKey = '') => {
                     </div>
                 </div>
 
-                <!-- Money Transfer / Sent -->
+                <!-- Money Sent -->
                 <div onclick="showMonthlyCategoryDetail('${targetMonthKey}', 'sent')" class="p-4 flex items-center justify-between hover:bg-gray-50 dark:hover:bg-gray-750 cursor-pointer transition group">
                     <div class="flex items-center gap-3">
                         <div class="w-10 h-10 rounded-full bg-purple-100 dark:bg-purple-900/40 text-purple-600 dark:text-purple-300 flex items-center justify-center font-bold text-sm shrink-0">📤</div>
@@ -7500,24 +7457,6 @@ const showMonthlyAISpendSummaryPage = (targetMonthKey = '') => {
                         <div>
                             <span class="text-base font-bold text-gray-900 dark:text-white block">₹${moneySentAmount.toLocaleString('en-IN')}</span>
                             <span class="text-[10px] text-gray-400 block">Spent</span>
-                        </div>
-                        <svg class="w-4 h-4 text-gray-400 group-hover:translate-x-1 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
-                    </div>
-                </div>
-
-                <!-- Money Received -->
-                <div onclick="showMonthlyCategoryDetail('${targetMonthKey}', 'received')" class="p-4 flex items-center justify-between hover:bg-gray-50 dark:hover:bg-gray-750 cursor-pointer transition group">
-                    <div class="flex items-center gap-3">
-                        <div class="w-10 h-10 rounded-full bg-teal-100 dark:bg-teal-900/40 text-teal-600 dark:text-teal-300 flex items-center justify-center font-bold text-sm shrink-0">📥</div>
-                        <div>
-                            <h4 class="text-sm font-bold text-gray-900 dark:text-white">Money Received</h4>
-                            <p class="text-xs text-gray-500 dark:text-gray-400 mt-0.5">${moneyReceivedCount} Payments</p>
-                        </div>
-                    </div>
-                    <div class="text-right flex items-center gap-2">
-                        <div>
-                            <span class="text-base font-bold text-emerald-600 dark:text-emerald-400 block">₹${moneyReceivedAmount.toLocaleString('en-IN')}</span>
-                            <span class="text-[10px] text-gray-400 block">Received</span>
                         </div>
                         <svg class="w-4 h-4 text-gray-400 group-hover:translate-x-1 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
                     </div>
