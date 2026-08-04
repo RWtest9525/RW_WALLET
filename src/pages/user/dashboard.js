@@ -447,6 +447,7 @@ const renderTransactionItem = (item, isFullPage = false) => {
     const timestamp = item.timestamp || item.createdAt || item.requestedAt;
     const dateStr = formatPaytmDate(timestamp);
     const rawType = normalizeTransactionType(item);
+    const rwLogoImg = `<img src="https://cdn-icons-png.flaticon.com/512/12449/12449036.png" class="w-4 h-4 object-contain inline-block" alt="RW Logo">`;
 
     // 1. DEPOSIT / ADD MONEY
     if (item.type === 'deposit' || item.orderId) {
@@ -459,17 +460,17 @@ const renderTransactionItem = (item, isFullPage = false) => {
                 : `${dateStr}`;
 
         const leftIcon = `
-            <div class="w-11 h-11 rounded-full bg-amber-100 dark:bg-amber-900/40 text-amber-600 dark:text-amber-300 flex items-center justify-center shrink-0 shadow-xs">
+            <div class="w-11 h-11 rounded-full bg-emerald-100 dark:bg-emerald-900/40 text-emerald-600 dark:text-emerald-300 flex items-center justify-center shrink-0 shadow-xs">
                 <svg class="w-6 h-6 fill-current" viewBox="0 0 24 24"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
             </div>`;
 
         return `
-            <div class="py-3 px-1 border-b border-gray-100 dark:border-gray-800 space-y-2 ${clickableClass}" ${dataKey}>
+            <div class="py-3 px-1 border-b border-gray-100 dark:border-gray-800 space-y-1 ${clickableClass}" ${dataKey}>
                 <div class="flex items-center justify-between gap-3">
                     <div class="flex items-center gap-3 flex-1 min-w-0">
                         ${leftIcon}
                         <div class="min-w-0 flex-1">
-                            <h4 class="text-sm font-bold text-gray-900 dark:text-white truncate">UPI Lite - Add Money</h4>
+                            <h4 class="text-sm font-bold text-gray-900 dark:text-white truncate">Add Money</h4>
                             <p class="text-xs font-medium ${!isSuccess && !isPending ? 'text-rose-500 font-bold flex items-center gap-1' : 'text-gray-500 dark:text-gray-400'} mt-0.5">
                                 ${statusText}
                                 ${!isSuccess && !isPending ? '<span class="inline-block w-2 h-2 rounded-full bg-rose-500"></span> Failed' : ''}
@@ -482,20 +483,13 @@ const renderTransactionItem = (item, isFullPage = false) => {
                         </div>
                     </div>
                     <div class="text-right shrink-0">
-                        <p class="text-base font-bold text-gray-900 dark:text-white">₹${(item.amount || 0).toLocaleString('en-IN')}</p>
+                        <p class="text-base font-bold text-emerald-600 dark:text-emerald-400">+ ₹${(item.amount || 0).toLocaleString('en-IN')}</p>
                         <p class="text-[11px] text-gray-400 font-medium mt-0.5 flex items-center justify-end gap-1">
                             <span>From</span>
-                            <span class="inline-flex items-center justify-center w-4 h-4 rounded-full bg-blue-600 text-white text-[9px] font-black">₹</span>
+                            ${rwLogoImg}
                         </p>
                     </div>
                 </div>
-                ${!isSuccess ? `
-                    <div class="pt-1 flex justify-end">
-                        <button onclick="event.stopPropagation(); handleReverifyDeposit('${item.orderId || item.id}', ${item.amount || 10}, ${item.taxAmount || 0})" class="px-3 py-1 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-lg shadow-sm transition flex items-center gap-1">
-                            <span>🔄 Verify Payment</span>
-                        </button>
-                    </div>
-                ` : ''}
             </div>`;
     }
 
@@ -537,7 +531,7 @@ const renderTransactionItem = (item, isFullPage = false) => {
                         <p class="text-base font-bold text-gray-900 dark:text-white">- ₹${(item.amount || 0).toLocaleString('en-IN')}</p>
                         <p class="text-[11px] text-gray-400 font-medium mt-0.5 flex items-center justify-end gap-1">
                             <span>From</span>
-                            <span class="inline-flex items-center justify-center w-4 h-4 rounded-full bg-amber-500 text-white text-[9px] font-black">⚡</span>
+                            ${rwLogoImg}
                         </p>
                     </div>
                 </div>
@@ -575,7 +569,7 @@ const renderTransactionItem = (item, isFullPage = false) => {
                         <p class="text-base font-bold text-gray-900 dark:text-white">- ₹${Number(chargeAmount).toLocaleString('en-IN')}</p>
                         <p class="text-[11px] text-gray-400 font-medium mt-0.5 flex items-center justify-end gap-1">
                             <span>From</span>
-                            <span class="inline-flex items-center justify-center w-4 h-4 rounded-full bg-amber-500 text-white text-[9px] font-black">⚡</span>
+                            ${rwLogoImg}
                         </p>
                     </div>
                 </div>
@@ -625,7 +619,7 @@ const renderTransactionItem = (item, isFullPage = false) => {
                     <p class="text-base font-bold ${amountColor}">${amountSign}${Math.abs(Number(item.amount || 0)).toLocaleString('en-IN')}</p>
                     <p class="text-[11px] text-gray-400 font-medium mt-0.5 flex items-center justify-end gap-1">
                         <span>${sourceLabel}</span>
-                        <span class="inline-flex items-center justify-center w-4 h-4 rounded-full bg-blue-600 text-white text-[9px] font-black">🔵</span>
+                        ${rwLogoImg}
                     </p>
                 </div>
             </div>
@@ -6823,10 +6817,12 @@ const renderFilteredTransactions = (filter, options = {}) => {
     let html = '';
     Object.keys(monthGroups).forEach(monthKey => {
         html += `
-            <div class="mt-3 mb-1">
-                <span class="text-[11px] font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400 block px-1 py-1 bg-gray-100/70 dark:bg-gray-750 rounded-lg">${monthKey}</span>
+            <div class="mt-6 mb-3 pt-3 border-t border-gray-200 dark:border-gray-700/80">
+                <div class="flex items-center justify-between bg-slate-100 dark:bg-gray-750 px-3.5 py-1.5 rounded-lg border-l-4 border-emerald-500 shadow-2xs">
+                    <span class="text-xs font-black uppercase tracking-wider text-gray-700 dark:text-gray-200">${monthKey}</span>
+                </div>
             </div>
-            <div class="space-y-0.5">
+            <div class="space-y-0 divide-y divide-gray-100 dark:divide-gray-800">
                 ${monthGroups[monthKey].map(item => renderTransactionItem(item, true)).join('')}
             </div>`;
     });
@@ -6837,6 +6833,37 @@ const renderFilteredTransactions = (filter, options = {}) => {
 
     listElement.innerHTML = html;
 };
+
+const downloadTransactionStatement = () => {
+    if (!unifiedHistoryCache || unifiedHistoryCache.length === 0) {
+        return showNotification('No transaction history available to download.', true);
+    }
+    try {
+        const headers = ["Date & Time", "Type", "Party / Detail", "Amount (INR)", "Status", "Order / Txn ID"];
+        const rows = unifiedHistoryCache.map(tx => [
+            `"${formatDate(tx.timestamp || tx.createdAt || tx.requestedAt)}"`,
+            `"${tx.type || 'transaction'}"`,
+            `"${(tx.senderName || tx.recipientName || tx.comment || 'N/A').replace(/"/g, '""')}"`,
+            tx.amount || 0,
+            `"${tx.status || 'completed'}"`,
+            `"${tx.orderId || tx.transactionId || tx.id || 'N/A'}"`
+        ]);
+        const csvContent = "data:text/csv;charset=utf-8," + [headers.join(","), ...rows.map(e => e.join(","))].join("\n");
+        const encodedUri = encodeURI(csvContent);
+        const link = document.createElement("a");
+        link.setAttribute("href", encodedUri);
+        link.setAttribute("download", `Payment_Statement_${Date.now()}.csv`);
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        showNotification('📥 Transaction statement downloaded successfully!', false, true);
+    } catch (e) {
+        console.error('Download statement error:', e);
+        showNotification('Failed to download statement.', true);
+    }
+};
+
+window.downloadTransactionStatement = downloadTransactionStatement;
 
 const loadMoreTransactionsIfNeeded = () => {
     if (!document.getElementById('all-transactions-list')) return;
@@ -6860,6 +6887,15 @@ const showAllTransactionsPage = () => {
         ${getPageHeader('Payment History')}
         <div class="max-w-2xl mx-auto bg-white dark:bg-gray-800 p-5 rounded-2xl shadow-lg space-y-4">
             
+            <!-- Header Action Row (Download Statement & Filters) -->
+            <div class="flex items-center justify-between gap-2 pb-1 border-b border-gray-100 dark:border-gray-700">
+                <h3 class="text-base font-black text-gray-900 dark:text-white">Transactions</h3>
+                <button onclick="downloadTransactionStatement()" class="px-3 py-1.5 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-100 rounded-xl text-xs font-bold transition flex items-center gap-1.5 shadow-2xs">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+                    <span>Download Statement</span>
+                </button>
+            </div>
+
             <!-- Paytm Style Search Box -->
             <div class="relative">
                 <span class="absolute inset-y-0 left-0 pl-3.5 flex items-center text-gray-400 pointer-events-none">
@@ -7241,13 +7277,12 @@ const showTransactionDetails = (key, source = 'user') => {
                             </div>
 
                             ${(item.type === 'deposit' || item.orderId || (item.comment || '').toLowerCase().includes('deposit')) && rawStatus !== 'completed' ? `
-                                <div class="mt-3 bg-amber-50 dark:bg-amber-900/30 border border-amber-200 dark:border-amber-800 rounded-xl p-3 text-left space-y-2">
-                                    <p class="text-xs font-bold text-amber-800 dark:text-amber-300">Paid manually via UPI App?</p>
-                                    <p class="text-[11px] text-gray-600 dark:text-gray-300">Enter your 12-digit UTR / Reference number to verify & credit your wallet:</p>
-                                    <div class="flex gap-2">
-                                        <input type="text" id="user-utr-verify-input" placeholder="12-digit UTR (e.g. 4215...)" value="${escapeHtml(item.utr || '')}" class="flex-1 px-3 py-1.5 bg-white dark:bg-gray-800 rounded-lg text-xs font-mono border border-gray-300 dark:border-gray-600 focus:ring-2 focus:ring-emerald-500">
-                                        <button onclick="handleUserVerifyDepositUTR('${item.orderId || item.id || item.transactionId}')" class="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold shadow-sm whitespace-nowrap">Verify UTR</button>
-                                    </div>
+                                <div class="mt-3 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 rounded-xl p-3 text-center space-y-2">
+                                    <p class="text-xs font-bold text-emerald-800 dark:text-emerald-300">Payment Unverified or Pending?</p>
+                                    <button onclick="handleReverifyDeposit('${item.orderId || item.id || item.transactionId}', ${item.amount || 10}, ${item.taxAmount || 0})" class="w-full py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow-md transition flex items-center justify-center gap-2">
+                                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+                                        <span>🔄 Verify Payment Status</span>
+                                    </button>
                                 </div>
                             ` : ''}
                         </div>

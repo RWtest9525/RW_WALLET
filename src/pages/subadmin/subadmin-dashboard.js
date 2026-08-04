@@ -1623,7 +1623,10 @@ const showAdminDepositHistoryPage = async () => {
                         <option value="completed">Completed Only</option>
                         <option value="failed">Failed Only</option>
                     </select>
-                    <button id="admin-refresh-deposits-btn" class="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-sm font-bold shadow-sm transition">Refresh</button>
+                    <button id="admin-refresh-deposits-btn" class="px-3 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold shadow-sm transition">Refresh</button>
+                    <button id="admin-autoverify-deposits-btn" onclick="handleAdminAutoVerifyAllDeposits()" class="px-3.5 py-2 bg-gradient-to-r from-amber-500 to-emerald-600 hover:from-amber-600 hover:to-emerald-700 text-white rounded-xl text-xs font-black shadow-md transition flex items-center gap-1">
+                        <span>⚡ Auto-Verify All</span>
+                    </button>
                 </div>
             </div>
 
@@ -1644,6 +1647,87 @@ const showAdminDepositHistoryPage = async () => {
     renderAdminDepositHistoryList();
     fetchAdminDepositHistory();
 };
+
+const handleAdminAutoVerifyAllDeposits = async () => {
+    const uncompleted = allAdminDepositsCache.filter(d => d.status !== 'completed');
+    if (!uncompleted.length) {
+        return showNotification('No pending or failed deposits to verify.', true);
+    }
+
+    showLoading();
+    let verifiedCount = 0;
+    const apiKey = appConfigCache?.fampay_api_key || 'FAM_fbc1b443110a37b5f2f1de5bef365c90defb23c1a38d19c0';
+
+    for (const d of uncompleted) {
+        const orderId = d.orderId || d.id;
+        if (!orderId) continue;
+        try {
+            const verifyUrl = `https://fampay.anujbots.xyz/verify.php?order_id=${encodeURIComponent(orderId)}&api_key=${encodeURIComponent(apiKey)}`;
+            const vRes = await fetch(verifyUrl).then(r => r.json()).catch(() => null);
+
+            if (vRes && (vRes.status === 'success' || vRes.success === true)) {
+                const txnId = vRes.data?.transaction_id || `TXN_${orderId}`;
+                const utr = vRes.data?.utr || 'N/A';
+                const senderName = vRes.data?.sender_name || 'UPI User';
+
+                const userId = d.userId;
+                const amount = Number(d.amount || 0);
+                const taxAmount = Number(d.taxAmount || 0);
+
+                if (userId && amount > 0) {
+                    const userRef = doc(db, `artifacts/${appId}/public/data/users`, userId);
+                    await runTransaction(db, async (tx) => {
+                        const uSnap = await tx.get(userRef);
+                        if (!uSnap.exists()) return;
+                        const curBal = Number(uSnap.data().balance || 0);
+                        const newBal = curBal + amount;
+
+                        tx.update(userRef, { balance: newBal });
+                        const txRef = doc(userRef, 'transactions', `dep_${orderId}`);
+                        tx.set(txRef, {
+                            type: 'deposit',
+                            amount,
+                            taxAmount,
+                            totalPayable: amount + taxAmount,
+                            balanceBefore: curBal,
+                            balanceAfter: newBal,
+                            comment: `UPI Deposit Auto-Verified (UTR: ${utr})`,
+                            orderId,
+                            transactionId: txnId,
+                            utr,
+                            senderName,
+                            status: 'completed',
+                            timestamp: serverTimestamp()
+                        }, { merge: true });
+                    });
+
+                    const depositRef = doc(db, `artifacts/${appId}/public/data/deposits`, orderId);
+                    await setDoc(depositRef, {
+                        status: 'completed',
+                        transactionId: txnId,
+                        utr,
+                        senderName,
+                        completedAt: serverTimestamp()
+                    }, { merge: true });
+
+                    verifiedCount++;
+                }
+            }
+        } catch (err) {
+            console.warn(`Auto-verify error for ${orderId}:`, err);
+        }
+    }
+
+    hideLoading();
+    if (verifiedCount > 0) {
+        showNotification(`⚡ Auto-Verification Complete! ${verifiedCount} deposit(s) verified & credited to users.`, false, true);
+        fetchAdminDepositHistory();
+    } else {
+        showNotification('Auto-verifier ran. No new payments detected in FamPay API.', true);
+    }
+};
+
+window.handleAdminAutoVerifyAllDeposits = handleAdminAutoVerifyAllDeposits;
 
 const fetchAdminDepositHistory = async () => {
     try {
