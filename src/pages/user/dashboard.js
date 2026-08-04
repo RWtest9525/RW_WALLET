@@ -6834,36 +6834,272 @@ const renderFilteredTransactions = (filter, options = {}) => {
     listElement.innerHTML = html;
 };
 
-const downloadTransactionStatement = () => {
+const openDownloadStatementModal = () => {
     if (!unifiedHistoryCache || unifiedHistoryCache.length === 0) {
         return showNotification('No transaction history available to download.', true);
     }
-    try {
-        const headers = ["Date & Time", "Type", "Party / Detail", "Amount (INR)", "Status", "Order / Txn ID"];
-        const rows = unifiedHistoryCache.map(tx => [
-            `"${formatDate(tx.timestamp || tx.createdAt || tx.requestedAt)}"`,
-            `"${tx.type || 'transaction'}"`,
-            `"${(tx.senderName || tx.recipientName || tx.comment || 'N/A').replace(/"/g, '""')}"`,
-            tx.amount || 0,
-            `"${tx.status || 'completed'}"`,
-            `"${tx.orderId || tx.transactionId || tx.id || 'N/A'}"`
-        ]);
-        const csvContent = "data:text/csv;charset=utf-8," + [headers.join(","), ...rows.map(e => e.join(","))].join("\n");
-        const encodedUri = encodeURI(csvContent);
-        const link = document.createElement("a");
-        link.setAttribute("href", encodedUri);
-        link.setAttribute("download", `Payment_Statement_${Date.now()}.csv`);
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-        showNotification('📥 Transaction statement downloaded successfully!', false, true);
-    } catch (e) {
-        console.error('Download statement error:', e);
-        showNotification('Failed to download statement.', true);
-    }
+
+    renderModal('Download Statement (PDF)',
+        `<div class="space-y-4 text-left">
+            <p class="text-xs text-gray-600 dark:text-gray-300 font-medium">Select the time period for your account statement PDF:</p>
+            
+            <div class="space-y-2.5">
+                <label class="flex items-center gap-3 p-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-750 cursor-pointer hover:border-emerald-500 transition">
+                    <input type="radio" name="pdf-range" value="all" checked class="w-4 h-4 text-emerald-600 focus:ring-emerald-500">
+                    <div>
+                        <span class="text-sm font-bold text-gray-900 dark:text-white block">All Time</span>
+                        <span class="text-[11px] text-gray-500">Complete statement of all transactions</span>
+                    </div>
+                </label>
+
+                <label class="flex items-center gap-3 p-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-750 cursor-pointer hover:border-emerald-500 transition">
+                    <input type="radio" name="pdf-range" value="1month" class="w-4 h-4 text-emerald-600 focus:ring-emerald-500">
+                    <div>
+                        <span class="text-sm font-bold text-gray-900 dark:text-white block">Last 1 Month</span>
+                        <span class="text-[11px] text-gray-500">Transactions from the past 30 days</span>
+                    </div>
+                </label>
+
+                <label class="flex items-center gap-3 p-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-750 cursor-pointer hover:border-emerald-500 transition">
+                    <input type="radio" name="pdf-range" value="3months" class="w-4 h-4 text-emerald-600 focus:ring-emerald-500">
+                    <div>
+                        <span class="text-sm font-bold text-gray-900 dark:text-white block">Last 3 Months</span>
+                        <span class="text-[11px] text-gray-500">Transactions from the past 90 days</span>
+                    </div>
+                </label>
+
+                <label class="flex items-center gap-3 p-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-750 cursor-pointer hover:border-emerald-500 transition">
+                    <input type="radio" name="pdf-range" value="6months" class="w-4 h-4 text-emerald-600 focus:ring-emerald-500">
+                    <div>
+                        <span class="text-sm font-bold text-gray-900 dark:text-white block">Last 6 Months</span>
+                        <span class="text-[11px] text-gray-500">Transactions from the past 180 days</span>
+                    </div>
+                </label>
+
+                <label class="flex items-center gap-3 p-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-750 cursor-pointer hover:border-emerald-500 transition">
+                    <input type="radio" name="pdf-range" value="custom_month" class="w-4 h-4 text-emerald-600 focus:ring-emerald-500">
+                    <div class="flex-1">
+                        <span class="text-sm font-bold text-gray-900 dark:text-white block mb-1">Select Specific Month</span>
+                        <div class="flex gap-2">
+                            <select id="pdf-month-select" class="px-2.5 py-1.5 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg text-xs font-semibold">
+                                <option value="0">January</option>
+                                <option value="1">February</option>
+                                <option value="2">March</option>
+                                <option value="3">April</option>
+                                <option value="4">May</option>
+                                <option value="5">June</option>
+                                <option value="6">July</option>
+                                <option value="7" selected>August</option>
+                                <option value="8">September</option>
+                                <option value="9">October</option>
+                                <option value="10">November</option>
+                                <option value="11">December</option>
+                            </select>
+                            <select id="pdf-year-select" class="px-2.5 py-1.5 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg text-xs font-semibold">
+                                <option value="2024">2024</option>
+                                <option value="2025">2025</option>
+                                <option value="2026" selected>2026</option>
+                            </select>
+                        </div>
+                    </div>
+                </label>
+            </div>
+        </div>`,
+        `<button onclick="window.closeModal()" class="px-4 py-2 text-xs bg-gray-200 dark:bg-gray-600 rounded-xl font-bold">Cancel</button>
+         <button id="generate-pdf-btn" class="px-4 py-2 text-xs bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold shadow-md flex items-center gap-1.5">
+            <span>📄 Generate PDF Statement</span>
+         </button>`,
+        'max-w-md'
+    );
+
+    document.getElementById('generate-pdf-btn').onclick = () => {
+        const selectedRange = document.querySelector('input[name="pdf-range"]:checked')?.value || 'all';
+        const selectedMonth = parseInt(document.getElementById('pdf-month-select')?.value || '7', 10);
+        const selectedYear = parseInt(document.getElementById('pdf-year-select')?.value || '2026', 10);
+
+        generatePDFStatement({ range: selectedRange, month: selectedMonth, year: selectedYear });
+    };
 };
 
-window.downloadTransactionStatement = downloadTransactionStatement;
+const generatePDFStatement = ({ range, month, year }) => {
+    let items = [...(unifiedHistoryCache || [])];
+    const now = new Date();
+    let filename = 'RW_WALLET_Statement.pdf';
+    let rangeTitle = 'All Time Statement';
+
+    if (range === '1month') {
+        const cutoff = new Date(now);
+        cutoff.setDate(cutoff.getDate() - 30);
+        items = items.filter(t => {
+            const d = new Date(t.timestamp || t.createdAt || t.requestedAt || 0);
+            return d >= cutoff;
+        });
+        filename = 'RW_WALLET_Statement_Last_1_Month.pdf';
+        rangeTitle = 'Last 1 Month Statement';
+    } else if (range === '3months') {
+        const cutoff = new Date(now);
+        cutoff.setDate(cutoff.getDate() - 90);
+        items = items.filter(t => {
+            const d = new Date(t.timestamp || t.createdAt || t.requestedAt || 0);
+            return d >= cutoff;
+        });
+        filename = 'RW_WALLET_Statement_Last_3_Months.pdf';
+        rangeTitle = 'Last 3 Months Statement';
+    } else if (range === '6months') {
+        const cutoff = new Date(now);
+        cutoff.setDate(cutoff.getDate() - 180);
+        items = items.filter(t => {
+            const d = new Date(t.timestamp || t.createdAt || t.requestedAt || 0);
+            return d >= cutoff;
+        });
+        filename = 'RW_WALLET_Statement_Last_6_Months.pdf';
+        rangeTitle = 'Last 6 Months Statement';
+    } else if (range === 'custom_month') {
+        const monthNames = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+        const monthName = monthNames[month] || 'Month';
+        items = items.filter(t => {
+            const d = new Date(t.timestamp || t.createdAt || t.requestedAt || 0);
+            return d.getMonth() === month && d.getFullYear() === year;
+        });
+        filename = `RW_WALLET_Statement_${monthName}_${year}.pdf`;
+        rangeTitle = `Statement for ${monthName} ${year}`;
+    }
+
+    if (items.length === 0) {
+        return showNotification(`No transactions found for ${rangeTitle}.`, true);
+    }
+
+    window.closeModal();
+
+    let totalCredits = 0;
+    let totalDebits = 0;
+    items.forEach(t => {
+        const amt = Math.abs(Number(t.amount || 0));
+        const isCredit = t.type === 'deposit' || t.type === 'credit' || t.type === 'gift_card' || (!['debit', 'withdrawal', 'mobile_recharge'].includes(t.type) && amt > 0);
+        if (isCredit) totalCredits += amt;
+        else totalDebits += amt;
+    });
+
+    const userName = currentUserData?.name || 'User';
+    const userMobile = currentUserData?.mobile || 'N/A';
+    const userEmail = currentUserData?.email || 'N/A';
+    const generatedDate = formatDate(new Date());
+
+    const printWin = window.open('', '_blank');
+    if (!printWin) {
+        return showNotification('Please allow popups to download your PDF statement.', true);
+    }
+
+    printWin.document.write(`
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <title>${filename.replace('.pdf', '')}</title>
+            <style>
+                @page { size: A4; margin: 15mm; }
+                body { font-family: 'Segoe UI', Arial, sans-serif; color: #1e293b; margin: 0; padding: 20px; background: #fff; }
+                .header { display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #10b981; padding-bottom: 15px; margin-bottom: 20px; }
+                .logo-box { display: flex; align-items: center; gap: 10px; }
+                .logo-img { width: 45px; height: 45px; border-radius: 50%; }
+                .brand-title { font-size: 22px; font-weight: 900; color: #047857; margin: 0; }
+                .brand-sub { font-size: 11px; color: #64748b; font-weight: 700; text-transform: uppercase; }
+                .summary-card { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 25px; background: #f8fafc; border: 1px solid #e2e8f0; padding: 15px; border-radius: 12px; }
+                .stat-box { text-align: center; }
+                .stat-label { font-size: 10px; text-transform: uppercase; font-weight: 700; color: #64748b; }
+                .stat-val { font-size: 16px; font-weight: 900; margin-top: 4px; }
+                .text-green { color: #059669; }
+                .text-red { color: #dc2626; }
+                .user-info { margin-bottom: 20px; font-size: 12px; color: #475569; display: flex; justify-content: space-between; background: #f1f5f9; padding: 10px 15px; border-radius: 8px; }
+                table { width: 100%; border-collapse: collapse; margin-top: 15px; font-size: 11px; }
+                th { background: #047857; color: white; padding: 10px; text-align: left; font-weight: 700; text-transform: uppercase; font-size: 10px; }
+                td { padding: 9px 10px; border-bottom: 1px solid #e2e8f0; }
+                tr:nth-child(even) { background: #f8fafc; }
+                .footer { margin-top: 40px; text-align: center; font-size: 10px; color: #94a3b8; border-top: 1px dashed #cbd5e1; padding-top: 15px; }
+            </style>
+        </head>
+        <body>
+            <div class="header">
+                <div class="logo-box">
+                    <img src="https://cdn-icons-png.flaticon.com/512/12449/12449036.png" class="logo-img">
+                    <div>
+                        <h1 class="brand-title">RW WALLET</h1>
+                        <div class="brand-sub">Official Account Statement</div>
+                    </div>
+                </div>
+                <div style="text-align: right;">
+                    <div style="font-size: 14px; font-weight: 800; color: #0f172a;">${rangeTitle}</div>
+                    <div style="font-size: 10px; color: #64748b;">Generated on: ${generatedDate}</div>
+                </div>
+            </div>
+
+            <div class="user-info">
+                <div><strong>Account Holder:</strong> ${userName} (${userMobile})</div>
+                <div><strong>Email:</strong> ${userEmail}</div>
+            </div>
+
+            <div class="summary-card">
+                <div class="stat-box">
+                    <div class="stat-label">Total Credits (+)</div>
+                    <div class="stat-val text-green">₹${totalCredits.toLocaleString('en-IN')}</div>
+                </div>
+                <div class="stat-box">
+                    <div class="stat-label">Total Debits (-)</div>
+                    <div class="stat-val text-red">₹${totalDebits.toLocaleString('en-IN')}</div>
+                </div>
+                <div class="stat-box">
+                    <div class="stat-label">Net Balance Change</div>
+                    <div class="stat-val">₹${(totalCredits - totalDebits).toLocaleString('en-IN')}</div>
+                </div>
+            </div>
+
+            <table>
+                <thead>
+                    <tr>
+                        <th>Date & Time</th>
+                        <th>Type / Category</th>
+                        <th>Description / Party</th>
+                        <th>Amount</th>
+                        <th>Status</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${items.map(t => {
+                        const dateStr = formatDate(t.timestamp || t.createdAt || t.requestedAt);
+                        const isCredit = t.type === 'deposit' || t.type === 'credit' || t.type === 'gift_card' || (!['debit', 'withdrawal', 'mobile_recharge'].includes(t.type) && Number(t.amount || 0) > 0);
+                        const party = t.senderName || t.recipientName || t.comment || t.type || 'N/A';
+                        const status = t.status || 'completed';
+                        const sign = isCredit ? '+' : '-';
+                        const colorClass = isCredit ? 'text-green' : 'text-red';
+                        return `
+                            <tr>
+                                <td>${dateStr}</td>
+                                <td><strong style="text-transform: capitalize;">${(t.type || 'Transaction').replace(/_/g, ' ')}</strong></td>
+                                <td>${party}</td>
+                                <td class="${colorClass}" style="font-weight: 800;">${sign} ₹${Math.abs(Number(t.amount || 0)).toLocaleString('en-IN')}</td>
+                                <td style="text-transform: uppercase; font-size: 9px; font-weight: 700;">${status}</td>
+                            </tr>`;
+                    }).join('')}
+                </tbody>
+            </table>
+
+            <div class="footer">
+                This is a computer-generated account statement from RW WALLET. No signature required.
+            </div>
+            <script>
+                window.onload = function() {
+                    document.title = "${filename}";
+                    window.print();
+                };
+            </script>
+        </body>
+        </html>
+    `);
+    printWin.document.close();
+};
+
+const downloadTransactionStatement = openDownloadStatementModal;
+window.openDownloadStatementModal = openDownloadStatementModal;
+window.downloadTransactionStatement = openDownloadStatementModal;
 
 const loadMoreTransactionsIfNeeded = () => {
     if (!document.getElementById('all-transactions-list')) return;
@@ -7103,6 +7339,23 @@ const showTransactionDetails = (key, source = 'user') => {
             let toParty = { label: 'To', name: isCredit ? recipientName : recipientName, detail: isCredit ? 'RW Wallet Balance' : recipientMobile, appLogo: isCredit ? recipientIsPro : recipientIsPro };
             let modeLabel = item.type === 'wallet_transfer' || item.type === 'debit' ? 'Wallet Transfer' : isAdminCredit ? 'Wallet Credit' : 'Wallet Transaction';
             let extraDetail = '';
+
+            if (item.type === 'deposit' || item.orderId) {
+                const isDepositSuccess = rawStatus === 'completed';
+                const isDepositPending = rawStatus === 'pending' || rawStatus === 'pending_admin_approval';
+                statusTitle = isDepositSuccess ? 'Money Added' : isDepositPending ? 'Deposit Pending' : 'Deposit Failed';
+                statusLabel = isDepositSuccess ? 'Added to Wallet' : isDepositPending ? 'Pending Verification' : 'Failed';
+                statusPillClass = isDepositSuccess
+                    ? 'bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-400 border-green-100 dark:border-green-900/30'
+                    : isDepositPending
+                        ? 'bg-amber-50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-400 border-amber-100 dark:border-amber-900/30'
+                        : 'bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-400 border-red-100 dark:border-red-900/30';
+                statusIconClass = isDepositSuccess ? 'text-green-500' : isDepositPending ? 'text-amber-500' : 'text-red-500';
+
+                fromParty = { label: 'From', name: 'UPI / Bank', detail: 'Instant Deposit', logoUrl: 'https://cdn-icons-png.flaticon.com/512/12449/12449036.png' };
+                toParty = { label: 'To', name: 'RW WALLET', detail: 'Wallet Balance', logoUrl: 'https://cdn-icons-png.flaticon.com/512/12449/12449036.png' };
+                modeLabel = 'UPI Deposit';
+            }
 
             if (isAdminCredit) {
                 fromParty = { label: 'From', name: 'REVIEWS WORLD', detail: 'Admin Wallet', appLogo: true };
