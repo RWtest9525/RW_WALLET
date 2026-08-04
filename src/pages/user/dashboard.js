@@ -6844,10 +6844,26 @@ const renderFilteredTransactions = (filter, options = {}) => {
 
     let html = '';
     Object.keys(monthGroups).forEach(monthKey => {
+        let monthEarned = 0;
+        let monthSpent = 0;
+        monthGroups[monthKey].forEach(t => {
+            const amt = Math.abs(Number(t.amount || 0));
+            const isCredit = t.type === 'deposit' || t.type === 'credit' || t.type === 'gift_card' || (!['debit', 'withdrawal', 'mobile_recharge'].includes(t.type) && Number(t.amount || 0) > 0);
+            if (isCredit) monthEarned += amt;
+            else monthSpent += amt;
+        });
+
         html += `
             <div class="mt-6 mb-3 pt-3 border-t border-gray-200 dark:border-gray-700/80">
-                <div class="flex items-center justify-between bg-slate-100 dark:bg-gray-750 px-3.5 py-1.5 rounded-lg border-l-4 border-emerald-500 shadow-2xs">
-                    <span class="text-xs font-black uppercase tracking-wider text-gray-700 dark:text-gray-200">${monthKey}</span>
+                <div onclick="showMonthlyAISpendSummaryPage('${monthKey}')" class="flex items-center justify-between bg-gradient-to-r from-slate-100 to-emerald-50/40 dark:from-gray-750 dark:to-gray-700 px-3.5 py-2 rounded-xl border-l-4 border-emerald-500 shadow-2xs cursor-pointer hover:bg-emerald-100/50 transition group">
+                    <div>
+                        <span class="text-xs font-black uppercase tracking-wider text-gray-800 dark:text-gray-200 block">${monthKey}</span>
+                        <span class="text-[10px] font-bold text-gray-500 dark:text-gray-400">Earned/Recv: <span class="text-emerald-600 dark:text-emerald-400 font-extrabold">₹${monthEarned.toLocaleString('en-IN')}</span> | Spent: <span class="text-rose-600 dark:text-rose-400 font-extrabold">₹${monthSpent.toLocaleString('en-IN')}</span></span>
+                    </div>
+                    <div class="flex items-center gap-1 text-emerald-600 dark:text-emerald-400 text-xs font-bold group-hover:translate-x-1 transition-transform">
+                        <span class="hidden sm:inline text-[11px]">AI Summary</span>
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M9 5l7 7-7 7"/></svg>
+                    </div>
                 </div>
             </div>
             <div class="space-y-0 divide-y divide-gray-100 dark:divide-gray-800">
@@ -7256,13 +7272,332 @@ const showAllTransactionsPage = () => {
     document.addEventListener('click', handleOutsideClick);
 
             // Keep the click listener for transaction details
-            document.getElementById('all-transactions-list').addEventListener('click', (e) => {
+            document.getElementById('all-transactions-list')?.addEventListener('click', (e) => {
                 const itemEl = e.target.closest('.tx-item-clickable');
                 if (itemEl) {
                     showTransactionDetails(itemEl.dataset.key);
                 }
             });
         };
+
+const showMonthlyAISpendSummaryPage = (targetMonthKey = '') => {
+    if ((!unifiedHistoryCache || unifiedHistoryCache.length === 0) && currentUser?.uid) {
+        unifiedHistoryCache = readHistoryItemsFromCache(currentUser.uid);
+    }
+
+    const items = unifiedHistoryCache || [];
+    const now = new Date();
+    const currentYear = now.getFullYear();
+
+    if (!targetMonthKey) {
+        targetMonthKey = now.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+    }
+
+    const monthItems = items.filter(t => {
+        const timestamp = t.timestamp || t.createdAt || t.requestedAt;
+        let date;
+        if (timestamp?.toDate) date = timestamp.toDate();
+        else if (timestamp?.seconds) date = new Date(timestamp.seconds * 1000);
+        else if (typeof timestamp === 'number') date = new Date(timestamp);
+        else date = new Date(timestamp);
+        if (isNaN(date.getTime())) return false;
+
+        const mKey = date.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+        return mKey.toLowerCase() === targetMonthKey.toLowerCase();
+    });
+
+    let totalSpent = 0;
+    let spentCount = 0;
+    let totalReceived = 0;
+    let receivedCount = 0;
+
+    let taskEarnings = 0;
+    let taskCount = 0;
+
+    let adminCredits = 0;
+    let adminCount = 0;
+
+    let addMoneyAmount = 0;
+    let addMoneyCount = 0;
+
+    let moneySentAmount = 0;
+    let moneySentCount = 0;
+
+    let moneyReceivedAmount = 0;
+    let moneyReceivedCount = 0;
+
+    let withdrawalAmount = 0;
+    let withdrawalCount = 0;
+
+    monthItems.forEach(t => {
+        const amt = Math.abs(Number(t.amount || 0));
+        const rawType = normalizeTransactionType(t);
+        const remarks = (t.comment || '').toLowerCase();
+        const sender = (t.senderName || '').toLowerCase();
+
+        const isDeposit = t.type === 'deposit' || !!t.orderId;
+        const isWithdrawal = t.type === 'withdrawal' || rawType === 'withdrawal';
+        const isRecharge = t.type === 'mobile_recharge';
+        const isAdminCredit = t.isAdminTransaction || remarks.includes('admin') || sender.includes('reviews world');
+        const isTaskReward = t.type === 'income' || remarks.includes('task') || remarks.includes('reward');
+        const isCredit = rawType === 'credit' || t.type === 'gift_card' || (!['debit', 'withdrawal', 'mobile_recharge'].includes(rawType) && amt > 0);
+
+        if (isDeposit) {
+            addMoneyAmount += amt;
+            addMoneyCount++;
+            totalReceived += amt;
+            receivedCount++;
+        } else if (isWithdrawal) {
+            withdrawalAmount += amt;
+            withdrawalCount++;
+            totalSpent += amt;
+            spentCount++;
+        } else if (isRecharge) {
+            totalSpent += amt;
+            spentCount++;
+        } else if (isTaskReward) {
+            taskEarnings += amt;
+            taskCount++;
+            totalReceived += amt;
+            receivedCount++;
+        } else if (isAdminCredit) {
+            adminCredits += amt;
+            adminCount++;
+            totalReceived += amt;
+            receivedCount++;
+        } else if (isCredit) {
+            moneyReceivedAmount += amt;
+            moneyReceivedCount++;
+            totalReceived += amt;
+            receivedCount++;
+        } else {
+            moneySentAmount += amt;
+            moneySentCount++;
+            totalSpent += amt;
+            spentCount++;
+        }
+    });
+
+    const monthShortNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    const monthTabsHtml = monthShortNames.map((m, idx) => {
+        const mFull = new Date(currentYear, idx, 1).toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+        const isActive = mFull.toLowerCase() === targetMonthKey.toLowerCase();
+        const activeClass = isActive
+            ? 'border-b-2 border-emerald-500 text-emerald-600 dark:text-emerald-400 font-black'
+            : 'text-gray-500 dark:text-gray-400 font-semibold hover:text-gray-900';
+
+        return `
+            <button onclick="showMonthlyAISpendSummaryPage('${mFull}')" class="px-3.5 py-2 text-xs transition-colors shrink-0 ${activeClass}">
+                ${m}
+            </button>`;
+    }).reverse().join('');
+
+    const content = `
+        ${getPageHeader('Monthly AI Spend Summary')}
+        <div class="max-w-2xl mx-auto space-y-4">
+            
+            <!-- Horizontal Month Selector -->
+            <div class="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 p-1.5 flex items-center gap-2 overflow-x-auto scrollbar-none">
+                <span class="text-xs font-black text-gray-400 dark:text-gray-500 px-2 shrink-0 border-r border-gray-200 dark:border-gray-700">${currentYear}</span>
+                <div class="flex items-center gap-1 overflow-x-auto">
+                    ${monthTabsHtml}
+                </div>
+            </div>
+
+            <!-- Overview Spent vs Received Card -->
+            <div class="bg-white dark:bg-gray-800 p-5 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 space-y-4">
+                <div class="grid grid-cols-2 gap-4 divide-x divide-gray-100 dark:divide-gray-700">
+                    <div>
+                        <span class="text-xs text-gray-500 dark:text-gray-400 font-bold block">Total Spent</span>
+                        <span class="text-2xl font-black text-gray-900 dark:text-white block mt-0.5">₹${totalSpent.toLocaleString('en-IN')}</span>
+                        <span class="text-[11px] text-gray-400 font-medium">${spentCount} Payments</span>
+                    </div>
+                    <div class="pl-4">
+                        <span class="text-xs text-gray-500 dark:text-gray-400 font-bold block">Total Received</span>
+                        <span class="text-2xl font-black text-emerald-600 dark:text-emerald-400 block mt-0.5">₹${totalReceived.toLocaleString('en-IN')}</span>
+                        <span class="text-[11px] text-gray-400 font-medium">${receivedCount} Payments</span>
+                    </div>
+                </div>
+
+                <div class="bg-slate-50 dark:bg-gray-750 p-3 rounded-xl border border-gray-100 dark:border-gray-700 text-[11px] text-gray-500 dark:text-gray-400">
+                    Note: Self-transfers and payments hidden by you are excluded from total paid/received calculations.
+                </div>
+            </div>
+
+            <!-- Categories Breakdown Table Header -->
+            <div class="flex justify-between items-center px-1">
+                <h3 class="text-sm font-black text-gray-900 dark:text-white">Categories (Tags)</h3>
+                <span class="text-xs font-bold text-gray-500">Amount</span>
+            </div>
+
+            <!-- Category Rows -->
+            <div class="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 divide-y divide-gray-100 dark:divide-gray-700 overflow-hidden">
+                
+                <!-- Task Earnings -->
+                <div onclick="showMonthlyCategoryDetail('${targetMonthKey}', 'task')" class="p-4 flex items-center justify-between hover:bg-gray-50 dark:hover:bg-gray-750 cursor-pointer transition group">
+                    <div class="flex items-center gap-3">
+                        <div class="w-10 h-10 rounded-full bg-emerald-100 dark:bg-emerald-900/40 text-emerald-600 dark:text-emerald-300 flex items-center justify-center font-bold text-sm shrink-0">💵</div>
+                        <div>
+                            <h4 class="text-sm font-bold text-gray-900 dark:text-white">Task Earnings / Rewards</h4>
+                            <p class="text-xs text-gray-500 dark:text-gray-400 mt-0.5">${taskCount} Payments</p>
+                        </div>
+                    </div>
+                    <div class="text-right flex items-center gap-2">
+                        <div>
+                            <span class="text-base font-bold text-emerald-600 dark:text-emerald-400 block">₹${taskEarnings.toLocaleString('en-IN')}</span>
+                            <span class="text-[10px] text-gray-400 block">Received</span>
+                        </div>
+                        <svg class="w-4 h-4 text-gray-400 group-hover:translate-x-1 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
+                    </div>
+                </div>
+
+                <!-- Admin Credits -->
+                <div onclick="showMonthlyCategoryDetail('${targetMonthKey}', 'admin')" class="p-4 flex items-center justify-between hover:bg-gray-50 dark:hover:bg-gray-750 cursor-pointer transition group">
+                    <div class="flex items-center gap-3">
+                        <div class="w-10 h-10 rounded-full bg-blue-100 dark:bg-blue-900/40 text-blue-600 dark:text-blue-300 flex items-center justify-center font-bold text-sm shrink-0">🏛️</div>
+                        <div>
+                            <h4 class="text-sm font-bold text-gray-900 dark:text-white">Admin Credits</h4>
+                            <p class="text-xs text-gray-500 dark:text-gray-400 mt-0.5">${adminCount} Payments</p>
+                        </div>
+                    </div>
+                    <div class="text-right flex items-center gap-2">
+                        <div>
+                            <span class="text-base font-bold text-emerald-600 dark:text-emerald-400 block">₹${adminCredits.toLocaleString('en-IN')}</span>
+                            <span class="text-[10px] text-gray-400 block">Received</span>
+                        </div>
+                        <svg class="w-4 h-4 text-gray-400 group-hover:translate-x-1 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
+                    </div>
+                </div>
+
+                <!-- Add Money -->
+                <div onclick="showMonthlyCategoryDetail('${targetMonthKey}', 'deposit')" class="p-4 flex items-center justify-between hover:bg-gray-50 dark:hover:bg-gray-750 cursor-pointer transition group">
+                    <div class="flex items-center gap-3">
+                        <div class="w-10 h-10 rounded-full bg-amber-100 dark:bg-amber-900/40 text-amber-600 dark:text-amber-300 flex items-center justify-center font-bold text-sm shrink-0">⚡</div>
+                        <div>
+                            <h4 class="text-sm font-bold text-gray-900 dark:text-white">Add Money (Self-Transfer)</h4>
+                            <p class="text-xs text-gray-500 dark:text-gray-400 mt-0.5">${addMoneyCount} Payments</p>
+                        </div>
+                    </div>
+                    <div class="text-right flex items-center gap-2">
+                        <div>
+                            <span class="text-base font-bold text-emerald-600 dark:text-emerald-400 block">₹${addMoneyAmount.toLocaleString('en-IN')}</span>
+                            <span class="text-[10px] text-gray-400 block">Received</span>
+                        </div>
+                        <svg class="w-4 h-4 text-gray-400 group-hover:translate-x-1 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
+                    </div>
+                </div>
+
+                <!-- Money Transfer / Sent -->
+                <div onclick="showMonthlyCategoryDetail('${targetMonthKey}', 'sent')" class="p-4 flex items-center justify-between hover:bg-gray-50 dark:hover:bg-gray-750 cursor-pointer transition group">
+                    <div class="flex items-center gap-3">
+                        <div class="w-10 h-10 rounded-full bg-purple-100 dark:bg-purple-900/40 text-purple-600 dark:text-purple-300 flex items-center justify-center font-bold text-sm shrink-0">📤</div>
+                        <div>
+                            <h4 class="text-sm font-bold text-gray-900 dark:text-white">Money Sent</h4>
+                            <p class="text-xs text-gray-500 dark:text-gray-400 mt-0.5">${moneySentCount} Payments</p>
+                        </div>
+                    </div>
+                    <div class="text-right flex items-center gap-2">
+                        <div>
+                            <span class="text-base font-bold text-gray-900 dark:text-white block">₹${moneySentAmount.toLocaleString('en-IN')}</span>
+                            <span class="text-[10px] text-gray-400 block">Spent</span>
+                        </div>
+                        <svg class="w-4 h-4 text-gray-400 group-hover:translate-x-1 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
+                    </div>
+                </div>
+
+                <!-- Money Received -->
+                <div onclick="showMonthlyCategoryDetail('${targetMonthKey}', 'received')" class="p-4 flex items-center justify-between hover:bg-gray-50 dark:hover:bg-gray-750 cursor-pointer transition group">
+                    <div class="flex items-center gap-3">
+                        <div class="w-10 h-10 rounded-full bg-teal-100 dark:bg-teal-900/40 text-teal-600 dark:text-teal-300 flex items-center justify-center font-bold text-sm shrink-0">📥</div>
+                        <div>
+                            <h4 class="text-sm font-bold text-gray-900 dark:text-white">Money Received</h4>
+                            <p class="text-xs text-gray-500 dark:text-gray-400 mt-0.5">${moneyReceivedCount} Payments</p>
+                        </div>
+                    </div>
+                    <div class="text-right flex items-center gap-2">
+                        <div>
+                            <span class="text-base font-bold text-emerald-600 dark:text-emerald-400 block">₹${moneyReceivedAmount.toLocaleString('en-IN')}</span>
+                            <span class="text-[10px] text-gray-400 block">Received</span>
+                        </div>
+                        <svg class="w-4 h-4 text-gray-400 group-hover:translate-x-1 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
+                    </div>
+                </div>
+
+                <!-- Withdrawal -->
+                <div onclick="showMonthlyCategoryDetail('${targetMonthKey}', 'withdrawal')" class="p-4 flex items-center justify-between hover:bg-gray-50 dark:hover:bg-gray-750 cursor-pointer transition group">
+                    <div class="flex items-center gap-3">
+                        <div class="w-10 h-10 rounded-full bg-rose-100 dark:bg-rose-900/40 text-rose-600 dark:text-rose-300 flex items-center justify-center font-bold text-sm shrink-0">💸</div>
+                        <div>
+                            <h4 class="text-sm font-bold text-gray-900 dark:text-white">Withdrawal</h4>
+                            <p class="text-xs text-gray-500 dark:text-gray-400 mt-0.5">${withdrawalCount} Payments</p>
+                        </div>
+                    </div>
+                    <div class="text-right flex items-center gap-2">
+                        <div>
+                            <span class="text-base font-bold text-gray-900 dark:text-white block">₹${withdrawalAmount.toLocaleString('en-IN')}</span>
+                            <span class="text-[10px] text-gray-400 block">Spent</span>
+                        </div>
+                        <svg class="w-4 h-4 text-gray-400 group-hover:translate-x-1 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Footer Branding -->
+            <div class="text-center py-4 text-xs font-bold text-gray-400 flex items-center justify-center gap-2 select-none opacity-50">
+                <img src="https://cdn-icons-png.flaticon.com/512/12449/12449036.png" class="w-4 h-4 object-contain">
+                <span>RW WALLET | AI Spend Intelligence</span>
+            </div>
+        </div>
+        ${getPageFooter()}`;
+
+    showPage(content);
+};
+
+const showMonthlyCategoryDetail = (monthKey, category) => {
+    const items = (unifiedHistoryCache || []).filter(t => {
+        const timestamp = t.timestamp || t.createdAt || t.requestedAt;
+        let date;
+        if (timestamp?.toDate) date = timestamp.toDate();
+        else if (timestamp?.seconds) date = new Date(timestamp.seconds * 1000);
+        else if (typeof timestamp === 'number') date = new Date(timestamp);
+        else date = new Date(timestamp);
+        if (isNaN(date.getTime())) return false;
+
+        const mKey = date.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+        if (mKey.toLowerCase() !== monthKey.toLowerCase()) return false;
+
+        const amt = Math.abs(Number(t.amount || 0));
+        const rawType = normalizeTransactionType(t);
+        const remarks = (t.comment || '').toLowerCase();
+        const sender = (t.senderName || '').toLowerCase();
+
+        if (category === 'deposit') return t.type === 'deposit' || !!t.orderId;
+        if (category === 'withdrawal') return t.type === 'withdrawal' || rawType === 'withdrawal';
+        if (category === 'task') return t.type === 'income' || remarks.includes('task') || remarks.includes('reward');
+        if (category === 'admin') return t.isAdminTransaction || remarks.includes('admin') || sender.includes('reviews world');
+        if (category === 'received') return rawType === 'credit' || t.type === 'gift_card' || (!['debit', 'withdrawal', 'mobile_recharge'].includes(rawType) && amt > 0);
+        if (category === 'sent') return rawType === 'debit' || t.type === 'wallet_transfer';
+        return true;
+    });
+
+    renderModal(`${monthKey} - Category Transactions`,
+        `<div class="space-y-2 max-h-[60vh] overflow-y-auto">
+            ${items.length ? items.map(t => renderTransactionItem(t, true)).join('') : '<p class="text-center text-gray-400 py-6 text-xs font-bold">No transactions found for this category.</p>'}
+        </div>`,
+        `<button onclick="window.closeModal()" class="w-full py-2.5 bg-gray-200 dark:bg-gray-600 text-xs font-bold rounded-xl">Close</button>`,
+        'max-w-md'
+    );
+
+    document.querySelectorAll('#modal-container .tx-item-clickable').forEach(el => {
+        el.addEventListener('click', () => {
+            window.closeModal();
+            showTransactionDetails(el.dataset.key);
+        });
+    });
+};
+
+window.showMonthlyAISpendSummaryPage = showMonthlyAISpendSummaryPage;
+window.showMonthlyCategoryDetail = showMonthlyCategoryDetail;
 
 const showPayToWalletPage = () => {
             const content = `
