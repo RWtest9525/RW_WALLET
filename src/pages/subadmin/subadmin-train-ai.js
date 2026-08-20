@@ -107,7 +107,16 @@ const showAdminTrainAiPage = async () => {
         ${getPageFooter()}
     `;
 
-    showPage(content, { returnTo: 'admin' });
+    showPage(content, {
+        returnTo: 'admin',
+        onBack: () => {
+            if (typeof window.showAdminMainPage === 'function') {
+                window.showAdminMainPage();
+            } else if (typeof hidePage === 'function') {
+                hidePage();
+            }
+        }
+    });
     setBottomNavActive('bottom-admin-btn');
 
     document.getElementById('save-ai-training-btn').addEventListener('click', handleSaveAiTraining);

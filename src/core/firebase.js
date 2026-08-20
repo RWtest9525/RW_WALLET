@@ -2,6 +2,11 @@
 
 const initFirebaseApp = () => {
     try {
+        if (window.app && window.db && window.auth) {
+            console.log("Firebase services already initialized.");
+            return;
+        }
+
         const firebaseConfig = {
             apiKey: "AIzaSyBzF1agrBFFh4cC2DkmZKePf4-gjE05OQo",
             authDomain: "review-world-1312e.firebaseapp.com",
@@ -11,8 +16,8 @@ const initFirebaseApp = () => {
             appId: "1:372772434173:web:bfeb08e0c96886ace94",
             measurementId: "G-X90GP8JTL8"
         };
-        const app = initializeApp(firebaseConfig);
-        const auth = getAuth(app);
+        const app = window.app || initializeApp(firebaseConfig);
+        const auth = window.auth || getAuth(app);
 
         // Initialize Firestore with Persistent Single-Tab Cache (APK/Web Safe)
         let db;
@@ -37,10 +42,10 @@ const initFirebaseApp = () => {
             }
         }
 
-        const storage = getStorage(app);
-        let messaging = null;
+        const storage = window.storage || getStorage(app);
+        let messaging = window.messaging || null;
         try {
-            messaging = getMessaging(app);
+            if (!messaging) messaging = getMessaging(app);
         } catch (e) {
             console.warn("Messaging not supported on this browser.");
         }

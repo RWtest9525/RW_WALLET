@@ -1558,16 +1558,18 @@ const resetRevyBotTimer = () => {
         };
 
 const closeRevyBotSession = () => {
-            if (revyBotTimer) clearTimeout(revyBotTimer);
-            revyBotTimer = null;
-            revyBotMessages = [];
-            revyBotLastQuestion = '';
-            if (window.revyBotAdminView && isCurrentAdmin) {
-                showAdminMainPage();
-            } else {
-                showHelpSupportPage();
-            }
-        };
+    if (revyBotTimer) clearTimeout(revyBotTimer);
+    revyBotTimer = null;
+    revyBotMessages = [];
+    revyBotLastQuestion = '';
+    if (window.revyBotAdminView) {
+        if (typeof showAdminMainPage === 'function') showAdminMainPage();
+        else if (typeof hidePage === 'function') hidePage();
+    } else {
+        if (typeof showHelpSupportPage === 'function') showHelpSupportPage();
+        else if (typeof hidePage === 'function') hidePage();
+    }
+};
 
 const getRevyBotReply = async (question) => {
             try {
@@ -1832,11 +1834,6 @@ const openRevyBotChatPage = (isAdminView = false) => {
                                 <h3 class="font-bold truncate inline-flex items-center gap-1">REVY - RW AI ${isRealAdminView ? '<span class="text-[10px] bg-orange-100 dark:bg-orange-900/40 text-orange-600 dark:text-orange-300 px-2 py-0.5 rounded-full font-black uppercase">Admin Training</span>' : getVerifiedBadge()}</h3>
                                 <p class="text-xs text-emerald-600 dark:text-emerald-300 truncate">${isRealAdminView ? 'Teach rules & chat with AI' : 'Instant help solution'}</p>
                             </div>
-                            ${isRealAdminView ? `
-                                <button onclick="window.showAdminTrainAiPage && window.showAdminTrainAiPage()" class="px-2.5 py-1.5 rounded-xl bg-orange-50 dark:bg-orange-900/30 text-orange-700 dark:text-orange-200 text-xs font-bold shrink-0 border border-orange-200 dark:border-orange-800" title="Edit System Rules">
-                                    Rules
-                                </button>
-                            ` : ''}
                             <button id="revy-close-btn" class="px-3 py-1.5 rounded-full bg-red-50 dark:bg-red-900/30 text-red-600 dark:text-red-200 text-xs font-bold">Exit</button>
                         </div>
                         <div id="revy-bot-messages" class="flex-1 min-h-0 space-y-3 overflow-y-auto p-4 bg-gray-50 dark:bg-gray-900"></div>
@@ -1856,14 +1853,16 @@ const openRevyBotChatPage = (isAdminView = false) => {
                 fullHeight: true,
                 returnTo: isRealAdminView ? 'admin' : 'help',
                 onBack: () => {
-                    if (window.revyBotAdminView && isCurrentAdmin) {
-                        showAdminMainPage();
+                    if (window.revyBotAdminView) {
+                        if (typeof showAdminMainPage === 'function') showAdminMainPage();
+                        else if (typeof hidePage === 'function') hidePage();
                     } else {
-                        showHelpSupportPage();
+                        if (typeof showHelpSupportPage === 'function') showHelpSupportPage();
+                        else if (typeof hidePage === 'function') hidePage();
                     }
                 }
             });
-            setBottomNavActive(window.revyBotAdminView && isCurrentAdmin ? 'bottom-admin-btn' : 'bottom-help-btn');
+            setBottomNavActive(isRealAdminView ? 'bottom-admin-btn' : 'bottom-help-btn');
             const revyKeyboardCleanup = installChatViewportLock({
                 shellId: 'revy-chat-shell',
                 composerId: 'revy-chat-composer',
@@ -1920,9 +1919,11 @@ const openRevyBotChatPage = (isAdminView = false) => {
             document.getElementById('revy-back-btn').onclick = () => {
                 if (revyKeyboardCleanup) revyKeyboardCleanup();
                 if (window.revyBotAdminView) {
-                    showAdminMainPage();
+                    if (typeof showAdminMainPage === 'function') showAdminMainPage();
+                    else if (typeof hidePage === 'function') hidePage();
                 } else {
-                    showHelpSupportPage();
+                    if (typeof showHelpSupportPage === 'function') showHelpSupportPage();
+                    else if (typeof hidePage === 'function') hidePage();
                 }
             };
             document.getElementById('revy-close-btn').onclick = () => {
