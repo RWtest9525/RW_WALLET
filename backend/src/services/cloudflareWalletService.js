@@ -4425,7 +4425,6 @@ ${memoriesContext}`
       console.error('Revy Bot API error:', error);
       res.status(500).json({ ok: false, error: 'BOT_ERROR', detail: error.message });
     }
-    }
   });
 
   app.get('/api/admin/chats', requireHttpAuth, async (req, res) => {
