@@ -1,6 +1,6 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
 import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, onAuthStateChanged, sendPasswordResetEmail, setPersistence, browserLocalPersistence } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-import { initializeFirestore, persistentLocalCache, persistentMultipleTabManager, doc, setDoc, getDoc, collection, collectionGroup, addDoc, onSnapshot, query, orderBy, Timestamp, writeBatch, runTransaction, deleteDoc, getDocs, serverTimestamp, where, arrayUnion, updateDoc, deleteField, increment, setLogLevel, limit as firestoreLimit } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+import { initializeFirestore, persistentLocalCache, persistentMultipleTabManager, persistentSingleTabManager, memoryLocalCache, doc, setDoc, getDoc, collection, collectionGroup, addDoc, onSnapshot, query, orderBy, Timestamp, writeBatch, runTransaction, deleteDoc, getDocs, serverTimestamp, where, arrayUnion, updateDoc, deleteField, increment, setLogLevel, limit as firestoreLimit } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 import { getStorage, ref as storageRef, uploadBytesResumable, getDownloadURL } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-storage.js";
 import { getMessaging, getToken, onMessage } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-messaging.js";
 
@@ -17,6 +17,8 @@ window.browserLocalPersistence = browserLocalPersistence;
 window.initializeFirestore = initializeFirestore;
 window.persistentLocalCache = persistentLocalCache;
 window.persistentMultipleTabManager = persistentMultipleTabManager;
+window.persistentSingleTabManager = persistentSingleTabManager;
+window.memoryLocalCache = memoryLocalCache;
 window.doc = doc;
 window.setDoc = setDoc;
 window.getDoc = getDoc;
@@ -124,11 +126,27 @@ window.SETTINGS_ICON_URL = 'https://cdn-icons-png.flaticon.com/512/3524/3524659.
 window.NOTIFICATION_ICON_URL = '/assets/images/notification_bell.png';
 window.app = initializeApp(firebaseConfig);
 window.auth = getAuth(app);
-window.db = initializeFirestore(app, {
-            localCache: persistentLocalCache({
-                tabManager: persistentMultipleTabManager()
-            })
+
+// Safe Firestore initialization: Use single-tab persistent cache to avoid WebLock deadlocks in Android WebView/APK, with memory fallback
+let initialDb;
+try {
+    initialDb = initializeFirestore(app, {
+        localCache: persistentLocalCache({
+            tabManager: persistentSingleTabManager({ forceOwnership: true })
+        })
+    });
+} catch (cacheErr) {
+    console.warn("Single-tab persistent cache init failed, falling back to memory cache:", cacheErr);
+    try {
+        initialDb = initializeFirestore(app, {
+            localCache: memoryLocalCache()
         });
+    } catch (memErr) {
+        console.warn("Memory cache fallback init:", memErr);
+        initialDb = initializeFirestore(app, {});
+    }
+}
+window.db = initialDb;
 window.storage = getStorage(app);
 window.FCM_VAPID_KEY = "BF-CJw4Tv7OT4omX5TpgSczgg8oedBdXPeadDPGgWQ7N40D_JkwViQHiX5wHjfPCh_55RmC03JRhVvZLNwLLkLE";
 window.ONESIGNAL_APP_ID = '465e22bd-8540-437b-ba7b-efa14ef4069f';

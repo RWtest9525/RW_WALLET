@@ -43,6 +43,14 @@ if (window.location.pathname.includes('/test-ocr') || window.location.hash.inclu
     renderTestOcrPage();
 }
 
+// Instant Backend Eager Pre-warming (Wake up Render container in background with 0ms delay)
+(() => {
+    try {
+        const backendUrl = window.BACKEND_BASE_URL || 'https://rw-wallet.onrender.com';
+        fetch(`${backendUrl}/ping`, { method: 'HEAD', cache: 'no-store' }).catch(() => {});
+    } catch (_) {}
+})();
+
 // Instant Asset Preloader for Referral and Profile Banners (Anti-Flicker Dual-Cache Ready)
 (() => {
     const criticalImages = [
@@ -386,86 +394,15 @@ onAuthStateChanged(auth, async (user) => {
                     document.getElementById('dashboard-content')?.classList.remove('hidden');
                 }
 
-                // Background config & approval checks
-                await loadAppConfigForStartup().catch(e => console.warn('App config startup skipped:', e));
-                const maintenanceActiveForUser = !isAdmin && isMaintenanceConfigActive(appConfigCache);
-
+                // Instant Startup: Hydrate user from cache and render UI without any network stall
+                hydrateUserFromCache(currentUser.uid);
                 applyMaintenanceMode();
                 showWhatsNewPopupIfNeeded();
-                hydrateUserFromCache(currentUser.uid);
 
-                const userDocRef = doc(db, `artifacts/${appId}/public/data/users`, currentUser.uid);
-                const userDocSnap = await getDoc(userDocRef).catch(error => {
-                    console.warn('Initial user approval check skipped:', error);
-                    return null;
-                });
-
-                if (userDocSnap?.exists()) {
-                    const userData = userDocSnap.data();
-
-                    // Update global state and cache
-                    currentUserData = { uid: currentUser.uid, id: currentUser.uid, email: currentUser.email, ...userData };
-                    window.currentUserData = currentUserData;
-                    writeJsonCache(getUserCacheKey(currentUser.uid), sanitizeUserForCache(currentUserData, currentUser.uid));
-                    try {
-                        sessionStorage.setItem(`rw_wallet_user_cache_ss_${currentUser.uid}`, JSON.stringify(sanitizeUserForCache(currentUserData, currentUser.uid)));
-                        sessionStorage.setItem('user_role_ss', String(currentUserData?.role || (checkIsUserAdmin(currentUser, currentUserData) ? 'admin' : 'user')));
-                    } catch (_) {}
-
-                    // Re-evaluate admin status and update layout/navigation
-                    const updatedIsAdmin = checkIsUserAdmin(currentUser, currentUserData);
-                    applyAdminBottomChrome(updatedIsAdmin);
-
-                    if (updatedIsAdmin) {
-                        if (typeof window.initializeAdminListeners === 'function' && !window.adminUsersRealtimeStarted) {
-                            try {
-                                window.initializeAdminListeners();
-                            } catch (err) {
-                                console.error("Error initializing admin listeners:", err);
-                            }
-                        }
-                    }
-
-                    if (!userData.referralCode && !userData.referral_code) {
-                        const generatedCode = `RW${currentUser.uid.slice(0, 6).toUpperCase()}`;
-                        updateDoc(userDocRef, { referralCode: generatedCode }).catch(e => console.warn("Failed to auto-repair referralCode in Firestore:", e));
-                        userData.referralCode = generatedCode;
-                        if (currentUserData) currentUserData.referralCode = generatedCode;
-                    }
-                    
-                    const approvalBlocked = await enforceCurrentUserApproval(currentUser.uid, userDocRef, userData).catch(error => {
-                        console.error('Approval enforcement failed:', error);
-                        return false;
-                    });
-                    if (approvalBlocked) {
-                        setTimeout(() => {
-                            try {
-                                initializeUserListeners(currentUser.uid);
-                            } catch (err) {
-                                console.error("Error initializing approval listener:", err);
-                            }
-                        }, 100);
-                        return;
-                    }
-                }
                 notificationsCache = readNotificationsCache(currentUser.uid);
                 refreshNotificationUnreadCount(notificationsCache);
                 preloadNotificationsForUser(currentUser.uid).catch(e => logBackgroundSkip('Initial notification preload skipped', e));
                 startNotificationAutoRefresh(currentUser.uid);
-
-                if (maintenanceActiveForUser) {
-                    maintenanceGateActive = true;
-                    currentMainSection = 'home';
-                    setMainChrome(false);
-                    document.getElementById('dashboard-content')?.classList.add('hidden');
-                    const pageContainer = document.getElementById('page-container');
-                    if (pageContainer) {
-                        pageContainer.classList.add('hidden');
-                        pageContainer.innerHTML = '';
-                        pageContainer.style.overflowY = 'auto';
-                    }
-                    applyMaintenanceMode();
-                }
 
                 document.getElementById('app-footer')?.classList.add('app-footer-hidden');
 
@@ -490,42 +427,98 @@ onAuthStateChanged(auth, async (user) => {
                     }
                 }
 
-                // Initialize user listeners (non-blocking)
-                setTimeout(() => {
-                    try {
-                        initializeUserListeners(currentUser.uid);
-                        startWithdrawalSettingsListener();
-                        initializePublicHomeRealtime();
+                // Attach real-time listeners eagerly and immediately (no delay)
+                try {
+                    initializeUserListeners(currentUser.uid);
+                    startWithdrawalSettingsListener();
+                    initializePublicHomeRealtime();
 
-                        // Silent prefetch of user task history for instant loading
-                        if (typeof window.loadUserTaskHistory === 'function') {
-                            window.loadUserTaskHistory().catch(e => console.warn('Silent prefetch of task history skipped:', e));
-                        }
-
-                        // Preload Socket.io client script and connect in background for instant chat
-                        if (typeof window.loadSocketIoClient === 'function') {
-                            window.loadSocketIoClient()
-                                .then(() => {
-                                    if (typeof window.getSupportSocket === 'function') {
-                                        window.getSupportSocket({ timeoutMs: 4000 }).catch(e => console.warn('Silent socket warmup connection failed:', e));
-                                    }
-                                })
-                                .catch(e => console.warn('Silent Socket.io script load failed:', e));
-                        }
-                    } catch (err) {
-                        console.error("Error initializing user listeners:", err);
+                    if (typeof window.loadUserTaskHistory === 'function') {
+                        window.loadUserTaskHistory().catch(e => console.warn('Silent prefetch of task history skipped:', e));
                     }
-                }, 200);
+
+                    if (typeof window.loadSocketIoClient === 'function') {
+                        window.loadSocketIoClient()
+                            .then(() => {
+                                if (typeof window.getSupportSocket === 'function') {
+                                    window.getSupportSocket({ timeoutMs: 4000 }).catch(e => console.warn('Silent socket warmup connection failed:', e));
+                                }
+                            })
+                            .catch(e => console.warn('Silent Socket.io script load failed:', e));
+                    }
+                } catch (err) {
+                    console.error("Error initializing user listeners eagerly:", err);
+                }
 
                 if (isAdmin) {
                     console.log("User is Admin, initializing admin listeners...");
-                    // Initialize admin listeners immediately
                     try {
                         initializeAdminListeners();
                     } catch (err) {
                         console.error("Error initializing admin listeners:", err);
                     }
                 }
+
+                // Background eager validation & profile refresh (non-blocking)
+                const userDocRef = doc(db, `artifacts/${appId}/public/data/users`, currentUser.uid);
+                Promise.allSettled([
+                    loadAppConfigForStartup(),
+                    getDoc(userDocRef)
+                ]).then(async ([configRes, userRes]) => {
+                    if (configRes.status === 'fulfilled') {
+                        const maintenanceActiveForUser = !isAdmin && isMaintenanceConfigActive(appConfigCache);
+                        if (maintenanceActiveForUser) {
+                            maintenanceGateActive = true;
+                            currentMainSection = 'home';
+                            setMainChrome(false);
+                            document.getElementById('dashboard-content')?.classList.add('hidden');
+                            const pageContainer = document.getElementById('page-container');
+                            if (pageContainer) {
+                                pageContainer.classList.add('hidden');
+                                pageContainer.innerHTML = '';
+                                pageContainer.style.overflowY = 'auto';
+                            }
+                            applyMaintenanceMode();
+                        }
+                    }
+
+                    if (userRes.status === 'fulfilled' && userRes.value?.exists()) {
+                        const userData = userRes.value.data();
+
+                        // Update global state and cache
+                        currentUserData = { uid: currentUser.uid, id: currentUser.uid, email: currentUser.email, ...userData };
+                        window.currentUserData = currentUserData;
+                        writeJsonCache(getUserCacheKey(currentUser.uid), sanitizeUserForCache(currentUserData, currentUser.uid));
+                        try {
+                            sessionStorage.setItem(`rw_wallet_user_cache_ss_${currentUser.uid}`, JSON.stringify(sanitizeUserForCache(currentUserData, currentUser.uid)));
+                            sessionStorage.setItem('user_role_ss', String(currentUserData?.role || (checkIsUserAdmin(currentUser, currentUserData) ? 'admin' : 'user')));
+                        } catch (_) {}
+
+                        // Re-evaluate admin status and update layout/navigation
+                        const updatedIsAdmin = checkIsUserAdmin(currentUser, currentUserData);
+                        applyAdminBottomChrome(updatedIsAdmin);
+
+                        if (updatedIsAdmin && typeof window.initializeAdminListeners === 'function' && !window.adminUsersRealtimeStarted) {
+                            try {
+                                window.initializeAdminListeners();
+                            } catch (err) {
+                                console.error("Error initializing admin listeners:", err);
+                            }
+                        }
+
+                        if (!userData.referralCode && !userData.referral_code) {
+                            const generatedCode = `RW${currentUser.uid.slice(0, 6).toUpperCase()}`;
+                            updateDoc(userDocRef, { referralCode: generatedCode }).catch(e => console.warn("Failed to auto-repair referralCode in Firestore:", e));
+                            userData.referralCode = generatedCode;
+                            if (currentUserData) currentUserData.referralCode = generatedCode;
+                        }
+
+                        await enforceCurrentUserApproval(currentUser.uid, userDocRef, userData).catch(error => {
+                            console.error('Approval enforcement failed:', error);
+                            return false;
+                        });
+                    }
+                }).catch(e => console.warn('Eager startup settlement skipped:', e));
 
                 // Check for pending chat notifications clicked during cold-start/launch
                 if (window.pendingChatNotification) {

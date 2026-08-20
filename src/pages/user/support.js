@@ -1582,13 +1582,12 @@ const getRevyBotReply = async (question) => {
 
                 const pendingWithdrawal = await getPendingWithdrawalForBot();
                 const latestTransactions = await getLatestTransactionsForBot(5);
-                const activeLoan = allLoansCache.find(loan => loan.userId === currentUser?.uid && loan.status === 'active' && isModernLoanRecord(loan));
-                const activeInvestment = allInvestmentsCache.find(item => item.userId === currentUser?.uid && item.status === 'active');
-
+                const isAdminUser = (typeof checkIsUserAdmin === 'function') ? checkIsUserAdmin(currentUser, currentUserData) : false;
                 const userContext = {
                     userName: currentUserData?.name || 'User',
                     userEmail: currentUserData?.email || '',
                     userMobile: currentUserData?.mobile || '',
+                    isAdmin: isAdminUser,
                     balance: currentUserData?.balance || 0,
                     pendingWithdrawal: pendingWithdrawal ? {
                         amount: pendingWithdrawal.amount || 0,
@@ -1794,13 +1793,33 @@ const addRevyBotMessage = (text, senderRole = 'bot', actions = '') => {
         };
 
 const openRevyBotChatPage = (isAdminView = false) => {
-            const isRealAdminView = isAdminView === true;
+            const isUserAdmin = (typeof checkIsUserAdmin === 'function') ? checkIsUserAdmin(currentUser, currentUserData) : false;
+            const isRealAdminView = isAdminView === true || isUserAdmin;
             window.revyBotAdminView = isRealAdminView;
             if (activeChatUnsubscribe) {
                 activeChatUnsubscribe();
                 activeChatUnsubscribe = null;
             }
             revyBotMessages = [];
+            
+            const quickOptions = isRealAdminView ? [
+                ['remember that withdrawal is processed in 2 hours', 'Train Payout Time'],
+                ['remember that reviews task payment is verified daily', 'Train Task Rules'],
+                ['pending withdrawal', 'Pending'],
+                ['transaction history', 'History'],
+                ['become partner investment', 'Partner'],
+                ['loan help', 'Loan']
+            ] : [
+                ['how to earn', 'Earn'],
+                ['how to withdraw', 'Withdraw'],
+                ['pending withdrawal', 'Pending'],
+                ['pay to wallet', 'Pay'],
+                ['transaction history', 'History'],
+                ['payment method', 'Profile'],
+                ['become partner investment', 'Partner'],
+                ['loan help', 'Loan']
+            ];
+
             const content = `
                 <div id="revy-chat-shell" class="max-w-xl mx-auto bg-gray-100 dark:bg-gray-900 h-[100dvh] flex flex-col">
                     <div class="bg-white dark:bg-gray-800 border border-gray-100 dark:border-gray-700 rounded-xl shadow-sm overflow-hidden flex flex-col h-full min-h-0">
@@ -1810,27 +1829,23 @@ const openRevyBotChatPage = (isAdminView = false) => {
                             </button>
                             ${getRevyBotLogo('h-10 w-10')}
                             <div class="min-w-0 flex-1">
-                                <h3 class="font-bold truncate inline-flex items-center gap-1">REVY - RW AI BOT ${getVerifiedBadge()}</h3>
-                                <p class="text-xs text-emerald-600 dark:text-emerald-300 truncate">Instant help solution</p>
+                                <h3 class="font-bold truncate inline-flex items-center gap-1">REVY - RW AI ${isRealAdminView ? '<span class="text-[10px] bg-orange-100 dark:bg-orange-900/40 text-orange-600 dark:text-orange-300 px-2 py-0.5 rounded-full font-black uppercase">Admin Training</span>' : getVerifiedBadge()}</h3>
+                                <p class="text-xs text-emerald-600 dark:text-emerald-300 truncate">${isRealAdminView ? 'Teach rules & chat with AI' : 'Instant help solution'}</p>
                             </div>
+                            ${isRealAdminView ? `
+                                <button onclick="window.showAdminTrainAiPage && window.showAdminTrainAiPage()" class="px-2.5 py-1.5 rounded-xl bg-orange-50 dark:bg-orange-900/30 text-orange-700 dark:text-orange-200 text-xs font-bold shrink-0 border border-orange-200 dark:border-orange-800" title="Edit System Rules">
+                                    Rules
+                                </button>
+                            ` : ''}
                             <button id="revy-close-btn" class="px-3 py-1.5 rounded-full bg-red-50 dark:bg-red-900/30 text-red-600 dark:text-red-200 text-xs font-bold">Exit</button>
                         </div>
                         <div id="revy-bot-messages" class="flex-1 min-h-0 space-y-3 overflow-y-auto p-4 bg-gray-50 dark:bg-gray-900"></div>
                         <div id="revy-quick-options" class="shrink-0 flex gap-2 overflow-x-auto px-3 py-2 border-t border-gray-100 dark:border-gray-700 bg-white dark:bg-gray-800">
-                            ${[
-                                ['how to earn', 'Earn'],
-                                ['how to withdraw', 'Withdraw'],
-                                ['pending withdrawal', 'Pending'],
-                                ['pay to wallet', 'Pay'],
-                                ['transaction history', 'History'],
-                                ['payment method', 'Profile'],
-                                ['become partner investment', 'Partner'],
-                                ['loan help', 'Loan']
-                            ].map(([question, label]) => `<button data-revy-question="${question}" class="revy-option shrink-0 px-3 py-1.5 rounded-full bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-200 text-xs font-bold">${label}</button>`).join('')}
+                            ${quickOptions.map(([question, label]) => `<button data-revy-question="${question}" class="revy-option shrink-0 px-3 py-1.5 rounded-full ${isRealAdminView && question.startsWith('remember') ? 'bg-orange-50 dark:bg-orange-900/30 text-orange-700 dark:text-orange-200 border border-orange-200/60 dark:border-orange-800/60' : 'bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-200'} text-xs font-bold">${label}</button>`).join('')}
                         </div>
                         <div id="revy-chat-composer" class="shrink-0 flex items-center gap-2 p-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] border-t border-gray-100 dark:border-gray-700 bg-white dark:bg-gray-800">
-                            <textarea id="revy-message-input" placeholder="Or type your question" rows="1" class="flex-1 min-w-0 px-4 py-2 text-[16px] bg-gray-100 dark:bg-gray-700 rounded-2xl focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none overflow-y-auto max-h-24"></textarea>
-                            <button id="revy-send-btn" class="h-10 w-10 rounded-full bg-blue-600 text-white flex items-center justify-center">
+                            <textarea id="revy-message-input" placeholder="${isRealAdminView ? 'Type question or instruction (e.g. remember that...)' : 'Or type your question'}" rows="1" class="flex-1 min-w-0 px-4 py-2 text-[16px] bg-gray-100 dark:bg-gray-700 rounded-2xl focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none overflow-y-auto max-h-24"></textarea>
+                            <button id="revy-send-btn" class="h-10 w-10 rounded-full ${isRealAdminView ? 'bg-orange-600' : 'bg-blue-600'} text-white flex items-center justify-center">
                                 <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M2 21l21-9L2 3v7l15 2-15 2v7z"></path></svg>
                             </button>
                         </div>
@@ -1914,7 +1929,11 @@ const openRevyBotChatPage = (isAdminView = false) => {
                 if (revyKeyboardCleanup) revyKeyboardCleanup();
                 closeRevyBotSession();
             };
-            addRevyBotMessage(`Hi ${currentUserData?.name || 'there'}, I am REVY, RW AI BOT. I can instantly help with wallet balance, withdrawal status, transaction history, payment details, recharge, gift code, loan, invoices, password reset, and app usage.`);
+
+            const greeting = isRealAdminView
+                ? `Hi ${currentUserData?.name || 'Admin'}! I am REVY, RW AI Assistant in Admin Training Mode. You can teach me new platform rules (e.g., "remember that..."), set instructions, or test customer questions.`
+                : `Hi ${currentUserData?.name || 'there'}, I am REVY, RW AI BOT. I can instantly help with wallet balance, withdrawal status, transaction history, payment details, recharge, gift code, loan, invoices, password reset, and app usage.`;
+            addRevyBotMessage(greeting);
         };
 
 const loadSubAdminChatCard = async (parentAdminId) => {

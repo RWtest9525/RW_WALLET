@@ -13,37 +13,50 @@ const initFirebaseApp = () => {
         };
         const app = initializeApp(firebaseConfig);
         const auth = getAuth(app);
-        
-        // Initialize Firestore with Persistent Cache
+
+        // Initialize Firestore with Persistent Single-Tab Cache (APK/Web Safe)
         let db;
         if (window.db) {
             db = window.db;
         } else {
-            db = initializeFirestore(app, {
-                localCache: persistentLocalCache()
-            });
+            try {
+                db = initializeFirestore(app, {
+                    localCache: persistentLocalCache({
+                        tabManager: persistentSingleTabManager({ forceOwnership: true })
+                    })
+                });
+            } catch (cacheErr) {
+                console.warn("Firebase.js persistent cache fallback:", cacheErr);
+                try {
+                    db = initializeFirestore(app, {
+                        localCache: memoryLocalCache()
+                    });
+                } catch (_) {
+                    db = initializeFirestore(app, {});
+                }
+            }
         }
-        
+
         const storage = getStorage(app);
         let messaging = null;
         try {
             messaging = getMessaging(app);
-        } catch(e) {
+        } catch (e) {
             console.warn("Messaging not supported on this browser.");
         }
-        
+
         window.app = app;
         window.auth = auth;
         window.db = db;
         window.storage = storage;
         window.messaging = messaging;
-        
+
         try {
             setLogLevel('error');
         } catch (e) {
             console.warn("Could not set Firebase log level:", e);
         }
-        
+
         console.log("Firebase services initialized successfully with persistent cache.");
     } catch (error) {
         console.error("Firebase startup failed:", error);

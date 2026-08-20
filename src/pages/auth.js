@@ -1,37 +1,48 @@
 // File: src/pages/auth.js
 
 const getBackendAuthToken = async (forceRefresh = false) => {
-            if (!currentUser) throw new Error('Login required');
-            if (backendAuthToken && !forceRefresh) return backendAuthToken;
-            if (backendAuthPromise && !forceRefresh) return backendAuthPromise;
+    if (!currentUser) throw new Error('Login required');
+    if (backendAuthToken && !forceRefresh) return backendAuthToken;
+    if (backendAuthPromise && !forceRefresh) return backendAuthPromise;
 
-            const profilePayload = (typeof window.getBackendProfilePayload === 'function')
-                ? window.getBackendProfilePayload()
-                : (currentUserData ? { name: currentUserData.name, mobile: currentUserData.mobile } : {});
+    const cachedToken = sessionStorage.getItem(`rw_backend_token_${currentUser.uid}`);
+    if (cachedToken && !forceRefresh) {
+        backendAuthToken = cachedToken;
+        return backendAuthToken;
+    }
 
-            backendAuthPromise = currentUser.getIdToken(forceRefresh)
-                .then(idToken => fetchWithTimeout(`${BACKEND_BASE_URL}/api/session/firebase`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        idToken,
-                        profile: profilePayload
-                    })
-                }, 7000))
-                .then(async res => {
-                    const data = await res.json().catch(() => ({}));
-                    if (!res.ok || !data.ok || !data.token) {
-                        throw new Error(data.error || 'Backend session failed');
-                    }
-                    backendAuthToken = data.token;
-                    return backendAuthToken;
-                })
-                .finally(() => {
-                    backendAuthPromise = null;
-                });
+    const profilePayload = (typeof window.getBackendProfilePayload === 'function')
+        ? window.getBackendProfilePayload()
+        : (currentUserData ? { name: currentUserData.name, mobile: currentUserData.mobile } : {});
 
-            return backendAuthPromise;
-        };
+    backendAuthPromise = currentUser.getIdToken(forceRefresh)
+        .then(idToken => fetchWithTimeout(`${BACKEND_BASE_URL}/api/session/firebase`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                idToken,
+                profile: profilePayload
+            })
+        }, 6000))
+        .then(async res => {
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok || !data.ok || !data.token) {
+                throw new Error(data.error || 'Backend session failed');
+            }
+            backendAuthToken = data.token;
+            try { sessionStorage.setItem(`rw_backend_token_${currentUser.uid}`, backendAuthToken); } catch (_) {}
+            return backendAuthToken;
+        })
+        .catch(err => {
+            console.debug('Backend auth token exchange note:', err?.message || err);
+            return backendAuthToken || '';
+        })
+        .finally(() => {
+            backendAuthPromise = null;
+        });
+
+    return backendAuthPromise;
+};
 
 const hasCachedLoginSession = () => !!getCachedSessionUserId();
 

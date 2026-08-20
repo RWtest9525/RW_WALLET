@@ -4256,37 +4256,65 @@ async function verifyTransactionWithFirestore(userId, transaction) {
       
       const db = admin.firestore();
       
-      // Securely verify user email from Firestore
+      // Securely verify admin identity across UID, token claims, and Firestore
       let callerEmail = (req.auth.email || '').toLowerCase().trim();
+      let callerRole = (req.auth.role || '').toLowerCase().trim();
+      let callerUid = String(req.auth.sub || req.auth.uid || '').trim();
+      
       try {
-        const userDoc = await db.doc(`artifacts/digital-wallet-prod/public/data/users/${req.auth.sub}`).get();
+        const userDoc = await db.doc(`artifacts/digital-wallet-prod/public/data/users/${callerUid}`).get();
         if (userDoc.exists) {
           const userData = userDoc.data();
           if (userData && userData.email) {
             callerEmail = userData.email.toLowerCase().trim();
           }
+          if (userData && userData.role) {
+            callerRole = userData.role.toLowerCase().trim();
+          }
         }
       } catch (err) {
-        console.error('Error verifying user email in Firestore:', err);
+        console.error('Error verifying user in Firestore:', err);
       }
       
-      const isCallerAdmin = (callerEmail === 'reviewsworld01@gmail.com');
+      const ADMIN_UID = 'mOs5Fmp4RoRzeBDH4pZLMOpQx7Q2';
+      const ADMIN_EMAILS = ['reviewsworld01@gmail.com', 'reviewsworld51@gmail.com'];
+      const isCallerAdmin = !!(
+        req.auth.isAdmin ||
+        callerRole === 'admin' ||
+        callerRole === 'owner' ||
+        callerRole === 'subadmin' ||
+        callerUid === ADMIN_UID ||
+        ADMIN_EMAILS.includes(callerEmail) ||
+        userContext?.isAdmin
+      );
 
-      // Fetch dynamic chatbot memories from Firestore
+      // Fetch dynamic chatbot memories and AI instructions from Firestore
       let memories = [];
+      let customInstructions = "";
       const memoryRef = db.doc(`artifacts/digital-wallet-prod/public/data/bot_memory/global`);
+      const aiConfigRef = db.doc(`artifacts/digital-wallet-prod/settings/ai_config`);
+      
       try {
-        const memoryDoc = await memoryRef.get();
-        if (memoryDoc.exists) {
-          memories = memoryDoc.data().memories || [];
+        const [memoryDoc, aiConfigDoc] = await Promise.allSettled([
+          memoryRef.get(),
+          aiConfigRef.get()
+        ]);
+        if (memoryDoc.status === 'fulfilled' && memoryDoc.value.exists) {
+          memories = memoryDoc.value.data().memories || [];
+        }
+        if (aiConfigDoc.status === 'fulfilled' && aiConfigDoc.value.exists) {
+          customInstructions = aiConfigDoc.value.data().instructions || "";
         }
       } catch (err) {
-        console.error('Error fetching bot memory:', err);
+        console.error('Error fetching bot memory/ai_config:', err);
       }
 
       let memoriesContext = "";
+      if (customInstructions) {
+        memoriesContext += `\nADMIN AI CONFIGURATION & GUIDELINES:\n${customInstructions}\n`;
+      }
       if (memories.length > 0) {
-        memoriesContext = "\nIMPORTANT: You have stored the following custom information from the admin in your memory. Follow these instructions/facts strictly:\n" + 
+        memoriesContext += "\nIMPORTANT STORED ADMIN MEMORIES & FACTS (Follow strictly):\n" + 
           memories.map((m, idx) => `${idx + 1}. ${m}`).join('\n') + "\n";
       }
 
@@ -4296,6 +4324,7 @@ async function verifyTransactionWithFirestore(userId, transaction) {
 - User Name: ${userContext.userName || 'User'}
 - Email: ${callerEmail}
 - Mobile: ${userContext.userMobile || ''}
+- Role: ${isCallerAdmin ? 'ADMINISTRATOR / OWNER' : 'User'}
 - Current Wallet Balance: ₹${userContext.balance || 0}
 - Active Loan Status: ${userContext.activeLoan ? `₹${userContext.activeLoan.amount} (${userContext.activeLoan.status})` : 'No active loan'}
 - Active Partner Investment: ${userContext.activeInvestment ? `₹${userContext.activeInvestment.amount} (${userContext.activeInvestment.status})` : 'No active investment'}
@@ -4304,6 +4333,17 @@ async function verifyTransactionWithFirestore(userId, transaction) {
 ${userContext.latestTransactions && userContext.latestTransactions.length ? userContext.latestTransactions.map((t, idx) => `  ${idx+1}. ${t}`).join('\n') : '  No transactions found.'}
 `;
       }
+
+      const adminTrainingBlock = isCallerAdmin
+        ? `ADMIN TRAINING MODE ACTIVE:
+The user chatting with you right now IS THE PLATFORM ADMINISTRATOR / OWNER (${callerEmail || 'Admin'}).
+- Whenever the administrator gives you instructions, answers questions, teaches you new facts, sets rules, or asks you to remember something (e.g. "remember that...", "note that...", "save rule...", or teaches how features work), you MUST accept and confirm it respectfully.
+- For ANY fact, rule, or piece of knowledge the admin tells you to remember/learn/save, you MUST append this special tag at the very end of your response: [SAVE_MEMORY: <the exact information/rule to remember>].
+  * Example Admin Prompt: "remember that task verification happens within 12 hours"
+  * Example Bot Reply: "Understood Admin! I have noted and remembered that task verification happens within 12 hours. [SAVE_MEMORY: Task verification happens within 12 hours]"
+- Never tell this user that they are not an admin.`
+        : `REGULAR USER MODE:
+- Regular users cannot train your system memory. If a regular user asks you to save custom rules or train memory, politely reply that only the administrator can train or update your memory. Do NOT output [SAVE_MEMORY: ...] tags for non-admin users.`;
 
       const systemMessage = {
         role: "system",
@@ -4324,12 +4364,8 @@ ${contextStr}
 5. If the user asks anything completely unrelated to the app, the owner, or greetings, reply EXACTLY with this:
 "Sorry, I can help only with RW Wallet, REVIEWS WORLD, earning, account, wallet, transaction, withdrawal, add fund, pay to wallet, recharge, gift code, loan, partner investment, profile, and app usage questions. Would you like me to transfer your problem to ADMIN?"
 
-ADMIN MEMORY TRAINING:
-The user with email 'reviewsworld01@gmail.com' is the ADMIN.
-- If the admin (email: reviewsworld01@gmail.com) explicitly tells you to remember, save, or note down any fact, rule, or information, you must accept and confirm it briefly, AND you MUST append a special tag at the very end of your response: [SAVE_MEMORY: <the exact details/info to save>].
-  * Example instruction: "admin says remember that withdrawal takes 2 hours"
-  * Example response: "Got it admin, I have noted that withdrawals take 2 hours. [SAVE_MEMORY: Withdrawals take 2 hours]"
-- Do NOT output this [SAVE_MEMORY: ...] tag for any other user (non-admin). If a non-admin user asks you to remember or save something, reply that only the administrator can train or update your memory.
+${adminTrainingBlock}
+
 ${memoriesContext}`
       };
 
@@ -4357,7 +4393,7 @@ ${memoriesContext}`
       const data = await response.json();
       let answer = data.choices?.[0]?.message?.content || "";
 
-      // Process and save memory if admin and [SAVE_MEMORY: ...] tag exists
+      // Process and save memory if admin and [SAVE_MEMORY: ...] tag exists or explicit training intent
       const saveMemoryRegex = /\[SAVE_MEMORY:\s*(.*?)\]/i;
       const match = answer.match(saveMemoryRegex);
       if (match) {
@@ -4372,7 +4408,7 @@ ${memoriesContext}`
               }
               if (!currentMemories.includes(newMemory)) {
                 currentMemories.push(newMemory);
-                transaction.set(memoryRef, { memories: currentMemories }, { merge: true });
+                transaction.set(memoryRef, { memories: currentMemories, updatedAt: admin.firestore.FieldValue.serverTimestamp(), updatedBy: callerEmail || callerUid }, { merge: true });
               }
             });
             console.log('Saved admin memory:', newMemory);
@@ -4384,10 +4420,11 @@ ${memoriesContext}`
         answer = answer.replace(/\[SAVE_MEMORY:\s*(.*?)\]/gi, '').trim();
       }
 
-      res.json({ ok: true, answer });
+      res.json({ ok: true, answer, isAdmin: isCallerAdmin });
     } catch (error) {
       console.error('Revy Bot API error:', error);
       res.status(500).json({ ok: false, error: 'BOT_ERROR', detail: error.message });
+    }
     }
   });
 

@@ -1453,7 +1453,7 @@ const fetchTaskCommentsRealtimeMap = async () => {
         const token = await getBackendAuthToken();
         const resp = await fetchWithTimeout(`${BACKEND_BASE_URL}/api/tasks/availability`, {
             headers: { Authorization: `Bearer ${token}` }
-        }, 8000);
+        }, 5000);
         const d = await resp.json();
         if (d.ok && d.takenComments) {
             window.userReservedTaskIds = Array.isArray(d.userReservedTaskIds) ? d.userReservedTaskIds : [];
@@ -1473,7 +1473,7 @@ const refreshTaskAvailabilityRealtime = async () => {
         const token = await getBackendAuthToken();
         const resp = await fetchWithTimeout(`${BACKEND_BASE_URL}/api/tasks/availability`, {
             headers: { Authorization: `Bearer ${token}` }
-        }, 8000);
+        }, 5000);
         const d = await resp.json();
         if (d.ok && d.takenComments) {
             window.userReservedTaskIds = Array.isArray(d.userReservedTaskIds) ? d.userReservedTaskIds : [];
@@ -1503,7 +1503,7 @@ const refreshTaskAvailabilityRealtime = async () => {
 const startAvailabilityPolling = () => {
     if (availabilityPollerInterval) return;
     refreshTaskAvailabilityRealtime();
-    availabilityPollerInterval = setInterval(refreshTaskAvailabilityRealtime, 8000);
+    availabilityPollerInterval = setInterval(refreshTaskAvailabilityRealtime, 6000);
 };
 
 const toTitleText = (value = '') => String(value)
