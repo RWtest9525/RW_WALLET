@@ -1572,71 +1572,72 @@ const closeRevyBotSession = () => {
 };
 
 const getRevyBotReply = async (question) => {
-            try {
-                const token = await getBackendAuthToken();
-                const history = (revyBotMessages || [])
-                    .slice(0, -1)
-                    .map(msg => ({
-                        role: msg.senderRole === 'user' ? 'user' : 'assistant',
-                        content: msg.text
-                    }))
-                    .slice(-6);
+    const activeLoan = (typeof allLoansCache !== 'undefined' ? allLoansCache : []).find(loan => loan.userId === currentUser?.uid && loan.status === 'active' && (typeof isModernLoanRecord === 'function' ? isModernLoanRecord(loan) : true));
+    const activeInvestment = (typeof allInvestmentsCache !== 'undefined' ? allInvestmentsCache : []).find(item => item.userId === currentUser?.uid && item.status === 'active');
 
-                const pendingWithdrawal = await getPendingWithdrawalForBot();
-                const latestTransactions = await getLatestTransactionsForBot(5);
-                const isAdminUser = (typeof checkIsUserAdmin === 'function') ? checkIsUserAdmin(currentUser, currentUserData) : false;
-                const userContext = {
-                    userName: currentUserData?.name || 'User',
-                    userEmail: currentUserData?.email || '',
-                    userMobile: currentUserData?.mobile || '',
-                    isAdmin: isAdminUser,
-                    balance: currentUserData?.balance || 0,
-                    pendingWithdrawal: pendingWithdrawal ? {
-                        amount: pendingWithdrawal.amount || 0,
-                        method: getWithdrawalDisplayMethodName(pendingWithdrawal, 'saved payout method'),
-                        status: pendingWithdrawal.status || 'pending',
-                        requestedAt: formatDateDDMMYY(pendingWithdrawal.timestamp || pendingWithdrawal.requestedAt || pendingWithdrawal.processedAt)
-                    } : null,
-                    latestTransactions: latestTransactions.map(item => getBotTransactionSummary(item)),
-                    activeLoan: activeLoan ? {
-                        amount: activeLoan.amount || activeLoan.principal || 0,
-                        status: activeLoan.status || 'active'
-                    } : null,
-                    activeInvestment: activeInvestment ? {
-                        amount: activeInvestment.amount || 0,
-                        status: activeInvestment.status || 'active'
-                    } : null
+    try {
+        const token = await getBackendAuthToken();
+        const history = (revyBotMessages || [])
+            .slice(0, -1)
+            .map(msg => ({
+                role: msg.senderRole === 'user' ? 'user' : 'assistant',
+                content: msg.text
+            }))
+            .slice(-6);
+
+        const pendingWithdrawal = await getPendingWithdrawalForBot();
+        const latestTransactions = await getLatestTransactionsForBot(5);
+        const isAdminUser = (typeof checkIsUserAdmin === 'function') ? checkIsUserAdmin(currentUser, currentUserData) : false;
+        const userContext = {
+            userName: currentUserData?.name || 'User',
+            userEmail: currentUserData?.email || '',
+            userMobile: currentUserData?.mobile || '',
+            isAdmin: isAdminUser,
+            balance: currentUserData?.balance || 0,
+            pendingWithdrawal: pendingWithdrawal ? {
+                amount: pendingWithdrawal.amount || 0,
+                method: getWithdrawalDisplayMethodName(pendingWithdrawal, 'saved payout method'),
+                status: pendingWithdrawal.status || 'pending',
+                requestedAt: formatDateDDMMYY(pendingWithdrawal.timestamp || pendingWithdrawal.requestedAt || pendingWithdrawal.processedAt)
+            } : null,
+            latestTransactions: latestTransactions.map(item => getBotTransactionSummary(item)),
+            activeLoan: activeLoan ? {
+                amount: activeLoan.amount || activeLoan.principal || 0,
+                status: activeLoan.status || 'active'
+            } : null,
+            activeInvestment: activeInvestment ? {
+                amount: activeInvestment.amount || 0,
+                status: activeInvestment.status || 'active'
+            } : null
+        };
+
+        const response = await fetchWithTimeout(`${BACKEND_BASE_URL}/api/revy-bot`, {
+            method: 'POST',
+            headers: {
+                Authorization: `Bearer ${token}`,
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ question, history, userContext })
+        }, 25000);
+        
+        const data = await response.json();
+        if (response.ok && data.ok && data.answer) {
+            const ans = data.answer.trim();
+            if (ans.includes('Sorry, I can help only with RW Wallet') || ans.includes('transfer your problem to ADMIN')) {
+                return {
+                    unsupported: true,
+                    text: 'Sorry, I can help only with RW Wallet, REVIEWS WORLD, earning, account, wallet, transaction, withdrawal, add fund, pay to wallet, recharge, gift code, loan, partner investment, profile, and app usage questions. Would you like me to transfer your problem to ADMIN?'
                 };
-
-                const response = await fetchWithTimeout(`${BACKEND_BASE_URL}/api/revy-bot`, {
-                    method: 'POST',
-                    headers: {
-                        Authorization: `Bearer ${token}`,
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({ question, history, userContext })
-                }, 25000);
-                
-                const data = await response.json();
-                if (response.ok && data.ok && data.answer) {
-                    const ans = data.answer.trim();
-                    if (ans.includes('Sorry, I can help only with RW Wallet') || ans.includes('transfer your problem to ADMIN')) {
-                        return {
-                            unsupported: true,
-                            text: 'Sorry, I can help only with RW Wallet, REVIEWS WORLD, earning, account, wallet, transaction, withdrawal, add fund, pay to wallet, recharge, gift code, loan, partner investment, profile, and app usage questions. Would you like me to transfer your problem to ADMIN?'
-                        };
-                    }
-                    return ans;
-                }
-            } catch (err) {
-                console.warn('Backend Revy Bot request failed, falling back to local rules:', err);
             }
+            return ans;
+        }
+    } catch (err) {
+        console.warn('Backend Revy Bot request failed, falling back to local rules:', err);
+    }
 
-            const text = String(question || '').toLowerCase();
-            const compactText = text.replace(/[^a-z0-9]+/g, ' ').trim();
-            const hasAny = (...words) => words.some(word => compactText.includes(String(word).toLowerCase()));
-            const activeLoan = allLoansCache.find(loan => loan.userId === currentUser?.uid && loan.status === 'active' && isModernLoanRecord(loan));
-            const activeInvestment = allInvestmentsCache.find(item => item.userId === currentUser?.uid && item.status === 'active');
+    const text = String(question || '').toLowerCase();
+    const compactText = text.replace(/[^a-z0-9]+/g, ' ').trim();
+    const hasAny = (...words) => words.some(word => compactText.includes(String(word).toLowerCase()));
 
             if (hasAny('earn', 'earning', 'income', 'make money', 'track income', 'work', 'task', 'review work', 'reviews work', 'map review', 'download work', 'like comment')) {
                 return 'Main earning work in REVIEWS WORLD is app reviews work, map review work, app download work, and like/comment work. Work updates are shared on the WhatsApp channel by admin. Complete the given task properly, then admin verifies it and wallet income/payment records can be tracked in the app. You can also check Track Income, Gift Codes if admin gives codes, and Become Partner if investment options are available.';
@@ -1854,7 +1855,8 @@ const openRevyBotChatPage = (isAdminView = false) => {
                 returnTo: isRealAdminView ? 'admin' : 'help',
                 onBack: () => {
                     if (window.revyBotAdminView) {
-                        if (typeof showAdminMainPage === 'function') showAdminMainPage();
+                        if (typeof showAdminTrainAiPage === 'function') showAdminTrainAiPage();
+                        else if (typeof showAdminMainPage === 'function') showAdminMainPage();
                         else if (typeof hidePage === 'function') hidePage();
                     } else {
                         if (typeof showHelpSupportPage === 'function') showHelpSupportPage();
@@ -1919,7 +1921,8 @@ const openRevyBotChatPage = (isAdminView = false) => {
             document.getElementById('revy-back-btn').onclick = () => {
                 if (revyKeyboardCleanup) revyKeyboardCleanup();
                 if (window.revyBotAdminView) {
-                    if (typeof showAdminMainPage === 'function') showAdminMainPage();
+                    if (typeof showAdminTrainAiPage === 'function') showAdminTrainAiPage();
+                    else if (typeof showAdminMainPage === 'function') showAdminMainPage();
                     else if (typeof hidePage === 'function') hidePage();
                 } else {
                     if (typeof showHelpSupportPage === 'function') showHelpSupportPage();

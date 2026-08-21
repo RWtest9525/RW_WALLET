@@ -65,7 +65,7 @@ const showAdminTrainAiPage = async () => {
                 <div class="relative z-10 space-y-2">
                     <div class="flex items-center justify-between flex-wrap gap-2">
                         <h3 class="text-lg font-black uppercase tracking-wider">AI Knowledge Base & Training</h3>
-                        <button onclick="window.openRevyBotChatPage && window.openRevyBotChatPage(true)" class="px-3 py-1.5 bg-white/20 hover:bg-white/30 backdrop-blur rounded-xl text-xs font-bold transition flex items-center gap-1.5">
+                        <button id="open-ai-chat-training-btn" class="px-3 py-1.5 bg-white/20 hover:bg-white/30 backdrop-blur rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer">
                             <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>
                             Open AI Chat Training
                         </button>
@@ -119,7 +119,15 @@ const showAdminTrainAiPage = async () => {
     });
     setBottomNavActive('bottom-admin-btn');
 
-    document.getElementById('save-ai-training-btn').addEventListener('click', handleSaveAiTraining);
+    document.getElementById('open-ai-chat-training-btn')?.addEventListener('click', () => {
+        if (typeof openRevyBotChatPage === 'function') {
+            openRevyBotChatPage(true);
+        } else if (typeof window.openRevyBotChatPage === 'function') {
+            window.openRevyBotChatPage(true);
+        }
+    });
+
+    document.getElementById('save-ai-training-btn')?.addEventListener('click', handleSaveAiTraining);
 };
 
 const handleSaveAiTraining = async () => {
