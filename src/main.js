@@ -27,6 +27,7 @@ import './pages/subadmin/subadmin-chats.js';
 import './pages/subadmin/subadmin-lists.js';
 import './pages/subadmin/subadmin-notifications.js';
 import './pages/subadmin/subadmin-manage-settings.js';
+import './pages/subadmin/subadmin-train-ai.js';
 import './pages/owner/owner-manage-admins.js';
 import './pages/owner/owner-settlements.js';
 import './pages/owner/owner-audit.js';
