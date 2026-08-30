@@ -599,24 +599,28 @@ async function saveChatMessage(d1, { roomId, senderId, message, timestamp, readB
   return !!row && row.sender_id === senderId && Number(row.timestamp) === Number(timestamp);
 }
 
-async function markRoomReadByAdmin(d1, roomId, readAt = nowMs()) {
+async function markRoomReadByAdmin(d1, roomId, readAt = nowMs(), adminId = '') {
+  const rawClean = String(roomId || '').replace(/^support_/, '');
+  const roomUserUid = rawClean.split('_')[0] || rawClean;
   await d1.query(
     `UPDATE chats
      SET read_by_admin_at = COALESCE(read_by_admin_at, ?)
      WHERE room_id = ?
-       AND sender_id != ?`,
-    [readAt, roomId, ADMIN_UID]
+       AND (sender_id = ? OR (read_by_admin_at IS NULL AND sender_id != ?))`,
+    [readAt, roomId, roomUserUid, adminId || ADMIN_UID]
   );
   return readAt;
 }
 
-async function markRoomReadByUser(d1, roomId, readAt = nowMs()) {
+async function markRoomReadByUser(d1, roomId, readAt = nowMs(), userUid = '') {
+  const rawClean = String(roomId || '').replace(/^support_/, '');
+  const targetUserUid = userUid || rawClean.split('_')[0] || rawClean;
   await d1.query(
     `UPDATE chats
      SET read_by_user_at = COALESCE(read_by_user_at, ?)
      WHERE room_id = ?
-       AND sender_id = ?`,
-    [readAt, roomId, ADMIN_UID]
+       AND sender_id != ?`,
+    [readAt, roomId, targetUserUid]
   );
   return readAt;
 }

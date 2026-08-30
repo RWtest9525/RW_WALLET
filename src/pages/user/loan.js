@@ -1543,6 +1543,162 @@ const processDueLoanRepayment = async (loanId) => {
             }
         };
 
+const adminCloseLoanManually = async (loanId, settlementNote = 'Paid externally to admin') => {
+    const loanRef = doc(db, `artifacts/${appId}/public/data/loans`, loanId);
+    let targetUserId = '';
+    let repayableAmount = 0;
+
+    await runTransaction(db, async (tx) => {
+        const loanDoc = await tx.get(loanRef);
+        if (!loanDoc.exists()) throw new Error('Loan not found.');
+        const loan = loanDoc.data();
+        if (loan.status === 'paid') throw new Error('Loan is already marked as paid.');
+
+        targetUserId = loan.userId;
+        repayableAmount = Number(loan.totalRepayable || loan.amount || 0);
+
+        const userRef = doc(db, `artifacts/${appId}/public/data/users`, loan.userId);
+        const userDoc = await tx.get(userRef);
+
+        const userUpdate = {
+            activeLoanId: deleteField(),
+            activeLoanVersion: deleteField(),
+            activeLoanAmount: deleteField(),
+            activeLoanInterest: deleteField(),
+            activeLoanRepayable: deleteField(),
+            activeLoanDueDate: deleteField(),
+            activeLoanCreatedAt: deleteField(),
+            activeLoanRepaymentStartedAt: deleteField(),
+            activeLoanRepaymentBasis: deleteField(),
+            loanLockedAmount: deleteField(),
+            loanReserveStartsAt: deleteField()
+        };
+
+        if (userDoc.exists()) {
+            const userData = userDoc.data();
+            if (userData.dueLoanBlocked || userData.dueLoanId === loanId || (userData.isDisabled && String(userData.banReason || '').toLowerCase().includes('loan'))) {
+                userUpdate.dueLoanBlocked = deleteField();
+                userUpdate.dueLoanReason = deleteField();
+                userUpdate.dueLoanId = deleteField();
+                userUpdate.isDisabled = false;
+                userUpdate.isFlagged = false;
+                userUpdate.banReason = deleteField();
+                userUpdate.banExpiry = deleteField();
+                userUpdate.disabledAt = deleteField();
+                userUpdate.disabledBy = deleteField();
+            }
+        }
+
+        tx.update(userRef, userUpdate);
+
+        tx.update(loanRef, {
+            status: 'paid',
+            paidAt: serverTimestamp(),
+            paidExternally: true,
+            repaymentMethod: 'external_admin',
+            closedByAdmin: true,
+            closedBy: currentUser?.uid || 'admin',
+            closedByEmail: currentUser?.email || 'admin',
+            settlementNote: settlementNote || 'Manual external payment confirmed by admin'
+        });
+
+        tx.set(doc(collection(userRef, 'transactions')), {
+            type: 'credit',
+            amount: repayableAmount,
+            comment: `Loan Closed (Paid Externally to Admin: ${settlementNote || 'Settled'})`,
+            timestamp: serverTimestamp(),
+            transactionId: `EXT-REPAY-${loanId}`,
+            status: 'completed',
+            recipientName: 'Reviews World Admin',
+            recipientMobile: ''
+        });
+    });
+
+    if (Array.isArray(allLoansCache)) {
+        allLoansCache = allLoansCache.map(l => l.id === loanId ? {
+            ...l,
+            status: 'paid',
+            paidAt: Date.now(),
+            paidExternally: true,
+            repaymentMethod: 'external_admin',
+            closedByAdmin: true,
+            settlementNote
+        } : l);
+    }
+    if (Array.isArray(allUsersCache) && targetUserId) {
+        allUsersCache = allUsersCache.map(u => (u.id === targetUserId || u.uid === targetUserId) ? {
+            ...u,
+            dueLoanBlocked: false,
+            dueLoanReason: undefined,
+            dueLoanId: undefined,
+            isDisabled: false,
+            isFlagged: false,
+            activeLoanId: undefined,
+            activeLoanRepayable: 0,
+            loanLockedAmount: 0
+        } : u);
+    }
+
+    try {
+        if (typeof addNotificationForUser === 'function' && targetUserId) {
+            await addNotificationForUser(targetUserId, {
+                title: 'Loan Settled & Closed',
+                message: `Your loan of ${formatCurrency(repayableAmount)} has been confirmed as paid externally and closed by admin. Your account is fully active.`,
+                type: 'loan'
+            });
+        }
+    } catch (_) {}
+};
+
+const showAdminCloseLoanConfirmModal = (loanId) => {
+    const loan = (typeof allLoansCache !== 'undefined' && Array.isArray(allLoansCache)) ? allLoansCache.find(l => l.id === loanId) : null;
+    const amountStr = loan ? formatCurrency(loan.totalRepayable || loan.amount || 0) : '';
+    renderModal('Close Loan (External Paid)',
+        `<div class="space-y-4 text-sm">
+            <div class="rounded-2xl bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800 p-4 text-emerald-800 dark:text-emerald-200">
+                <p class="font-black">Mark Loan as Paid Externally</p>
+                <p class="mt-1 text-xs text-emerald-700 dark:text-emerald-300">
+                    Use this option if the user paid ${amountStr ? `<strong>${amountStr}</strong>` : 'their loan'} directly to you via UPI, Bank Transfer, or Cash.
+                </p>
+            </div>
+            <div class="space-y-1">
+                <label class="block text-xs font-bold text-gray-600 dark:text-gray-300">Payment Note / UPI Ref (Optional):</label>
+                <input type="text" id="admin-close-loan-note" placeholder="e.g. Paid via UPI ref #12345 / Cash received" class="w-full px-4 py-2.5 bg-gray-100 dark:bg-gray-700 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500">
+            </div>
+            <p class="text-xs text-gray-500">
+                ✓ Loan will be marked as <strong>PAID</strong>.<br>
+                ✓ User active loan locks will be cleared.<br>
+                ✓ User will be <strong>unbanned / unblocked immediately</strong> if blocked due to this overdue loan.
+            </p>
+        </div>`,
+        `<button onclick="window.closeModal()" class="px-4 py-2 text-sm bg-gray-200 dark:bg-gray-600 rounded-lg font-bold">Cancel</button>
+         <button id="confirm-admin-close-loan-btn" class="px-4 py-2 text-sm bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-black shadow">Confirm & Close Loan</button>`,
+        'max-w-md');
+
+    document.getElementById('confirm-admin-close-loan-btn').onclick = async () => {
+        const note = (document.getElementById('admin-close-loan-note')?.value || '').trim() || 'Paid externally to admin';
+        const btn = document.getElementById('confirm-admin-close-loan-btn');
+        if (btn) { btn.disabled = true; btn.textContent = 'Closing loan...'; }
+        try {
+            await adminCloseLoanManually(loanId, note);
+            window.closeModal();
+            showNotification('Loan closed successfully and user unblocked!');
+            if (typeof refreshAdminDashboardCaches === 'function') {
+                await refreshAdminDashboardCaches();
+            }
+            if (loan?.userId && typeof showAdminLoanUserDetailsPage === 'function') {
+                showAdminLoanUserDetailsPage(loan.userId);
+            } else if (typeof renderAdminLoanPage === 'function') {
+                renderAdminLoanPage();
+            }
+        } catch (err) {
+            console.error('Manual loan closure failed:', err);
+            showNotification(`Error: ${err.message}`, true);
+            if (btn) { btn.disabled = false; btn.textContent = 'Confirm & Close Loan'; }
+        }
+    };
+};
+
 const showLoanActionConfirmModal = ({ title, message, confirmLabel = 'OK', confirmClass = 'bg-indigo-600', onConfirm }) => {
             renderModal(title,
                 `<div class="space-y-3 text-sm">
@@ -1934,6 +2090,8 @@ window.handleTakeLoan = handleTakeLoan;
 window.handleRepayLoan = handleRepayLoan;
 window.processDueLoansForUser = processDueLoansForUser;
 window.processDueLoanRepayment = processDueLoanRepayment;
+window.adminCloseLoanManually = adminCloseLoanManually;
+window.showAdminCloseLoanConfirmModal = showAdminCloseLoanConfirmModal;
 window.showLoanActionConfirmModal = showLoanActionConfirmModal;
 window.showApproveLoanRequestModal = showApproveLoanRequestModal;
 window.showRejectLoanRequestConfirmModal = showRejectLoanRequestConfirmModal;

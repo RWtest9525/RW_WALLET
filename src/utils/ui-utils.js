@@ -2712,22 +2712,32 @@ const getPremiumLogoFrame = (innerHtml, sizeClass = 'h-14 w-14', extraClass = ''
 
 const renderMessageTicks = (message, isMine, viewerRole) => {
             if (!isMine) return '';
-            const isReadByOppositeSide = !!message.readAt;
-            const tickClass = isReadByOppositeSide ? 'text-blue-500' : 'text-gray-400';
-            return `<span class="${tickClass} font-bold tracking-[-3px] ml-1">✓✓</span>`;
+            const readVal = message.readAt || (viewerRole === 'admin' ? (message.readByUserAt || message.read_by_user_at) : (message.readByAdminAt || message.read_by_admin_at));
+            const isRead = !!readVal && readVal !== 0 && readVal !== '0';
+            if (isRead) {
+                return `<span class="text-sky-500 dark:text-sky-400 font-extrabold tracking-[-3px] ml-1 select-none" title="Read">✓✓</span>`;
+            }
+            return `<span class="text-gray-400 dark:text-gray-500 font-medium tracking-[-3px] ml-1 select-none" title="Delivered">✓✓</span>`;
         };
 
 const normalizeBackendMessage = (message) => {
             const senderId = message.senderId || message.sender_id || '';
-            const isSenderCurrent = senderId && currentUser?.uid && (senderId === currentUser.uid);
-            const isSenderAdmin = senderId === ADMIN_UID || message.senderRole === 'admin' || message.sender_role === 'admin' || (window.currentUserData && (window.currentUserData.role === 'admin' || window.currentUserData.role === 'owner') && isSenderCurrent);
+            const myUid = (typeof getCurrentUserId === 'function' ? getCurrentUserId() : (currentUser?.uid || ''));
+            const isSenderCurrent = senderId && myUid && (senderId === myUid);
+            
+            const isSenderAdmin = senderId === ADMIN_UID 
+                || message.senderRole === 'admin' 
+                || message.sender_role === 'admin' 
+                || (window.currentUserData && (window.currentUserData.role === 'admin' || window.currentUserData.role === 'owner') && isSenderCurrent)
+                || (typeof allUsersCache !== 'undefined' && Array.isArray(allUsersCache) && allUsersCache.some(u => (u.id === senderId || u.uid === senderId) && (u.role === 'admin' || u.role === 'subadmin' || u.role === 'owner')));
+
+            const readByUserAt = message.readByUserAt || message.read_by_user_at || null;
+            const readByAdminAt = message.readByAdminAt || message.read_by_admin_at || null;
             
             let rawReadAt = message.readAt
-                    || (isSenderAdmin
-                        ? (message.readByUserAt || message.read_by_user_at)
-                        : (message.readByAdminAt || message.read_by_admin_at))
-                    || null;
-            
+                || (isSenderAdmin ? readByUserAt : readByAdminAt)
+                || null;
+
             if (rawReadAt === 0 || rawReadAt === '0' || rawReadAt === 0.0 || !rawReadAt) {
                 rawReadAt = null;
             }
@@ -2740,6 +2750,8 @@ const normalizeBackendMessage = (message) => {
                 senderRole: isSenderAdmin ? 'admin' : (message.senderRole || message.sender_role || 'user'),
                 createdAt: message.timestamp || message.createdAt || Date.now(),
                 readAt: rawReadAt,
+                readByUserAt: (readByUserAt && readByUserAt !== 0 && readByUserAt !== '0') ? readByUserAt : null,
+                readByAdminAt: (readByAdminAt && readByAdminAt !== 0 && readByAdminAt !== '0') ? readByAdminAt : null,
                 clientMessageId: message.clientMessageId || message.client_message_id || null
             };
         };

@@ -1141,7 +1141,10 @@ const showAdminLoanUserDetailsPage = (userId) => {
                         </div>
                         <div class="mt-3 flex flex-wrap gap-2">
                             <button data-action="admin-view-loan-detail" data-loanid="${loan.id}" class="rounded-lg bg-slate-900 px-3 py-2 text-xs font-black text-white dark:bg-slate-100 dark:text-slate-900">Full Details</button>
-                            ${isActiveLoanRecord(loan) ? `<button data-action="admin-loan-auto-debit" data-loanid="${loan.id}" ${canAutoDebit ? '' : 'disabled'} class="rounded-lg px-3 py-2 text-xs font-black ${canAutoDebit ? 'bg-indigo-600 text-white' : 'bg-gray-200 text-gray-500 dark:bg-gray-700'}">Auto Debit</button>` : ''}
+                            ${isActiveLoanRecord(loan) ? `
+                                <button data-action="admin-close-loan-manual" data-loanid="${loan.id}" class="rounded-lg bg-emerald-600 hover:bg-emerald-700 px-3 py-2 text-xs font-black text-white shadow-sm">✓ Close Loan (External Paid)</button>
+                                <button data-action="admin-loan-auto-debit" data-loanid="${loan.id}" ${canAutoDebit ? '' : 'disabled'} class="rounded-lg px-3 py-2 text-xs font-black ${canAutoDebit ? 'bg-indigo-600 text-white' : 'bg-gray-200 text-gray-500 dark:bg-gray-700'}">Auto Debit</button>
+                            ` : ''}
                         </div>
                     </div>`;
             }).join('') : '<p class="rounded-2xl border border-dashed border-gray-200 dark:border-gray-700 p-5 text-center text-sm font-bold text-gray-500">No loan history.</p>';
@@ -1187,12 +1190,13 @@ const showAdminLoanDetailModal = (loanId) => {
             const dueDate = toDate(loan.dueDate);
             const createdAt = toDate(loan.createdAt);
             const paidAt = toDate(loan.paidAt);
+            const isPaid = loan.status === 'paid';
             renderModal('Admin Loan Details',
                 `<div class="space-y-3 text-sm">
                     <div class="rounded-2xl bg-gray-50 dark:bg-gray-700 p-4 space-y-2">
                         <div class="flex justify-between gap-3"><span>User</span><span class="font-bold text-right">${escapeHtml(loan.userName || 'User')}</span></div>
                         <div class="flex justify-between gap-3"><span>Mobile</span><span class="font-bold text-right">${escapeHtml(loan.userMobile || 'N/A')}</span></div>
-                        <div class="flex justify-between gap-3"><span>Status</span><span class="font-bold text-right">${escapeHtml(loan.status || 'active')}</span></div>
+                        <div class="flex justify-between gap-3"><span>Status</span><span class="font-bold text-right uppercase ${isPaid ? 'text-emerald-600' : 'text-amber-600'}">${escapeHtml(loan.status || 'active')}</span></div>
                     </div>
                     <div class="rounded-2xl border border-gray-200 dark:border-gray-700 p-4 space-y-2">
                         <div class="flex justify-between gap-3"><span>Principal</span><span class="font-black">${formatCurrency(loan.amount || 0)}</span></div>
@@ -1201,10 +1205,14 @@ const showAdminLoanDetailModal = (loanId) => {
                         <div class="flex justify-between gap-3"><span>Credit Limit</span><span class="font-black">${formatCurrency(loan.creditLimitAtBorrow || 0)}</span></div>
                         <div class="flex justify-between gap-3"><span>Created</span><span class="font-black">${createdAt ? createdAt.toLocaleDateString('en-IN') : 'N/A'}</span></div>
                         <div class="flex justify-between gap-3"><span>Due Date</span><span class="font-black text-right">${escapeHtml(getLoanDueDateText(loan))}</span></div>
-                        ${paidAt ? `<div class="flex justify-between gap-3"><span>Paid</span><span class="font-black">${paidAt.toLocaleDateString('en-IN')}</span></div>` : ''}
+                        ${paidAt ? `<div class="flex justify-between gap-3"><span>Paid</span><span class="font-black text-emerald-600">${paidAt.toLocaleDateString('en-IN')} ${loan.paidExternally ? '(External/Manual)' : ''}</span></div>` : ''}
+                        ${loan.settlementNote ? `<div class="flex justify-between gap-3"><span>Note</span><span class="font-semibold text-right text-xs text-gray-500">${escapeHtml(loan.settlementNote)}</span></div>` : ''}
                     </div>
                 </div>`,
-                `<button onclick="window.closeModal()" class="px-4 py-2 text-sm bg-indigo-600 text-white rounded-lg">Close</button>`,
+                `<div class="flex justify-end gap-2">
+                    <button onclick="window.closeModal()" class="px-4 py-2 text-sm bg-gray-200 dark:bg-gray-600 rounded-lg">Close</button>
+                    ${!isPaid ? `<button data-action="admin-close-loan-manual" data-loanid="${loan.id}" class="px-4 py-2 text-sm bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-black shadow">Close Loan (External Paid)</button>` : ''}
+                </div>`,
                 'max-w-md');
         };
 

@@ -804,8 +804,14 @@ const applySupportReadReceipt = (roomId, readerRole, readAt = Date.now()) => {
                 const normalized = normalizeBackendMessage(message);
                 if (normalized.roomId !== roomId) return normalized;
                 if (normalized.senderRole === readerRole) return normalized;
-                if (timestampToMillis(normalized.createdAt) > receiptTime) return normalized;
-                return { ...normalized, readAt: normalized.readAt || receiptTime };
+                if (timestampToMillis(normalized.createdAt) > receiptTime + 60000) return normalized;
+                const updated = { ...normalized, readAt: normalized.readAt || receiptTime };
+                if (readerRole === 'admin') {
+                    updated.readByAdminAt = updated.readByAdminAt || receiptTime;
+                } else {
+                    updated.readByUserAt = updated.readByUserAt || receiptTime;
+                }
+                return updated;
             }));
             const cached = updateMessages(readSupportChatCache(roomId));
             writeSupportChatCache(roomId, cached);
@@ -1832,10 +1838,16 @@ const openRevyBotChatPage = (isAdminView = false) => {
                             </button>
                             ${getRevyBotLogo('h-10 w-10')}
                             <div class="min-w-0 flex-1">
-                                <h3 class="font-bold truncate inline-flex items-center gap-1">REVY - RW AI ${isRealAdminView ? '<span class="text-[10px] bg-orange-100 dark:bg-orange-900/40 text-orange-600 dark:text-orange-300 px-2 py-0.5 rounded-full font-black uppercase">Admin Training</span>' : getVerifiedBadge()}</h3>
-                                <p class="text-xs text-emerald-600 dark:text-emerald-300 truncate">${isRealAdminView ? 'Teach rules & chat with AI' : 'Instant help solution'}</p>
+                                <h3 class="font-bold truncate inline-flex items-center gap-1">REVY - RW AI ${isRealAdminView ? '<span class="text-[10px] bg-orange-100 dark:bg-orange-900/40 text-orange-600 dark:text-orange-300 px-2 py-0.5 rounded-full font-black uppercase">Train AI</span>' : getVerifiedBadge()}</h3>
+                                <p class="text-xs text-emerald-600 dark:text-emerald-300 truncate">${isRealAdminView ? 'Teach rules & test AI in real-time' : 'Instant help solution'}</p>
                             </div>
-                            <button id="revy-close-btn" class="px-3 py-1.5 rounded-full bg-red-50 dark:bg-red-900/30 text-red-600 dark:text-red-200 text-xs font-bold">Exit</button>
+                            <div class="flex items-center gap-1.5 shrink-0">
+                                ${isRealAdminView ? `
+                                    <button id="revy-rules-btn" class="px-2.5 py-1.5 rounded-full bg-orange-100 hover:bg-orange-200 dark:bg-orange-900/40 text-orange-700 dark:text-orange-300 text-xs font-bold transition flex items-center gap-1" title="View & Edit AI Rules">⚙️ Rules</button>
+                                    <button id="revy-memories-btn" class="px-2.5 py-1.5 rounded-full bg-amber-100 hover:bg-amber-200 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300 text-xs font-bold transition flex items-center gap-1" title="Learned Memories">🧠 Memories</button>
+                                ` : ''}
+                                <button id="revy-close-btn" class="px-3 py-1.5 rounded-full bg-red-50 dark:bg-red-900/30 text-red-600 dark:text-red-200 text-xs font-bold">Exit</button>
+                            </div>
                         </div>
                         <div id="revy-bot-messages" class="flex-1 min-h-0 space-y-3 overflow-y-auto p-4 bg-gray-50 dark:bg-gray-900"></div>
                         <div id="revy-quick-options" class="shrink-0 flex gap-2 overflow-x-auto px-3 py-2 border-t border-gray-100 dark:border-gray-700 bg-white dark:bg-gray-800">
@@ -1855,8 +1867,7 @@ const openRevyBotChatPage = (isAdminView = false) => {
                 returnTo: isRealAdminView ? 'admin' : 'help',
                 onBack: () => {
                     if (window.revyBotAdminView) {
-                        if (typeof showAdminTrainAiPage === 'function') showAdminTrainAiPage();
-                        else if (typeof showAdminMainPage === 'function') showAdminMainPage();
+                        if (typeof showAdminMainPage === 'function') showAdminMainPage();
                         else if (typeof hidePage === 'function') hidePage();
                     } else {
                         if (typeof showHelpSupportPage === 'function') showHelpSupportPage();
@@ -1918,11 +1929,18 @@ const openRevyBotChatPage = (isAdminView = false) => {
                     }
                 });
             }
+            document.getElementById('revy-rules-btn')?.addEventListener('click', () => {
+                if (typeof showAiGlobalRulesModal === 'function') showAiGlobalRulesModal();
+                else if (typeof window.showAiGlobalRulesModal === 'function') window.showAiGlobalRulesModal();
+            });
+            document.getElementById('revy-memories-btn')?.addEventListener('click', () => {
+                if (typeof showAiMemoriesModal === 'function') showAiMemoriesModal();
+                else if (typeof window.showAiMemoriesModal === 'function') window.showAiMemoriesModal();
+            });
             document.getElementById('revy-back-btn').onclick = () => {
                 if (revyKeyboardCleanup) revyKeyboardCleanup();
                 if (window.revyBotAdminView) {
-                    if (typeof showAdminTrainAiPage === 'function') showAdminTrainAiPage();
-                    else if (typeof showAdminMainPage === 'function') showAdminMainPage();
+                    if (typeof showAdminMainPage === 'function') showAdminMainPage();
                     else if (typeof hidePage === 'function') hidePage();
                 } else {
                     if (typeof showHelpSupportPage === 'function') showHelpSupportPage();
@@ -1935,7 +1953,7 @@ const openRevyBotChatPage = (isAdminView = false) => {
             };
 
             const greeting = isRealAdminView
-                ? `Hi ${currentUserData?.name || 'Admin'}! I am REVY, RW AI Assistant in Admin Training Mode. You can teach me new platform rules (e.g., "remember that..."), set instructions, or test customer questions.`
+                ? `Hi ${currentUserData?.name || 'Admin'}! I am REVY, RW AI Assistant in Admin Training Mode. You can teach me new platform rules (e.g., "remember that..."), set instructions, or test customer questions in real-time.`
                 : `Hi ${currentUserData?.name || 'there'}, I am REVY, RW AI BOT. I can instantly help with wallet balance, withdrawal status, transaction history, payment details, recharge, gift code, loan, invoices, password reset, and app usage.`;
             addRevyBotMessage(greeting);
         };

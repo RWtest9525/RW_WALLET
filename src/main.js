@@ -52,8 +52,16 @@ if (window.location.pathname.includes('/test-ocr') || window.location.hash.inclu
     } catch (_) {}
 })();
 
-// Instant Asset Preloader for Referral and Profile Banners (Anti-Flicker Dual-Cache Ready)
-(() => {
+// Non-blocking Asset Preloader (Runs in background during idle time to keep APK startup ultra-fast)
+const scheduleIdlePreload = (fn) => {
+    if (typeof window.requestIdleCallback === 'function') {
+        window.requestIdleCallback(fn, { timeout: 2000 });
+    } else {
+        setTimeout(fn, 800);
+    }
+};
+
+scheduleIdlePreload(() => {
     const criticalImages = [
         '/assets/images/logo_192.png',
         '/assets/images/logo_512.png',
@@ -73,30 +81,15 @@ if (window.location.pathname.includes('/test-ocr') || window.location.hash.inclu
         '/assets/images/withdraw_flipkart.png',
         '/assets/images/withdraw_paypal.png'
     ];
-    const MARKER_LS = 'rw_critical_images_loaded_v1';
-    const MARKER_SS = 'rw_critical_images_loaded_ss_v1';
     try {
-        const alreadyReady = localStorage.getItem(MARKER_LS) === '1' || sessionStorage.getItem(MARKER_SS) === '1';
         criticalImages.forEach(src => {
             const img = new Image();
-            img.decoding = 'sync';
-            img.fetchPriority = 'high';
-            img.onload = img.onerror = () => {
-                try {
-                    localStorage.setItem(MARKER_LS, '1');
-                    sessionStorage.setItem(MARKER_SS, '1');
-                } catch (_) {}
-            };
+            img.decoding = 'async';
+            img.fetchPriority = 'low';
             img.src = src;
         });
-        if (alreadyReady) {
-            try {
-                localStorage.setItem(MARKER_LS, '1');
-                sessionStorage.setItem(MARKER_SS, '1');
-            } catch (_) {}
-        }
     } catch (_) {}
-})();
+});
 
 const syncBottomNavFromCache = () => {
     try {
@@ -708,6 +701,10 @@ document.body.addEventListener('click', (e) => {
                     if (inv) downloadInvestmentInvoice(inv);
                     break;
                 }
+
+                case 'admin-close-loan-manual':
+                    showAdminCloseLoanConfirmModal(target.dataset.loanid);
+                    break;
 
                 case 'admin-loan-auto-debit':
                     processDueLoanRepayment(target.dataset.loanid)
