@@ -451,6 +451,13 @@ root.outerHTML = `
                                 </span>
                                 <span class="text-sm font-medium text-orange-700 dark:text-orange-300 font-bold">Train AI</span>
                             </button>
+                            <button id="admin-bulk-send-btn"
+                                class="flex flex-col items-center justify-center p-3 min-h-28 bg-indigo-50 dark:bg-indigo-900/20 rounded-2xl hover:bg-indigo-100 dark:hover:bg-indigo-900/30 transition border border-indigo-200 dark:border-indigo-800 shadow-sm">
+                                <span class="flex h-12 w-12 items-center justify-center rounded-2xl bg-white dark:bg-gray-800 shadow-sm mb-2">
+                                    <img src="https://cdn-icons-png.flaticon.com/512/2933/2933116.png" class="h-8 w-8 object-contain" alt="Bulk Send Money">
+                                </span>
+                                <span class="text-sm font-medium text-indigo-700 dark:text-indigo-300 font-bold">Bulk Send</span>
+                            </button>
                         </div>
                     </div>
                 </div>

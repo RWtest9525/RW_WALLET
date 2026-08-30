@@ -861,6 +861,10 @@ const openSlideMenu = () => {
                         <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="mr-3"><path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" /></svg>
                         Withdrawal History
                     </button>
+                    <button id="slide-menu-admin-bulk-send" class="flex items-center w-full text-left p-4 hover:bg-gray-100 dark:hover:bg-gray-700 transition font-medium text-indigo-600 dark:text-indigo-400 font-bold">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="mr-3"><path d="M22 2L11 13"></path><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>
+                        Bulk Send Money
+                    </button>
                     `;
             }
 
@@ -904,6 +908,10 @@ const openSlideMenu = () => {
                 document.getElementById('slide-menu-admin-users').onclick = () => { showAdminUsersPage(); closeSlideMenu(); };
                 document.getElementById('slide-menu-admin-gift-codes').onclick = () => { showAdminGiftCodesPage(); closeSlideMenu(); };
                 document.getElementById('slide-menu-admin-withdrawal-history').onclick = () => { showWithdrawalHistoryPage(); closeSlideMenu(); };
+                document.getElementById('slide-menu-admin-bulk-send')?.addEventListener('click', () => {
+                    if (typeof showAdminBulkSendPage === 'function') showAdminBulkSendPage();
+                    closeSlideMenu();
+                });
             }
             document.getElementById('slide-menu-logout-btn').onclick = () => {
                 window.handleLogout();
