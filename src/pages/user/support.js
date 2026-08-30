@@ -1906,7 +1906,6 @@ const openRevyBotChatPage = (isAdminView = false) => {
                                     <button id="revy-rules-btn" class="px-2.5 py-1.5 rounded-full bg-orange-100 hover:bg-orange-200 dark:bg-orange-900/40 text-orange-700 dark:text-orange-300 text-xs font-bold transition flex items-center gap-1" title="View & Edit AI Rules">⚙️ Rules</button>
                                     <button id="revy-memories-btn" class="px-2.5 py-1.5 rounded-full bg-amber-100 hover:bg-amber-200 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300 text-xs font-bold transition flex items-center gap-1" title="Learned Memories">🧠 Memories</button>
                                 ` : ''}
-                                <button id="revy-close-btn" class="px-3 py-1.5 rounded-full bg-red-50 dark:bg-red-900/30 text-red-600 dark:text-red-200 text-xs font-bold">Exit</button>
                             </div>
                         </div>
                         <div id="revy-bot-messages" class="flex-1 min-h-0 space-y-3 overflow-y-auto p-4 bg-gray-50 dark:bg-gray-900"></div>
@@ -1914,7 +1913,7 @@ const openRevyBotChatPage = (isAdminView = false) => {
                             ${quickOptions.map(([question, label]) => `<button data-revy-question="${question}" class="revy-option shrink-0 px-3 py-1.5 rounded-full ${isRealAdminView && question.startsWith('remember') ? 'bg-orange-50 dark:bg-orange-900/30 text-orange-700 dark:text-orange-200 border border-orange-200/60 dark:border-orange-800/60' : 'bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-200'} text-xs font-bold">${label}</button>`).join('')}
                         </div>
                         <div id="revy-chat-composer" class="shrink-0 flex items-center gap-2 p-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] border-t border-gray-100 dark:border-gray-700 bg-white dark:bg-gray-800">
-                            <textarea id="revy-message-input" placeholder="${isRealAdminView ? 'Type question or instruction (e.g. remember that...)' : 'Or type your question'}" rows="1" class="flex-1 min-w-0 px-4 py-2 text-[16px] bg-gray-100 dark:bg-gray-700 rounded-2xl focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none overflow-y-auto max-h-24"></textarea>
+                            <textarea id="revy-message-input" placeholder="${isRealAdminView ? 'Type question or instruction (e.g. remember that...)' : 'Type your question here...'}" rows="1" class="flex-1 min-w-0 px-4 py-2 text-[16px] bg-gray-100 dark:bg-gray-700 rounded-2xl focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none overflow-y-auto max-h-24"></textarea>
                             <button id="revy-send-btn" class="h-10 w-10 rounded-full ${isRealAdminView ? 'bg-orange-600' : 'bg-blue-600'} text-white flex items-center justify-center">
                                 <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M2 21l21-9L2 3v7l15 2-15 2v7z"></path></svg>
                             </button>
@@ -2006,10 +2005,6 @@ const openRevyBotChatPage = (isAdminView = false) => {
                     if (typeof showHelpSupportPage === 'function') showHelpSupportPage();
                     else if (typeof hidePage === 'function') hidePage();
                 }
-            };
-            document.getElementById('revy-close-btn').onclick = () => {
-                if (revyKeyboardCleanup) revyKeyboardCleanup();
-                closeRevyBotSession();
             };
 
             const greeting = isRealAdminView

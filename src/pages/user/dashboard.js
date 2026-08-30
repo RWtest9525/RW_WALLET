@@ -690,21 +690,31 @@ const showPage = (content, options = {}) => {
             document.getElementById('app-footer')?.classList.add('app-footer-hidden');
             // ---- Only NOW make new content visible (fresh HTML, one paint only) ----
             pageContainer.classList.remove('hidden');
-            const backButton = pageContainer.querySelector('.page-back-btn');
+
+            const defaultBackAction = () => {
+                if (returnSection === 'settings') {
+                    showSettingsPage();
+                } else if (returnSection === 'transactions') {
+                    showAllTransactionsPage();
+                } else if (returnSection === 'help') {
+                    showHelpSupportPage();
+                } else if (returnSection === 'admin') {
+                    showAdminMainPage();
+                } else {
+                    hidePage();
+                }
+            };
+
+            window.currentPageBackHandler = options.onBack || defaultBackAction;
+            window.isSubPageActive = true;
+
+            try {
+                window.history.pushState({ rwPage: true, returnTo: returnSection, ts: Date.now() }, '');
+            } catch (_) {}
+
+            const backButton = pageContainer.querySelector('.page-back-btn') || document.getElementById('revy-back-btn');
             if (backButton) {
-                backButton.onclick = options.onBack || (() => {
-                    if (returnSection === 'settings') {
-                        showSettingsPage();
-                    } else if (returnSection === 'transactions') {
-                        showAllTransactionsPage();
-                    } else if (returnSection === 'help') {
-                        showHelpSupportPage();
-                    } else if (returnSection === 'admin') {
-                        showAdminMainPage();
-                    } else {
-                        hidePage();
-                    }
-                });
+                backButton.onclick = window.currentPageBackHandler;
             }
         };
 
@@ -723,6 +733,9 @@ const hidePage = () => {
             }
             activeTaskReservation = null;
             window.activeTaskReservation = null;
+            window.currentPageBackHandler = null;
+            window.isSubPageActive = false;
+
             document.getElementById('dashboard-content').classList.remove('hidden');
             document.getElementById('page-container').classList.add('hidden');
             document.getElementById('page-container').innerHTML = '';
@@ -736,13 +749,92 @@ const hidePage = () => {
                 switchTab(selectedTab.dataset.tab);
                 setBottomNavActive(selectedTab.dataset.tab === 'admin-panel' ? 'bottom-admin-btn' : 'bottom-home-btn');
             } else {
-                const fallbackTab = currentUser.uid === ADMIN_UID && currentMainSection === 'admin'
+                const fallbackTab = currentUser && currentUser.uid === ADMIN_UID && currentMainSection === 'admin'
                     ? 'admin-panel'
                     : 'user-panel';
                 switchTab(fallbackTab);
                 setBottomNavActive(fallbackTab === 'admin-panel' ? 'bottom-admin-btn' : 'bottom-home-btn');
             }
         };
+
+let lastBackGestureTime = 0;
+
+const showAppExitModal = () => {
+    renderModal('Exit App?',
+        `<div class="space-y-3 py-2 text-center">
+            <div class="w-14 h-14 rounded-full bg-red-100 dark:bg-red-900/40 text-red-600 dark:text-red-300 mx-auto flex items-center justify-center text-2xl shadow-inner">
+                <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+            </div>
+            <p class="text-base font-bold text-gray-800 dark:text-gray-100">Do you want to close RW Wallet?</p>
+            <p class="text-xs text-gray-500 dark:text-gray-400">Click "Yes, Close" to exit, or "No, Stay" to keep using your wallet.</p>
+        </div>`,
+        `<div class="flex justify-center gap-3 w-full">
+            <button onclick="window.closeModal()" class="flex-1 py-2.5 rounded-xl bg-gray-150 dark:bg-gray-700 text-gray-800 dark:text-gray-200 font-bold text-xs transition hover:bg-gray-200 dark:hover:bg-gray-650">No, Stay</button>
+            <button onclick="window.confirmExitApp()" class="flex-1 py-2.5 rounded-xl bg-red-600 hover:bg-red-700 text-white font-black text-xs shadow-md transition">Yes, Close</button>
+        </div>`,
+        'max-w-xs');
+};
+
+const confirmExitApp = () => {
+    window.closeModal();
+    if (window.navigator && window.navigator.app && typeof window.navigator.app.exitApp === 'function') {
+        window.navigator.app.exitApp();
+    } else if (typeof window.close === 'function') {
+        window.close();
+    }
+};
+
+const handleDeviceBackNavigation = (e) => {
+    const modalContainer = document.getElementById('modal-container');
+    const isModalOpen = modalContainer && modalContainer.children.length > 0 && modalContainer.innerHTML.trim().length > 0;
+    
+    if (isModalOpen) {
+        if (e && e.preventDefault) e.preventDefault();
+        window.closeModal();
+        try { window.history.pushState({ rwPage: true }, ''); } catch (_) {}
+        return;
+    }
+
+    const pageContainer = document.getElementById('page-container');
+    const isPageOpen = pageContainer && !pageContainer.classList.contains('hidden') && pageContainer.innerHTML.trim().length > 0;
+
+    if (isPageOpen) {
+        if (e && e.preventDefault) e.preventDefault();
+        if (typeof window.currentPageBackHandler === 'function') {
+            window.currentPageBackHandler();
+        } else {
+            const backButton = pageContainer.querySelector('.page-back-btn') || document.getElementById('revy-back-btn');
+            if (backButton) {
+                backButton.click();
+            } else if (typeof hidePage === 'function') {
+                hidePage();
+            }
+        }
+        return;
+    }
+
+    // User is on root Dashboard / Main screen
+    const now = Date.now();
+    if (now - lastBackGestureTime < 3000) {
+        // Double back within 3 seconds: show exit confirmation modal
+        if (e && e.preventDefault) e.preventDefault();
+        showAppExitModal();
+        try { window.history.pushState({ rwRoot: true }, ''); } catch (_) {}
+    } else {
+        lastBackGestureTime = now;
+        if (e && e.preventDefault) e.preventDefault();
+        showNotification('Swipe / press back again to exit', false, 2500);
+        try { window.history.pushState({ rwRoot: true }, ''); } catch (_) {}
+    }
+};
+
+window.showAppExitModal = showAppExitModal;
+window.confirmExitApp = confirmExitApp;
+window.handleDeviceBackNavigation = handleDeviceBackNavigation;
+
+// Hook up browser gesture/history popstate & Cordova/Capacitor hardware backbutton
+window.addEventListener('popstate', handleDeviceBackNavigation);
+document.addEventListener('backbutton', handleDeviceBackNavigation, false);
 
 const openSlideMenu = () => {
             const menu = document.getElementById('slide-menu');
