@@ -1638,7 +1638,67 @@ const getRevyBotReply = async (question) => {
             return ans;
         }
     } catch (err) {
-        console.warn('Backend Revy Bot request failed, falling back to local rules:', err);
+        console.warn('Backend Revy Bot request failed, trying client direct fallback:', err);
+    }
+
+    // Client-side direct fallback to Gemini / Groq if backend request failed
+    try {
+        const aiConfigRef = doc(db, `artifacts/${appId}/settings`, 'ai_config');
+        const snap = await getDoc(aiConfigRef);
+        if (snap.exists()) {
+            const cfg = snap.data();
+            const clientApiKey = (cfg.apiKey || cfg.api_key || '').trim();
+            const clientProvider = (cfg.provider || '').toLowerCase().trim();
+            const clientModel = (cfg.model || '').trim();
+            const customPrompt = (cfg.instructions || '').trim();
+
+            if (clientApiKey) {
+                const sysPrompt = `You are REVY, the official AI assistant for RW Wallet (REVIEWS WORLD). Answer user questions briefly (2-3 lines), accurately, matching their language (English, Hinglish, Hindi). User balance: ₹${currentUserData?.balance || 0}.\n${customPrompt}`;
+                
+                if (clientApiKey.startsWith('AIzaSy') || clientProvider === 'gemini') {
+                    const targetModel = clientModel || 'gemini-1.5-flash';
+                    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${targetModel}:generateContent?key=${encodeURIComponent(clientApiKey)}`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            system_instruction: { parts: [{ text: sysPrompt }] },
+                            contents: [
+                                ...history.map(h => ({ role: h.role === 'user' ? 'user' : 'model', parts: [{ text: h.content }] })),
+                                { role: 'user', parts: [{ text: question }] }
+                            ],
+                            generationConfig: { temperature: 0.3, maxOutputTokens: 350 }
+                        })
+                    });
+                    if (res.ok) {
+                        const data = await res.json();
+                        const ans = data.candidates?.[0]?.content?.parts?.[0]?.text;
+                        if (ans) return ans.trim();
+                    }
+                } else if (clientApiKey.startsWith('gsk_') || clientProvider === 'groq') {
+                    const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${clientApiKey}` },
+                        body: JSON.stringify({
+                            model: clientModel || 'llama-3.3-70b-versatile',
+                            messages: [
+                                { role: 'system', content: sysPrompt },
+                                ...history,
+                                { role: 'user', content: question }
+                            ],
+                            temperature: 0.3,
+                            max_tokens: 350
+                        })
+                    });
+                    if (res.ok) {
+                        const data = await res.json();
+                        const ans = data.choices?.[0]?.message?.content;
+                        if (ans) return ans.trim();
+                    }
+                }
+            }
+        }
+    } catch (clientAiErr) {
+        console.warn('Client AI direct fallback failed, using local rules:', clientAiErr);
     }
 
     const text = String(question || '').toLowerCase();

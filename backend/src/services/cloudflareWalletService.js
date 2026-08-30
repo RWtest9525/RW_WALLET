@@ -4295,6 +4295,7 @@ async function verifyTransactionWithFirestore(userId, transaction) {
       // Fetch dynamic chatbot memories and AI instructions from Firestore
       let memories = [];
       let customInstructions = "";
+      let aiConfigData = {};
       const memoryRef = db.doc(`artifacts/digital-wallet-prod/public/data/bot_memory/global`);
       const aiConfigRef = db.doc(`artifacts/digital-wallet-prod/settings/ai_config`);
       
@@ -4307,7 +4308,8 @@ async function verifyTransactionWithFirestore(userId, transaction) {
           memories = memoryDoc.value.data().memories || [];
         }
         if (aiConfigDoc.status === 'fulfilled' && aiConfigDoc.value.exists) {
-          customInstructions = aiConfigDoc.value.data().instructions || "";
+          aiConfigData = aiConfigDoc.value.data() || {};
+          customInstructions = aiConfigData.instructions || "";
         }
       } catch (err) {
         console.error('Error fetching bot memory/ai_config:', err);
@@ -4373,29 +4375,151 @@ ${adminTrainingBlock}
 ${memoriesContext}`
       };
 
-      const messages = [systemMessage, ...formattedHistory, { role: "user", content: question }];
+      let answer = "";
+      let usedProvider = "unknown";
 
-      const response = await fetch("https://integrate.api.nvidia.com/v1/chat/completions", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": "Bearer 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"
-        },
-        body: JSON.stringify({
-          model: "meta/llama-3.1-8b-instruct",
-          messages: messages,
-          temperature: 0.2,
-          top_p: 0.7,
-          max_tokens: 300
-        })
-      });
+      const configuredApiKey = (aiConfigData.apiKey || aiConfigData.api_key || process.env.AI_API_KEY || process.env.GEMINI_API_KEY || process.env.GROQ_API_KEY || process.env.OPENAI_API_KEY || "").trim();
+      const configuredProvider = (aiConfigData.provider || "").toLowerCase().trim();
+      const configuredModel = (aiConfigData.model || "").trim();
 
-      if (!response.ok) {
-        throw new Error(`Nvidia API error: status ${response.status}`);
+      // Provider calling helpers
+      const callGemini = async (key, model = "gemini-1.5-flash") => {
+        const cleanModel = model || "gemini-1.5-flash";
+        const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(cleanModel)}:generateContent?key=${encodeURIComponent(key)}`;
+        const contents = [];
+        for (const h of formattedHistory) {
+          if (h && h.content) {
+            contents.push({
+              role: h.role === "user" ? "user" : "model",
+              parts: [{ text: String(h.content) }]
+            });
+          }
+        }
+        contents.push({
+          role: "user",
+          parts: [{ text: String(question) }]
+        });
+
+        const body = {
+          system_instruction: {
+            parts: [{ text: systemMessage.content }]
+          },
+          contents,
+          generationConfig: {
+            temperature: 0.3,
+            maxOutputTokens: 400
+          }
+        };
+
+        const res = await fetch(url, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body)
+        });
+
+        if (!res.ok) {
+          const errText = await res.text();
+          throw new Error(`Gemini API ${res.status}: ${errText.slice(0, 180)}`);
+        }
+
+        const json = await res.json();
+        const textOut = json.candidates?.[0]?.content?.parts?.[0]?.text || "";
+        if (!textOut) throw new Error("Empty text from Gemini API");
+        return textOut;
+      };
+
+      const callOpenAiFormat = async (endpoint, key, model, headers = {}) => {
+        const msgs = [
+          systemMessage,
+          ...formattedHistory.map(h => ({
+            role: h.role === "user" ? "user" : "assistant",
+            content: String(h.content || "")
+          })),
+          { role: "user", content: question }
+        ];
+
+        const res = await fetch(endpoint, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${key}`,
+            ...headers
+          },
+          body: JSON.stringify({
+            model: model || "llama-3.3-70b-versatile",
+            messages: msgs,
+            temperature: 0.3,
+            max_tokens: 400
+          })
+        });
+
+        if (!res.ok) {
+          const errText = await res.text();
+          throw new Error(`OpenAI-compatible API ${res.status}: ${errText.slice(0, 180)}`);
+        }
+
+        const json = await res.json();
+        const textOut = json.choices?.[0]?.message?.content || "";
+        if (!textOut) throw new Error("Empty text from AI API");
+        return textOut;
+      };
+
+      // Try configured key first
+      if (configuredApiKey) {
+        try {
+          if (configuredApiKey.startsWith("AIzaSy") || configuredProvider === "gemini") {
+            answer = await callGemini(configuredApiKey, configuredModel || "gemini-1.5-flash");
+            usedProvider = "gemini";
+          } else if (configuredApiKey.startsWith("gsk_") || configuredProvider === "groq") {
+            answer = await callOpenAiFormat("https://api.groq.com/openai/v1/chat/completions", configuredApiKey, configuredModel || "llama-3.3-70b-versatile");
+            usedProvider = "groq";
+          } else if (configuredApiKey.startsWith("sk-or-") || configuredProvider === "openrouter") {
+            answer = await callOpenAiFormat("https://openrouter.ai/api/v1/chat/completions", configuredApiKey, configuredModel || "google/gemini-2.0-flash-exp:free", { "HTTP-Referer": "https://rw-wallet.onrender.com", "X-Title": "RW Wallet" });
+            usedProvider = "openrouter";
+          } else if (configuredApiKey.startsWith("sk-") || configuredProvider === "openai") {
+            answer = await callOpenAiFormat("https://api.openai.com/v1/chat/completions", configuredApiKey, configuredModel || "gpt-4o-mini");
+            usedProvider = "openai";
+          } else if (configuredApiKey.startsWith("nvapi-") || configuredProvider === "nvidia") {
+            answer = await callOpenAiFormat("https://integrate.api.nvidia.com/v1/chat/completions", configuredApiKey, configuredModel || "meta/llama-3.1-8b-instruct");
+            usedProvider = "nvidia";
+          } else {
+            // General auto-try: Gemini then OpenAI format
+            try {
+              answer = await callGemini(configuredApiKey, configuredModel || "gemini-1.5-flash");
+              usedProvider = "gemini";
+            } catch (_) {
+              answer = await callOpenAiFormat("https://api.groq.com/openai/v1/chat/completions", configuredApiKey, configuredModel || "llama-3.3-70b-versatile");
+              usedProvider = "groq";
+            }
+          }
+        } catch (confErr) {
+          console.warn(`Configured AI provider error (${configuredProvider || "auto"}):`, confErr.message);
+        }
       }
 
-      const data = await response.json();
-      let answer = data.choices?.[0]?.message?.content || "";
+      // If answer still empty, try environment fallback keys
+      if (!answer) {
+        const fallbacks = [
+          process.env.GEMINI_API_KEY ? { provider: "gemini", fn: () => callGemini(process.env.GEMINI_API_KEY, "gemini-1.5-flash") } : null,
+          process.env.GROQ_API_KEY ? { provider: "groq", fn: () => callOpenAiFormat("https://api.groq.com/openai/v1/chat/completions", process.env.GROQ_API_KEY, "llama-3.3-70b-versatile") } : null,
+          process.env.OPENAI_API_KEY ? { provider: "openai", fn: () => callOpenAiFormat("https://api.openai.com/v1/chat/completions", process.env.OPENAI_API_KEY, "gpt-4o-mini") } : null,
+          process.env.NVIDIA_API_KEY ? { provider: "nvidia", fn: () => callOpenAiFormat("https://integrate.api.nvidia.com/v1/chat/completions", process.env.NVIDIA_API_KEY, "meta/llama-3.1-8b-instruct") } : null
+        ].filter(Boolean);
+
+        for (const fb of fallbacks) {
+          try {
+            answer = await fb.fn();
+            usedProvider = fb.provider;
+            if (answer) break;
+          } catch (fbErr) {
+            console.warn(`Fallback AI provider (${fb.provider}) error:`, fbErr.message);
+          }
+        }
+      }
+
+      if (!answer) {
+        throw new Error("All AI providers were unreachable. Please configure a valid Gemini or Groq API key in Train AI > Rules & API Settings.");
+      }
 
       // Process and save memory if admin and [SAVE_MEMORY: ...] tag exists or explicit training intent
       const saveMemoryRegex = /\[SAVE_MEMORY:\s*(.*?)\]/i;
@@ -4424,7 +4548,7 @@ ${memoriesContext}`
         answer = answer.replace(/\[SAVE_MEMORY:\s*(.*?)\]/gi, '').trim();
       }
 
-      res.json({ ok: true, answer, isAdmin: isCallerAdmin });
+      res.json({ ok: true, answer, provider: usedProvider, isAdmin: isCallerAdmin });
     } catch (error) {
       console.error('Revy Bot API error:', error);
       res.status(500).json({ ok: false, error: 'BOT_ERROR', detail: error.message });
